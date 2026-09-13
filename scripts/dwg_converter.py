@@ -122,19 +122,26 @@ def convert_dwg_to_dxf(dwg_path: str, output_dxf_path: str, timeout_sec: int = 1
     
     source_sha_before = calculate_sha256(dwg_path)
     
-    # 2. Check Converter Executable
-    converter_exe = DWG_CONVERTER_PATH
-    if not os.path.exists(converter_exe):
-        which_path = shutil.which("dwg2dxf")
-        if which_path:
-            converter_exe = which_path
-        else:
-            return {
-                "status": "CONVERTER_NOT_AVAILABLE",
-                "error_code": "CONVERTER_NOT_AVAILABLE",
-                "message": f"LibreDWG executable not found at {DWG_CONVERTER_PATH}",
-                "duration_ms": int((time.time() - start_time) * 1000)
-            }
+    # 2. Check Converter Executable (Priority: ENV > Project tools/libredwg > C:\tools\libredwg > PATH)
+    candidate_paths = [
+        os.environ.get("LIBREDWG_PATH", ""),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "libredwg", "dwg2dxf.exe"),
+        r"C:\tools\libredwg\dwg2dxf.exe",
+        shutil.which("dwg2dxf") or ""
+    ]
+    converter_exe = None
+    for cp in candidate_paths:
+        if cp and os.path.exists(cp):
+            converter_exe = cp
+            break
+
+    if not converter_exe:
+        return {
+            "status": "CONVERTER_NOT_AVAILABLE",
+            "error_code": "CONVERTER_NOT_AVAILABLE",
+            "message": f"LibreDWG executable not found. Checked: {candidate_paths}",
+            "duration_ms": int((time.time() - start_time) * 1000)
+        }
     
     # 3. Create temp workspace
     temp_dir = os.path.join(os.path.dirname(output_dxf_path), "temp_convert_" + str(int(time.time()*1000)))

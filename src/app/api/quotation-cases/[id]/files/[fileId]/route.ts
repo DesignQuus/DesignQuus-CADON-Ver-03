@@ -17,64 +17,64 @@ export async function DELETE(
   const { id, fileId } = await params;
 
   try {
-    const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ? AND quotation_case_id = ?').get(fileId, id) as any;
+    const file = (await db.prepare('SELECT * FROM uploaded_files WHERE id = ? AND quotation_case_id = ?').get(fileId, id)) as any;
     if (!file) {
       return NextResponse.json({ error: '삭제할 파일을 찾을 수 없습니다.' }, { status: 404 });
     }
 
     // 1. Find all directly or indirectly derived files (e.g. DWG -> DXF -> SVG)
-    const directDerived = db.prepare('SELECT * FROM uploaded_files WHERE derived_from_file_id = ?').all(fileId) as any[];
+    const directDerived = (await db.prepare('SELECT * FROM uploaded_files WHERE derived_from_file_id = ?').all(fileId)) as any[];
     const directDerivedIds = directDerived.map((f: any) => f.id);
     let secondaryDerived: any[] = [];
     if (directDerivedIds.length > 0) {
       const placeholders = directDerivedIds.map(() => '?').join(',');
-      secondaryDerived = db.prepare(`SELECT * FROM uploaded_files WHERE derived_from_file_id IN (${placeholders})`).all(...directDerivedIds) as any[];
+      secondaryDerived = (await db.prepare(`SELECT * FROM uploaded_files WHERE derived_from_file_id IN (${placeholders})`).all(...directDerivedIds)) as any[];
     }
     const allRelatedFiles = [file, ...directDerived, ...secondaryDerived];
 
     // Check if any OTHER source CAD files remain for this case
-    const remainingSource = db.prepare(`
+    const remainingSource = (await db.prepare(`
       SELECT COUNT(*) as cnt FROM uploaded_files 
       WHERE quotation_case_id = ? 
         AND id != ? 
         AND (derived_from_file_id IS NULL OR derived_from_file_id != ?)
         AND file_role != 'VECTOR_SVG'
         AND file_type IN ('DWG', 'DXF')
-    `).get(id, fileId, fileId) as any;
+    `).get(id, fileId, fileId)) as any;
 
     const shouldWipeAllCaseData = (remainingSource?.cnt || 0) === 0;
 
     // 2. High-speed atomic DB transaction for instant deletion
-    const deleteTx = db.transaction(() => {
+    const deleteTx = db.transaction(async () => {
       // Delete CAD parse runs and objects for this file and related files
       const fileIdsToDelete = allRelatedFiles.map((f: any) => f.id);
       const placeholders = fileIdsToDelete.map(() => '?').join(',');
-      const parseRuns = db.prepare(`SELECT id FROM cad_parse_runs WHERE source_file_id IN (${placeholders})`).all(...fileIdsToDelete) as any[];
+      const parseRuns = (await db.prepare(`SELECT id FROM cad_parse_runs WHERE source_file_id IN (${placeholders})`).all(...fileIdsToDelete)) as any[];
       for (const pr of parseRuns) {
-        db.prepare('DELETE FROM cad_objects WHERE parse_run_id = ?').run(pr.id);
-        db.prepare('DELETE FROM cad_parse_runs WHERE id = ?').run(pr.id);
+        await db.prepare('DELETE FROM cad_objects WHERE parse_run_id = ?').run(pr.id);
+        await db.prepare('DELETE FROM cad_parse_runs WHERE id = ?').run(pr.id);
       }
 
       // Delete the file and all its derived files
-      db.prepare(`DELETE FROM uploaded_files WHERE id IN (${placeholders})`).run(...fileIdsToDelete);
+      await db.prepare(`DELETE FROM uploaded_files WHERE id IN (${placeholders})`).run(...fileIdsToDelete);
 
       // Delete drawings associated with the deleted files
-      db.prepare(`DELETE FROM drawings WHERE source_file_id IN (${placeholders})`).run(...fileIdsToDelete);
+      await db.prepare(`DELETE FROM drawings WHERE source_file_id IN (${placeholders})`).run(...fileIdsToDelete);
 
       if (shouldWipeAllCaseData) {
         // No other source drawings exist: Wipe all remaining orphaned records
-        db.prepare('DELETE FROM drawings WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM drawing_relationships WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM bom_areas WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM raw_bom_items WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM flattened_bom_items WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM normalized_bom_items WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM master_candidates WHERE normalized_item_id LIKE ?').run(`%${id}%`);
-        db.prepare('DELETE FROM bom_approval_records WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM final_bom_items WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM quotes WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM uploaded_files WHERE quotation_case_id = ?').run(id);
-        db.prepare(`
+        await db.prepare('DELETE FROM drawings WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM drawing_relationships WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM bom_areas WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM raw_bom_items WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM flattened_bom_items WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM normalized_bom_items WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM master_candidates WHERE normalized_item_id LIKE ?').run(`%${id}%`);
+        await db.prepare('DELETE FROM bom_approval_records WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM final_bom_items WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM quotes WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM uploaded_files WHERE quotation_case_id = ?').run(id);
+        await db.prepare(`
           UPDATE quotation_cases 
           SET status = 'REGISTERED', quote_readiness = 'PENDING_BOM'
           WHERE id = ?
@@ -82,7 +82,7 @@ export async function DELETE(
       }
     });
 
-    deleteTx();
+    await deleteTx();
 
     // 3. Delete physical files from disk asynchronously without blocking
     for (const f of allRelatedFiles) {

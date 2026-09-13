@@ -13,7 +13,7 @@ export async function POST(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
@@ -26,25 +26,25 @@ export async function POST(
 
     // 1. Update drawings table (Primary source of truth for CAD drawing package)
     if (all) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE drawings 
         SET is_quote_included = ?, exclude_reason = ?
         WHERE quotation_case_id = ?
       `).run(flagVal, excludeReasonStr, id);
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE normalized_bom_items
         SET is_quote_included = ?, exclude_reason = ?
         WHERE quotation_case_id = ?
       `).run(flagVal, excludeReasonStr, id);
     } else if (excludeDuplicates) {
       // 💎 Senior Manager Preset: Keep 1st instance of duplicates, exclude others
-      const allDwgs = db.prepare(`
+      const allDwgs = (await db.prepare(`
         SELECT id, drawing_no_raw, drawing_index 
         FROM drawings 
         WHERE quotation_case_id = ? 
         ORDER BY drawing_index ASC
-      `).all(id) as any[];
+      `).all(id)) as any[];
 
       const seen = new Set<string>();
       const idsToExclude: string[] = [];
@@ -63,13 +63,13 @@ export async function POST(
 
       if (idsToExclude.length > 0) {
         const excludePlaceholders = idsToExclude.map(() => '?').join(',');
-        db.prepare(`
+        await db.prepare(`
           UPDATE drawings
           SET is_quote_included = 0, exclude_reason = '중복 도면 (단일 품목 견적 반영)'
           WHERE id IN (${excludePlaceholders})
         `).run(...idsToExclude);
 
-        db.prepare(`
+        await db.prepare(`
           UPDATE normalized_bom_items
           SET is_quote_included = 0, exclude_reason = '중복 도면 (단일 품목 견적 반영)'
           WHERE quotation_case_id = ? AND id IN (
@@ -83,13 +83,13 @@ export async function POST(
 
       if (idsToInclude.length > 0) {
         const includePlaceholders = idsToInclude.map(() => '?').join(',');
-        db.prepare(`
+        await db.prepare(`
           UPDATE drawings
           SET is_quote_included = 1, exclude_reason = NULL
           WHERE id IN (${includePlaceholders})
         `).run(...idsToInclude);
 
-        db.prepare(`
+        await db.prepare(`
           UPDATE normalized_bom_items
           SET is_quote_included = 1, exclude_reason = NULL
           WHERE quotation_case_id = ? AND id IN (
@@ -102,13 +102,13 @@ export async function POST(
       }
     } else if (Array.isArray(drawingNos) && drawingNos.length > 0) {
       const placeholders = drawingNos.map(() => '?').join(',');
-      db.prepare(`
+      await db.prepare(`
         UPDATE drawings 
         SET is_quote_included = ?, exclude_reason = ?
         WHERE quotation_case_id = ? AND (drawing_no_raw IN (${placeholders}) OR drawing_no_normalized IN (${placeholders}) OR drawing_name_raw IN (${placeholders}))
       `).run(flagVal, excludeReasonStr, id, ...drawingNos, ...drawingNos, ...drawingNos);
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE normalized_bom_items
         SET is_quote_included = ?, exclude_reason = ?
         WHERE quotation_case_id = ? AND id IN (
@@ -125,12 +125,13 @@ export async function POST(
     }
 
     // 2. Synchronize with quotes and quote_items if a quote exists
-    const latestQuote = db.prepare(`
+    // 2. Synchronize with quotes and quote_items if a quote exists
+    const latestQuote = (await db.prepare(`
       SELECT * FROM quotes 
       WHERE quotation_case_id = ? 
       ORDER BY quote_version DESC 
       LIMIT 1
-    `).get(id) as any;
+    `).get(id)) as any;
 
     let subtotal = 0;
     let taxAmount = 0;
@@ -141,30 +142,30 @@ export async function POST(
     if (latestQuote) {
       // Auto-unlock if locked so manager edits are smoothly applied
       if (latestQuote.is_locked) {
-        db.prepare("UPDATE quotes SET is_locked = 0, status = 'DRAFT' WHERE id = ?").run(latestQuote.id);
+        await db.prepare("UPDATE quotes SET is_locked = 0, status = 'DRAFT' WHERE id = ?").run(latestQuote.id);
       }
 
       if (all) {
-        db.prepare(`
+        await db.prepare(`
           UPDATE quote_items 
           SET is_included = ? 
           WHERE quote_id = ?
         `).run(flagVal, latestQuote.id);
       } else if (pricedOnly) {
-        db.prepare(`
+        await db.prepare(`
           UPDATE quote_items 
           SET is_included = CASE WHEN unit_price > 0 THEN 1 ELSE 0 END 
           WHERE quote_id = ?
         `).run(latestQuote.id);
       } else if (excludeDuplicates) {
         // Sync quote items with excluded drawings
-        const excludedDwgNos = db.prepare(`
+        const excludedDwgNos = ((await db.prepare(`
           SELECT drawing_no_raw FROM drawings WHERE quotation_case_id = ? AND is_quote_included = 0
-        `).all(id).map((r: any) => r.drawing_no_raw);
+        `).all(id)) as any[]).map((r: any) => r.drawing_no_raw);
 
         if (excludedDwgNos.length > 0) {
           const exPl = excludedDwgNos.map(() => '?').join(',');
-          db.prepare(`
+          await db.prepare(`
             UPDATE quote_items 
             SET is_included = 0
             WHERE quote_id = ? AND drawing_no IN (${exPl})
@@ -172,7 +173,7 @@ export async function POST(
         }
       } else if (Array.isArray(drawingNos) && drawingNos.length > 0) {
         const placeholders = drawingNos.map(() => '?').join(',');
-        db.prepare(`
+        await db.prepare(`
           UPDATE quote_items 
           SET is_included = ? 
           WHERE quote_id = ? AND (drawing_no IN (${placeholders}) OR item_name IN (${placeholders}))
@@ -180,45 +181,45 @@ export async function POST(
       }
 
       // Recalculate Subtotal, VAT, Total
-      const sumResult = db.prepare(`
+      const sumResult = (await db.prepare(`
         SELECT COALESCE(SUM(amount), 0) as active_subtotal
         FROM quote_items
         WHERE quote_id = ? AND is_included = 1
-      `).get(latestQuote.id) as any;
+      `).get(latestQuote.id)) as any;
 
       subtotal = sumResult?.active_subtotal || 0;
       const taxRate = latestQuote.tax_rate ?? 0.10;
       taxAmount = Math.round(subtotal * taxRate);
       totalAmount = subtotal + taxAmount;
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE quotes 
         SET subtotal = ?, tax_amount = ?, total_amount = ?, updated_at = ?
         WHERE id = ?
       `).run(subtotal, taxAmount, totalAmount, new Date().toISOString(), latestQuote.id);
 
       // Get quote item counts
-      const counts = db.prepare(`
+      const counts = (await db.prepare(`
         SELECT 
           COUNT(*) as total_items,
           SUM(CASE WHEN is_included = 1 THEN 1 ELSE 0 END) as included_items
         FROM quote_items
         WHERE quote_id = ?
-      `).get(latestQuote.id) as any;
+      `).get(latestQuote.id)) as any;
 
       totalItems = counts?.total_items || 0;
       includedItems = counts?.included_items || 0;
     }
 
     // 3. Get drawing level counts
-    const dwgCounts = db.prepare(`
+    const dwgCounts = (await db.prepare(`
       SELECT 
         COUNT(*) as total_drawings,
         SUM(CASE WHEN is_quote_included = 1 THEN 1 ELSE 0 END) as included_drawings,
         SUM(CASE WHEN is_quote_included = 0 THEN 1 ELSE 0 END) as excluded_drawings
       FROM drawings
       WHERE quotation_case_id = ?
-    `).get(id) as any;
+    `).get(id)) as any;
 
     // 4. Audit Log
     const toggleDesc = all

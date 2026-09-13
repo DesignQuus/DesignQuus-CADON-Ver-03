@@ -14,13 +14,13 @@ export async function POST(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
 
   // Permission Guard
-  const perm = checkCasePermission(session.userId, session.role, id);
+  const perm = await checkCasePermission(session.userId, session.role, id);
   if (!perm.canEdit) {
     return NextResponse.json({
       error: perm.message || '해당 견적건에 대한 수정/승인 권한이 없습니다. 최고관리자의 승인이 필요합니다.',
@@ -39,14 +39,14 @@ export async function POST(
     if (Array.isArray(itemIds) && itemIds.length > 0) {
       // Unapprove specific selected items
       const placeholders = itemIds.map(() => '?').join(',');
-      const result = db.prepare(`
+      const result = await db.prepare(`
         DELETE FROM final_bom_items
         WHERE quotation_case_id = ? AND normalized_item_id IN (${placeholders})
       `).run(id, ...itemIds);
       unapprovedCount = result.changes;
 
       const approvalId = `unappr_batch_${Date.now()}`;
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO bom_approval_records (
           id, quotation_case_id, normalized_item_id, selected_master_id,
           decision_type, decision_reason, is_override,
@@ -61,14 +61,14 @@ export async function POST(
       });
     } else {
       // Unapprove ALL items for this quotation case (전체 초기화)
-      const result = db.prepare(`
+      const result = await db.prepare(`
         DELETE FROM final_bom_items
         WHERE quotation_case_id = ?
       `).run(id);
       unapprovedCount = result.changes;
 
       const approvalId = `unappr_all_${Date.now()}`;
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO bom_approval_records (
           id, quotation_case_id, normalized_item_id, selected_master_id,
           decision_type, decision_reason, is_override,
@@ -84,7 +84,7 @@ export async function POST(
     }
 
     // Update readiness to REVIEW_REQUIRED
-    db.prepare('UPDATE quotation_cases SET quote_readiness = ?, updated_at = ? WHERE id = ?').run('REVIEW_REQUIRED', now, id);
+    await db.prepare('UPDATE quotation_cases SET quote_readiness = ?, updated_at = ? WHERE id = ?').run('REVIEW_REQUIRED', now, id);
 
     return NextResponse.json({
       success: true,

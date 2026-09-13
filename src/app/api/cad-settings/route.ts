@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Find sample DWG from storage
-    const dwgRow = db.prepare(`SELECT storage_path FROM uploaded_files WHERE file_type = 'DWG' OR original_file_name LIKE '%.dwg' ORDER BY created_at DESC LIMIT 1`).get() as any;
+    const dwgRow = (await db.prepare(`SELECT storage_path FROM uploaded_files WHERE file_type = 'DWG' OR original_file_name LIKE '%.dwg' ORDER BY rowid DESC LIMIT 1`).get()) as any;
     const sampleFile = dwgRow?.storage_path ? resolveStoragePath(dwgRow.storage_path) : path.join(getStorageSubdir('files'), 'REAL_TEST_MACHINE.dwg');
     const targetFile = fs.existsSync(sampleFile) ? sampleFile : process.cwd();
 

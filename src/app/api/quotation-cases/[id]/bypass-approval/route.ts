@@ -13,7 +13,7 @@ export async function POST(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
@@ -22,7 +22,7 @@ export async function POST(
     const now = new Date().toISOString();
 
     // 1. If there is a PENDING approval request for this case, immediately approve it
-    db.prepare(`
+    await db.prepare(`
       UPDATE approval_requests
       SET status = 'APPROVED',
           reviewed_by_user_id = ?,
@@ -32,7 +32,7 @@ export async function POST(
     `).run(session.userId, now, id);
 
     // 2. Set global system approval settings to ALLOW and is_approval_suspended = 1
-    db.prepare(`
+    await db.prepare(`
       UPDATE system_approval_settings
       SET cross_user_edit_policy = 'ALLOW',
           cross_user_approve_policy = 'ALLOW',

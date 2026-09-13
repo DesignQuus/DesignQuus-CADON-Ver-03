@@ -42,15 +42,15 @@ export interface CasePermissionResult {
   message?: string;
 }
 
-export function getSystemApprovalSettings(): SystemApprovalSettings {
-  const row = db.prepare(`
+export async function getSystemApprovalSettings(): Promise<SystemApprovalSettings> {
+  const row = (await db.prepare(`
     SELECT * FROM system_approval_settings WHERE id = 'GLOBAL_CONFIG'
-  `).get() as SystemApprovalSettings | undefined;
+  `).get()) as SystemApprovalSettings | undefined;
 
   if (row) return row;
 
   const now = new Date().toISOString();
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO system_approval_settings (
       id, cross_user_edit_policy, cross_user_approve_policy,
       require_admin_final_quote_approval, approval_valid_hours, is_approval_suspended, updated_at
@@ -68,40 +68,35 @@ export function getSystemApprovalSettings(): SystemApprovalSettings {
   };
 }
 
-export function getUserApprovalPermissions(userId: string): UserApprovalPermission | null {
-  const row = db.prepare(`
+export async function getUserApprovalPermissions(userId: string): Promise<UserApprovalPermission | null> {
+  const row = (await db.prepare(`
     SELECT uap.*, u.name as user_name, u.login_id as user_login_id, u.role as user_role
     FROM user_approval_permissions uap
     JOIN users u ON uap.user_id = u.id
     WHERE uap.user_id = ?
-  `).get(userId) as UserApprovalPermission | undefined;
+  `).get(userId)) as UserApprovalPermission | undefined;
 
   return row || null;
 }
 
-export function getAllUserApprovalPermissions(): UserApprovalPermission[] {
-  return db.prepare(`
+export async function getAllUserApprovalPermissions(): Promise<UserApprovalPermission[]> {
+  return (await db.prepare(`
     SELECT uap.*, u.name as user_name, u.login_id as user_login_id, u.role as user_role
     FROM user_approval_permissions uap
     JOIN users u ON uap.user_id = u.id
     WHERE u.is_active = 1
     ORDER BY CASE WHEN u.role = 'SUPER_ADMIN' THEN 0 ELSE 1 END, u.name ASC
-  `).all() as UserApprovalPermission[];
+  `).all()) as UserApprovalPermission[];
 }
 
-export function checkCasePermission(
+export async function checkCasePermission(
   userId: string,
   userRole: string,
   quotationCaseId: string
-): CasePermissionResult {
-  const qc = db.prepare(`
-    SELECT qc.id, qc.case_no, qc.case_name, qc.created_by_user_id, u.name as owner_name
-    FROM quotation_cases qc
-    LEFT JOIN users u ON qc.created_by_user_id = u.id
-    WHERE qc.id = ?
-  `).get(quotationCaseId) as { id: string; case_no: string; case_name: string; created_by_user_id: string; owner_name: string } | undefined;
+): Promise<CasePermissionResult> {
+  const rawQc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(quotationCaseId)) as any;
 
-  if (!qc) {
+  if (!rawQc) {
     return {
       canEdit: false,
       canApprove: false,
@@ -115,6 +110,14 @@ export function checkCasePermission(
     };
   }
 
+  const ownerUser = rawQc.created_by_user_id
+    ? (await db.prepare('SELECT name FROM users WHERE id = ?').get(rawQc.created_by_user_id)) as any
+    : null;
+
+  const qc = {
+    ...rawQc,
+    owner_name: ownerUser?.name || '담당자'
+  };
   const ownerUserId = qc.created_by_user_id;
   const ownerName = qc.owner_name || '담당자';
 
@@ -135,7 +138,7 @@ export function checkCasePermission(
 
   // 2. 본인이 담당한 견적건인 경우 -> 자유 수정 및 승인 가능
   if (ownerUserId === userId) {
-    const userPerm = getUserApprovalPermissions(userId);
+    const userPerm = await getUserApprovalPermissions(userId);
     const canEdit = userPerm ? Boolean(userPerm.can_edit_own) : true;
     const canApprove = userPerm ? Boolean(userPerm.can_approve_own) : true;
 
@@ -153,8 +156,8 @@ export function checkCasePermission(
   }
 
   // 3. 다른 담당자의 견적건인 경우 (Cross-User Case)
-  const settings = getSystemApprovalSettings();
-  const userPerm = getUserApprovalPermissions(userId);
+  const settings = await getSystemApprovalSettings();
+  const userPerm = await getUserApprovalPermissions(userId);
 
   // 💡 최고관리자 결재 승인 기능 보류 (현재 개발/검수 단계) 또는 ALLOW 정책인 경우 -> 결재 없이 자유 견적 진행 허용
   const isSuspended = settings.is_approval_suspended !== 0 || settings.cross_user_edit_policy === 'ALLOW';
@@ -204,16 +207,16 @@ export function checkCasePermission(
   }
 
   // 기본값: 'REQUIRE_APPROVAL' -> 최고관리자의 승인 여부 조회
-  const activeReq = db.prepare(`
+  const activeReq = (await db.prepare(`
     SELECT * FROM approval_requests
-    WHERE quotation_case_id = ? AND requester_user_id = ?
-    ORDER BY created_at DESC
+    WHERE quotation_case_id = ? AND requester_id = ?
+    ORDER BY rowid DESC
     LIMIT 1
-  `).get(quotationCaseId, userId) as {
+  `).get(quotationCaseId, userId)) as {
     id: string;
     status: 'PENDING' | 'APPROVED' | 'REJECTED';
     created_at: string;
-    review_comment?: string;
+    reviewer_comment?: string;
   } | undefined;
 
   if (activeReq) {
@@ -229,7 +232,7 @@ export function checkCasePermission(
         approvalStatus: 'APPROVED',
         activeRequestId: activeReq.id,
         requestedAt: activeReq.created_at,
-        reviewComment: activeReq.review_comment,
+        reviewComment: activeReq.reviewer_comment,
         message: '최고관리자의 승인이 완료되어 타 담당자의 견적건을 수정 및 승인할 수 있습니다.'
       };
     } else if (activeReq.status === 'PENDING') {
@@ -258,7 +261,7 @@ export function checkCasePermission(
         approvalStatus: 'REJECTED',
         activeRequestId: activeReq.id,
         requestedAt: activeReq.created_at,
-        reviewComment: activeReq.review_comment,
+        reviewComment: activeReq.reviewer_comment,
         message: '최고관리자에 의해 수정 권한 요청이 반려되었습니다.'
       };
     }

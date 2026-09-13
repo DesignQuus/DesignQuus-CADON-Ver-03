@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-11T04:06:46.323Z
+ * Generated at: 2026-09-13T03:24:17.094Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -8,7 +8,7 @@
 export const EGDESK_CONFIG = {
   apiUrl: 'http://localhost:8080',
   tunnelUrl: 'https://tunneling-service.onrender.com/t/lee-mac-pc',
-  apiKey: '1468e8f0-0b9b-447c-b5b0-d7c9a29817d8',
+  apiKey: '48632c34-0fd1-4b53-b448-b8162e19b925',
 } as const;
 
 export interface TableDefinition {
@@ -23,251 +23,242 @@ export interface TableDefinition {
 
 export const TABLES = {
   table1: {
+    name: 'approval_requests',
+    displayName: '견적/단가 승인 결재 요청 대장',
+    rowCount: 0,
+    columnCount: 21,
+    columns: ['id', '_version', 'quotation_case_id', 'request_type', 'requester_id', 'target_owner_id', 'reason', 'status', 'reviewer_id', 'reviewer_comment', 'reviewed_at', 'expires_at', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
+  } as TableDefinition,
+  table2: {
+    name: 'user_approval_permissions',
+    displayName: '사용자별 결재/수정 세부 권한',
+    rowCount: 6,
+    columnCount: 17,
+    columns: ['id', '_version', 'user_id', 'can_edit_own', 'can_approve_own', 'can_edit_others', 'can_approve_others', 'can_edit_price', 'can_approve_quote', 'updated_at', 'tenant_id', 'uuid', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
+  } as TableDefinition,
+  table3: {
+    name: 'system_approval_settings',
+    displayName: '전사 결재 정책 설정',
+    rowCount: 1,
+    columnCount: 16,
+    columns: ['id', '_version', 'cross_user_edit_policy', 'cross_user_approve_policy', 'require_admin_final_quote_approval', 'approval_valid_hours', 'is_approval_suspended', 'updated_by_user_id', 'updated_at', 'tenant_id', 'uuid', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
+  } as TableDefinition,
+  table4: {
+    name: 'user_activity_logs',
+    displayName: '사용자 감사 활동 로그',
+    rowCount: 19,
+    columnCount: 20,
+    columns: ['id', '_version', 'user_id', 'user_name', 'user_login_id', 'user_role', 'activity_type', 'quotation_case_id', 'case_name', 'details', 'ip_address', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
+  } as TableDefinition,
+  table5: {
     name: 'users',
     displayName: '사용자 계정 대장',
-    description: '시스템 사용자 및 권한',
-    rowCount: 2,
+    rowCount: 7,
     columnCount: 11,
     columns: ['id', '_version', 'login_id', 'password_hash', 'name', 'role', 'company_id', 'is_active', 'last_login_at', 'created_at', 'updated_at']
   } as TableDefinition,
-  table2: {
+  table6: {
     name: 'user_company_access',
     displayName: '사용자-회사 접근 권한',
-    description: '테넌트별 사용자 접근 권한',
-    rowCount: 1,
-    columnCount: 5,
-    columns: ['user_id', '_version', 'company_id', 'access_role', 'is_active']
+    rowCount: 28,
+    columnCount: 6,
+    columns: ['id', 'user_id', '_version', 'company_id', 'access_role', 'is_active']
   } as TableDefinition,
-  table3: {
+  table7: {
     name: 'uploaded_files',
     displayName: '업로드/파생 파일 관리',
-    description: '도면(DWG/DXF/SVG) 파일 메타데이터',
-    rowCount: 12,
+    rowCount: 0,
     columnCount: 14,
     columns: ['id', '_version', 'quotation_case_id', 'original_file_name', 'stored_file_name', 'storage_path', 'file_type', 'file_role', 'derived_from_file_id', 'file_size', 'checksum', 'upload_status', 'uploaded_by_user_id', 'created_at']
   } as TableDefinition,
-  table4: {
+  table8: {
     name: 'system_baselines',
     displayName: '골든 기준선 벤치마크',
-    description: '파서 정확도 및 회귀 검증 지표',
-    rowCount: 1,
+    rowCount: 0,
     columnCount: 8,
     columns: ['id', '_version', 'golden_case_id', 'baseline_name', 'parser_version', 'metrics_json', 'created_by', 'created_at']
   } as TableDefinition,
-  table5: {
+  table9: {
     name: 'raw_bom_items',
     displayName: 'CAD 추출 Raw BOM',
-    description: '도면에서 추출된 원본 BOM 행 아이템',
-    rowCount: 1386,
+    rowCount: 0,
     columnCount: 17,
     columns: ['id', '_version', 'quotation_case_id', 'drawing_no', 'row_index', 'item_no_raw', 'part_no_raw', 'name_raw', 'specification_raw', 'material_raw', 'quantity_raw', 'quantity_numeric', 'unit_raw', 'remark_raw', 'source_handles_json', 'status', 'created_at']
   } as TableDefinition,
-  table6: {
+  table10: {
     name: 'quotes',
     displayName: '견적서 마스터',
-    description: '견적 헤더, 할인율, 부가세, 총액, 버전',
-    rowCount: 8,
+    rowCount: 1,
     columnCount: 24,
     columns: ['id', '_version', 'quotation_case_id', 'quote_no', 'quote_version', 'company_id', 'project_id', 'status', 'currency', 'subtotal', 'discount_type', 'discount_rate', 'discount_amount', 'tax_rate', 'tax_amount', 'total_amount', 'quote_date', 'is_locked', 'created_by_user_id', 'approved_by_user_id', 'approved_at', 'override_reason', 'created_at', 'updated_at']
   } as TableDefinition,
-  table7: {
+  table11: {
     name: 'quote_items',
     displayName: '견적서 명세 품목',
-    description: '견적 행별 단가, 금액, 포함 여부',
-    rowCount: 101,
+    rowCount: 0,
     columnCount: 19,
     columns: ['id', '_version', 'quote_id', 'final_bom_item_id', 'master_id', 'item_no', 'master_code', 'item_name', 'specification', 'material', 'quantity', 'unit', 'unit_price', 'amount', 'price_source', 'price_status', 'remark', 'created_at', 'is_included']
   } as TableDefinition,
-  table8: {
+  table12: {
     name: 'quote_exports',
     displayName: '견적서 엑셀 발행 이력',
-    description: '발행된 견적서 엑셀 파일 메타데이터',
-    rowCount: 2,
+    rowCount: 0,
     columnCount: 12,
     columns: ['id', '_version', 'quote_id', 'quote_version', 'template_id', 'file_name', 'storage_path', 'file_size', 'export_status', 'is_draft', 'exported_by_user_id', 'exported_at']
   } as TableDefinition,
-  table9: {
+  table13: {
     name: 'quotation_cases',
     displayName: '견적의뢰 건 관리',
-    description: '도면 등록 및 견적의뢰 건',
-    rowCount: 2,
+    rowCount: 1,
     columnCount: 13,
     columns: ['id', '_version', 'case_no', 'company_id', 'project_id', 'case_name', 'request_date', 'status', 'revision', 'quote_readiness', 'created_by_user_id', 'created_at', 'updated_at']
   } as TableDefinition,
-  table10: {
+  table14: {
     name: 'projects',
     displayName: '프로젝트 관리',
-    description: '고객사별 프로젝트',
-    rowCount: 1,
+    rowCount: 0,
     columnCount: 9,
     columns: ['id', '_version', 'company_id', 'project_code', 'project_name', 'description', 'status', 'created_at', 'updated_at']
   } as TableDefinition,
-  table11: {
+  table15: {
     name: 'product_masters',
     displayName: '표준 마스터 품목 대장',
-    description: '표준 부품 마스터 코드 및 규격',
-    rowCount: 7,
+    rowCount: 0,
     columnCount: 12,
     columns: ['id', '_version', 'company_id', 'master_code', 'standard_name', 'category', 'specification', 'material', 'unit', 'status', 'created_at', 'updated_at']
   } as TableDefinition,
-  table12: {
+  table16: {
     name: 'price_masters',
     displayName: '기준 단가 마스터',
-    description: '표준 부품별 기본 단가표',
-    rowCount: 7,
+    rowCount: 0,
     columnCount: 12,
     columns: ['id', '_version', 'master_id', 'company_id', 'price_type', 'unit_price', 'currency', 'effective_from', 'effective_to', 'is_active', 'created_at', 'updated_at']
   } as TableDefinition,
-  table13: {
+  table17: {
     name: 'normalized_bom_items',
     displayName: '정규화 BOM 아이템',
-    description: '약어 확장, 방향, 규격/재질 표준화 아이템',
-    rowCount: 115,
+    rowCount: 0,
     columnCount: 14,
     columns: ['id', '_version', 'quotation_case_id', 'raw_item_id', 'raw_name', 'normalized_name', 'search_name', 'direction', 'spec_candidate', 'material_candidate', 'quantity', 'unit', 'status', 'created_at']
   } as TableDefinition,
-  table14: {
+  table18: {
     name: 'master_candidates',
     displayName: '마스터 추천 매칭 후보',
-    description: '유사도 채점 및 긍정/부정 근거',
-    rowCount: 54,
+    rowCount: 0,
     columnCount: 14,
     columns: ['id', '_version', 'normalized_item_id', 'master_id', 'master_code', 'standard_name', 'specification', 'material', 'rank', 'total_score', 'positive_evidence_json', 'negative_evidence_json', 'candidate_status', 'created_at']
   } as TableDefinition,
-  table15: {
+  table19: {
     name: 'master_aliases',
     displayName: '마스터 품목 별칭 대장',
-    description: '품목 이명 및 동의어 매핑',
-    rowCount: 1,
+    rowCount: 0,
     columnCount: 11,
     columns: ['id', '_version', 'company_id', 'master_id', 'alias_name', 'alias_normalized', 'approval_count', 'rejection_count', 'scope', 'created_at', 'updated_at']
   } as TableDefinition,
-  table16: {
+  table20: {
     name: 'manual_price_pool',
     displayName: '수기 단가 지식 풀',
-    description: '수기 입력된 단가 누적 학습 풀',
-    rowCount: 23,
+    rowCount: 0,
     columnCount: 10,
     columns: ['id', '_version', 'item_name', 'specification', 'material', 'unit_price', 'remark', 'quotation_case_id', 'created_by_user_id', 'created_at']
   } as TableDefinition,
-  table17: {
+  table21: {
     name: 'golden_cases',
     displayName: '골든 데이터셋 케이스',
-    description: '파서 검증용 표준 벤치마크 케이스',
-    rowCount: 1,
+    rowCount: 0,
     columnCount: 15,
     columns: ['id', '_version', 'project_id', 'quotation_case_id', 'case_code', 'name', 'description', 'data_classification', 'source_checksum', 'status', 'actual_drawing_count', 'actual_bom_count', 'actual_item_count', 'created_by', 'created_at']
   } as TableDefinition,
-  table18: {
+  table22: {
     name: 'flattened_bom_items',
     displayName: '다단계 집계 BOM',
-    description: '조립 구조가 반영된 롤업 BOM 아이템',
-    rowCount: 115,
+    rowCount: 0,
     columnCount: 13,
     columns: ['id', '_version', 'quotation_case_id', 'item_key', 'part_no', 'name', 'specification', 'material', 'total_quantity', 'unit', 'source_drawings_json', 'source_item_ids_json', 'created_at']
   } as TableDefinition,
-  table19: {
+  table23: {
     name: 'final_bom_items',
     displayName: '최종 확정 견적 BOM',
-    description: '승인 완료된 최종 견적 대상 품목',
-    rowCount: 43,
+    rowCount: 0,
     columnCount: 15,
     columns: ['id', '_version', 'quotation_case_id', 'normalized_item_id', 'final_master_id', 'final_master_code', 'final_name', 'final_spec', 'final_material', 'final_quantity', 'final_unit', 'approval_status', 'approved_by_user_id', 'approved_at', 'created_at']
   } as TableDefinition,
-  table20: {
+  table24: {
     name: 'excel_templates',
     displayName: '엑셀 템플릿 관리',
-    description: '공식 견적서 엑셀 양식 관리',
-    rowCount: 1,
+    rowCount: 0,
     columnCount: 13,
     columns: ['id', '_version', 'company_id', 'template_name', 'original_file_name', 'storage_path', 'template_type', 'version', 'is_active', 'is_default', 'created_by_user_id', 'created_at', 'updated_at']
   } as TableDefinition,
-  table21: {
+  table25: {
     name: 'dwg_conversion_runs',
     displayName: 'DWG 변환 실행 이력',
-    description: 'LibreDWG 변환 실행 로그',
     rowCount: 13,
     columnCount: 19,
     columns: ['id', '_version', 'source_file_id', 'derived_file_id', 'provider', 'converter_version', 'source_dwg_signature', 'source_dwg_version', 'output_dxf_version', 'status', 'started_at', 'completed_at', 'duration_ms', 'exit_code', 'warning_count', 'warnings_json', 'error_code', 'error_message', 'created_at']
   } as TableDefinition,
-  table22: {
+  table26: {
     name: 'drawings',
     displayName: '도면 시트 및 표제란',
-    description: '도면 번호, 품명, 규격, 척도, 리비전',
-    rowCount: 175,
+    rowCount: 0,
     columnCount: 17,
     columns: ['id', '_version', 'quotation_case_id', 'drawing_index', 'drawing_no_raw', 'drawing_no_normalized', 'drawing_name_raw', 'drawing_name_normalized', 'revision', 'material', 'scale', 'drawing_type', 'frame_bbox_json', 'title_block_bbox_json', 'confidence_score', 'status', 'created_at']
   } as TableDefinition,
-  table23: {
+  table27: {
     name: 'drawing_relationships',
     displayName: '도면 계층 관계',
-    description: '조립도-부조립도-단품 종속 관계',
-    rowCount: 117,
+    rowCount: 0,
     columnCount: 8,
     columns: ['id', '_version', 'quotation_case_id', 'parent_drawing_no', 'child_drawing_no', 'relationship_type', 'confidence_score', 'created_at']
   } as TableDefinition,
-  table24: {
+  table28: {
     name: 'companies',
     displayName: '고객사/협력사 대장',
-    description: '고객사 정보 및 테넌트 식별',
-    rowCount: 2,
+    rowCount: 4,
     columnCount: 8,
     columns: ['id', '_version', 'company_code', 'company_name', 'company_type', 'is_active', 'created_at', 'updated_at']
   } as TableDefinition,
-  table25: {
+  table29: {
     name: 'case_archives',
     displayName: '분석 스냅샷 아카이브',
-    description: '견적 건 분석 상태 스냅샷',
-    rowCount: 2,
+    rowCount: 0,
     columnCount: 10,
     columns: ['id', '_version', 'quotation_case_id', 'archive_version', 'archive_name', 'drawings_count', 'bom_items_count', 'snapshot_data_json', 'created_by_user_id', 'created_at']
   } as TableDefinition,
-  table26: {
+  table30: {
     name: 'cad_parse_runs',
     displayName: 'CAD 파싱 실행 이력',
-    description: 'CAD 엔티티 파싱 통계 및 결과',
-    rowCount: 21,
+    rowCount: 0,
     columnCount: 10,
     columns: ['id', '_version', 'source_file_id', 'dxf_version', 'total_entities', 'entity_counts_json', 'global_bounds_json', 'status', 'duration_ms', 'created_at']
   } as TableDefinition,
-  table27: {
+  table31: {
     name: 'cad_objects',
     displayName: 'CAD 객체 기하 데이터',
-    description: '도면 개별 CAD 엔티티 캐시',
-    rowCount: 931845,
+    rowCount: 0,
     columnCount: 11,
     columns: ['id', '_version', 'parse_run_id', 'handle', 'entity_type', 'layer', 'color', 'raw_text', 'bounding_box_json', 'geometry_data_json', 'created_at']
   } as TableDefinition,
-  table28: {
+  table32: {
     name: 'cad_app_settings',
     displayName: '로컬 CAD 실행 경로',
-    description: 'AutoCAD / DWG FastView / TrueView 경로',
-    rowCount: 0,
-    columnCount: 4,
-    columns: ['key', '_version', 'value', 'updated_at']
+    rowCount: 1,
+    columnCount: 5,
+    columns: ['id', 'key', '_version', 'value', 'updated_at']
   } as TableDefinition,
-  table29: {
+  table33: {
     name: 'bom_areas',
     displayName: 'BOM 검출 영역',
-    description: '도면 내 BOM 테이블 영역 바운딩 박스',
-    rowCount: 136,
+    rowCount: 0,
     columnCount: 9,
     columns: ['id', '_version', 'quotation_case_id', 'drawing_no', 'table_type', 'bbox_json', 'confidence_score', 'status', 'created_at']
   } as TableDefinition,
-  table30: {
+  table34: {
     name: 'bom_approval_records',
     displayName: 'BOM 승인/수정 이력',
-    description: '사용자 승인 결정 및 마스터 오버라이드',
-    rowCount: 38,
+    rowCount: 0,
     columnCount: 12,
     columns: ['id', '_version', 'quotation_case_id', 'normalized_item_id', 'selected_master_id', 'decision_type', 'decision_reason', 'difference_notes', 'is_override', 'approved_by_user_id', 'approved_at', 'created_at']
-  } as TableDefinition,
-  table31: {
-    name: 'example_table',
-    displayName: 'Example Table',
-    rowCount: 0,
-    columnCount: 4,
-    columns: ['id', '_version', 'name', 'created_at']
   } as TableDefinition
 } as const;
 
@@ -283,35 +274,38 @@ export function getTableByName(tableName: string): TableDefinition | undefined {
 
 // Export table names for easy access
 export const TABLE_NAMES = {
-  table1: 'users',
-  table2: 'user_company_access',
-  table3: 'uploaded_files',
-  table4: 'system_baselines',
-  table5: 'raw_bom_items',
-  table6: 'quotes',
-  table7: 'quote_items',
-  table8: 'quote_exports',
-  table9: 'quotation_cases',
-  table10: 'projects',
-  table11: 'product_masters',
-  table12: 'price_masters',
-  table13: 'normalized_bom_items',
-  table14: 'master_candidates',
-  table15: 'master_aliases',
-  table16: 'manual_price_pool',
-  table17: 'golden_cases',
-  table18: 'flattened_bom_items',
-  table19: 'final_bom_items',
-  table20: 'excel_templates',
-  table21: 'dwg_conversion_runs',
-  table22: 'drawings',
-  table23: 'drawing_relationships',
-  table24: 'companies',
-  table25: 'case_archives',
-  table26: 'cad_parse_runs',
-  table27: 'cad_objects',
-  table28: 'cad_app_settings',
-  table29: 'bom_areas',
-  table30: 'bom_approval_records',
-  table31: 'example_table'
+  table1: 'approval_requests',
+  table2: 'user_approval_permissions',
+  table3: 'system_approval_settings',
+  table4: 'user_activity_logs',
+  table5: 'users',
+  table6: 'user_company_access',
+  table7: 'uploaded_files',
+  table8: 'system_baselines',
+  table9: 'raw_bom_items',
+  table10: 'quotes',
+  table11: 'quote_items',
+  table12: 'quote_exports',
+  table13: 'quotation_cases',
+  table14: 'projects',
+  table15: 'product_masters',
+  table16: 'price_masters',
+  table17: 'normalized_bom_items',
+  table18: 'master_candidates',
+  table19: 'master_aliases',
+  table20: 'manual_price_pool',
+  table21: 'golden_cases',
+  table22: 'flattened_bom_items',
+  table23: 'final_bom_items',
+  table24: 'excel_templates',
+  table25: 'dwg_conversion_runs',
+  table26: 'drawings',
+  table27: 'drawing_relationships',
+  table28: 'companies',
+  table29: 'case_archives',
+  table30: 'cad_parse_runs',
+  table31: 'cad_objects',
+  table32: 'cad_app_settings',
+  table33: 'bom_areas',
+  table34: 'bom_approval_records'
 } as const;

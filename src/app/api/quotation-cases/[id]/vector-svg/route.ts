@@ -28,12 +28,12 @@ export async function GET(
   }
 
   // 1. Look for registered VECTOR_SVG file
-  let svgFile = db.prepare(`
+  let svgFile = (await db.prepare(`
     SELECT * FROM uploaded_files
     WHERE quotation_case_id = ? AND (file_role = 'VECTOR_SVG' OR original_file_name LIKE '%.svg')
-    ORDER BY created_at DESC
+    ORDER BY rowid DESC
     LIMIT 1
-  `).get(id) as any;
+  `).get(id)) as any;
 
   let svgPath: string | null = null;
   if (svgFile && svgFile.storage_path) {
@@ -58,12 +58,12 @@ export async function GET(
 
   // 3. On-demand Generation: If SVG not found, generate it immediately from source DXF
   if (!svgPath || !fs.existsSync(svgPath)) {
-    const sourceFile = db.prepare(`
+    const sourceFile = (await db.prepare(`
       SELECT * FROM uploaded_files
       WHERE quotation_case_id = ? AND file_type IN ('DXF', 'DWG')
-      ORDER BY (CASE WHEN file_type = 'DXF' THEN 1 ELSE 2 END) ASC, created_at DESC
+      ORDER BY (CASE WHEN file_type = 'DXF' THEN 1 ELSE 2 END) ASC, rowid DESC
       LIMIT 1
-    `).get(id) as any;
+    `).get(id)) as any;
 
     if (sourceFile && sourceFile.storage_path) {
       const srcPath = resolveStoragePath(sourceFile.storage_path);

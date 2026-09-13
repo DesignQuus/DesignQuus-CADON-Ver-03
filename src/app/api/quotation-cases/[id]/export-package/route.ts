@@ -16,16 +16,16 @@ export async function GET(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
 
   try {
-    const drawings = db.prepare('SELECT * FROM drawings WHERE quotation_case_id = ?').all(id) as any[];
-    const rawBom = db.prepare('SELECT * FROM raw_bom_items WHERE quotation_case_id = ?').all(id) as any[];
-    const dwgFile = db.prepare("SELECT * FROM uploaded_files WHERE quotation_case_id = ? AND file_type = 'DWG' ORDER BY created_at DESC LIMIT 1").get(id) as any;
-    const dxfFile = db.prepare("SELECT * FROM uploaded_files WHERE quotation_case_id = ? AND file_type = 'DXF' ORDER BY created_at DESC LIMIT 1").get(id) as any;
+    const drawings = (await db.prepare('SELECT * FROM drawings WHERE quotation_case_id = ?').all(id)) as any[];
+    const rawBom = (await db.prepare('SELECT * FROM raw_bom_items WHERE quotation_case_id = ?').all(id)) as any[];
+    const dwgFile = (await db.prepare("SELECT * FROM uploaded_files WHERE quotation_case_id = ? AND file_type = 'DWG' ORDER BY rowid DESC LIMIT 1").get(id)) as any;
+    const dxfFile = (await db.prepare("SELECT * FROM uploaded_files WHERE quotation_case_id = ? AND file_type = 'DXF' ORDER BY rowid DESC LIMIT 1").get(id)) as any;
 
     const manifest = {
       case_info: {

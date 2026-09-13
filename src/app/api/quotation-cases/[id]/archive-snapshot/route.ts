@@ -13,11 +13,11 @@ export async function GET(
 
   const { id } = await params;
   try {
-    const archives = db.prepare(`
-      SELECT id, quotation_case_id, archive_version, archive_name, drawings_count, bom_items_count, created_by_user_id, created_at
+    const archives = await db.prepare(`
+      SELECT *
       FROM case_archives
       WHERE quotation_case_id = ?
-      ORDER BY created_at DESC
+      ORDER BY rowid DESC
     `).all(id);
 
     return NextResponse.json({ archives });
@@ -36,20 +36,20 @@ export async function POST(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
 
   try {
     // 1. Fetch current analysis data
-    const drawings = db.prepare('SELECT * FROM drawings WHERE quotation_case_id = ?').all(id) as any[];
-    const rawBom = db.prepare('SELECT * FROM raw_bom_items WHERE quotation_case_id = ?').all(id) as any[];
-    const normBom = db.prepare('SELECT * FROM normalized_bom_items WHERE quotation_case_id = ?').all(id) as any[];
-    const files = db.prepare('SELECT * FROM uploaded_files WHERE quotation_case_id = ?').all(id) as any[];
+    const drawings = (await db.prepare('SELECT * FROM drawings WHERE quotation_case_id = ?').all(id)) as any[];
+    const rawBom = (await db.prepare('SELECT * FROM raw_bom_items WHERE quotation_case_id = ?').all(id)) as any[];
+    const normBom = (await db.prepare('SELECT * FROM normalized_bom_items WHERE quotation_case_id = ?').all(id)) as any[];
+    const files = (await db.prepare('SELECT * FROM uploaded_files WHERE quotation_case_id = ?').all(id)) as any[];
 
     // 2. Count existing archives to determine next version (v1.0, v2.0, ...)
-    const existingCount = db.prepare('SELECT count(*) as cnt FROM case_archives WHERE quotation_case_id = ?').get(id) as any;
+    const existingCount = (await db.prepare('SELECT count(*) as cnt FROM case_archives WHERE quotation_case_id = ?').get(id)) as any;
     const nextVer = `v${(existingCount?.cnt || 0) + 1}.0`;
     const now = new Date().toISOString();
     const dateStr = now.split('T')[0];
@@ -67,7 +67,7 @@ export async function POST(
       archived_by: session.userId
     };
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO case_archives (
         id, quotation_case_id, archive_version, archive_name,
         drawings_count, bom_items_count, snapshot_data_json,
@@ -80,7 +80,7 @@ export async function POST(
     );
 
     // Update case revision
-    db.prepare('UPDATE quotation_cases SET revision = ?, updated_at = ? WHERE id = ?').run(
+    await db.prepare('UPDATE quotation_cases SET revision = ?, updated_at = ? WHERE id = ?').run(
       nextVer, now, id
     );
 

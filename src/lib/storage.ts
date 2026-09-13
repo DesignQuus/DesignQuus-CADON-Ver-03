@@ -6,7 +6,23 @@ export function getEgdeskStorageDir(): string {
     return process.env.EGDESK_STORAGE_DIR;
   }
 
-  const projectId = process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID || '5883d2d5-7b0a-4947-a4fa-1f702c1dbc2f';
+  // Auto-read .env.development.local if not already loaded in non-Next environments
+  if (!process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID) {
+    try {
+      const envPath = path.join(process.cwd(), '.env.development.local');
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        const match = envContent.match(/NEXT_PUBLIC_EGDESK_PROJECT_ID=([^\r\n]+)/);
+        if (match && match[1]) {
+          process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID = match[1].trim();
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  const projectId = process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID || '6db634cd-3796-4c8b-8aba-549cb79c49e9';
   const envName = process.env.NEXT_PUBLIC_EGDESK_ENV || 'development';
   const appData = process.env.APPDATA || path.join(process.env.USERPROFILE || 'C:\\Users\\SteveLee', 'AppData', 'Roaming');
   
@@ -52,6 +68,11 @@ export function resolveStoragePath(storedPath: string): string {
   // Fallback check in local workspace storage
   const localCandidate = path.resolve(process.cwd(), storedPath);
   if (fs.existsSync(localCandidate)) return localCandidate;
+
+  for (const sub of ['files', 'derived', 'exports', 'templates', 'temp'] as const) {
+    const candidate = path.join(process.cwd(), 'storage', sub, fileName);
+    if (fs.existsSync(candidate)) return candidate;
+  }
 
   return storedPath;
 }

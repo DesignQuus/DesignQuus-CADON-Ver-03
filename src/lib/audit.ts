@@ -31,12 +31,12 @@ export interface LogActivityParams {
 /**
  * Directly insert an activity record into user_activity_logs
  */
-export function logUserActivity(params: LogActivityParams): void {
+export async function logUserActivity(params: LogActivityParams): Promise<void> {
   try {
     const id = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO user_activity_logs (
         id, user_id, user_name, user_login_id, user_role,
         activity_type, quotation_case_id, case_name, details,
@@ -102,16 +102,16 @@ export async function recordActivity(
     let caseName = activity.caseName;
     if (!caseName && activity.quotationCaseId) {
       try {
-        const c = db
+        const c = (await db
           .prepare('SELECT case_name, case_no FROM quotation_cases WHERE id = ?')
-          .get(activity.quotationCaseId) as { case_name: string; case_no: string } | undefined;
+          .get(activity.quotationCaseId)) as { case_name: string; case_no: string } | undefined;
         if (c) {
           caseName = `[${c.case_no}] ${c.case_name}`;
         }
       } catch {}
     }
 
-    logUserActivity({
+    await logUserActivity({
       userId: session.userId,
       userName: session.name,
       userLoginId: session.loginId,

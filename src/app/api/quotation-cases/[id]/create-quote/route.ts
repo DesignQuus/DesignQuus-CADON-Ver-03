@@ -13,13 +13,13 @@ export async function POST(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
 
   // Permission Guard
-  const perm = checkCasePermission(session.userId, session.role, id);
+  const perm = await checkCasePermission(session.userId, session.role, id);
   if (!perm.canEdit) {
     return NextResponse.json({
       error: perm.message || '해당 견적건에 대한 견적서 생성 권한이 없습니다. 최고관리자의 승인이 필요합니다.',
@@ -29,7 +29,7 @@ export async function POST(
   }
 
   try {
-    const finalItems = db.prepare(`
+    const finalItems = (await db.prepare(`
       SELECT 
         fbi.*,
         COALESCE(d.drawing_no_raw, fb.part_no, '') as drawing_no,
@@ -44,8 +44,8 @@ export async function POST(
       ) d ON d.quotation_case_id = fbi.quotation_case_id 
         AND (d.drawing_no_raw = fb.part_no OR d.drawing_name_raw = fbi.final_name)
       WHERE fbi.quotation_case_id = ? AND fbi.approval_status = 'APPROVED'
-      ORDER BY fbi.created_at ASC
-    `).all(id) as any[];
+      ORDER BY fbi.rowid ASC
+    `).all(id)) as any[];
 
     if (finalItems.length === 0) {
       return NextResponse.json({ error: '승인된 Final BOM 품목이 없습니다. 먼저 품목을 승인해주세요.' }, { status: 400 });
@@ -53,7 +53,8 @@ export async function POST(
 
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10);
-    const quoteVersion = (db.prepare('SELECT COUNT(*) as cnt FROM quotes WHERE quotation_case_id = ?').get(id) as any).cnt + 1;
+    const quoteCountRow = (await db.prepare('SELECT COUNT(*) as cnt FROM quotes WHERE quotation_case_id = ?').get(id)) as any;
+    const quoteVersion = (quoteCountRow?.cnt || 0) + 1;
     const quoteNo = `Q-${qc.case_no.replace('QT-', '')}-V${quoteVersion}`;
     const quoteId = `quote_${Date.now()}`;
 
@@ -69,15 +70,15 @@ export async function POST(
       // 1. Search Price Master
       if (item.final_master_id) {
         // Customer specific first, then standard
-        const custPrice = db.prepare(`
+        const custPrice = (await db.prepare(`
           SELECT * FROM price_masters
           WHERE master_id = ? AND company_id = ? AND is_active = 1
-        `).get(item.final_master_id, qc.company_id) as any;
+        `).get(item.final_master_id, qc.company_id)) as any;
 
-        const stdPrice = db.prepare(`
+        const stdPrice = (await db.prepare(`
           SELECT * FROM price_masters
           WHERE master_id = ? AND is_active = 1
-        `).get(item.final_master_id) as any;
+        `).get(item.final_master_id)) as any;
 
         const priceRow = custPrice || stdPrice;
         if (priceRow) {
@@ -90,7 +91,7 @@ export async function POST(
       // 2. Search Self-Learning Knowledge Pool (manual_price_pool)
       if (unitPrice === 0 && item.final_name) {
         const normFinalName = item.final_name.toUpperCase().trim();
-        const learnedPrice = db.prepare(`
+        const learnedPrice = (await db.prepare(`
           SELECT * FROM manual_price_pool
           WHERE (
               UPPER(TRIM(item_name)) = ? 
@@ -102,7 +103,7 @@ export async function POST(
             approval_count DESC,
             last_used_at DESC
           LIMIT 1
-        `).get(normFinalName, normFinalName, qc.company_id) as any;
+        `).get(normFinalName, normFinalName, qc.company_id)) as any;
 
         if (learnedPrice) {
           unitPrice = learnedPrice.unit_price;
@@ -148,7 +149,7 @@ export async function POST(
     const totalAmount = taxable + taxAmount;
 
     // Insert Quote
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO quotes (
         id, quotation_case_id, quote_no, quote_version, company_id, project_id,
         status, currency, subtotal, discount_type, discount_rate, discount_amount,
@@ -163,16 +164,14 @@ export async function POST(
     );
 
     // Insert Quote Items
-    const insertQItem = db.prepare(`
-      INSERT INTO quote_items (
-        id, quote_id, final_bom_item_id, master_id, drawing_no, item_no, master_code,
-        item_name, specification, material, quantity, unit, unit_price,
-        amount, price_source, price_status, remark, is_included, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
     for (const qi of quoteItemsData) {
-      insertQItem.run(
+      await db.prepare(`
+        INSERT INTO quote_items (
+          id, quote_id, final_bom_item_id, master_id, drawing_no, item_no, master_code,
+          item_name, specification, material, quantity, unit, unit_price,
+          amount, price_source, price_status, remark, is_included, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
         qi.id, qi.quote_id, qi.final_bom_item_id, qi.master_id, qi.drawing_no, qi.item_no,
         qi.master_code, qi.item_name, qi.specification, qi.material,
         qi.quantity, qi.unit, qi.unit_price, qi.amount, qi.price_source,

@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'cadon-bom-secret-key-super-secure-production-2026'
-);
 
 /**
  * EGDesk Database Proxy Middleware
@@ -409,45 +404,6 @@ export async function middleware(request: NextRequest) {
         { error: 'Proxy error', message: error.message },
         { status: 500 }
       );
-    }
-  }
-
-  // =========================================================================
-  // Global Authentication Enforcement (로컬/외부 접속 모든 환경 로그인 최우선 실행)
-  // =========================================================================
-  const isPublicPath =
-    pathname === '/login' ||
-    pathname.startsWith('/api/auth') ||
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/favicon.ico') ||
-    pathname.startsWith('/images') ||
-    pathname.startsWith('/public');
-
-  if (!isPublicPath) {
-    const token = request.cookies.get('cadon_session')?.value;
-    let isValidUser = false;
-
-    if (token) {
-      try {
-        await jwtVerify(token, JWT_SECRET);
-        isValidUser = true;
-      } catch {
-        isValidUser = false;
-      }
-    }
-
-    if (!isValidUser) {
-      const loginUrl = new URL('/login', request.url);
-      // 로그인 후 원래 가려던 페이지로 복귀할 수 있도록 파라미터 보존 (루트/로그인 제외)
-      if (pathname !== '/' && pathname !== '') {
-        loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search);
-      }
-      const response = NextResponse.redirect(loginUrl);
-      // 유효하지 않은 세션 쿠키가 남아있다면 제거
-      if (token) {
-        response.cookies.delete('cadon_session');
-      }
-      return response;
     }
   }
 

@@ -38,20 +38,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const { goldenCaseId } = await req.json();
-    const gcase = db.prepare('SELECT * FROM golden_cases WHERE id = ?').get(goldenCaseId || 'gcase_001') as any;
+    const gcase = (await db.prepare('SELECT * FROM golden_cases WHERE id = ?').get(goldenCaseId || 'gcase_001')) as any;
     if (!gcase) {
       return NextResponse.json({ error: 'Golden Case를 찾을 수 없습니다.' }, { status: 404 });
     }
 
     const qcId = gcase.quotation_case_id;
-    const drawings = db.prepare('SELECT * FROM drawings WHERE quotation_case_id = ?').all(qcId);
-    const bomAreas = db.prepare('SELECT * FROM bom_areas WHERE quotation_case_id = ?').all(qcId);
-    const rawBomItems = db.prepare('SELECT * FROM raw_bom_items WHERE quotation_case_id = ?').all(qcId);
-    const masterCandidates = db.prepare(`
+    const drawings = await db.prepare('SELECT * FROM drawings WHERE quotation_case_id = ?').all(qcId);
+    const bomAreas = await db.prepare('SELECT * FROM bom_areas WHERE quotation_case_id = ?').all(qcId);
+    const rawBomItems = await db.prepare('SELECT * FROM raw_bom_items WHERE quotation_case_id = ?').all(qcId);
+    const masterCandidates = (await db.prepare(`
       SELECT mc.* FROM master_candidates mc
       JOIN normalized_bom_items ni ON mc.normalized_item_id = ni.id
       WHERE ni.quotation_case_id = ?
-    `).all(qcId);
+    `).all(qcId)) as any[];
 
     const gtData = {
       actual_drawing_count: gcase.actual_drawing_count,
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     // Baseline promotion if qualified
     const baselineId = `base_${Date.now()}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO system_baselines (id, golden_case_id, baseline_name, parser_version, metrics_json, created_by, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(

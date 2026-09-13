@@ -2742,7 +2742,7 @@ export async function callAiCallerTool(
 }
 
 /** Known API key names discovered at setup time from EGDesk AI Keys Manager */
-export const AI_KEY_NAMES = ['egdesk-gemini'] as const;
+export const AI_KEY_NAMES = ['EGDesk'] as const;
 
 export type AiCallerCallOptions = {
   systemPrompt?: string;
@@ -2771,7 +2771,7 @@ export type AiCallerCallOptions = {
     mimeType?: string;
   }>;
   /** Select a specific Google API key by name (as saved in EGDesk AI Keys Manager). Leave empty to use the default key. */
-  keyName?: 'egdesk-gemini' | (string & {});
+  keyName?: 'EGDesk' | (string & {});
 };
 
 export type AiCallerModelDetails = {
@@ -2851,7 +2851,7 @@ export type AiCallerGenerateImageOptions = {
   fallbackModel?: string;
   caller?: string;
   /** Select a specific Google API key by name (as saved in EGDesk AI Keys Manager). Leave empty to use the default key. */
-  keyName?: 'egdesk-gemini' | (string & {});
+  keyName?: 'EGDesk' | (string & {});
 };
 
 export type AiCallerGeneratedImage = {

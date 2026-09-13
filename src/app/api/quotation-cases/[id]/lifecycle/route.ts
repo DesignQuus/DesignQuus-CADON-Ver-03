@@ -16,7 +16,7 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
@@ -30,7 +30,7 @@ export async function PATCH(
 
     if (action === 'ARCHIVE') {
       const archiveReason = reason || '일정 보류';
-      db.prepare(`
+      await db.prepare(`
         UPDATE quotation_cases
         SET lifecycle_status = 'ARCHIVED',
             archived_at = ?,
@@ -43,14 +43,14 @@ export async function PATCH(
         activityType: 'CASE_ARCHIVE',
         quotationCaseId: id,
         caseName: qc.case_name,
-        details: `견적건 보관함 이동 [사유: ]`
+        details: `견적건 보관함 이동 [사유: ${archiveReason}]`
       });
 
       return NextResponse.json({ success: true, message: '보관함으로 이동되었습니다.' });
     }
 
     if (action === 'TRASH') {
-      db.prepare(`
+      await db.prepare(`
         UPDATE quotation_cases
         SET lifecycle_status = 'TRASHED',
             trashed_at = ?,
@@ -70,7 +70,7 @@ export async function PATCH(
     }
 
     if (action === 'RESTORE') {
-      db.prepare(`
+      await db.prepare(`
         UPDATE quotation_cases
         SET lifecycle_status = 'ACTIVE',
             archived_at = NULL,
@@ -96,34 +96,34 @@ export async function PATCH(
         return NextResponse.json({ error: '영구 삭제 권한이 없습니다 (담당자 또는 최고관리자 전용).' }, { status: 403 });
       }
 
-      const files = db.prepare('SELECT * FROM uploaded_files WHERE quotation_case_id = ?').all(id) as any[];
+      const files = (await db.prepare('SELECT * FROM uploaded_files WHERE quotation_case_id = ?').all(id)) as any[];
 
-      const deleteTx = db.transaction(() => {
+      const deleteTx = db.transaction(async () => {
         const fileIds = files.map(f => f.id);
         if (fileIds.length > 0) {
           const placeholders = fileIds.map(() => '?').join(',');
-          const parseRuns = db.prepare(`SELECT id FROM cad_parse_runs WHERE source_file_id IN ()`).all(...fileIds) as any[];
+          const parseRuns = (await db.prepare(`SELECT id FROM cad_parse_runs WHERE source_file_id IN (${placeholders})`).all(...fileIds)) as any[];
           for (const pr of parseRuns) {
-            db.prepare('DELETE FROM cad_objects WHERE parse_run_id = ?').run(pr.id);
-            db.prepare('DELETE FROM cad_parse_runs WHERE id = ?').run(pr.id);
+            await db.prepare('DELETE FROM cad_objects WHERE parse_run_id = ?').run(pr.id);
+            await db.prepare('DELETE FROM cad_parse_runs WHERE id = ?').run(pr.id);
           }
         }
 
-        db.prepare('DELETE FROM drawings WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM drawing_relationships WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM bom_areas WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM raw_bom_items WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM flattened_bom_items WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM normalized_bom_items WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM master_candidates WHERE normalized_item_id LIKE ?').run(`%%`);
-        db.prepare('DELETE FROM bom_approval_records WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM final_bom_items WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM quotes WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM uploaded_files WHERE quotation_case_id = ?').run(id);
-        db.prepare('DELETE FROM quotation_cases WHERE id = ?').run(id);
+        await db.prepare('DELETE FROM drawings WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM drawing_relationships WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM bom_areas WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM raw_bom_items WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM flattened_bom_items WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM normalized_bom_items WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM master_candidates WHERE normalized_item_id LIKE ?').run(`%${id}%`);
+        await db.prepare('DELETE FROM bom_approval_records WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM final_bom_items WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM quotes WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM uploaded_files WHERE quotation_case_id = ?').run(id);
+        await db.prepare('DELETE FROM quotation_cases WHERE id = ?').run(id);
       });
 
-      deleteTx();
+      await deleteTx();
 
       for (const f of files) {
         if (f.storage_path) {

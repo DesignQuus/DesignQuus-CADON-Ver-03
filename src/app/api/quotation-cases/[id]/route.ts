@@ -19,37 +19,47 @@ export async function GET(
 
   const { id } = await params;
 
-  const qc = db.prepare(`
-    SELECT qc.*, c.company_name, c.company_code, p.project_name, p.project_code,
-           u.name as created_by_name
-    FROM quotation_cases qc
-    JOIN companies c ON qc.company_id = c.id
-    JOIN projects p ON qc.project_id = p.id
-    LEFT JOIN users u ON qc.created_by_user_id = u.id
-    WHERE qc.id = ?
-  `).get(id) as any;
-
-  if (!qc) {
+  const rawQc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
+  if (!rawQc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
 
+  const [company, project, creator] = await Promise.all([
+    rawQc.company_id ? db.prepare('SELECT company_name, company_code FROM companies WHERE id = ?').get(rawQc.company_id) as Promise<any> : Promise.resolve(null),
+    rawQc.project_id ? db.prepare('SELECT project_name, project_code FROM projects WHERE id = ?').get(rawQc.project_id) as Promise<any> : Promise.resolve(null),
+    rawQc.created_by_user_id ? db.prepare('SELECT name FROM users WHERE id = ?').get(rawQc.created_by_user_id) as Promise<any> : Promise.resolve(null)
+  ]);
+
+  const qc = {
+    ...rawQc,
+    company_name: company?.company_name || '',
+    company_code: company?.company_code || '',
+    project_name: project?.project_name || '',
+    project_code: project?.project_code || '',
+    created_by_name: creator?.name || '담당자'
+  };
+
   // Tenant Isolation Check
   if (session.role !== 'SUPER_ADMIN') {
-    const access = db.prepare(`
-      SELECT 1 FROM user_company_access
-      WHERE user_id = ? AND company_id = ? AND is_active = 1
-    `).get(session.userId, qc.company_id);
-    if (!access) {
-      return NextResponse.json({ error: '해당 고객사의 견적건에 접근할 권한이 없습니다.' }, { status: 403 });
+    const isOwner = qc.created_by_user_id === session.userId;
+    const isUnassigned = !qc.company_id || qc.company_id === 'comp_unassigned';
+    if (!isOwner && !isUnassigned) {
+      const access = await db.prepare(`
+        SELECT 1 FROM user_company_access
+        WHERE user_id = ? AND company_id = ? AND is_active = 1
+      `).get(session.userId, qc.company_id);
+      if (!access) {
+        return NextResponse.json({ error: '해당 고객사의 견적건에 접근할 권한이 없습니다.' }, { status: 403 });
+      }
     }
   }
 
   // Fetch all related entities (Exclude internal conversion artifacts from user-facing files)
-  const allCaseFiles = db.prepare(`
+  const allCaseFiles = (await db.prepare(`
     SELECT * FROM uploaded_files
     WHERE quotation_case_id = ?
-    ORDER BY created_at ASC
-  `).all(id) as any[];
+    ORDER BY rowid ASC
+  `).all(id)) as any[];
 
   // Primary source files (exclude internal conversion artifacts like DERIVED and VECTOR_SVG)
   const sourceFiles = allCaseFiles.filter((f: any) => 
@@ -79,7 +89,7 @@ export async function GET(
   }
 
   // If case has no source files and no drawings, return clean initial state
-  const existingDrawingsCount = db.prepare('SELECT COUNT(*) as cnt FROM drawings WHERE quotation_case_id = ?').get(id) as any;
+  const existingDrawingsCount = (await db.prepare('SELECT COUNT(*) as cnt FROM drawings WHERE quotation_case_id = ?').get(id)) as any;
   if (files.length === 0 && (!existingDrawingsCount?.cnt || existingDrawingsCount?.cnt === 0)) {
     return NextResponse.json({
       case: { ...qc, status: 'REGISTERED', quote_readiness: 'PENDING_BOM' },
@@ -102,19 +112,19 @@ export async function GET(
   }
   // Auto-cleanup orphaned drawings whose source file was deleted from this case
   if (sourceFiles.length > 0) {
-    db.prepare(`
-      DELETE FROM drawings 
-      WHERE quotation_case_id = ? 
-        AND source_file_id IS NOT NULL 
-        AND source_file_id NOT IN (SELECT id FROM uploaded_files WHERE quotation_case_id = ?)
-    `).run(id, id);
+    const validFileIds = new Set(sourceFiles.map((f: any) => f.id));
+    const allCaseDrawings = (await db.prepare('SELECT id, source_file_id FROM drawings WHERE quotation_case_id = ?').all(id)) as any[];
+    const orphanedDrawings = allCaseDrawings.filter(d => d.source_file_id && !validFileIds.has(d.source_file_id));
+    for (const od of orphanedDrawings) {
+      await db.prepare('DELETE FROM drawings WHERE id = ?').run(od.id);
+    }
   }
 
-  const drawings = db.prepare('SELECT * FROM drawings WHERE quotation_case_id = ? ORDER BY drawing_index ASC').all(id) as any[];
-  const relationships = db.prepare('SELECT * FROM drawing_relationships WHERE quotation_case_id = ?').all(id);
-  const bomAreas = db.prepare('SELECT * FROM bom_areas WHERE quotation_case_id = ?').all(id);
-  const rawBomItems = db.prepare('SELECT * FROM raw_bom_items WHERE quotation_case_id = ? ORDER BY row_index ASC').all(id) as any[];
-  const flattenedBomItems = db.prepare('SELECT * FROM flattened_bom_items WHERE quotation_case_id = ?').all(id) as any[];
+  const drawings = (await db.prepare('SELECT * FROM drawings WHERE quotation_case_id = ? ORDER BY drawing_index ASC').all(id)) as any[];
+  const relationships = await db.prepare('SELECT * FROM drawing_relationships WHERE quotation_case_id = ?').all(id);
+  const bomAreas = await db.prepare('SELECT * FROM bom_areas WHERE quotation_case_id = ?').all(id);
+  const rawBomItems = (await db.prepare('SELECT * FROM raw_bom_items WHERE quotation_case_id = ? ORDER BY row_index ASC').all(id)) as any[];
+  const flattenedBomItems = (await db.prepare('SELECT * FROM flattened_bom_items WHERE quotation_case_id = ?').all(id)) as any[];
 
   // Auto-correct sub-part drawings that had generic project title instead of actual part name
   const partNameMap = new Map<string, string>();
@@ -144,9 +154,9 @@ export async function GET(
     }
   }
 
-  const priceMasters = db.prepare('SELECT * FROM price_masters').all() as any[];
+  const priceMasters = (await db.prepare('SELECT * FROM price_masters').all()) as any[];
 
-  const normalizedItems = db.prepare(`
+  const normalizedItems = (await db.prepare(`
     SELECT 
       ni.*,
       COALESCE(fb.part_no, '') as drawing_no,
@@ -188,9 +198,9 @@ export async function GET(
     LEFT JOIN companies c ON qc.company_id = c.id
     WHERE ni.quotation_case_id = ?
     ORDER BY ni.id ASC
-  `).all(id) as any[];
+  `).all(id)) as any[];
 
-  const learnedPool = getLearnedPricePool(qc.company_id);
+  const learnedPool = await getLearnedPricePool(qc.company_id);
 
   // 💎 Attach BOM Similarity Analysis & Standard Master Schema Suggestion to each item
   for (const item of normalizedItems) {
@@ -199,7 +209,7 @@ export async function GET(
   }
   
   // Fetch candidates for normalized items
-  const candidates = db.prepare(`
+  const candidates = await db.prepare(`
     SELECT mc.*, ni.raw_name, ni.normalized_name
     FROM master_candidates mc
     JOIN normalized_bom_items ni ON mc.normalized_item_id = ni.id
@@ -207,15 +217,15 @@ export async function GET(
     ORDER BY mc.rank ASC
   `).all(id);
 
-  const approvalRecords = db.prepare('SELECT * FROM bom_approval_records WHERE quotation_case_id = ?').all(id);
-  const finalBomItems = db.prepare('SELECT * FROM final_bom_items WHERE quotation_case_id = ?').all(id);
-  const quotes = db.prepare('SELECT * FROM quotes WHERE quotation_case_id = ? ORDER BY quote_version DESC').all(id);
+  const approvalRecords = await db.prepare('SELECT * FROM bom_approval_records WHERE quotation_case_id = ?').all(id);
+  const finalBomItems = await db.prepare('SELECT * FROM final_bom_items WHERE quotation_case_id = ?').all(id);
+  const quotes = (await db.prepare('SELECT * FROM quotes WHERE quotation_case_id = ? ORDER BY quote_version DESC').all(id)) as any[];
 
   // Latest quote items if exists
-  let latestQuote = quotes[0] as any || null;
+  let latestQuote = quotes[0] || null;
   let quoteItems: any[] = [];
   if (latestQuote) {
-    quoteItems = db.prepare(`
+    quoteItems = (await db.prepare(`
       SELECT 
         qi.*,
         COALESCE(NULLIF(qi.drawing_no, ''), fb.part_no, '') as drawing_no,
@@ -225,29 +235,29 @@ export async function GET(
       LEFT JOIN flattened_bom_items fb ON fb.id = REPLACE(fbi.normalized_item_id, 'norm_', 'fb_')
       WHERE qi.quote_id = ?
       ORDER BY qi.item_no ASC
-    `).all(latestQuote.id);
+    `).all(latestQuote.id)) as any[];
   }
 
   // Latest CAD Parse Run and Objects for preview
-  const latestParseRun = db.prepare(`
-    SELECT cpr.id, cpr.source_file_id, cpr.status, cpr.total_entities, cpr.created_at
+  const latestParseRun = (await db.prepare(`
+    SELECT cpr.*
     FROM cad_parse_runs cpr
     JOIN uploaded_files uf ON cpr.source_file_id = uf.id
     WHERE uf.quotation_case_id = ?
-    ORDER BY cpr.created_at DESC
+    ORDER BY cpr.rowid DESC
     LIMIT 1
-  `).get(id) as any;
+  `).get(id)) as any;
 
   let cadObjects: any[] = [];
   if (latestParseRun) {
-    cadObjects = db.prepare(`
+    cadObjects = (await db.prepare(`
       SELECT * FROM cad_objects
       WHERE parse_run_id = ?
       LIMIT 60000
-    `).all(latestParseRun.id);
+    `).all(latestParseRun.id)) as any[];
   }
 
-  const permission = checkCasePermission(session.userId, session.role, id);
+  const permission = await checkCasePermission(session.userId, session.role, id);
 
   return NextResponse.json({
     case: qc,
@@ -281,7 +291,7 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
@@ -300,21 +310,21 @@ export async function PATCH(
       targetCompanyId = companyId;
     } else if (companyName && companyName.trim()) {
       const trimmed = companyName.trim();
-      const existing = db.prepare('SELECT id FROM companies WHERE company_name = ?').get(trimmed) as any;
+      const existing = (await db.prepare('SELECT id FROM companies WHERE company_name = ?').get(trimmed)) as any;
       if (existing) {
         targetCompanyId = existing.id;
       } else {
         const newCompId = `comp_${Date.now()}`;
         const code = `CUST-${Date.now().toString().slice(-4)}`;
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO companies (id, company_code, company_name, company_type, is_active, created_at, updated_at)
           VALUES (?, ?, ?, 'CUSTOMER', 1, ?, ?)
         `).run(newCompId, code, trimmed, now, now);
 
         // Grant access
-        const allUsers = db.prepare('SELECT id FROM users').all() as any[];
+        const allUsers = (await db.prepare('SELECT id FROM users').all()) as any[];
         for (const u of allUsers) {
-          db.prepare(`
+          await db.prepare(`
             INSERT OR IGNORE INTO user_company_access (user_id, company_id, access_role, is_active)
             VALUES (?, ?, 'MANAGER', 1)
           `).run(u.id, newCompId);
@@ -323,7 +333,7 @@ export async function PATCH(
 
         // Auto create project for new company
         const newProjId = `proj_${Date.now()}`;
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO projects (id, company_id, project_code, project_name, status, created_at, updated_at)
           VALUES (?, ?, 'PRJ-MAIN', ?, 'ACTIVE', ?, ?)
         `).run(newProjId, newCompId, `${trimmed} 표준 견적 프로젝트`, now, now);
@@ -336,12 +346,12 @@ export async function PATCH(
       targetProjectId = projectId;
     } else if (projectName && projectName.trim()) {
       const trimmedP = projectName.trim();
-      const existingP = db.prepare('SELECT id FROM projects WHERE company_id = ? AND project_name = ?').get(targetCompanyId, trimmedP) as any;
+      const existingP = (await db.prepare('SELECT id FROM projects WHERE company_id = ? AND project_name = ?').get(targetCompanyId, trimmedP)) as any;
       if (existingP) {
         targetProjectId = existingP.id;
       } else {
         const newPId = `proj_${Date.now()}`;
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO projects (id, company_id, project_code, project_name, status, created_at, updated_at)
           VALUES (?, ?, 'PRJ-NEW', ?, 'ACTIVE', ?, ?)
         `).run(newPId, targetCompanyId, trimmedP, now, now);
@@ -353,13 +363,13 @@ export async function PATCH(
       targetCaseName = caseName.trim();
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE quotation_cases
       SET company_id = ?, project_id = ?, case_name = ?, updated_at = ?
       WHERE id = ?
     `).run(targetCompanyId, targetProjectId, targetCaseName, now, id);
 
-    const updated = db.prepare(`
+    const updated = await db.prepare(`
       SELECT qc.*, c.company_name, c.company_code, p.project_name, p.project_code
       FROM quotation_cases qc
       JOIN companies c ON qc.company_id = c.id

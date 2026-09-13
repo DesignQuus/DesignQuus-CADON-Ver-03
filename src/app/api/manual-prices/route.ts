@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   try {
     if (mode === 'ALL_LEARNED') {
-      const allLearned = getLearnedPricePool();
+      const allLearned = await getLearnedPricePool();
       return NextResponse.json({ success: true, list: allLearned });
     }
 
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
         mpp.unit_price, 
         MAX(mpp.remark) as remark, 
         MAX(mpp.quotation_case_id) as quotation_case_id, 
-        MAX(mpp.created_at) as created_at,
+        MAX(mpp.rowid) as latest_rowid,
         MAX(COALESCE(mpp.approval_count, 1)) as approval_count,
         MAX(mpp.last_used_at) as last_used_at,
         MAX(mpp.source) as source,
@@ -38,27 +38,30 @@ export async function GET(req: NextRequest) {
         CASE
           WHEN LOWER(mpp.item_name) = LOWER(?) THEN 100
           WHEN LOWER(mpp.item_name) LIKE LOWER(?) THEN 50
+          WHEN LOWER(mpp.specification) LIKE LOWER(?) THEN 30
+          WHEN LOWER(mpp.material) LIKE LOWER(?) THEN 20
           ELSE 10
         END as match_score
       FROM manual_price_pool mpp
-      LEFT JOIN companies c ON mpp.company_id = c.id
+      LEFT JOIN quotation_cases qc ON mpp.quotation_case_id = qc.id
+      LEFT JOIN companies c ON qc.company_id = c.id
     `;
-    const params: any[] = [name, `%${name}%`];
+    const params: any[] = [name, `%${name}%`, `%${name}%`, `%${name}%`];
 
     if (name) {
-      query += ` WHERE LOWER(mpp.item_name) LIKE LOWER(?) OR LOWER(COALESCE(mpp.specification, '')) LIKE LOWER(?)`;
+      query += ` WHERE mpp.item_name LIKE ? OR mpp.specification LIKE ?`;
       params.push(`%${name}%`, `%${name}%`);
     }
 
     query += ` GROUP BY mpp.item_name, mpp.specification, mpp.material, mpp.unit_price`;
-    query += ` ORDER BY match_score DESC, mpp.created_at DESC LIMIT 15`;
+    query += ` ORDER BY match_score DESC, mpp.rowid DESC LIMIT 15`;
 
-    const results = db.prepare(query).all(...params) as any[];
+    const results = (await db.prepare(query).all(...params)) as any[];
 
     // If matches are few, fetch most recent items from the pool as general suggestions
     if (results.length < 5) {
       const existingKeys = new Set(results.map((r: any) => `${r.item_name}_${r.unit_price}`));
-      const recentGeneral = db.prepare(`
+      const recentGeneral = (await db.prepare(`
         SELECT 
           MAX(id) as id, 
           item_name, 
@@ -67,13 +70,13 @@ export async function GET(req: NextRequest) {
           unit_price, 
           MAX(remark) as remark, 
           MAX(quotation_case_id) as quotation_case_id, 
-          MAX(created_at) as created_at, 
+          MAX(rowid) as latest_rowid, 
           5 as match_score
         FROM manual_price_pool
         GROUP BY item_name, specification, material, unit_price
-        ORDER BY created_at DESC
+        ORDER BY rowid DESC
         LIMIT 10
-      `).all() as any[];
+      `).all()) as any[];
 
       for (const r of recentGeneral) {
         const key = `${r.item_name}_${r.unit_price}`;
@@ -112,7 +115,7 @@ export async function GET(req: NextRequest) {
         WHERE pm.is_active = 1
         ORDER BY match_score DESC, p.standard_name ASC
       `;
-      priceMasters = db.prepare(pmQuery).all(name, name, `%${name}%`, `%${name}%`, `%${name}%`) as any[];
+      priceMasters = (await db.prepare(pmQuery).all(name, name, `%${name}%`, `%${name}%`, `%${name}%`)) as any[];
     } catch (pmErr) {
       console.warn('priceMasters fetch failed:', pmErr);
     }

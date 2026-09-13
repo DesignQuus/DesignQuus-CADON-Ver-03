@@ -22,6 +22,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [privacyReason, setPrivacyReason] = useState('');
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'cad' | 'structure' | 'approval' | 'quote' | 'excel'>('cad');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -414,7 +415,12 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
   const fetchData = async () => {
     try {
+      setFetchError(null);
       const res = await fetch(`/api/quotation-cases/${id}`);
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
       if (res.ok) {
         const json = await res.json();
         setData(json);
@@ -428,7 +434,12 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             .map((ni: any) => ni.id);
           setSelectedApprovalIds(quoteIncludedIds);
         }
+      } else {
+        const errJson = await res.json().catch(() => null);
+        setFetchError(errJson?.error || `견적건을 불러오는 중 오류가 발생했습니다 (${res.status})`);
       }
+    } catch (e: any) {
+      setFetchError(e.message || '네트워크 통신 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -1689,10 +1700,48 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   };
 
   if (loading) {
-    return <div className="text-center py-24 text-slate-500 font-medium">견적 워크벤치 로딩 중...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center py-32 space-y-4">
+        <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
+        <div className="text-slate-600 font-semibold text-sm">견적 워크벤치 로딩 중...</div>
+      </div>
+    );
   }
 
   const qc = data?.case;
+
+  if (!qc) {
+    return (
+      <div className="max-w-xl mx-auto my-24 p-8 bg-white rounded-2xl border border-slate-200 shadow-sm text-center space-y-5">
+        <div className="w-14 h-14 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-center mx-auto text-amber-600">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="text-lg font-bold text-slate-900">견적의뢰 건을 불러올 수 없습니다</h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+            {fetchError || '요청하신 견적건 ID가 존재하지 않거나, 조회 권한이 필요합니다.'}
+          </p>
+        </div>
+        <div className="pt-2 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => { setLoading(true); fetchData(); }}
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            다시 시도
+          </button>
+          <Link
+            href="/cases"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5"
+          >
+            <Home className="w-3.5 h-3.5" />
+            견적의뢰 메인 목록으로
+          </Link>
+        </div>
+      </div>
+    );
+  }
   const rawFiles = data?.files || [];
   // User-facing primary source drawings only (exclude internal conversion artifacts like DERIVED and VECTOR_SVG)
   const files = rawFiles.filter((f: any) => 

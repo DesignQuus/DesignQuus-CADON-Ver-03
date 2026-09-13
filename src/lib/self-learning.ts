@@ -35,7 +35,7 @@ export interface LearnedMaterialRecord {
 /**
  * 도면 검수 승인 또는 견적 단가 입력 시 지식 베이스(manual_price_pool)에 자동 누적 및 자가학습 갱신
  */
-export function learnOrUpdateMaterialPrice(params: LearnMaterialParams): { success: boolean; id: string; isNew: boolean } {
+export async function learnOrUpdateMaterialPrice(params: LearnMaterialParams): Promise<{ success: boolean; id: string; isNew: boolean }> {
   const now = new Date().toISOString();
   const name = (params.standardName || params.rawName || '').trim();
   if (!name) return { success: false, id: '', isNew: false };
@@ -56,7 +56,7 @@ export function learnOrUpdateMaterialPrice(params: LearnMaterialParams): { succe
     let existing: any = null;
 
     if (params.companyId) {
-      existing = db.prepare(`
+      existing = await db.prepare(`
         SELECT * FROM manual_price_pool
         WHERE company_id = ? 
           AND (
@@ -75,7 +75,7 @@ export function learnOrUpdateMaterialPrice(params: LearnMaterialParams): { succe
     }
 
     if (!existing) {
-      existing = db.prepare(`
+      existing = await db.prepare(`
         SELECT * FROM manual_price_pool
         WHERE (
             UPPER(TRIM(item_name)) = ? 
@@ -99,7 +99,7 @@ export function learnOrUpdateMaterialPrice(params: LearnMaterialParams): { succe
       const updatedRemark = remark || existing.remark;
       const updatedCompany = params.companyId || existing.company_id;
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE manual_price_pool
         SET 
           unit_price = ?,
@@ -128,7 +128,7 @@ export function learnOrUpdateMaterialPrice(params: LearnMaterialParams): { succe
     } else {
       // 3. 신규 자재 학습 풀 등록
       const newId = `mpp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO manual_price_pool (
           id, item_name, standard_name, specification, material, standard_material,
           unit_price, approval_count, last_used_at, source, remark, company_id,
@@ -156,15 +156,15 @@ export function learnOrUpdateMaterialPrice(params: LearnMaterialParams): { succe
       if (params.companyId && params.rawName && params.standardName && params.rawName !== params.standardName) {
         try {
           const aliasNorm = params.rawName.toUpperCase().trim();
-          const existingAlias = db.prepare(`
+          const existingAlias = await db.prepare(`
             SELECT id FROM master_aliases 
             WHERE company_id = ? AND alias_normalized = ?
           `).get(params.companyId, aliasNorm);
 
           if (!existingAlias) {
-            const anyMaster = db.prepare('SELECT id FROM product_masters LIMIT 1').get() as { id: string } | undefined;
+            const anyMaster = (await db.prepare('SELECT id FROM product_masters LIMIT 1').get()) as { id: string } | undefined;
             if (anyMaster) {
-              db.prepare(`
+              await db.prepare(`
                 INSERT OR IGNORE INTO master_aliases (
                   id, company_id, master_id, alias_name, alias_normalized,
                   approval_count, scope, created_at, updated_at
@@ -188,16 +188,16 @@ export function learnOrUpdateMaterialPrice(params: LearnMaterialParams): { succe
 /**
  * 전체 누적 학습된 자재/단가 풀 조회 (승인 횟수 및 최신순 정렬)
  */
-export function getLearnedPricePool(companyId?: string | null): LearnedMaterialRecord[] {
+export async function getLearnedPricePool(companyId?: string | null): Promise<LearnedMaterialRecord[]> {
   try {
-    const rows = db.prepare(`
+    const rows = (await db.prepare(`
       SELECT 
         mpp.*,
         c.company_name
       FROM manual_price_pool mpp
       LEFT JOIN companies c ON mpp.company_id = c.id
-      ORDER BY mpp.approval_count DESC, mpp.last_used_at DESC, mpp.created_at DESC
-    `).all() as LearnedMaterialRecord[];
+      ORDER BY mpp.approval_count DESC, mpp.last_used_at DESC, mpp.rowid DESC
+    `).all()) as LearnedMaterialRecord[];
 
     return rows;
   } catch (e) {

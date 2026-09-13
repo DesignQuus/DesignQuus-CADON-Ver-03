@@ -10,11 +10,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   }
 
-  const settings = getSystemApprovalSettings();
-  const userPermissions = getAllUserApprovalPermissions();
-  const pendingRow = db.prepare(`
+  const settings = await getSystemApprovalSettings();
+  const userPermissions = await getAllUserApprovalPermissions();
+  const pendingRow = (await db.prepare(`
     SELECT COUNT(*) as cnt FROM approval_requests WHERE status = 'PENDING'
-  `).get() as { cnt: number };
+  `).get()) as { cnt: number };
 
   return NextResponse.json({
     settings,
@@ -38,10 +38,10 @@ export async function POST(req: NextRequest) {
     const { settings, userPermissions } = await req.json();
     const now = new Date().toISOString();
 
-    db.transaction(() => {
+    const runTx = db.transaction(async () => {
       // 1. Update global settings if provided
       if (settings) {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO system_approval_settings (
             id, cross_user_edit_policy, cross_user_approve_policy,
             require_admin_final_quote_approval, approval_valid_hours, updated_by_user_id, updated_at
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       // 2. Update user permissions matrix if provided
       if (Array.isArray(userPermissions)) {
         for (const u of userPermissions) {
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO user_approval_permissions (
               user_id, can_edit_own, can_approve_own, can_edit_others,
               can_approve_others, can_edit_price, can_approve_quote, updated_at
@@ -91,7 +91,8 @@ export async function POST(req: NextRequest) {
           );
         }
       }
-    })();
+    });
+    await runTx();
 
     // Audit log
     await recordActivity(req, session, {

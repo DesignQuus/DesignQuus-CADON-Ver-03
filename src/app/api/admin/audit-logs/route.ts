@@ -39,35 +39,28 @@ export async function GET(req: NextRequest) {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const countRow = db
+    const countRow = (await db
       .prepare(`SELECT COUNT(*) as cnt FROM user_activity_logs ${whereClause}`)
-      .get(...params) as { cnt: number };
+      .get(...params)) as { cnt: number };
 
     const total = countRow ? countRow.cnt : 0;
     const totalPages = Math.ceil(total / limit);
 
-    const logs = db
+    const logs = await db
       .prepare(
-        `SELECT * FROM user_activity_logs ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+        `SELECT * FROM user_activity_logs ${whereClause} ORDER BY rowid DESC LIMIT ? OFFSET ?`
       )
       .all(...params, limit, offset);
 
     // Calculate Summary Stats
     const today = new Date().toISOString().split('T')[0];
-    const statsRow = db.prepare(`
-      SELECT
-        COUNT(*) as totalLogs,
-        SUM(CASE WHEN activity_type = 'LOGIN' AND created_at >= ? THEN 1 ELSE 0 END) as todayLogins,
-        SUM(CASE WHEN activity_type = 'PRICE_UPDATE' THEN 1 ELSE 0 END) as priceUpdates,
-        SUM(CASE WHEN activity_type = 'EXCEL_EXPORT' THEN 1 ELSE 0 END) as excelExports,
-        SUM(CASE WHEN activity_type = 'QUOTE_TOGGLE' THEN 1 ELSE 0 END) as quoteToggles
-      FROM user_activity_logs
-    `).get(today) as {
-      totalLogs: number;
-      todayLogins: number;
-      priceUpdates: number;
-      excelExports: number;
-      quoteToggles: number;
+    const allActivityLogs = (await db.prepare('SELECT * FROM user_activity_logs').all()) as any[];
+    const statsRow = {
+      totalLogs: allActivityLogs.length,
+      todayLogins: allActivityLogs.filter(l => l.activity_type === 'LOGIN' && (l.created_at || '').startsWith(today)).length,
+      priceUpdates: allActivityLogs.filter(l => l.activity_type === 'PRICE_UPDATE').length,
+      excelExports: allActivityLogs.filter(l => l.activity_type === 'EXCEL_EXPORT').length,
+      quoteToggles: allActivityLogs.filter(l => l.activity_type === 'QUOTE_TOGGLE').length
     };
 
     return NextResponse.json({

@@ -46,20 +46,20 @@ export async function POST(
   } catch {}
 
   // 1. Find file record in database
-  let file = db.prepare(`
+  let file = (await db.prepare(`
     SELECT * FROM uploaded_files
     WHERE quotation_case_id = ? AND (file_type = 'DWG' OR original_file_name LIKE '%.dwg')
-    ORDER BY created_at DESC
+    ORDER BY rowid DESC
     LIMIT 1
-  `).get(id) as any;
+  `).get(id)) as any;
 
   if (!file) {
-    file = db.prepare(`
+    file = (await db.prepare(`
       SELECT * FROM uploaded_files
       WHERE quotation_case_id = ? AND (file_type = 'DXF' OR original_file_name LIKE '%.dxf')
-      ORDER BY created_at DESC
+      ORDER BY rowid DESC
       LIMIT 1
-    `).get(id) as any;
+    `).get(id)) as any;
   }
 
   if (!file) {

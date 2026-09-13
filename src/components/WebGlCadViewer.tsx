@@ -488,6 +488,9 @@ export default function WebGlCadViewer({
       }
 
       const version = dataView.getUint32(4, true);
+      if (version === 2 && arrayBuffer.byteLength < 32) {
+        throw new Error('CAD 바이너리 v2 헤더가 올바르지 않습니다 (최소 32바이트 필요).');
+      }
       let numLines = 0, numTris = 0;
       let minX = 0, minY = 0, maxX = 0, maxY = 0;
       let posByteOffset = 28;

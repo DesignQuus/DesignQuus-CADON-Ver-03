@@ -99,18 +99,18 @@ export async function GET(
   // Auto-generate if missing in all locations
   if (!targetTxt || !fs.existsSync(targetTxt)) {
     const sourceFile = fileId
-      ? (db.prepare(`
+      ? ((await db.prepare(`
           SELECT * FROM uploaded_files
           WHERE quotation_case_id = ? AND (id = ? OR derived_from_file_id = ?) AND file_type IN ('DXF', 'DWG')
-          ORDER BY (CASE WHEN file_type = 'DXF' THEN 1 ELSE 2 END) ASC, created_at DESC
+          ORDER BY (CASE WHEN file_type = 'DXF' THEN 1 ELSE 2 END) ASC, rowid DESC
           LIMIT 1
-        `).get(id, fileId, fileId) as any)
-      : (db.prepare(`
+        `).get(id, fileId, fileId)) as any)
+      : ((await db.prepare(`
           SELECT * FROM uploaded_files
           WHERE quotation_case_id = ? AND file_type IN ('DXF', 'DWG')
-          ORDER BY (CASE WHEN file_type = 'DXF' THEN 1 ELSE 2 END) ASC, created_at DESC
+          ORDER BY (CASE WHEN file_type = 'DXF' THEN 1 ELSE 2 END) ASC, rowid DESC
           LIMIT 1
-        `).get(id) as any);
+        `).get(id)) as any);
 
     if (sourceFile && sourceFile.storage_path) {
       const srcPath = resolveStoragePath(sourceFile.storage_path);

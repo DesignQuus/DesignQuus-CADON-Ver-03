@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import { db } from './db';
+import { db, insertRows } from './db';
 import { getStorageSubdir, resolveStoragePath } from './storage';
 
 const SCRIPTS_DIR = path.join(process.cwd(), 'scripts');
@@ -54,7 +54,7 @@ export async function processCadFilePipeline(
   sourceFileId: string,
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const file = db.prepare('SELECT * FROM uploaded_files WHERE id = ?').get(sourceFileId) as any;
+  const file = (await db.prepare('SELECT * FROM uploaded_files WHERE id = ?').get(sourceFileId)) as any;
   if (!file) {
     return { success: false, error: 'FILE_NOT_FOUND' };
   }
@@ -72,7 +72,7 @@ export async function processCadFilePipeline(
     const absoluteSourcePath = resolveStoragePath(file.storage_path);
     const convResult = await runPythonScript('dwg_converter.py', [absoluteSourcePath, derivedDxfPath]);
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO dwg_conversion_runs (
         id, source_file_id, provider, converter_version, source_dwg_signature,
         status, started_at, completed_at, duration_ms, warning_count, warnings_json,
@@ -91,14 +91,14 @@ export async function processCadFilePipeline(
     }
 
     // Clean up any previous derived DXF files for this source DWG to prevent duplicate listing
-    db.prepare(`
+    await db.prepare(`
       DELETE FROM uploaded_files
       WHERE quotation_case_id = ? AND derived_from_file_id = ? AND upload_status = 'CONVERTED'
     `).run(quotationCaseId, file.id);
 
     // Register Derived File
     const derivedFileId = `file_drv_${Date.now()}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO uploaded_files (
         id, quotation_case_id, original_file_name, stored_file_name, storage_path,
         file_type, file_role, derived_from_file_id, file_size, checksum,
@@ -110,7 +110,7 @@ export async function processCadFilePipeline(
       convResult.derived_dxf_sha256 || 'checksum', 'CONVERTED', userId, now
     );
 
-    db.prepare('UPDATE dwg_conversion_runs SET derived_file_id = ? WHERE id = ?').run(derivedFileId, convRunId);
+    await db.prepare('UPDATE dwg_conversion_runs SET derived_file_id = ? WHERE id = ?').run(derivedFileId, convRunId);
     effectiveDxfPath = derivedDxfPath;
   }
 
@@ -146,15 +146,15 @@ export async function processCadFilePipeline(
   const svgFilePath = path.join(derivedStorageDir, svgFileName);
 
   const svgPromise = runPythonScript('vector_svg_renderer.py', [absoluteDxfPath, svgFilePath])
-    .then((svgResult) => {
+    .then(async (svgResult) => {
       if (svgResult && svgResult.status === 'SUCCESS') {
-        db.prepare(`
+        await db.prepare(`
           DELETE FROM uploaded_files
           WHERE quotation_case_id = ? AND file_role = 'VECTOR_SVG'
         `).run(quotationCaseId);
 
         const svgFileId = `file_svg_${Date.now()}`;
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO uploaded_files (
             id, quotation_case_id, original_file_name, stored_file_name, storage_path,
             file_type, file_role, derived_from_file_id, file_size, checksum,
@@ -175,7 +175,7 @@ export async function processCadFilePipeline(
   }
 
   const parseRunId = `parse_${Date.now()}`;
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO cad_parse_runs (
       id, source_file_id, dxf_version, total_entities, entity_counts_json,
       global_bounds_json, status, duration_ms, created_at
@@ -186,25 +186,25 @@ export async function processCadFilePipeline(
     'SUCCESS', parseResult.duration_ms, now
   );
 
-  // Insert CAD objects batch
-  const insertObj = db.prepare(`
-    INSERT INTO cad_objects (
-      id, parse_run_id, handle, entity_type, layer, color, raw_text,
-      bounding_box_json, geometry_data_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const insertManyObjs = db.transaction((objs: any[]) => {
-    for (let i = 0; i < objs.length; i++) {
-      const o = objs[i];
-      insertObj.run(
-        `cad_obj_${parseRunId}_${i+1}`, parseRunId, o.handle, o.entity_type,
-        o.layer, o.color, o.raw_text || null, JSON.stringify(o.bounding_box),
-        JSON.stringify(o.geometry_data), now
-      );
+  // Insert CAD objects in batches via insertRows
+  if (parseResult.objects && parseResult.objects.length > 0) {
+    const batchSize = 500;
+    for (let b = 0; b < parseResult.objects.length; b += batchSize) {
+      const chunk = parseResult.objects.slice(b, b + batchSize).map((o: any, idx: number) => ({
+        id: `cad_obj_${parseRunId}_${b + idx + 1}`,
+        parse_run_id: parseRunId,
+        handle: o.handle,
+        entity_type: o.entity_type,
+        layer: o.layer,
+        color: o.color,
+        raw_text: o.raw_text || null,
+        bounding_box_json: JSON.stringify(o.bounding_box),
+        geometry_data_json: JSON.stringify(o.geometry_data),
+        created_at: now
+      }));
+      await insertRows('cad_objects', chunk);
     }
-  });
-  insertManyObjs(parseResult.objects);
+  }
 
   // 3. Detect Frames & Sheet Candidates (PROMPT 05)
   const tempDir = getStorageSubdir('temp');
@@ -226,39 +226,43 @@ export async function processCadFilePipeline(
   fs.writeFileSync(tempStrucJson, JSON.stringify(structureResult));
 
   // Save Drawings to DB (source_file_id 기반 격리 저장 - 다른 도면 데이터 보존)
-  db.prepare('DELETE FROM drawings WHERE quotation_case_id = ? AND (source_file_id = ? OR source_file_id IS NULL)').run(quotationCaseId, sourceFileId);
-  db.prepare('DELETE FROM drawing_relationships WHERE quotation_case_id = ?').run(quotationCaseId);
+  await db.prepare('DELETE FROM drawings WHERE quotation_case_id = ? AND (source_file_id = ? OR source_file_id IS NULL)').run(quotationCaseId, sourceFileId);
+  await db.prepare('DELETE FROM drawing_relationships WHERE quotation_case_id = ?').run(quotationCaseId);
 
-  const insertDwg = db.prepare(`
-    INSERT INTO drawings (
-      id, quotation_case_id, source_file_id, drawing_index, drawing_no_raw, drawing_no_normalized,
-      drawing_name_raw, drawing_name_normalized, revision, material, scale,
-      drawing_type, frame_bbox_json, title_block_bbox_json, confidence_score, status, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  for (const d of structureResult.drawings) {
-    insertDwg.run(
-      `dwg_${sourceFileId}_${d.drawing_index}`, quotationCaseId, sourceFileId, d.drawing_index,
-      d.drawing_no_raw, d.drawing_no_normalized, d.drawing_name_raw,
-      d.drawing_name_normalized, d.revision, d.material, d.scale,
-      d.drawing_type, JSON.stringify(d.frame_bbox), JSON.stringify(d.title_block_bbox),
-      d.confidence_score, d.status, now
-    );
+  if (structureResult.drawings && structureResult.drawings.length > 0) {
+    const dwgRows = structureResult.drawings.map((d: any) => ({
+      id: `dwg_${sourceFileId}_${d.drawing_index}`,
+      quotation_case_id: quotationCaseId,
+      source_file_id: sourceFileId,
+      drawing_index: d.drawing_index,
+      drawing_no_raw: d.drawing_no_raw,
+      drawing_no_normalized: d.drawing_no_normalized,
+      drawing_name_raw: d.drawing_name_raw,
+      drawing_name_normalized: d.drawing_name_normalized,
+      revision: d.revision,
+      material: d.material,
+      scale: d.scale,
+      drawing_type: d.drawing_type,
+      frame_bbox_json: JSON.stringify(d.frame_bbox),
+      title_block_bbox_json: JSON.stringify(d.title_block_bbox),
+      confidence_score: d.confidence_score,
+      status: d.status,
+      created_at: now
+    }));
+    await insertRows('drawings', dwgRows);
   }
 
-  const insertRel = db.prepare(`
-    INSERT INTO drawing_relationships (
-      id, quotation_case_id, parent_drawing_no, child_drawing_no, relationship_type,
-      confidence_score, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (let idx = 0; idx < structureResult.relationships.length; idx++) {
-    const r = structureResult.relationships[idx];
-    insertRel.run(
-      `rel_${quotationCaseId}_${idx+1}`, quotationCaseId, r.parent_drawing_no,
-      r.child_drawing_no, r.relationship_type, r.confidence_score, now
-    );
+  if (structureResult.relationships && structureResult.relationships.length > 0) {
+    const relRows = structureResult.relationships.map((r: any, idx: number) => ({
+      id: `rel_${quotationCaseId}_${idx + 1}`,
+      quotation_case_id: quotationCaseId,
+      parent_drawing_no: r.parent_drawing_no,
+      child_drawing_no: r.child_drawing_no,
+      relationship_type: r.relationship_type,
+      confidence_score: r.confidence_score,
+      created_at: now
+    }));
+    await insertRows('drawing_relationships', relRows);
   }
 
   // 6. Detect BOM Areas (PROMPT 08)
@@ -266,18 +270,20 @@ export async function processCadFilePipeline(
   const tempBomAreaJson = path.join(tempDir, `bom_area_${parseRunId}.json`);
   fs.writeFileSync(tempBomAreaJson, JSON.stringify(bomAreaResult));
 
-  db.prepare('DELETE FROM bom_areas WHERE quotation_case_id = ? AND (source_file_id = ? OR source_file_id IS NULL)').run(quotationCaseId, sourceFileId);
-  const insertBomArea = db.prepare(`
-    INSERT INTO bom_areas (
-      id, quotation_case_id, source_file_id, drawing_no, table_type, bbox_json, confidence_score, status, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (let i = 0; i < bomAreaResult.bom_areas.length; i++) {
-    const ba = bomAreaResult.bom_areas[i];
-    insertBomArea.run(
-      `ba_${sourceFileId}_${i+1}`, quotationCaseId, sourceFileId, ba.drawing_no,
-      ba.table_type, JSON.stringify(ba.bbox), ba.confidence_score, ba.status, now
-    );
+  await db.prepare('DELETE FROM bom_areas WHERE quotation_case_id = ? AND (source_file_id = ? OR source_file_id IS NULL)').run(quotationCaseId, sourceFileId);
+  if (bomAreaResult.bom_areas && bomAreaResult.bom_areas.length > 0) {
+    const baRows = bomAreaResult.bom_areas.map((ba: any, i: number) => ({
+      id: `ba_${sourceFileId}_${i + 1}`,
+      quotation_case_id: quotationCaseId,
+      source_file_id: sourceFileId,
+      drawing_no: ba.drawing_no,
+      table_type: ba.table_type,
+      bbox_json: JSON.stringify(ba.bbox),
+      confidence_score: ba.confidence_score,
+      status: ba.status,
+      created_at: now
+    }));
+    await insertRows('bom_areas', baRows);
   }
 
   // 7. Extract Raw BOM Rows (PROMPT 09)
@@ -285,23 +291,28 @@ export async function processCadFilePipeline(
   const tempRawBomJson = path.join(tempDir, `raw_bom_${parseRunId}.json`);
   fs.writeFileSync(tempRawBomJson, JSON.stringify(rawBomResult));
 
-  db.prepare('DELETE FROM raw_bom_items WHERE quotation_case_id = ? AND (source_file_id = ? OR source_file_id IS NULL)').run(quotationCaseId, sourceFileId);
-  const insertRawBom = db.prepare(`
-    INSERT INTO raw_bom_items (
-      id, quotation_case_id, source_file_id, drawing_no, row_index, item_no_raw, part_no_raw,
-      name_raw, specification_raw, material_raw, quantity_raw, quantity_numeric,
-      unit_raw, remark_raw, source_handles_json, status, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (let idx = 0; idx < rawBomResult.raw_bom_items.length; idx++) {
-    const rb = rawBomResult.raw_bom_items[idx];
-    insertRawBom.run(
-      `rb_${sourceFileId}_${idx + 1}`, quotationCaseId, sourceFileId, rb.drawing_no,
-      rb.row_index, rb.item_no_raw, rb.part_no_raw, rb.name_raw,
-      rb.specification_raw, rb.material_raw, rb.quantity_raw,
-      rb.quantity_numeric, rb.unit_raw, rb.remark_raw,
-      JSON.stringify(rb.source_handles), rb.status, now
-    );
+  await db.prepare('DELETE FROM raw_bom_items WHERE quotation_case_id = ? AND (source_file_id = ? OR source_file_id IS NULL)').run(quotationCaseId, sourceFileId);
+  if (rawBomResult.raw_bom_items && rawBomResult.raw_bom_items.length > 0) {
+    const rbRows = rawBomResult.raw_bom_items.map((rb: any, idx: number) => ({
+      id: `rb_${sourceFileId}_${idx + 1}`,
+      quotation_case_id: quotationCaseId,
+      source_file_id: sourceFileId,
+      drawing_no: rb.drawing_no,
+      row_index: rb.row_index,
+      item_no_raw: rb.item_no_raw,
+      part_no_raw: rb.part_no_raw,
+      name_raw: rb.name_raw,
+      specification_raw: rb.specification_raw,
+      material_raw: rb.material_raw,
+      quantity_raw: rb.quantity_raw,
+      quantity_numeric: rb.quantity_numeric,
+      unit_raw: rb.unit_raw,
+      remark_raw: rb.remark_raw,
+      source_handles_json: JSON.stringify(rb.source_handles),
+      status: rb.status,
+      created_at: now
+    }));
+    await insertRows('raw_bom_items', rbRows);
   }
 
   // 8. Multi-Level BOM & Quantity Roll-Up (PROMPT 10)
@@ -309,20 +320,23 @@ export async function processCadFilePipeline(
   const tempMultiJson = path.join(tempDir, `multi_${parseRunId}.json`);
   fs.writeFileSync(tempMultiJson, JSON.stringify(multiLevelResult));
 
-  db.prepare('DELETE FROM flattened_bom_items WHERE quotation_case_id = ?').run(quotationCaseId);
-  const insertFlat = db.prepare(`
-    INSERT INTO flattened_bom_items (
-      id, quotation_case_id, item_key, part_no, name, specification, material,
-      total_quantity, unit, source_drawings_json, source_item_ids_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (let idx = 0; idx < multiLevelResult.flattened_bom.length; idx++) {
-    const fb = multiLevelResult.flattened_bom[idx];
-    insertFlat.run(
-      `fb_${quotationCaseId}_${idx+1}`, quotationCaseId, fb.key, fb.part_no,
-      fb.name, fb.specification, fb.material, fb.total_quantity, fb.unit,
-      JSON.stringify(fb.source_drawings), JSON.stringify(fb.source_item_ids), now
-    );
+  await db.prepare('DELETE FROM flattened_bom_items WHERE quotation_case_id = ?').run(quotationCaseId);
+  if (multiLevelResult.flattened_bom && multiLevelResult.flattened_bom.length > 0) {
+    const flatRows = multiLevelResult.flattened_bom.map((fb: any, idx: number) => ({
+      id: `fb_${quotationCaseId}_${idx + 1}`,
+      quotation_case_id: quotationCaseId,
+      item_key: fb.key,
+      part_no: fb.part_no,
+      name: fb.name,
+      specification: fb.specification,
+      material: fb.material,
+      total_quantity: fb.total_quantity,
+      unit: fb.unit,
+      source_drawings_json: JSON.stringify(fb.source_drawings),
+      source_item_ids_json: JSON.stringify(fb.source_item_ids),
+      created_at: now
+    }));
+    await insertRows('flattened_bom_items', flatRows);
   }
 
   // 9. BOM Normalization (PROMPT 11)
@@ -330,48 +344,58 @@ export async function processCadFilePipeline(
   const tempNormJson = path.join(tempDir, `norm_${parseRunId}.json`);
   fs.writeFileSync(tempNormJson, JSON.stringify(normResult));
 
-  db.prepare('DELETE FROM normalized_bom_items WHERE quotation_case_id = ?').run(quotationCaseId);
-  const insertNorm = db.prepare(`
-    INSERT INTO normalized_bom_items (
-      id, quotation_case_id, raw_name, normalized_name, search_name, direction,
-      spec_candidate, material_candidate, quantity, unit, status, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  await db.prepare('DELETE FROM normalized_bom_items WHERE quotation_case_id = ?').run(quotationCaseId);
   const normIds: string[] = [];
-  for (let idx = 0; idx < normResult.normalized_items.length; idx++) {
-    const ni = normResult.normalized_items[idx];
-    const nId = `norm_${quotationCaseId}_${idx+1}`;
-    normIds.push(nId);
-    insertNorm.run(
-      nId, quotationCaseId, ni.raw_name, ni.normalized_name, ni.search_name,
-      ni.direction, ni.spec_candidate, ni.material_candidate, ni.quantity,
-      ni.unit, ni.status, now
-    );
+  if (normResult.normalized_items && normResult.normalized_items.length > 0) {
+    const normRows = normResult.normalized_items.map((ni: any, idx: number) => {
+      const nId = `norm_${quotationCaseId}_${idx + 1}`;
+      normIds.push(nId);
+      return {
+        id: nId,
+        quotation_case_id: quotationCaseId,
+        raw_name: ni.raw_name,
+        normalized_name: ni.normalized_name,
+        search_name: ni.search_name,
+        direction: ni.direction,
+        spec_candidate: ni.spec_candidate,
+        material_candidate: ni.material_candidate,
+        quantity: ni.quantity,
+        unit: ni.unit,
+        status: ni.status,
+        created_at: now
+      };
+    });
+    await insertRows('normalized_bom_items', normRows);
   }
 
   // 10. Master Candidate Matching (PROMPT 12)
   const masterResult = await runPythonScript('master_matcher.py', [tempNormJson]);
   
-  db.prepare('DELETE FROM master_candidates WHERE normalized_item_id IN (SELECT id FROM normalized_bom_items WHERE quotation_case_id = ?)').run(quotationCaseId);
-  const insertCand = db.prepare(`
-    INSERT INTO master_candidates (
-      id, normalized_item_id, master_code, standard_name, specification, material,
-      rank, total_score, positive_evidence_json, negative_evidence_json, candidate_status, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
+  await db.prepare('DELETE FROM master_candidates WHERE normalized_item_id IN (SELECT id FROM normalized_bom_items WHERE quotation_case_id = ?)').run(quotationCaseId);
+  const candRows: any[] = [];
   for (let i = 0; i < masterResult.results.length; i++) {
     const mr = masterResult.results[i];
     const normId = normIds[i];
     for (let r = 0; r < mr.top_candidates.length; r++) {
       const tc = mr.top_candidates[r];
-      insertCand.run(
-        `cand_${normId}_${r+1}`, normId, tc.master_code, tc.standard_name,
-        tc.specification, tc.material, r + 1, tc.total_score,
-        JSON.stringify(tc.positive_evidence), JSON.stringify(tc.negative_evidence),
-        r === 0 ? 'TOP_CANDIDATE' : 'ALTERNATIVE', now
-      );
+      candRows.push({
+        id: `cand_${normId}_${r + 1}`,
+        normalized_item_id: normId,
+        master_code: tc.master_code,
+        standard_name: tc.standard_name,
+        specification: tc.specification,
+        material: tc.material,
+        rank: r + 1,
+        total_score: tc.total_score,
+        positive_evidence_json: JSON.stringify(tc.positive_evidence),
+        negative_evidence_json: JSON.stringify(tc.negative_evidence),
+        candidate_status: r === 0 ? 'TOP_CANDIDATE' : 'ALTERNATIVE',
+        created_at: now
+      });
     }
+  }
+  if (candRows.length > 0) {
+    await insertRows('master_candidates', candRows);
   }
 
   // Cleanup temp files
@@ -380,7 +404,7 @@ export async function processCadFilePipeline(
   });
 
   // Update Quotation Case status
-  db.prepare(`
+  await db.prepare(`
     UPDATE quotation_cases
     SET status = 'ANALYZED', quote_readiness = 'REVIEW_REQUIRED', updated_at = ?
     WHERE id = ?

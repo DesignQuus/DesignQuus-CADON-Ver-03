@@ -13,13 +13,13 @@ export async function POST(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
 
   // Permission Guard
-  const perm = checkCasePermission(session.userId, session.role, id);
+  const perm = await checkCasePermission(session.userId, session.role, id);
   if (!perm.canEdit) {
     return NextResponse.json({
       error: perm.message || '해당 견적건에 대한 수정/승인 권한이 없습니다. 최고관리자의 승인이 필요합니다.',
@@ -32,8 +32,8 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const approveAll = body.approveAll ?? true;
 
-    const unapprovedItems = approveAll && !body.onlyMatched
-      ? db.prepare(`
+    const unapprovedItems = (approveAll && !body.onlyMatched
+      ? await db.prepare(`
           SELECT 
             ni.*, 
             COALESCE(fb.part_no, '') as drawing_no,
@@ -57,8 +57,8 @@ export async function POST(
           WHERE ni.quotation_case_id = ?
             AND ni.id NOT IN (SELECT normalized_item_id FROM final_bom_items WHERE quotation_case_id = ?)
             AND COALESCE(d.is_quote_included, ni.is_quote_included, 1) = 1
-        `).all(id, id) as any[]
-      : db.prepare(`
+        `).all(id, id)
+      : await db.prepare(`
           SELECT ni.*, mc.master_id, mc.master_code, mc.standard_name, mc.specification as master_spec, mc.material as master_mat
           FROM normalized_bom_items ni
           LEFT JOIN flattened_bom_items fb ON fb.id = REPLACE(ni.id, 'norm_', 'fb_')
@@ -71,7 +71,7 @@ export async function POST(
           WHERE ni.quotation_case_id = ?
             AND ni.id NOT IN (SELECT normalized_item_id FROM final_bom_items WHERE quotation_case_id = ?)
             AND COALESCE(d.is_quote_included, ni.is_quote_included, 1) = 1
-        `).all(id, id) as any[];
+        `).all(id, id)) as any[];
 
     const now = new Date().toISOString();
     let approvedCount = 0;
@@ -89,7 +89,7 @@ export async function POST(
       const finalMat = isMatched ? (item.master_mat || item.material_candidate) : (item.drawing_mat || item.material_candidate || 'SS400');
 
       // 1. Audit
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO bom_approval_records (
           id, quotation_case_id, normalized_item_id, selected_master_id,
           decision_type, decision_reason, is_override, approved_by_user_id, approved_at, created_at
@@ -100,7 +100,7 @@ export async function POST(
       );
 
       // 2. Final BOM
-      db.prepare(`
+      await db.prepare(`
         INSERT OR REPLACE INTO final_bom_items (
           id, quotation_case_id, normalized_item_id, final_master_id, final_master_code,
           final_name, final_spec, final_material, final_quantity, final_unit,
@@ -117,7 +117,7 @@ export async function POST(
 
     // Update readiness
     const readiness = 'READY_FOR_QUOTE';
-    db.prepare('UPDATE quotation_cases SET quote_readiness = ?, updated_at = ? WHERE id = ?').run(readiness, now, id);
+    await db.prepare('UPDATE quotation_cases SET quote_readiness = ?, updated_at = ? WHERE id = ?').run(readiness, now, id);
 
     return NextResponse.json({ success: true, approvedCount, readiness });
   } catch (error: any) {

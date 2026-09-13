@@ -63,6 +63,9 @@ scratch/
 *.bmp
 test_*.png
 *.tmp
+*.dwl
+*.dwl2
+*.bak
 
 # OS metadata
 .DS_Store

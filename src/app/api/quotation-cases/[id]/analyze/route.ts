@@ -14,7 +14,7 @@ export async function POST(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
@@ -29,17 +29,17 @@ export async function POST(
     let targetFile: any = null;
 
     if (fileId) {
-      targetFile = db.prepare('SELECT * FROM uploaded_files WHERE id = ? AND quotation_case_id = ?').get(fileId, id) as any;
+      targetFile = (await db.prepare('SELECT * FROM uploaded_files WHERE id = ? AND quotation_case_id = ?').get(fileId, id)) as any;
     }
 
     if (!targetFile) {
       // Find latest DWG or DXF file (prefer DWG)
-      targetFile = db.prepare(`
+      targetFile = (await db.prepare(`
         SELECT * FROM uploaded_files
         WHERE quotation_case_id = ? AND file_type IN ('DWG', 'DXF')
-        ORDER BY (CASE WHEN file_type = 'DWG' THEN 1 ELSE 2 END) ASC, created_at DESC
+        ORDER BY (CASE WHEN file_type = 'DWG' THEN 1 ELSE 2 END) ASC, rowid DESC
         LIMIT 1
-      `).get(id) as any;
+      `).get(id)) as any;
     }
 
     if (!targetFile) {

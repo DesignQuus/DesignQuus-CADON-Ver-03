@@ -46,13 +46,13 @@ export async function POST(
   }
 
   const { id } = await params;
-  const quote = db.prepare(`
+  const quote = (await db.prepare(`
     SELECT q.*, c.company_name, p.project_name
     FROM quotes q
     JOIN companies c ON q.company_id = c.id
     JOIN projects p ON q.project_id = p.id
     WHERE q.id = ?
-  `).get(id) as any;
+  `).get(id)) as any;
 
   if (!quote) {
     return NextResponse.json({ error: '견적서를 찾을 수 없습니다.' }, { status: 404 });
@@ -64,7 +64,7 @@ export async function POST(
       reqBody = await req.json();
     } catch {}
 
-    let items = db.prepare(`
+    let items = (await db.prepare(`
       SELECT 
         qi.*,
         COALESCE(fb.part_no, '') as drawing_no,
@@ -74,10 +74,10 @@ export async function POST(
       LEFT JOIN flattened_bom_items fb ON fb.id = REPLACE(fbi.normalized_item_id, 'norm_', 'fb_')
       WHERE qi.quote_id = ? AND (qi.is_included IS NULL OR qi.is_included != 0)
       ORDER BY qi.item_no ASC
-    `).all(id) as any[];
+    `).all(id)) as any[];
 
     if (items.length === 0) {
-      items = db.prepare(`
+      items = (await db.prepare(`
         SELECT 
           qi.*,
           COALESCE(fb.part_no, '') as drawing_no,
@@ -87,10 +87,10 @@ export async function POST(
         LEFT JOIN flattened_bom_items fb ON fb.id = REPLACE(fbi.normalized_item_id, 'norm_', 'fb_')
         WHERE qi.quote_id = ?
         ORDER BY qi.item_no ASC
-      `).all(id) as any[];
+      `).all(id)) as any[];
     }
 
-    const template = db.prepare('SELECT * FROM excel_templates WHERE is_default = 1 LIMIT 1').get() as any;
+    const template = (await db.prepare('SELECT * FROM excel_templates WHERE is_default = 1 LIMIT 1').get()) as any;
 
     const exportsDir = getStorageSubdir('exports');
     fs.mkdirSync(exportsDir, { recursive: true });
@@ -162,7 +162,7 @@ export async function POST(
     const exportId = `exp_${Date.now()}`;
     const now = new Date().toISOString();
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO quote_exports (
         id, quote_id, quote_version, template_id, file_name, storage_path,
         file_size, export_status, is_draft, exported_by_user_id, exported_at

@@ -53,7 +53,7 @@ export async function destroySession() {
 }
 
 export async function authenticateUser(loginId: string, plainPass: string): Promise<UserSession | null> {
-  const user = db.prepare('SELECT * FROM users WHERE login_id = ? AND is_active = 1').get(loginId) as {
+  const user = (await db.prepare('SELECT * FROM users WHERE login_id = ? AND is_active = 1').get(loginId)) as {
     id: string;
     login_id: string;
     password_hash: string;
@@ -67,7 +67,7 @@ export async function authenticateUser(loginId: string, plainPass: string): Prom
   const valid = bcrypt.compareSync(plainPass, user.password_hash);
   if (!valid) return null;
 
-  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
+  await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
 
   return {
     userId: user.id,

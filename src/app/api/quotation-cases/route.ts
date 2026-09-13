@@ -11,7 +11,6 @@ export async function GET(req: NextRequest) {
 
   const baseSelect = `
     SELECT qc.*, c.company_name, c.company_code, p.project_name, p.project_code,
-      u.name as created_by_name,
       (SELECT COUNT(DISTINCT uf.original_file_name) FROM uploaded_files uf WHERE uf.quotation_case_id = qc.id AND uf.file_role = 'SOURCE') as files_count,
       (SELECT COUNT(*) FROM drawings d WHERE d.quotation_case_id = qc.id) as drawings_count,
       COALESCE(NULLIF((SELECT COUNT(*) FROM final_bom_items fbi WHERE fbi.quotation_case_id = qc.id), 0), (SELECT COUNT(*) FROM normalized_bom_items nbi WHERE nbi.quotation_case_id = qc.id), 0) as bom_items_count,
@@ -19,20 +18,29 @@ export async function GET(req: NextRequest) {
     FROM quotation_cases qc
     JOIN companies c ON qc.company_id = c.id
     JOIN projects p ON qc.project_id = p.id
-    LEFT JOIN users u ON qc.created_by_user_id = u.id
   `;
 
-  let cases;
+  const allUsers = (await db.prepare('SELECT id, name FROM users').all()) as any[];
+  const userMap = new Map(allUsers.map((u: any) => [u.id, u.name]));
+
+  let cases: any[];
   if (session.role === 'SUPER_ADMIN') {
-    cases = db.prepare(`${baseSelect} ORDER BY qc.created_at DESC`).all();
+    cases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
   } else {
-    cases = db.prepare(`
-      ${baseSelect}
-      JOIN user_company_access uca ON uca.company_id = c.id
-      WHERE uca.user_id = ? AND uca.is_active = 1
-      AND (qc.visibility = 'SHARED' OR qc.created_by_user_id = ?)
-      ORDER BY qc.created_at DESC
-    `).all(session.userId, session.userId);
+    const accessibleCompanies = (await db.prepare(`
+      SELECT company_id FROM user_company_access
+      WHERE user_id = ? AND is_active = 1
+    `).all(session.userId)) as any[];
+    const compIds = new Set(accessibleCompanies.map((c: any) => c.company_id));
+
+    const allCases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
+    cases = allCases.filter((c: any) =>
+      compIds.has(c.company_id) && (c.visibility === 'SHARED' || c.created_by_user_id === session.userId)
+    );
+  }
+
+  for (const c of cases) {
+    c.created_by_name = userMap.get(c.created_by_user_id) || '담당자';
   }
 
   return NextResponse.json({ cases });
@@ -52,15 +60,15 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const countRow = db.prepare(`
+    const countRow = (await db.prepare(`
       SELECT COUNT(*) as cnt FROM quotation_cases WHERE case_no LIKE ?
-    `).get(`QT-${dateStr}-%`) as { cnt: number };
+    `).get(`QT-${dateStr}-%`)) as { cnt: number };
 
     const seq = String(countRow.cnt + 1).padStart(3, '0');
     const caseNo = `QT-${dateStr}-${seq}`;
     const id = `case_${Date.now()}`;
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO quotation_cases (
         id, case_no, company_id, project_id, case_name, request_date,
         status, revision, quote_readiness, created_by_user_id, created_at, updated_at

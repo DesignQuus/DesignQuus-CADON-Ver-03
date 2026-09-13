@@ -46,9 +46,9 @@ export async function GET(req: NextRequest) {
     params.push(caseId);
   }
 
-  query += ` ORDER BY ar.created_at DESC`;
+  query += ` ORDER BY ar.rowid DESC`;
 
-  const requests = db.prepare(query).all(...params);
+  const requests = await db.prepare(query).all(...params);
   return NextResponse.json({ requests });
 }
 
@@ -68,26 +68,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '수정 또는 승인 요청 사유를 입력해주세요.' }, { status: 400 });
     }
 
-    const qc = db.prepare(`
-      SELECT qc.*, u.name as owner_name
-      FROM quotation_cases qc
-      LEFT JOIN users u ON qc.created_by_user_id = u.id
-      WHERE qc.id = ?
-    `).get(quotationCaseId) as any;
+    const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(quotationCaseId)) as any;
 
     if (!qc) {
       return NextResponse.json({ error: '해당 견적건을 찾을 수 없습니다.' }, { status: 404 });
     }
+
+    const ownerUser = qc.created_by_user_id ? (await db.prepare('SELECT name FROM users WHERE id = ?').get(qc.created_by_user_id)) as any : null;
+    qc.owner_name = ownerUser?.name || '담당자';
 
     if (qc.created_by_user_id === session.userId) {
       return NextResponse.json({ error: '본인이 담당한 견적건은 최고관리자 승인 없이 직접 수정 가능합니다.' }, { status: 400 });
     }
 
     // Check if there is already a PENDING request
-    const existingPending = db.prepare(`
+    const existingPending = (await db.prepare(`
       SELECT * FROM approval_requests
       WHERE quotation_case_id = ? AND requester_user_id = ? AND status = 'PENDING'
-    `).get(quotationCaseId, session.userId) as any;
+    `).get(quotationCaseId, session.userId)) as any;
 
     if (existingPending) {
       return NextResponse.json({
@@ -99,7 +97,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO approval_requests (
         id, request_type, quotation_case_id, requester_user_id,
         owner_user_id, reason, status, created_at
@@ -122,7 +120,7 @@ export async function POST(req: NextRequest) {
       details: `${session.name} 담당자가 타 담당자(${qc.owner_name})의 견적건(${qc.case_no})에 대해 최고관리자 결재 승인을 요청함 (사유: ${reason.trim()})`
     });
 
-    const newRequest = db.prepare(`
+    const newRequest = await db.prepare(`
       SELECT ar.*, qc.case_no, qc.case_name
       FROM approval_requests ar
       JOIN quotation_cases qc ON ar.quotation_case_id = qc.id

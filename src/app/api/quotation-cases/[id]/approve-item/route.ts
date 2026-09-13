@@ -15,13 +15,13 @@ export async function POST(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
 
   // Permission Guard
-  const perm = checkCasePermission(session.userId, session.role, id);
+  const perm = await checkCasePermission(session.userId, session.role, id);
   if (!perm.canEdit) {
     return NextResponse.json({
       error: perm.message || '해당 견적건에 대한 수정/승인 권한이 없습니다. 최고관리자의 승인이 필요합니다.',
@@ -49,7 +49,7 @@ export async function POST(
     const approvalId = `appr_${Date.now()}`;
 
     // 1. Record Immutable Audit Record (PROMPT 13)
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO bom_approval_records (
         id, quotation_case_id, normalized_item_id, selected_master_id,
         decision_type, decision_reason, difference_notes, is_override,
@@ -63,7 +63,7 @@ export async function POST(
 
     // 2. Insert or Replace Final BOM Item
     const finalBomId = `final_${normalizedItemId}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT OR REPLACE INTO final_bom_items (
         id, quotation_case_id, normalized_item_id, final_master_id, final_master_code,
         final_name, final_spec, final_material, final_quantity, final_unit,
@@ -79,21 +79,21 @@ export async function POST(
 
     // 3. Accumulate Alias Knowledge if Existing/Similar Master
     if ((decisionType === 'EXISTING_MASTER' || decisionType === 'SIMILAR_MASTER') && selectedMasterId) {
-      const normItem = db.prepare('SELECT * FROM normalized_bom_items WHERE id = ?').get(normalizedItemId) as any;
+      const normItem = (await db.prepare('SELECT * FROM normalized_bom_items WHERE id = ?').get(normalizedItemId)) as any;
       if (normItem) {
-        const existingAlias = db.prepare(`
+        const existingAlias = (await db.prepare(`
           SELECT * FROM master_aliases
           WHERE company_id = ? AND master_id = ? AND alias_name = ?
-        `).get(qc.company_id, selectedMasterId, normItem.raw_name) as any;
+        `).get(qc.company_id, selectedMasterId, normItem.raw_name)) as any;
 
         if (existingAlias) {
-          db.prepare(`
+          await db.prepare(`
             UPDATE master_aliases
             SET approval_count = approval_count + 1, updated_at = ?
             WHERE id = ?
           `).run(now, existingAlias.id);
         } else {
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO master_aliases (
               id, company_id, master_id, alias_name, alias_normalized,
               approval_count, scope, created_at, updated_at
@@ -109,8 +109,8 @@ export async function POST(
     // 3-1. Self-Learning Engine Knowledge Accumulation
     if (decisionType !== 'EXCLUDED') {
       try {
-        const normItem = db.prepare('SELECT * FROM normalized_bom_items WHERE id = ?').get(normalizedItemId) as any;
-        learnOrUpdateMaterialPrice({
+        const normItem = (await db.prepare('SELECT * FROM normalized_bom_items WHERE id = ?').get(normalizedItemId)) as any;
+        await learnOrUpdateMaterialPrice({
           companyId: qc.company_id,
           rawName: normItem?.raw_name || finalName,
           standardName: finalName,
@@ -127,12 +127,12 @@ export async function POST(
     }
 
     // 4. Update Quote Readiness
-    const totalNorm = (db.prepare('SELECT COUNT(*) as cnt FROM normalized_bom_items WHERE quotation_case_id = ?').get(id) as any).cnt;
-    const totalApproved = (db.prepare('SELECT COUNT(*) as cnt FROM final_bom_items WHERE quotation_case_id = ? AND approval_status = ?').get(id, 'APPROVED') as any).cnt;
-    const totalExcluded = (db.prepare('SELECT COUNT(*) as cnt FROM final_bom_items WHERE quotation_case_id = ? AND approval_status = ?').get(id, 'EXCLUDED') as any).cnt;
+    const totalNorm = ((await db.prepare('SELECT COUNT(*) as cnt FROM normalized_bom_items WHERE quotation_case_id = ?').get(id)) as any)?.cnt || 0;
+    const totalApproved = ((await db.prepare('SELECT COUNT(*) as cnt FROM final_bom_items WHERE quotation_case_id = ? AND approval_status = ?').get(id, 'APPROVED')) as any)?.cnt || 0;
+    const totalExcluded = ((await db.prepare('SELECT COUNT(*) as cnt FROM final_bom_items WHERE quotation_case_id = ? AND approval_status = ?').get(id, 'EXCLUDED')) as any)?.cnt || 0;
 
     const readiness = (totalApproved + totalExcluded >= totalNorm && totalNorm > 0) ? 'READY_FOR_QUOTE' : 'REVIEW_REQUIRED';
-    db.prepare('UPDATE quotation_cases SET quote_readiness = ?, updated_at = ? WHERE id = ?').run(readiness, now, id);
+    await db.prepare('UPDATE quotation_cases SET quote_readiness = ?, updated_at = ? WHERE id = ?').run(readiness, now, id);
 
     // Audit log: BOM_APPROVAL
     await recordActivity(req, session, {
