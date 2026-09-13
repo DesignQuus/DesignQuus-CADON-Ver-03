@@ -63,12 +63,15 @@ export async function GET(req: NextRequest) {
       quoteToggles: allActivityLogs.filter(l => l.activity_type === 'QUOTE_TOGGLE').length
     };
 
+    const activeUsers = (await db.prepare('SELECT id, login_id, name, role FROM users WHERE is_active = 1 ORDER BY name ASC').all()) as any[];
+
     return NextResponse.json({
       success: true,
       logs,
       total,
       page,
       totalPages,
+      users: activeUsers,
       stats: {
         totalLogs: statsRow?.totalLogs || 0,
         todayLogins: statsRow?.todayLogins || 0,

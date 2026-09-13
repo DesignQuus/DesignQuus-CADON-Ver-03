@@ -531,8 +531,8 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          companyId: qc?.company_id || 'comp_sechang',
-          projectId: qc?.project_id || 'proj_sechang',
+          companyId: qc?.company_id || 'comp_unassigned',
+          projectId: qc?.project_id || 'proj_unassigned',
           caseName: autoCaseName
         })
       });

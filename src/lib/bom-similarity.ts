@@ -3,6 +3,45 @@
  * 자재리스트 표준 데이터 규격(Standard Master Schema) 및 자재 유사도 분석 엔진
  */
 
+import { db } from './db';
+import { queryTable, executeSQL } from '../../egdesk-helpers';
+
+/**
+ * 이지데스크 user-data API(queryTable, executeSQL)를 통해 실시간 부품 마스터 및 단가 풀을 동적으로 조회
+ */
+export async function fetchDbMastersAndPricePool(companyId?: string): Promise<{ masters: any[]; learnedPool: any[] }> {
+  try {
+    const pMastersRes = await queryTable('product_masters', { limit: 500 });
+    const prcMastersRes = await queryTable('price_masters', { limit: 500 });
+    
+    const pRows = pMastersRes?.rows || [];
+    const prcRows = prcMastersRes?.rows || [];
+    const prcMap = new Map(prcRows.map((p: any) => [p.master_id, p.unit_price]));
+
+    const combinedMasters = pRows.map((pm: any) => ({
+      ...pm,
+      item_code: pm.master_code,
+      item_name: pm.standard_name,
+      unit_price: prcMap.get(pm.id) || 0
+    }));
+
+    const poolFilters: Record<string, string> = {};
+    if (companyId) {
+      poolFilters['company_id'] = companyId;
+    }
+    const poolRes = await queryTable('manual_price_pool', {
+      filters: Object.keys(poolFilters).length > 0 ? poolFilters : undefined,
+      limit: 200
+    });
+    const learnedPool = poolRes?.rows || [];
+
+    return { masters: combinedMasters, learnedPool };
+  } catch (e) {
+    console.warn('[fetchDbMastersAndPricePool] Failed to query via egdesk-helpers, returning empty:', e);
+    return { masters: [], learnedPool: [] };
+  }
+}
+
 export interface StandardSchemaSuggestion {
   // 1. 자재구분 (가공품 vs 구매품/기성품)
   item_type: 'MACHINED' | 'COMMERCIAL';

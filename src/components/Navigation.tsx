@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home } from 'lucide-react';
+import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home, Users } from 'lucide-react';
 
 export default function Navigation() {
   const [user, setUser] = useState<any>(null);
@@ -126,6 +126,17 @@ export default function Navigation() {
                 </span>
               )}
             </Link>
+            <Link
+              href="/admin/members"
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                pathname.startsWith('/admin/members')
+                  ? 'bg-indigo-50 text-indigo-700 font-bold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <Users className="w-4 h-4 text-indigo-600" />
+              <span>임직원 및 회원사 관리</span>
+            </Link>
           </nav>
         </div>
 
@@ -138,6 +149,14 @@ export default function Navigation() {
                   {user.role === 'SUPER_ADMIN' ? (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800">
                       최고관리자
+                    </span>
+                  ) : user.role === 'TENANT_ADMIN' ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800">
+                      대표관리자
+                    </span>
+                  ) : user.role === 'REVIEWER' ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                      검토자
                     </span>
                   ) : (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">

@@ -20,6 +20,7 @@ if (typeof process !== 'undefined' && !process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID
 
 import {
   createTable,
+  deleteTable,
   queryTable,
   insertRows,
   updateRows,
@@ -61,6 +62,8 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'name', type: 'TEXT', notNull: true },
       { name: 'role', type: 'TEXT', notNull: true },
       { name: 'company_id', type: 'TEXT' },
+      { name: 'employee_number', type: 'TEXT' },
+      { name: 'phone', type: 'TEXT' },
       { name: 'is_active', type: 'INTEGER', notNull: true },
       { name: 'last_login_at', type: 'TEXT' },
       { name: 'created_at', type: 'TEXT', notNull: true }
@@ -217,6 +220,7 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
     columns: [
       { name: 'id', type: 'TEXT', notNull: true },
       { name: 'quotation_case_id', type: 'TEXT', notNull: true },
+      { name: 'source_file_id', type: 'TEXT' },
       { name: 'drawing_index', type: 'INTEGER', notNull: true },
       { name: 'drawing_no_raw', type: 'TEXT' },
       { name: 'drawing_no_normalized', type: 'TEXT' },
@@ -226,6 +230,8 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'material', type: 'TEXT' },
       { name: 'scale', type: 'TEXT' },
       { name: 'drawing_type', type: 'TEXT' },
+      { name: 'is_quote_included', type: 'INTEGER' },
+      { name: 'exclude_reason', type: 'TEXT' },
       { name: 'frame_bbox_json', type: 'TEXT' },
       { name: 'title_block_bbox_json', type: 'TEXT' },
       { name: 'confidence_score', type: 'REAL', notNull: true },
@@ -256,6 +262,7 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
     columns: [
       { name: 'id', type: 'TEXT', notNull: true },
       { name: 'quotation_case_id', type: 'TEXT', notNull: true },
+      { name: 'source_file_id', type: 'TEXT' },
       { name: 'drawing_no', type: 'TEXT', notNull: true },
       { name: 'table_type', type: 'TEXT', notNull: true },
       { name: 'bbox_json', type: 'TEXT', notNull: true },
@@ -272,6 +279,7 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
     columns: [
       { name: 'id', type: 'TEXT', notNull: true },
       { name: 'quotation_case_id', type: 'TEXT', notNull: true },
+      { name: 'source_file_id', type: 'TEXT' },
       { name: 'drawing_no', type: 'TEXT', notNull: true },
       { name: 'row_index', type: 'INTEGER', notNull: true },
       { name: 'item_no_raw', type: 'TEXT' },
@@ -325,6 +333,8 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'material_candidate', type: 'TEXT' },
       { name: 'quantity', type: 'REAL', notNull: true },
       { name: 'unit', type: 'TEXT', notNull: true },
+      { name: 'is_quote_included', type: 'INTEGER' },
+      { name: 'exclude_reason', type: 'TEXT' },
       { name: 'status', type: 'TEXT', notNull: true },
       { name: 'created_at', type: 'TEXT', notNull: true }
     ],
@@ -495,6 +505,7 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'amount', type: 'REAL', notNull: true },
       { name: 'price_source', type: 'TEXT', notNull: true },
       { name: 'price_status', type: 'TEXT', notNull: true },
+      { name: 'drawing_no', type: 'TEXT' },
       { name: 'remark', type: 'TEXT' },
       { name: 'is_included', type: 'INTEGER', notNull: true },
       { name: 'created_at', type: 'TEXT', notNull: true }
@@ -648,6 +659,21 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
     uniqueKeyColumns: ['id']
   },
   {
+    name: 'system_settings',
+    displayName: '시스템 테넌트 설정 대장',
+    description: '테넌트별 전사 환경설정 및 정책 키-값 보관',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'key', type: 'TEXT', notNull: true },
+      { name: 'value', type: 'TEXT' },
+      { name: 'tenant_id', type: 'TEXT' },
+      { name: 'description', type: 'TEXT' },
+      { name: 'updated_at', type: 'TEXT' },
+      { name: 'updated_by', type: 'TEXT' }
+    ],
+    uniqueKeyColumns: ['id']
+  },
+  {
     name: 'system_approval_settings',
     displayName: '전사 결재 정책 설정',
     description: '타인 견적 수정/승인 및 관리자 최종결재 통제',
@@ -687,14 +713,14 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'id', type: 'TEXT', notNull: true },
       { name: 'quotation_case_id', type: 'TEXT', notNull: true },
       { name: 'request_type', type: 'TEXT', notNull: true },
-      { name: 'requester_id', type: 'TEXT', notNull: true },
-      { name: 'target_owner_id', type: 'TEXT', notNull: true },
+      { name: 'requester_user_id', type: 'TEXT', notNull: true },
+      { name: 'owner_user_id', type: 'TEXT', notNull: true },
       { name: 'reason', type: 'TEXT', notNull: true },
       { name: 'status', type: 'TEXT', notNull: true },
-      { name: 'reviewer_id', type: 'TEXT' },
-      { name: 'reviewer_comment', type: 'TEXT' },
+      { name: 'reviewed_by_user_id', type: 'TEXT' },
+      { name: 'review_comment', type: 'TEXT' },
       { name: 'reviewed_at', type: 'TEXT' },
-      { name: 'expires_at', type: 'TEXT', notNull: true },
+      { name: 'expires_at', type: 'TEXT' },
       { name: 'created_at', type: 'TEXT', notNull: true }
     ],
     uniqueKeyColumns: ['id']
@@ -739,34 +765,69 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
         console.error(`❌ Failed to create table "${tableName}":`, err.message);
       }
     } else {
-      // 기존 테이블의 감사 컬럼 누락 여부 확인 및 ALTER TABLE 자동 보정
+      // 기존 테이블의 누락 컬럼 확인 및 안전한 테이블 재구축(데이터 100% 보존) 마이그레이션
       try {
         const schemaInfo = await getTableSchema(tableName);
         const currentCols = (schemaInfo?.schema || []).map((c: any) => c.name.toLowerCase());
-        
-        for (const auditCol of AUDIT_COLUMNS) {
-          if (!currentCols.includes(auditCol.name.toLowerCase())) {
-            console.log(`[Auto-Migration] Injecting missing audit column "${auditCol.name}" into "${tableName}"...`);
-            await executeSQL(`ALTER TABLE ${tableName} ADD COLUMN ${auditCol.name} ${auditCol.type};`);
+        const missingCols = finalColumns.filter(c => !currentCols.includes(c.name.toLowerCase()));
+
+        if (missingCols.length > 0) {
+          console.log(`[Auto-Migration] Table "${tableName}" has ${missingCols.length} missing columns (${missingCols.map(c => c.name).join(', ')}). Rebuilding schema with data preservation...`);
+          
+          // 1. 기존 데이터 백업
+          let oldRows: any[] = [];
+          try {
+            const queryRes = await queryTable(tableName);
+            oldRows = Array.isArray(queryRes) ? queryRes : (queryRes?.rows || []);
+          } catch (fetchErr: any) {
+            console.warn(`Could not read old rows for ${tableName}:`, fetchErr.message);
+          }
+
+          // 2. 기존 테이블 삭제
+          await deleteTable(tableName);
+
+          // 3. 신규 스키마로 생성
+          await createTable(tableDisplayName, finalColumns as any, {
+            tableName,
+            uniqueKeyColumns: spec.uniqueKeyColumns || ['id']
+          });
+
+          // 4. 백업 데이터 복원
+          if (oldRows.length > 0) {
+            const validColNames = finalColumns.map(c => c.name);
+            const cleanedRows = oldRows.map(row => {
+              const cleaned: Record<string, any> = {};
+              for (const colName of validColNames) {
+                if (row[colName] !== undefined) {
+                  cleaned[colName] = row[colName];
+                } else if (colName === 'tenant_id') {
+                  cleaned.tenant_id = row.tenant_id || row.company_id || 'tenant-cadon';
+                }
+              }
+              return cleaned;
+            });
+            await insertRows(tableName, cleanedRows);
+            console.log(`✓ Table "${tableName}" rebuilt and ${cleanedRows.length} rows preserved.`);
+          } else {
+            console.log(`✓ Table "${tableName}" rebuilt (was empty).`);
           }
         }
       } catch (altErr: any) {
-        // 이미 존재하거나 조용한 성공 처리
+        console.warn(`[Auto-Migration Warning] Failed to migrate "${tableName}":`, altErr.message);
       }
     }
   }
 
-  // 3. 기본 계정 및 마스터 데이터 시딩 (Users, Companies, Product Masters, Approval Config)
-  console.log('🌱 [CADON Zero-Config Setup] Verifying and Seeding Default Master Data...');
+  // 3. 기본 관리자 계정 및 기본 플레이스홀더 시딩
+  console.log('🌱 [CADON Zero-Config Setup] Verifying Admin Account & Default Master Data...');
 
-  // A. 관리자 & 5인 영업담당자 시딩
+  // A. 관리자 계정만 보장 시딩
   const userCountRes = await executeSQL('SELECT COUNT(*) as cnt FROM users');
   const userCount = Number(userCountRes?.rows?.[0]?.cnt || 0);
 
   if (userCount === 0) {
-    console.log('🌱 Seeding initial user accounts...');
+    console.log('🌱 Seeding initial admin user account...');
     const defaultPassHash = bcrypt.hashSync('Cadon1234!@', 10);
-    const legacyPassHash = bcrypt.hashSync('admin1234!', 10);
     const usersToInsert = [
       {
         id: 'usr_admin',
@@ -780,239 +841,51 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
         uuid: 'usr_admin',
         created_at: now,
         updated_at: now
-      },
-      {
-        id: 'usr_sales1',
-        login_id: 'sales1',
-        password_hash: defaultPassHash,
-        name: '영업1팀 담당자',
-        role: 'SALES_USER',
-        company_id: 'comp_001',
-        is_active: 1,
-        tenant_id: 'tenant-cadon',
-        uuid: 'usr_sales1',
-        created_at: now,
-        updated_at: now
-      },
-      {
-        id: 'usr_kim',
-        login_id: 'kim',
-        password_hash: defaultPassHash,
-        name: '김견적 과장',
-        role: 'SALES_USER',
-        company_id: 'comp_001',
-        is_active: 1,
-        tenant_id: 'tenant-cadon',
-        uuid: 'usr_kim',
-        created_at: now,
-        updated_at: now
-      },
-      {
-        id: 'usr_lee',
-        login_id: 'lee',
-        password_hash: defaultPassHash,
-        name: '이견적 대리',
-        role: 'SALES_USER',
-        company_id: 'comp_001',
-        is_active: 1,
-        tenant_id: 'tenant-cadon',
-        uuid: 'usr_lee',
-        created_at: now,
-        updated_at: now
-      },
-      {
-        id: 'usr_choi',
-        login_id: 'choi',
-        password_hash: defaultPassHash,
-        name: '최견적 차장',
-        role: 'SALES_USER',
-        company_id: 'comp_002',
-        is_active: 1,
-        tenant_id: 'tenant-cadon',
-        uuid: 'usr_choi',
-        created_at: now,
-        updated_at: now
-      },
-      {
-        id: 'usr_song',
-        login_id: 'song',
-        password_hash: defaultPassHash,
-        name: '송견적 주임',
-        role: 'SALES_USER',
-        company_id: 'comp_002',
-        is_active: 1,
-        tenant_id: 'tenant-cadon',
-        uuid: 'usr_song',
-        created_at: now,
-        updated_at: now
-      },
-      {
-        id: 'usr_park',
-        login_id: 'park',
-        password_hash: defaultPassHash,
-        name: '박견적 대리',
-        role: 'SALES_USER',
-        company_id: 'comp_001',
-        is_active: 1,
-        tenant_id: 'tenant-cadon',
-        uuid: 'usr_park',
-        created_at: now,
-        updated_at: now
       }
     ];
     await insertRows('users', usersToInsert);
-    console.log('✓ User accounts seeded.');
-  } else {
-    // Ensure usr_sales1 exists for test compatibility
-    const sales1Res = await executeSQL("SELECT COUNT(*) as cnt FROM users WHERE login_id = 'sales1'");
-    if (Number(sales1Res?.rows?.[0]?.cnt || 0) === 0) {
-      const defaultPassHash = bcrypt.hashSync('Cadon1234!@', 10);
-      await insertRows('users', [{
-        id: 'usr_sales1',
-        login_id: 'sales1',
-        password_hash: defaultPassHash,
-        name: '영업1팀 담당자',
-        role: 'SALES_USER',
-        company_id: 'comp_001',
-        is_active: 1,
-        tenant_id: 'tenant-cadon',
-        uuid: 'usr_sales1',
-        created_at: now,
-        updated_at: now
-      }]);
-    }
+    console.log('✓ Admin user account seeded.');
   }
 
-  // B. 기본 고객사 시딩
+  // B. 기본 미지정 고객사/프로젝트 플레이스홀더 시딩
   const compCountRes = await executeSQL('SELECT COUNT(*) as cnt FROM companies');
   const compCount = Number(compCountRes?.rows?.[0]?.cnt || 0);
 
   if (compCount === 0) {
-    console.log('🌱 Seeding initial demo companies...');
-    const companiesToInsert = [
+    console.log('🌱 Seeding default unassigned company placeholder...');
+    await insertRows('companies', [
       {
-        id: 'comp_sechang',
-        company_code: 'CUST-SECHANG',
-        company_name: '(주)세창인터내셔널',
+        id: 'comp_unassigned',
+        company_code: 'UNASSIGNED',
+        company_name: '고객사 미지정',
         company_type: 'CUSTOMER',
         is_active: 1,
         tenant_id: 'tenant-cadon',
-        uuid: 'comp_sechang',
-        created_at: now,
-        updated_at: now
-      },
-      {
-        id: 'comp_001',
-        company_code: 'CUST-0001',
-        company_name: 'A기계공업 (주)',
-        company_type: 'CUSTOMER',
-        is_active: 1,
-        tenant_id: 'tenant-cadon',
-        uuid: 'comp_001',
-        created_at: now,
-        updated_at: now
-      },
-      {
-        id: 'comp_002',
-        company_code: 'CUST-0002',
-        company_name: 'B자동화시스템 (주)',
-        company_type: 'CUSTOMER',
-        is_active: 1,
-        tenant_id: 'tenant-cadon',
-        uuid: 'comp_002',
+        uuid: 'comp_unassigned',
         created_at: now,
         updated_at: now
       }
-    ];
-    await insertRows('companies', companiesToInsert);
-
-    // 접근 권한 매핑
-    await insertRows('user_company_access', [
-      { id: 'uca_1', user_id: 'usr_sales1', company_id: 'comp_001', access_role: 'MANAGER', is_active: 1, tenant_id: 'tenant-cadon', uuid: 'uca_1', updated_at: now },
-      { id: 'uca_2', user_id: 'usr_admin', company_id: 'comp_001', access_role: 'MANAGER', is_active: 1, tenant_id: 'tenant-cadon', uuid: 'uca_2', updated_at: now },
-      { id: 'uca_3', user_id: 'usr_admin', company_id: 'comp_002', access_role: 'MANAGER', is_active: 1, tenant_id: 'tenant-cadon', uuid: 'uca_3', updated_at: now },
-      { id: 'uca_4', user_id: 'usr_admin', company_id: 'comp_sechang', access_role: 'MANAGER', is_active: 1, tenant_id: 'tenant-cadon', uuid: 'uca_4', updated_at: now }
     ]);
 
-    // 프로젝트 & 케이스 시딩
+    await insertRows('user_company_access', [
+      { id: 'uca_admin_unassigned', user_id: 'usr_admin', company_id: 'comp_unassigned', access_role: 'MANAGER', is_active: 1, tenant_id: 'tenant-cadon', uuid: 'uca_admin_unassigned', updated_at: now }
+    ]);
+
     await insertRows('projects', [
       {
-        id: 'proj_001',
-        company_id: 'comp_001',
-        project_code: 'PRJ-2026-01',
-        project_name: '2026 고속 가이드레일 및 프레임 증설라인',
-        description: 'A기계 메인 생산라인 증설 견적 건',
+        id: 'proj_unassigned',
+        company_id: 'comp_unassigned',
+        project_code: 'PRJ-UNASSIGNED',
+        project_name: '프로젝트 미지정',
+        description: '도면 직접 등록 시 생성되는 기본 프로젝트',
         status: 'ACTIVE',
         tenant_id: 'tenant-cadon',
-        uuid: 'proj_001',
+        uuid: 'proj_unassigned',
         created_at: now,
         updated_at: now
       }
     ]);
-
-    await insertRows('quotation_cases', [
-      {
-        id: 'case_001',
-        case_no: 'QT-20260901-001',
-        company_id: 'comp_001',
-        project_id: 'proj_001',
-        case_name: 'A기계 고속라인 가이드레일/모터베이스 제작 견적의뢰',
-        request_date: '2026-09-01',
-        status: 'DRAFT',
-        revision: '0',
-        quote_readiness: 'NOT_READY',
-        created_by_user_id: 'usr_kim',
-        tenant_id: 'tenant-cadon',
-        uuid: 'case_001',
-        created_at: now,
-        updated_at: now
-      }
-    ]);
-
-    // 표준 마스터 부품 시딩
-    const masters = [
-      { id: 'mst_001', code: 'GR-1200', name: 'GUIDE RAIL ASSY 1200', cat: 'GUIDE_RAIL', spec: '1200L', mat: 'AL6063', unit: 'EA', price: 120000 },
-      { id: 'mst_002', code: 'GR-1000', name: 'GUIDE RAIL ASSY 1000', cat: 'GUIDE_RAIL', spec: '1000L', mat: 'AL6063', unit: 'EA', price: 95000 },
-      { id: 'mst_003', code: 'MB-001', name: 'MOTOR BASE BRACKET', cat: 'BRACKET', spec: '150x120x10T', mat: 'SS400', unit: 'EA', price: 45000 },
-      { id: 'mst_004', code: 'FR-101-LH', name: 'MAIN FRAME LH', cat: 'FRAME', spec: '800x600', mat: 'SS400', unit: 'EA', price: 65000 },
-      { id: 'mst_005', code: 'FR-101-RH', name: 'MAIN FRAME RH', cat: 'FRAME', spec: '800x600', mat: 'SS400', unit: 'EA', price: 65000 },
-      { id: 'mst_006', code: 'SF-102', name: 'DRIVE SHAFT D25', cat: 'SHAFT', spec: 'DIA 25x300L', mat: 'S45C', unit: 'EA', price: 28000 },
-      { id: 'mst_007', code: 'BK-003', name: 'GUIDE BRACKET SIDE', cat: 'BRACKET', spec: '50x50x5T', mat: 'SUS304', unit: 'EA', price: 18000 }
-    ];
-
-    const prodMastersToInsert = masters.map(m => ({
-      id: m.id,
-      master_code: m.code,
-      standard_name: m.name,
-      category: m.cat,
-      specification: m.spec,
-      material: m.mat,
-      unit: m.unit,
-      status: 'ACTIVE',
-      tenant_id: 'tenant-cadon',
-      uuid: m.id,
-      created_at: now,
-      updated_at: now
-    }));
-    await insertRows('product_masters', prodMastersToInsert);
-
-    const priceMastersToInsert = masters.map(m => ({
-      id: `prc_${m.id}`,
-      master_id: m.id,
-      company_id: null,
-      price_type: 'STANDARD',
-      unit_price: m.price,
-      currency: 'KRW',
-      effective_from: '2026-01-01',
-      effective_to: null,
-      is_active: 1,
-      tenant_id: 'tenant-cadon',
-      uuid: `prc_${m.id}`,
-      created_at: now,
-      updated_at: now
-    }));
-    await insertRows('price_masters', priceMastersToInsert);
-    console.log('✓ Companies, Projects, and 7 Standard Product Masters seeded.');
+    console.log('✓ Default unassigned company and project placeholders seeded.');
   }
 
   // C. 전사 결재 설정 시딩 (GLOBAL_CONFIG)
@@ -1034,15 +907,13 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
       }
     ]);
 
-    const allUsers = [
-      'usr_admin', 'usr_kim', 'usr_lee', 'usr_choi', 'usr_song', 'usr_park'
-    ];
+    const allUsers = ['usr_admin'];
     const userPermissions = allUsers.map(uId => ({
       user_id: uId,
       can_edit_own: 1,
       can_approve_own: 1,
-      can_edit_others: uId === 'usr_admin' ? 'ALLOW' : 'REQUIRE_APPROVAL',
-      can_approve_others: uId === 'usr_admin' ? 'ALLOW' : 'REQUIRE_APPROVAL',
+      can_edit_others: 'ALLOW',
+      can_approve_others: 'ALLOW',
       can_edit_price: 1,
       can_approve_quote: 1,
       tenant_id: 'tenant-cadon',
@@ -1050,9 +921,9 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
       updated_at: now
     }));
     await insertRows('user_approval_permissions', userPermissions);
-    console.log('✓ Global Approval Config and User Permissions seeded.');
+    console.log('✓ Global Approval Config and Admin Permissions seeded.');
   }
 
   console.log('✨ [CADON Zero-Config Setup] Database Setup and Audit Injections Completed Successfully.');
-  return { success: true, message: 'Database setup complete with audit columns injected and demo data seeded.' };
+  return { success: true, message: 'Database setup complete with audit columns injected.' };
 }

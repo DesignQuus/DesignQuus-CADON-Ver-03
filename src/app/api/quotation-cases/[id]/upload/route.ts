@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
 import { getStorageSubdir } from '@/lib/storage';
+import { queryTable, insertRows } from '../../../../../../egdesk-helpers';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+
+const getRows = (res: any): any[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.rows)) return res.rows;
+  return [];
+};
 
 export async function POST(
   req: NextRequest,
@@ -17,7 +24,8 @@ export async function POST(
   }
 
   const { id } = await params;
-  const qc = db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id) as any;
+  const cases = getRows(await queryTable('quotation_cases', { filters: { id }, limit: 1 }));
+  const qc = cases[0] || null;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
@@ -58,15 +66,20 @@ export async function POST(
     const fileId = `file_${Date.now()}`;
     const now = new Date().toISOString();
 
-    db.prepare(`
-      INSERT INTO uploaded_files (
-        id, quotation_case_id, original_file_name, stored_file_name, storage_path,
-        file_type, file_role, file_size, checksum, upload_status, uploaded_by_user_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      fileId, id, originalName, storedFileName, storagePath,
-      fileType, 'SOURCE', buffer.length, checksum, 'UPLOADED', session.userId, now
-    );
+    await insertRows('uploaded_files', [{
+      id: fileId,
+      quotation_case_id: id,
+      original_file_name: originalName,
+      stored_file_name: storedFileName,
+      storage_path: storagePath,
+      file_type: fileType,
+      file_role: 'SOURCE',
+      file_size: buffer.length,
+      checksum,
+      upload_status: 'UPLOADED',
+      uploaded_by_user_id: session.userId,
+      created_at: now
+    }]);
 
     // Audit log: FILE_UPLOAD
     await recordActivity(req, session, {

@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { checkCasePermission } from '@/lib/permissions';
+import {
+  queryTable,
+  insertRows,
+  updateRows,
+  deleteRows,
+  executeSQL
+} from '../../../../../../egdesk-helpers';
 
-// Pre-configured intelligent BOM templates based on equipment drawing pattern recognition
-const VIRTUAL_BOM_TEMPLATES: Record<string, any[]> = {
+// Standard fallback intelligent BOM templates based on equipment drawing pattern recognition
+const BASE_VIRTUAL_BOM_TEMPLATES: Record<string, any[]> = {
   TRACTION_MACHINE_MONA: [
     {
       item_no: '1',
@@ -87,7 +93,14 @@ const VIRTUAL_BOM_TEMPLATES: Record<string, any[]> = {
   ]
 };
 
-// GET: Infer and preview virtual BOM for a case
+const getRows = (res: any): any[] => {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.rows)) return res.rows;
+  return [];
+};
+
+// GET: Infer and preview virtual BOM for a case using EGDesk helpers
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -98,17 +111,18 @@ export async function GET(
   }
 
   const { id } = await params;
-  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
+  const cases = getRows(await queryTable('quotation_cases', { filters: { id }, limit: 1 }));
+  const qc = cases[0] || null;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
 
-  // Check current BOM state
-  const rawBomCount = ((await db.prepare('SELECT COUNT(*) as cnt FROM raw_bom_items WHERE quotation_case_id = ?').get(id)) as any)?.cnt || 0;
-  const rawBomRows = (await db.prepare('SELECT * FROM raw_bom_items WHERE quotation_case_id = ?').all(id)) as any[];
-  const bomAreas = (await db.prepare('SELECT * FROM bom_areas WHERE quotation_case_id = ?').all(id)) as any[];
+  // Check current BOM state via egdesk-helpers
+  const rawBomRows = getRows(await queryTable('raw_bom_items', { filters: { quotation_case_id: id } }));
+  const bomAreas = getRows(await queryTable('bom_areas', { filters: { quotation_case_id: id } }));
+  const rawBomCount = rawBomRows.length;
 
-  // Determine if existing BOM is empty or trivial dummy data (e.g. only 1 item like "UNIT mm")
+  // Determine if existing BOM is empty or trivial dummy data
   const isTrivialBom = rawBomCount === 0 || (
     rawBomCount === 1 && (
       rawBomRows[0]?.name_raw?.includes('UNIT') ||
@@ -118,31 +132,38 @@ export async function GET(
     )
   );
 
-  const isVirtualAlreadyApplied = rawBomRows.some(r => r.status === 'AI_VIRTUAL') ||
-    bomAreas.some(b => b.table_type === 'VIRTUAL_BOM' || b.status === 'AI_INFERRED');
+  const isVirtualAlreadyApplied = rawBomRows.some((r: any) => r.status === 'AI_VIRTUAL') ||
+    bomAreas.some((b: any) => b.table_type === 'VIRTUAL_BOM' || b.status === 'AI_INFERRED');
 
   // Inspect drawing texts to detect equipment model / pattern
-  const files = (await db.prepare('SELECT * FROM uploaded_files WHERE quotation_case_id = ?').all(id)) as any[];
-  const drawings = (await db.prepare('SELECT * FROM drawings WHERE quotation_case_id = ?').all(id)) as any[];
+  const files = getRows(await queryTable('uploaded_files', { filters: { quotation_case_id: id } }));
+  const drawings = getRows(await queryTable('drawings', { filters: { quotation_case_id: id } }));
 
   let detectedModel = 'MONA200D';
   let equipmentType = '동기 기어리스 권상기 (Permanent Magnet Traction Machine)';
   let patternScore = 0.97;
 
-  // Query cad_objects texts for keyword detection
-  const textObjects = (await db.prepare(`
-    SELECT co.raw_text FROM cad_objects co
-    JOIN cad_parse_runs cpr ON co.parse_run_id = cpr.id
-    JOIN uploaded_files uf ON cpr.source_file_id = uf.id
-    WHERE uf.quotation_case_id = ? AND co.raw_text IS NOT NULL
-    LIMIT 300
-  `).all(id)) as any[];
+  // Query cad_objects texts via executeSQL
+  let textObjects: any[] = [];
+  try {
+    const rawSql = `
+      SELECT co.raw_text FROM cad_objects co
+      JOIN cad_parse_runs cpr ON co.parse_run_id = cpr.id
+      JOIN uploaded_files uf ON cpr.source_file_id = uf.id
+      WHERE uf.quotation_case_id = '${id}' AND co.raw_text IS NOT NULL
+      LIMIT 300
+    `;
+    const sqlRes = await executeSQL(rawSql);
+    textObjects = getRows(sqlRes);
+  } catch (sqlErr) {
+    console.warn('[VirtualBOM GET] Failed to execute SQL for CAD texts:', sqlErr);
+  }
 
   const combinedText = [
     qc.case_name || '',
-    ...files.map(f => f.original_file_name || ''),
-    ...drawings.map(d => `${d.drawing_no_raw || ''} ${d.drawing_name_raw || ''}`),
-    ...textObjects.map(t => t.raw_text || '')
+    ...files.map((f: any) => f.original_file_name || ''),
+    ...drawings.map((d: any) => `${d.drawing_no_raw || ''} ${d.drawing_name_raw || ''}`),
+    ...textObjects.map((t: any) => t.raw_text || '')
   ].join(' ').toUpperCase();
 
   let templateKey = 'TRACTION_MACHINE_MONA';
@@ -153,7 +174,34 @@ export async function GET(
     patternScore = 0.97;
   }
 
-  const virtualItems = VIRTUAL_BOM_TEMPLATES[templateKey] || VIRTUAL_BOM_TEMPLATES.TRACTION_MACHINE_MONA;
+  // Check if product_masters in DB has matching records to supplement template
+  let virtualItems = BASE_VIRTUAL_BOM_TEMPLATES[templateKey] || BASE_VIRTUAL_BOM_TEMPLATES.TRACTION_MACHINE_MONA;
+  try {
+    const dbMasters = getRows(await queryTable('product_masters', { limit: 50 }));
+    if (dbMasters.length > 0) {
+      // Map DB masters if any relevant items exist
+      const relevant = dbMasters.filter((m: any) => 
+        m.item_name && (combinedText.includes(m.item_name.toUpperCase()) || combinedText.includes(m.part_no?.toUpperCase() || ''))
+      );
+      if (relevant.length > 0) {
+        virtualItems = relevant.map((m: any, idx: number) => ({
+          item_no: String(idx + 1),
+          part_no: m.part_no || `MST-${String(idx + 1).padStart(2, '0')}`,
+          name: m.item_name,
+          normalized_name: m.standard_name || m.item_name,
+          spec: m.spec_pattern || '-',
+          material: m.material_id || 'SS400',
+          qty: 1,
+          unit: 'EA',
+          confidence: 0.95,
+          evidence: `EGDesk 기준정보 마스터(${m.item_name}) 직접 매칭`,
+          remark: '기준정보 DB 기반 도면 역추론 품목'
+        }));
+      }
+    }
+  } catch (masterErr) {
+    console.warn('[VirtualBOM GET] Could not load product_masters:', masterErr);
+  }
 
   return NextResponse.json({
     isApplicable: true,
@@ -179,7 +227,7 @@ export async function GET(
   });
 }
 
-// POST: Approve and apply virtual BOM to quotation case
+// POST: Approve and apply virtual BOM to quotation case using EGDesk helpers
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -190,7 +238,8 @@ export async function POST(
   }
 
   const { id } = await params;
-  const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
+  const cases = getRows(await queryTable('quotation_cases', { filters: { id }, limit: 1 }));
+  const qc = cases[0] || null;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
@@ -206,36 +255,35 @@ export async function POST(
   const body = await req.json().catch(() => ({}));
   const items: any[] = Array.isArray(body.items) && body.items.length > 0 
     ? body.items 
-    : VIRTUAL_BOM_TEMPLATES.TRACTION_MACHINE_MONA;
+    : BASE_VIRTUAL_BOM_TEMPLATES.TRACTION_MACHINE_MONA;
   const drawingNo = body.drawingNo || 'MONA200D';
   const drawingTitle = body.drawingTitle || 'MONA200D 동기 권상기 외형도';
   const now = new Date().toISOString();
 
-  // Execute database transaction
-  const applyTx = db.transaction(async () => {
-    // 1. Clean up old dummy / raw / normalized BOM data for this case
-    await db.prepare('DELETE FROM raw_bom_items WHERE quotation_case_id = ?').run(id);
-    await db.prepare('DELETE FROM flattened_bom_items WHERE quotation_case_id = ?').run(id);
-    await db.prepare('DELETE FROM normalized_bom_items WHERE quotation_case_id = ?').run(id);
-    await db.prepare('DELETE FROM bom_areas WHERE quotation_case_id = ?').run(id);
+  try {
+    // 1. Clean up old dummy / raw / normalized BOM data for this case using deleteRows
+    await deleteRows('raw_bom_items', { filters: { quotation_case_id: id } });
+    await deleteRows('flattened_bom_items', { filters: { quotation_case_id: id } });
+    await deleteRows('normalized_bom_items', { filters: { quotation_case_id: id } });
+    await deleteRows('bom_areas', { filters: { quotation_case_id: id } });
 
-    // 2. Insert Virtual BOM Area
-    await db.prepare(`
-      INSERT INTO bom_areas (
-        id, quotation_case_id, drawing_no, table_type, bbox_json, confidence_score, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      `ba_virtual_${id}_1`,
-      id,
-      drawingNo,
-      'VIRTUAL_BOM',
-      JSON.stringify({ note: 'AI 역추론 가상 BOM 영역' }),
-      0.96,
-      'AI_INFERRED',
-      now
-    );
+    // 2. Insert Virtual BOM Area via insertRows
+    await insertRows('bom_areas', [{
+      id: `ba_virtual_${id}_1`,
+      quotation_case_id: id,
+      drawing_no: drawingNo,
+      table_type: 'VIRTUAL_BOM',
+      bbox_json: JSON.stringify({ note: 'AI 역추론 가상 BOM 영역' }),
+      confidence_score: 0.96,
+      status: 'AI_INFERRED',
+      created_at: now
+    }]);
 
-    // 3. Insert Raw, Flattened, and Normalized BOM items
+    // 3. Prepare Raw, Flattened, and Normalized BOM rows
+    const rawRows: any[] = [];
+    const flatRows: any[] = [];
+    const normRows: any[] = [];
+
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const rawId = `rb_virtual_${id}_${i + 1}`;
@@ -249,109 +297,91 @@ export async function POST(
       const unit = item.unit || 'EA';
       const remark = item.remark || item.evidence || 'AI 역추론 가상 BOM';
 
-      await db.prepare(`
-        INSERT INTO raw_bom_items (
-          id, quotation_case_id, source_file_id, drawing_no, row_index, item_no_raw, part_no_raw,
-          name_raw, specification_raw, material_raw, quantity_raw, quantity_numeric,
-          unit_raw, remark_raw, source_handles_json, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        rawId,
-        id,
-        null,
-        drawingNo,
-        i + 1,
-        item.item_no || String(i + 1),
-        partNo,
-        name,
-        spec,
-        mat,
-        String(qtyNum),
-        qtyNum,
-        unit,
-        remark,
-        '[]',
-        'AI_VIRTUAL',
-        now
-      );
+      rawRows.push({
+        id: rawId,
+        quotation_case_id: id,
+        source_file_id: null,
+        drawing_no: drawingNo,
+        row_index: i + 1,
+        item_no_raw: item.item_no || String(i + 1),
+        part_no_raw: partNo,
+        name_raw: name,
+        specification_raw: spec,
+        material_raw: mat,
+        quantity_raw: String(qtyNum),
+        quantity_numeric: qtyNum,
+        unit_raw: unit,
+        remark_raw: remark,
+        source_handles_json: '[]',
+        status: 'AI_VIRTUAL',
+        created_at: now
+      });
 
-      await db.prepare(`
-        INSERT INTO flattened_bom_items (
-          id, quotation_case_id, item_key, part_no, name, specification, material,
-          total_quantity, unit, source_drawings_json, source_item_ids_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        flatId,
-        id,
-        name,
-        partNo,
-        name,
-        spec,
-        mat,
-        qtyNum,
-        unit,
-        JSON.stringify([drawingNo]),
-        JSON.stringify([rawId]),
-        now
-      );
+      flatRows.push({
+        id: flatId,
+        quotation_case_id: id,
+        item_key: name,
+        part_no: partNo,
+        name: name,
+        specification: spec,
+        material: mat,
+        total_quantity: qtyNum,
+        unit: unit,
+        source_drawings_json: JSON.stringify([drawingNo]),
+        source_item_ids_json: JSON.stringify([rawId]),
+        created_at: now
+      });
 
-      await db.prepare(`
-        INSERT INTO normalized_bom_items (
-          id, quotation_case_id, raw_item_id, raw_name, normalized_name, search_name, direction,
-          spec_candidate, material_candidate, quantity, unit, status, is_quote_included, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        normId,
-        id,
-        rawId,
-        name,
-        item.normalized_name || name,
-        name.replace(/\s+/g, ''),
-        null,
-        spec,
-        mat,
-        qtyNum,
-        unit,
-        'NORMALIZED',
-        1,
-        now
-      );
+      normRows.push({
+        id: normId,
+        quotation_case_id: id,
+        raw_item_id: rawId,
+        raw_name: name,
+        normalized_name: item.normalized_name || name,
+        search_name: name.replace(/\s+/g, ''),
+        direction: null,
+        spec_candidate: spec,
+        material_candidate: mat,
+        quantity: qtyNum,
+        unit: unit,
+        status: 'NORMALIZED',
+        is_quote_included: 1,
+        created_at: now
+      });
     }
 
-    // 4. Update drawings table so drawing info is cleanly identified instead of 'DWG SIZE A3' / 'NO'
-    const existingDrawings = (await db.prepare('SELECT id, drawing_no_raw FROM drawings WHERE quotation_case_id = ?').all(id)) as any[];
+    // Insert all rows in batches using egdesk insertRows
+    if (rawRows.length > 0) {
+      await insertRows('raw_bom_items', rawRows);
+    }
+    if (flatRows.length > 0) {
+      await insertRows('flattened_bom_items', flatRows);
+    }
+    if (normRows.length > 0) {
+      await insertRows('normalized_bom_items', normRows);
+    }
+
+    // 4. Update drawings table via updateRows
+    const existingDrawings = getRows(await queryTable('drawings', { filters: { quotation_case_id: id } }));
     if (existingDrawings.length > 0) {
-      await db.prepare(`
-        UPDATE drawings 
-        SET drawing_no_raw = ?,
-            drawing_no_normalized = ?,
-            drawing_name_raw = ?,
-            drawing_name_normalized = ?,
-            drawing_type = 'MAIN_ASSEMBLY',
-            scale = '1:1',
-            status = 'CONFIRMED'
-        WHERE id = ?
-      `).run(
-        drawingNo,
-        drawingNo,
-        drawingTitle,
-        drawingTitle,
-        existingDrawings[0].id
-      );
+      await updateRows('drawings', {
+        drawing_no_raw: drawingNo,
+        drawing_no_normalized: drawingNo,
+        drawing_name_raw: drawingTitle,
+        drawing_name_normalized: drawingTitle,
+        drawing_type: 'MAIN_ASSEMBLY',
+        scale: '1:1',
+        status: 'CONFIRMED'
+      }, { filters: { id: existingDrawings[0].id } });
     }
 
-    // 5. Update quotation case status
-    await db.prepare(`
-      UPDATE quotation_cases
-      SET status = 'BOM_EXTRACTED',
-          quote_readiness = 'READY',
-          updated_at = ?
-      WHERE id = ?
-    `).run(now, id);
-  });
+    // 5. Update quotation case status via updateRows
+    await updateRows('quotation_cases', {
+      status: 'BOM_EXTRACTED',
+      quote_readiness: 'READY',
+      updated_at: now
+    }, { filters: { id } });
 
-  try {
-    await applyTx();
     return NextResponse.json({
       success: true,
       message: `✨ AI 역추론 가상 BOM ${items.length}개 품목이 성공적으로 등록되었습니다.`,

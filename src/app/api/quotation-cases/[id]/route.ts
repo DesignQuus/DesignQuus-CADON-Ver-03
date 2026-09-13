@@ -19,7 +19,8 @@ export async function GET(
 
   const { id } = await params;
 
-  const rawQc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
+  try {
+    const rawQc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!rawQc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
@@ -259,26 +260,33 @@ export async function GET(
 
   const permission = await checkCasePermission(session.userId, session.role, id);
 
-  return NextResponse.json({
-    case: qc,
-    permission,
-    files,
-    allFiles: allCaseFiles,
-    drawings,
-    relationships,
-    bomAreas,
-    rawBomItems,
-    flattenedBomItems,
-    normalizedItems,
-    candidates,
-    approvalRecords,
-    finalBomItems,
-    quotes,
-    latestQuote,
-    quoteItems,
-    cadObjects,
-    latestParseRun
-  });
+    return NextResponse.json({
+      case: qc,
+      permission,
+      files,
+      allFiles: allCaseFiles,
+      drawings,
+      relationships,
+      bomAreas,
+      rawBomItems,
+      flattenedBomItems,
+      normalizedItems,
+      candidates,
+      approvalRecords,
+      finalBomItems,
+      quotes,
+      latestQuote,
+      quoteItems,
+      cadObjects,
+      latestParseRun
+    });
+  } catch (err: any) {
+    console.error(`[GET /api/quotation-cases/${id}] Error:`, err);
+    return NextResponse.json(
+      { error: err?.message || '견적건을 불러오는 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
 }
 
 export async function PATCH(

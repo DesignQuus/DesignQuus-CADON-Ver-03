@@ -4,46 +4,56 @@ import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+    }
+
+    const baseSelect = `
+      SELECT qc.*, 
+        COALESCE(c.company_name, '고객사 미지정') as company_name, 
+        COALESCE(c.company_code, '-') as company_code, 
+        COALESCE(p.project_name, '프로젝트 미지정') as project_name, 
+        COALESCE(p.project_code, '-') as project_code,
+        (SELECT COUNT(DISTINCT uf.original_file_name) FROM uploaded_files uf WHERE uf.quotation_case_id = qc.id AND uf.file_role = 'SOURCE') as files_count,
+        (SELECT COUNT(*) FROM drawings d WHERE d.quotation_case_id = qc.id) as drawings_count,
+        COALESCE(NULLIF((SELECT COUNT(*) FROM final_bom_items fbi WHERE fbi.quotation_case_id = qc.id), 0), (SELECT COUNT(*) FROM normalized_bom_items nbi WHERE nbi.quotation_case_id = qc.id), 0) as bom_items_count,
+        (SELECT q.total_amount FROM quotes q WHERE q.quotation_case_id = qc.id ORDER BY q.quote_version DESC LIMIT 1) as quote_total_amount
+      FROM quotation_cases qc
+      LEFT JOIN companies c ON qc.company_id = c.id
+      LEFT JOIN projects p ON qc.project_id = p.id
+    `;
+
+    const allUsers = (await db.prepare('SELECT id, name FROM users').all()) as any[];
+    const userMap = new Map(allUsers.map((u: any) => [u.id, u.name]));
+
+    let cases: any[];
+    if (session.role === 'SUPER_ADMIN') {
+      cases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
+    } else {
+      const accessibleCompanies = (await db.prepare(`
+        SELECT company_id FROM user_company_access
+        WHERE user_id = ? AND is_active = 1
+      `).all(session.userId)) as any[];
+      const compIds = new Set(accessibleCompanies.map((c: any) => c.company_id));
+
+      const allCases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
+      cases = allCases.filter((c: any) =>
+        (!c.company_id || c.company_id === 'comp_unassigned' || compIds.has(c.company_id)) &&
+        (c.visibility === 'SHARED' || c.created_by_user_id === session.userId)
+      );
+    }
+
+    for (const c of cases) {
+      c.created_by_name = userMap.get(c.created_by_user_id) || '담당자';
+    }
+
+    return NextResponse.json({ cases });
+  } catch (err: any) {
+    console.error('[quotation-cases GET Error]:', err);
+    return NextResponse.json({ error: err.message || '견적건 목록 조회 실패' }, { status: 500 });
   }
-
-  const baseSelect = `
-    SELECT qc.*, c.company_name, c.company_code, p.project_name, p.project_code,
-      (SELECT COUNT(DISTINCT uf.original_file_name) FROM uploaded_files uf WHERE uf.quotation_case_id = qc.id AND uf.file_role = 'SOURCE') as files_count,
-      (SELECT COUNT(*) FROM drawings d WHERE d.quotation_case_id = qc.id) as drawings_count,
-      COALESCE(NULLIF((SELECT COUNT(*) FROM final_bom_items fbi WHERE fbi.quotation_case_id = qc.id), 0), (SELECT COUNT(*) FROM normalized_bom_items nbi WHERE nbi.quotation_case_id = qc.id), 0) as bom_items_count,
-      (SELECT q.total_amount FROM quotes q WHERE q.quotation_case_id = qc.id ORDER BY q.quote_version DESC LIMIT 1) as quote_total_amount
-    FROM quotation_cases qc
-    JOIN companies c ON qc.company_id = c.id
-    JOIN projects p ON qc.project_id = p.id
-  `;
-
-  const allUsers = (await db.prepare('SELECT id, name FROM users').all()) as any[];
-  const userMap = new Map(allUsers.map((u: any) => [u.id, u.name]));
-
-  let cases: any[];
-  if (session.role === 'SUPER_ADMIN') {
-    cases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
-  } else {
-    const accessibleCompanies = (await db.prepare(`
-      SELECT company_id FROM user_company_access
-      WHERE user_id = ? AND is_active = 1
-    `).all(session.userId)) as any[];
-    const compIds = new Set(accessibleCompanies.map((c: any) => c.company_id));
-
-    const allCases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
-    cases = allCases.filter((c: any) =>
-      compIds.has(c.company_id) && (c.visibility === 'SHARED' || c.created_by_user_id === session.userId)
-    );
-  }
-
-  for (const c of cases) {
-    c.created_by_name = userMap.get(c.created_by_user_id) || '담당자';
-  }
-
-  return NextResponse.json({ cases });
 }
 
 export async function POST(req: NextRequest) {

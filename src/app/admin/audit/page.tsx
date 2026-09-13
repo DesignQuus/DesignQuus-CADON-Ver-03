@@ -34,6 +34,7 @@ export default function AuditLogsPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   // Filters
+  const [users, setUsers] = useState<any[]>([]);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedType, setSelectedType] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,6 +56,9 @@ export default function AuditLogsPage() {
         setStats(data.stats || {});
         setTotalPages(data.totalPages || 1);
         setPage(data.page || 1);
+        if (data.users) {
+          setUsers(data.users);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch audit logs:', err);
@@ -235,12 +239,11 @@ export default function AuditLogsPage() {
               className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800"
             >
               <option value="">전체 담당자</option>
-              <option value="usr_kim">김견적 (과장 / 영업견적 1팀)</option>
-              <option value="usr_lee">이견적 (대리 / 영업견적 1팀)</option>
-              <option value="usr_choi">최견적 (차장 / 기술견적 2팀)</option>
-              <option value="usr_song">송견적 (주임 / 기술견적 2팀)</option>
-              <option value="usr_park">박견적 (대리 / 정밀견적 3팀)</option>
-              <option value="usr_admin">시스템 최고관리자</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.role === 'SUPER_ADMIN' ? '최고관리자' : u.role})
+                </option>
+              ))}
             </select>
           </div>
 

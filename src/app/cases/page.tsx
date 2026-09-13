@@ -59,65 +59,33 @@ interface ManagerTheme {
   initial: string;
 }
 
-const MANAGER_THEMES: Record<string, ManagerTheme> = {
-  usr_kim: {
-    bg: 'bg-blue-50',
-    text: 'text-blue-700',
-    border: 'border-blue-200',
-    badge: 'bg-blue-600 text-white',
-    dept: '영업1팀',
-    initial: '김'
-  },
-  usr_lee: {
-    bg: 'bg-emerald-50',
-    text: 'text-emerald-700',
-    border: 'border-emerald-200',
-    badge: 'bg-emerald-600 text-white',
-    dept: '영업1팀',
-    initial: '이'
-  },
-  usr_choi: {
-    bg: 'bg-purple-50',
-    text: 'text-purple-700',
-    border: 'border-purple-200',
-    badge: 'bg-purple-600 text-white',
-    dept: '기술2팀',
-    initial: '최'
-  },
-  usr_song: {
-    bg: 'bg-rose-50',
-    text: 'text-rose-700',
-    border: 'border-rose-200',
-    badge: 'bg-rose-600 text-white',
-    dept: '기술2팀',
-    initial: '송'
-  },
-  usr_park: {
-    bg: 'bg-amber-50',
-    text: 'text-amber-800',
-    border: 'border-amber-200',
-    badge: 'bg-amber-600 text-white',
-    dept: '정밀3팀',
-    initial: '박'
-  },
-  usr_admin: {
-    bg: 'bg-slate-100',
-    text: 'text-slate-800',
-    border: 'border-slate-300',
-    badge: 'bg-slate-700 text-white',
-    dept: '운영총괄',
-    initial: '관'
-  }
-};
+const THEME_PALETTES: ManagerTheme[] = [
+  { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', badge: 'bg-blue-600 text-white', dept: '견적팀', initial: '견' },
+  { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', badge: 'bg-emerald-600 text-white', dept: '견적팀', initial: '견' },
+  { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badge: 'bg-purple-600 text-white', dept: '견적팀', initial: '견' },
+  { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', badge: 'bg-indigo-600 text-white', dept: '견적팀', initial: '견' },
+  { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', badge: 'bg-amber-600 text-white', dept: '견적팀', initial: '견' }
+];
 
-function getManagerTheme(userId: string): ManagerTheme {
-  return MANAGER_THEMES[userId] || {
-    bg: 'bg-slate-50',
-    text: 'text-slate-700',
-    border: 'border-slate-200',
-    badge: 'bg-slate-500 text-white',
-    dept: '견적팀',
-    initial: '👤'
+function getManagerTheme(userId: string, userName?: string): ManagerTheme {
+  if (userId === 'usr_admin') {
+    return {
+      bg: 'bg-slate-100',
+      text: 'text-slate-800',
+      border: 'border-slate-300',
+      badge: 'bg-slate-700 text-white',
+      dept: '운영총괄',
+      initial: '관'
+    };
+  }
+  let hash = 0;
+  for (let i = 0; i < (userId || '').length; i++) {
+    hash = (hash << 5) - hash + userId.charCodeAt(i);
+  }
+  const theme = THEME_PALETTES[Math.abs(hash) % THEME_PALETTES.length];
+  return {
+    ...theme,
+    initial: userName ? userName.slice(0, 1) : '👤'
   };
 }
 
@@ -157,8 +125,9 @@ export default function CasesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [caseName, setCaseName] = useState('');
-  const [companyId, setCompanyId] = useState('comp_sechang');
-  const [projectId, setProjectId] = useState('proj_sechang');
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [companyId, setCompanyId] = useState('comp_unassigned');
+  const [projectId, setProjectId] = useState('proj_unassigned');
   const [submitting, setSubmitting] = useState(false);
 
   // Filter & Search States
@@ -189,6 +158,22 @@ export default function CasesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
+  const fetchCompanies = async () => {
+    try {
+      const res = await fetch('/api/companies');
+      if (res.ok) {
+        const data = await res.json();
+        const compList = data.companies || [];
+        setCompanies(compList);
+        if (compList.length > 0) {
+          setCompanyId(compList[0].id);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch companies:', e);
+    }
+  };
+
   const fetchCases = async () => {
     try {
       const res = await fetch('/api/quotation-cases');
@@ -209,6 +194,7 @@ export default function CasesPage() {
 
   useEffect(() => {
     fetchCases();
+    fetchCompanies();
     fetch('/api/auth/me')
       .then((res) => (res.ok ? res.json() : { user: null }))
       .then((data) => {
@@ -1172,7 +1158,7 @@ export default function CasesPage() {
                     </th>
                     <th
                       onClick={() => handleSort('case_name')}
-                      className="py-3 px-3.5 cursor-pointer hover:bg-slate-100 transition-colors group"
+                      className="py-3 px-3.5 cursor-pointer hover:bg-slate-100 transition-colors group min-w-[220px] whitespace-nowrap"
                     >
                       <span>견적의뢰 건명</span>
                       {renderSortIndicator('case_name')}
@@ -1271,7 +1257,7 @@ export default function CasesPage() {
                           </td>
 
                           {/* Case Name */}
-                          <td className="py-3 px-3.5">
+                          <td className="py-3 px-3.5 min-w-[220px]">
                             <div className="flex items-center space-x-2">
                               <span className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1 text-[13.5px]">
                                 {c.case_name}
@@ -1765,11 +1751,15 @@ export default function CasesPage() {
                   onChange={(e) => setCompanyId(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-[3px] text-xs font-semibold text-slate-800 outline-none focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                 >
-                  <option value="comp_sechang">(주)세창인터내셔널 [CUST-SECHANG]</option>
-                  <option value="comp_001">A기계공업 (주) [CUST-0001]</option>
-                  <option value="comp_002">B자동화시스템 (주) [CUST-0002]</option>
-                  <option value="comp_003">(주)한화에어로스페이스 파트너스 [CUST-0003]</option>
-                  <option value="comp_004">현대모비스 구동모듈 협력단 [CUST-0004]</option>
+                  {companies.length === 0 ? (
+                    <option value="comp_unassigned">고객사 미지정</option>
+                  ) : (
+                    companies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.company_name} {c.company_code ? `[${c.company_code}]` : ''}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -1780,12 +1770,7 @@ export default function CasesPage() {
                   onChange={(e) => setProjectId(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-[3px] text-xs font-semibold text-slate-800 outline-none focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                 >
-                  <option value="proj_sechang">인버터 조립 LINE 신규라인 (보그워너)</option>
-                  <option value="proj_001">2026 고속 가이드레일 및 프레임 증설라인</option>
-                  <option value="proj_002">스마트 컨베이어 이송 자동화 시스템</option>
-                  <option value="proj_003">2차전지 모듈 조립 라인 지그/프레임 제작</option>
-                  <option value="proj_004">항공 정밀 가공 지그 및 툴링 파트</option>
-                  <option value="proj_005">구동모터 브라켓 및 샤프트 시제품 제작</option>
+                  <option value="proj_unassigned">기본 프로젝트 (미지정)</option>
                 </select>
               </div>
 

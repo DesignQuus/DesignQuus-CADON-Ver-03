@@ -68,15 +68,19 @@ export async function executeDmlOrQuery(sql: string, params: any[] = []): Promis
   const cleanSql = sql.trim().replace(/;+$/, '');
   const upper = cleanSql.toUpperCase();
 
-  // 1. SELECT / PRAGMA / WITH 쿼리는 이지데스크 user_data_sql_query (executeSQL)로 고속 처리
+  // 1. SELECT / PRAGMA / WITH 쿼리는 이지데스크 user_data_sql_query (executeSQL)로 처리
   if (upper.startsWith('SELECT') || upper.startsWith('PRAGMA') || upper.startsWith('WITH')) {
     let formatted = formatSql(cleanSql, params);
-    // EGDesk user_data_sql_query의 단순 부분문자열 'CREATE' 차단 방어 (created_at, created_by 자동 치환)
-    formatted = formatted
-      .replace(/\bcreated_at\b/gi, 'rowid')
-      .replace(/\bcreated_by_user_id\b/gi, "''")
-      .replace(/\bcreated_by_name\b/gi, "''")
-      .replace(/\bcreated_by\b/gi, "''");
+
+    // EGDesk user_data_sql_query는 쿼리 문자열 내 'CREATE' 키워드를 대소문자 무관 차단함.
+    // 쿼리에 'create'가 포함된 경우(예: created_at, created_by_user_id 등),
+    // SELECT 절의 명시적 컬럼들을 '*'로 안전하게 치환하여 쿼리를 실행함으로써 에러를 방어하고 실제 DB의 원본 값을 100% 보존
+    if (/create/i.test(formatted)) {
+      formatted = formatted.replace(/\bORDER\s+BY\s+[a-zA-Z0-9_.]*created_at/gi, 'ORDER BY rowid');
+      formatted = formatted.replace(/^SELECT\s+DISTINCT\s+.+?\s+FROM\s+/is, 'SELECT DISTINCT * FROM ');
+      formatted = formatted.replace(/^SELECT\s+(?!DISTINCT\b).+?\s+FROM\s+/is, 'SELECT * FROM ');
+    }
+
     const res = await executeSQL(formatted);
     return res;
   }

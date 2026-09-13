@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 
 export function getEgdeskStorageDir(): string {
   if (process.env.EGDESK_STORAGE_DIR && fs.existsSync(process.env.EGDESK_STORAGE_DIR)) {
@@ -24,15 +25,18 @@ export function getEgdeskStorageDir(): string {
 
   const projectId = process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID || '6db634cd-3796-4c8b-8aba-549cb79c49e9';
   const envName = process.env.NEXT_PUBLIC_EGDESK_ENV || 'development';
-  const appData = process.env.APPDATA || path.join(process.env.USERPROFILE || 'C:\\Users\\SteveLee', 'AppData', 'Roaming');
+  const userHome = os.homedir() || process.env.USERPROFILE || process.env.HOME || '';
+  const appData = process.env.APPDATA || (userHome ? path.join(userHome, 'AppData', 'Roaming') : '');
   
-  const egdeskProjectDir = path.join(appData, 'egdesk', 'user-data', envName, 'projects', projectId);
-  if (fs.existsSync(egdeskProjectDir)) {
-    const egdeskStorage = path.join(egdeskProjectDir, 'storage');
-    if (!fs.existsSync(egdeskStorage)) {
-      fs.mkdirSync(egdeskStorage, { recursive: true });
+  if (appData) {
+    const egdeskProjectDir = path.join(appData, 'egdesk', 'user-data', envName, 'projects', projectId);
+    if (fs.existsSync(egdeskProjectDir)) {
+      const egdeskStorage = path.join(egdeskProjectDir, 'storage');
+      if (!fs.existsSync(egdeskStorage)) {
+        fs.mkdirSync(egdeskStorage, { recursive: true });
+      }
+      return egdeskStorage;
     }
-    return egdeskStorage;
   }
 
   // Fallback to local storage in workspace
