@@ -132,20 +132,20 @@ export async function GET(
   for (const rb of rawBomItems) {
     const pno = (rb.part_no || rb.drawing_no || '').trim();
     const pname = (rb.item_name || rb.part_name || '').trim();
-    if (pno && pname && pname !== '인버터 조립 LINE' && !pname.endsWith('조립 LINE') && !pname.endsWith('조립LINE')) {
+    if (pno && pname && !pname.endsWith('조립 LINE') && !pname.endsWith('조립LINE')) {
       if (!partNameMap.has(pno)) partNameMap.set(pno, pname);
     }
   }
   for (const fb of flattenedBomItems) {
     const pno = (fb.part_no || fb.drawing_no || '').trim();
     const pname = (fb.name || fb.item_name || '').trim();
-    if (pno && pname && pname !== '인버터 조립 LINE' && !pname.endsWith('조립 LINE') && !pname.endsWith('조립LINE')) {
+    if (pno && pname && !pname.endsWith('조립 LINE') && !pname.endsWith('조립LINE')) {
       if (!partNameMap.has(pno)) partNameMap.set(pno, pname);
     }
   }
 
   for (const d of drawings) {
-    if (d.drawing_type !== 'MAIN_ASSEMBLY' && (d.drawing_name_raw === '인버터 조립 LINE' || d.drawing_name_raw?.endsWith('조립 LINE') || d.drawing_name_raw?.endsWith('조립LINE'))) {
+    if (d.drawing_type !== 'MAIN_ASSEMBLY' && (d.drawing_name_raw?.endsWith('조립 LINE') || d.drawing_name_raw?.endsWith('조립LINE') || d.drawing_name_raw === d.project_name)) {
       const pno = (d.drawing_no_raw || '').trim();
       const betterName = partNameMap.get(pno);
       if (betterName) {

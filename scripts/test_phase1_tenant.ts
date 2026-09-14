@@ -39,11 +39,11 @@ async function runPhase1Test() {
   // 3. Test JWT tenant_id Payload Encoding & Decoding
   console.log('\n--- 3. Testing JWT Token with tenant_id payload ---');
   const secret = new TextEncoder().encode('cadon-bom-secret-key-super-secure-production-2026');
-  const testTenant = 'comp_sechang_intl';
+  const testTenant = 'comp_test_corp';
   const token = await new SignJWT({
     userId: 'usr_test_1',
     loginId: 'tester',
-    name: '세창 담당자',
+    name: '테스트 담당자',
     role: 'TENANT_ADMIN',
     tenant_id: testTenant,
     companyId: testTenant

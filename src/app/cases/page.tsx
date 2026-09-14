@@ -126,8 +126,8 @@ export default function CasesPage() {
   const [showModal, setShowModal] = useState(false);
   const [caseName, setCaseName] = useState('');
   const [companies, setCompanies] = useState<any[]>([]);
-  const [companyId, setCompanyId] = useState('comp_unassigned');
-  const [projectId, setProjectId] = useState('proj_unassigned');
+  const [companyId, setCompanyId] = useState('');
+  const [projectId, setProjectId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Filter & Search States
@@ -1752,7 +1752,7 @@ export default function CasesPage() {
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-[3px] text-xs font-semibold text-slate-800 outline-none focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                 >
                   {companies.length === 0 ? (
-                    <option value="comp_unassigned">고객사 미지정</option>
+                    <option value="">(등록된 고객사 없음)</option>
                   ) : (
                     companies.map((c) => (
                       <option key={c.id} value={c.id}>

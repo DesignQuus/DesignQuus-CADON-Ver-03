@@ -101,23 +101,23 @@ def populate_standard_quotation(ws, quote_data: dict):
         quote_date = str(quote_date).split("T")[0]
         
     supplier = quote_data.get("supplier", {
-        "business_no": "123-45-67890",
-        "company_name": "주식회사 캐드온 (CADON Inc.)",
-        "ceo_name": "홍 길 동",
-        "address": "서울특별시 금천구 가산디지털1로 123, 캐드온타워 8층",
-        "biz_type": "제조업 / 서비스",
-        "biz_category": "정밀가공, 공장자동화, CAD/CAM 솔루션",
-        "tel": "02-1234-5678",
-        "fax": "02-1234-5679",
-        "email": "quote@cadon.co.kr",
-        "manager": "기술영업팀 / 김영업 팀장 (010-9876-5432)"
+        "business_no": "",
+        "company_name": "",
+        "ceo_name": "",
+        "address": "",
+        "biz_type": "",
+        "biz_category": "",
+        "tel": "",
+        "fax": "",
+        "email": "",
+        "manager": ""
     })
     
     terms = quote_data.get("terms", {
         "delivery_terms": "발주 확정 후 30일 이내 납품 (도면 승인 기준)",
         "payment_terms": "세금계산서 발행 후 30일 이내 현금 결제 (협의 가능)",
         "validity_terms": "견적 제출일로부터 30일간 유효",
-        "bank_account": "기업은행 123-456789-01-012 (예금주: 주식회사 캐드온)",
+        "bank_account": "",
         "remarks": "1. 본 견적서는 CAD 도면 정밀 분석 기반 표준 산출 견적서입니다.\n2. 사양 변경 시 견적 금액이 변동될 수 있습니다."
     })
 
@@ -170,7 +170,7 @@ def populate_standard_quotation(ws, quote_data: dict):
     ws["G5"].fill = fill_zebra
     ws["G5"].alignment = Alignment(horizontal="center", vertical="center")
     ws.merge_cells("H5:K5")
-    ws["H5"] = supplier.get("business_no", "123-45-67890")
+    ws["H5"] = supplier.get("business_no", "")
     ws["H5"].font = Font(name=font_family, size=10, bold=True, color=c_title)
     ws["H5"].alignment = Alignment(horizontal="center", vertical="center")
 
@@ -178,7 +178,7 @@ def populate_standard_quotation(ws, quote_data: dict):
     ws["G6"].font = Font(name=font_family, size=9.5, bold=True, color=c_text_sub)
     ws["G6"].fill = fill_zebra
     ws["G6"].alignment = Alignment(horizontal="center", vertical="center")
-    ws["H6"] = supplier.get("company_name", "주식회사 캐드온")
+    ws["H6"] = supplier.get("company_name", "")
     ws["H6"].font = Font(name=font_family, size=9.5, bold=True, color=c_title)
     ws["H6"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
@@ -187,7 +187,8 @@ def populate_standard_quotation(ws, quote_data: dict):
     ws["I6"].fill = fill_zebra
     ws["I6"].alignment = Alignment(horizontal="center", vertical="center")
     ws.merge_cells("J6:K6")
-    ws["J6"] = f"{supplier.get('ceo_name', '홍 길 동')}  (인)"
+    ceo_text = supplier.get('ceo_name', '')
+    ws["J6"] = f"{ceo_text}  (인)" if ceo_text else "(인)"
     ws["J6"].font = Font(name=font_family, size=9.5, bold=True, color=c_title)
     ws["J6"].alignment = Alignment(horizontal="center", vertical="center")
 
@@ -204,7 +205,7 @@ def populate_standard_quotation(ws, quote_data: dict):
     ws["G8"].font = Font(name=font_family, size=9.5, bold=True, color=c_text_sub)
     ws["G8"].fill = fill_zebra
     ws["G8"].alignment = Alignment(horizontal="center", vertical="center")
-    ws["H8"] = supplier.get("biz_type", "제조업")
+    ws["H8"] = supplier.get("biz_type", "")
     ws["H8"].font = Font(name=font_family, size=9, color=c_text_main)
     ws["H8"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
@@ -213,7 +214,7 @@ def populate_standard_quotation(ws, quote_data: dict):
     ws["I8"].fill = fill_zebra
     ws["I8"].alignment = Alignment(horizontal="center", vertical="center")
     ws.merge_cells("J8:K8")
-    ws["J8"] = supplier.get("biz_category", "정밀가공, 자동화설비")
+    ws["J8"] = supplier.get("biz_category", "")
     ws["J8"].font = Font(name=font_family, size=9, color=c_text_main)
     ws["J8"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
@@ -221,7 +222,7 @@ def populate_standard_quotation(ws, quote_data: dict):
     ws["G9"].font = Font(name=font_family, size=9.5, bold=True, color=c_text_sub)
     ws["G9"].fill = fill_zebra
     ws["G9"].alignment = Alignment(horizontal="center", vertical="center")
-    ws["H9"] = supplier.get("tel", "02-1234-5678")
+    ws["H9"] = supplier.get("tel", "")
     ws["H9"].font = Font(name=font_family, size=9, color=c_text_main)
     ws["H9"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
 
@@ -230,7 +231,7 @@ def populate_standard_quotation(ws, quote_data: dict):
     ws["I9"].fill = fill_zebra
     ws["I9"].alignment = Alignment(horizontal="center", vertical="center")
     ws.merge_cells("J9:K9")
-    ws["J9"] = supplier.get("fax", "02-1234-5679")
+    ws["J9"] = supplier.get("fax", "")
     ws["J9"].font = Font(name=font_family, size=9, color=c_text_main)
     ws["J9"].alignment = Alignment(horizontal="left", vertical="center", indent=1)
 

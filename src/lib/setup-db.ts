@@ -27,6 +27,7 @@ import {
   deleteRows,
   executeSQL,
   getTableSchema,
+  getTableSchemas,
   listTables
 } from '../../egdesk-helpers';
 
@@ -724,6 +725,57 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'created_at', type: 'TEXT', notNull: true }
     ],
     uniqueKeyColumns: ['id']
+  },
+  {
+    name: 'part_fabrication_features',
+    displayName: '부품별 가공 피처 대장',
+    description: '도면에서 추출된 외곽치수, 절단길이, 절곡수, 탭수, 이론중량',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'quotation_case_id', type: 'TEXT', notNull: true },
+      { name: 'drawing_id', type: 'TEXT' },
+      { name: 'bom_item_id', type: 'TEXT' },
+      { name: 'process_type', type: 'TEXT', notNull: true },
+      { name: 'material_code', type: 'TEXT', notNull: true },
+      { name: 'material_density', type: 'REAL', notNull: true },
+      { name: 'bbox_width', type: 'REAL', notNull: true },
+      { name: 'bbox_length', type: 'REAL', notNull: true },
+      { name: 'bbox_thickness', type: 'REAL', notNull: true },
+      { name: 'cutting_length_total', type: 'REAL', notNull: true },
+      { name: 'pierce_count', type: 'INTEGER', notNull: true },
+      { name: 'bending_count', type: 'INTEGER', notNull: true },
+      { name: 'through_hole_count', type: 'INTEGER', notNull: true },
+      { name: 'tap_hole_count', type: 'INTEGER', notNull: true },
+      { name: 'part_weight_kg', type: 'REAL', notNull: true },
+      { name: 'surface_area_cm2', type: 'REAL' },
+      { name: 'heat_treatment', type: 'TEXT' },
+      { name: 'surface_treatment', type: 'TEXT' },
+      { name: 'raw_features_json', type: 'TEXT' },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
+  },
+  {
+    name: 'part_cost_breakdowns',
+    displayName: '부품별 제조원가 세부내역',
+    description: '재료비, 절단비, 절곡비, 가공비, 후처리비 산출 근거',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'feature_id', type: 'TEXT', notNull: true },
+      { name: 'quotation_case_id', type: 'TEXT', notNull: true },
+      { name: 'material_cost', type: 'REAL', notNull: true },
+      { name: 'laser_cutting_cost', type: 'REAL', notNull: true },
+      { name: 'bending_cost', type: 'REAL', notNull: true },
+      { name: 'tapping_cost', type: 'REAL', notNull: true },
+      { name: 'machining_cost', type: 'REAL', notNull: true },
+      { name: 'surface_finish_cost', type: 'REAL', notNull: true },
+      { name: 'subtotal_cost', type: 'REAL', notNull: true },
+      { name: 'markup_rate', type: 'REAL', notNull: true },
+      { name: 'final_unit_price', type: 'REAL', notNull: true },
+      { name: 'calc_formula_json', type: 'TEXT' },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
   }
 ];
 
@@ -847,46 +899,7 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
     console.log('✓ Admin user account seeded.');
   }
 
-  // B. 기본 미지정 고객사/프로젝트 플레이스홀더 시딩
-  const compCountRes = await executeSQL('SELECT COUNT(*) as cnt FROM companies');
-  const compCount = Number(compCountRes?.rows?.[0]?.cnt || 0);
 
-  if (compCount === 0) {
-    console.log('🌱 Seeding default unassigned company placeholder...');
-    await insertRows('companies', [
-      {
-        id: 'comp_unassigned',
-        company_code: 'UNASSIGNED',
-        company_name: '고객사 미지정',
-        company_type: 'CUSTOMER',
-        is_active: 1,
-        tenant_id: 'tenant-cadon',
-        uuid: 'comp_unassigned',
-        created_at: now,
-        updated_at: now
-      }
-    ]);
-
-    await insertRows('user_company_access', [
-      { id: 'uca_admin_unassigned', user_id: 'usr_admin', company_id: 'comp_unassigned', access_role: 'MANAGER', is_active: 1, tenant_id: 'tenant-cadon', uuid: 'uca_admin_unassigned', updated_at: now }
-    ]);
-
-    await insertRows('projects', [
-      {
-        id: 'proj_unassigned',
-        company_id: 'comp_unassigned',
-        project_code: 'PRJ-UNASSIGNED',
-        project_name: '프로젝트 미지정',
-        description: '도면 직접 등록 시 생성되는 기본 프로젝트',
-        status: 'ACTIVE',
-        tenant_id: 'tenant-cadon',
-        uuid: 'proj_unassigned',
-        created_at: now,
-        updated_at: now
-      }
-    ]);
-    console.log('✓ Default unassigned company and project placeholders seeded.');
-  }
 
   // C. 전사 결재 설정 시딩 (GLOBAL_CONFIG)
   const approvalConfigRes = await executeSQL("SELECT COUNT(*) as cnt FROM system_approval_settings WHERE id = 'GLOBAL_CONFIG'");
@@ -924,6 +937,129 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
     console.log('✓ Global Approval Config and Admin Permissions seeded.');
   }
 
+  // D. 시스템 테넌트 기본 설정 시딩 (site_name, currency, vat_rate)
+  const siteNameRes = await executeSQL("SELECT id, value FROM system_settings WHERE key = 'site_name'");
+  const existingSiteName = siteNameRes?.rows?.[0];
+  if (!existingSiteName) {
+    await insertRows('system_settings', [
+      {
+        id: 'setting_site_name',
+        key: 'site_name',
+        value: 'CADON BOM AI',
+        description: '시스템 공식 서비스 명칭',
+        tenant_id: 'tenant-cadon',
+        uuid: 'setting_site_name',
+        updated_at: now
+      },
+      {
+        id: 'setting_currency',
+        key: 'default_currency',
+        value: 'KRW',
+        description: '견적 기본 통화 단위',
+        tenant_id: 'tenant-cadon',
+        uuid: 'setting_currency',
+        updated_at: now
+      },
+      {
+        id: 'setting_vat_rate',
+        key: 'default_vat_rate',
+        value: '0.1',
+        description: '기본 부가가치세율 (10%)',
+        tenant_id: 'tenant-cadon',
+        uuid: 'setting_vat_rate',
+        updated_at: now
+      }
+    ]);
+  } else if (existingSiteName.id === 'setting_test_1789282454282') {
+    await deleteRows('system_settings', { filters: { id: existingSiteName.id } });
+    await insertRows('system_settings', [{
+      id: 'setting_site_name',
+      key: 'site_name',
+      value: 'CADON BOM AI',
+      description: '시스템 공식 서비스 명칭',
+      tenant_id: 'tenant-cadon',
+      uuid: 'setting_site_name',
+      updated_at: now
+    }]);
+    console.log('✓ Cleaned up system_settings test id to setting_site_name.');
+  }
+
+  // E. egdesk.schema.ts 파일에 최신 36개 테이블 실데이터 스키마 자동 동기화
+  await syncEgdeskSchemaFile();
+
   console.log('✨ [CADON Zero-Config Setup] Database Setup and Audit Injections Completed Successfully.');
-  return { success: true, message: 'Database setup complete with audit columns injected.' };
+  return { success: true, message: 'Database setup complete with audit columns injected and schema synced.' };
+}
+
+/**
+ * EGDesk My DB 라이브 스키마를 읽어 egdesk.schema.ts 파일을 100% 최신화
+ */
+export async function syncEgdeskSchemaFile(): Promise<void> {
+  console.log('🔄 [CADON Zero-Config Setup] Synchronizing egdesk.schema.ts with live database...');
+  try {
+    const listRes = await listTables();
+    const tableList = (listRes.tables || []);
+    const tableNames = tableList.map((t: any) => t.tableName);
+    if (tableNames.length === 0) return;
+
+    const schemasRes = await getTableSchemas(tableNames);
+    const schemas = schemasRes?.schemas || {};
+
+    const tableDescriptions: Record<string, { displayName: string; description: string }> = {};
+    for (const spec of CADON_TABLE_SPECS) {
+      tableDescriptions[spec.name] = {
+        displayName: spec.displayName,
+        description: spec.description
+      };
+    }
+    tableDescriptions['audit_logs'] = {
+      displayName: '시스템 감사 로그',
+      description: 'EGDesk 시스템 및 플러그인 변경 감사 로그'
+    };
+
+    const sortedNames = Object.keys(schemas).sort();
+    const tablesObj: Record<string, any> = {};
+
+    for (const name of sortedNames) {
+      const info = schemas[name];
+      const descInfo = tableDescriptions[name] || {
+        displayName: info.displayName || name,
+        description: info.displayName || name
+      };
+      const colNames = (info.schema || []).map((c: any) => c.name);
+
+      tablesObj[name] = {
+        name,
+        displayName: descInfo.displayName,
+        description: descInfo.description,
+        columns: colNames,
+        columnCount: colNames.length,
+        rowCount: info.rowCount || 0
+      };
+    }
+
+    const schemaFilePath = path.join(process.cwd(), 'egdesk.schema.ts');
+    const content = `/**
+ * egdesk.schema.ts — committed seed schema
+ *
+ * COMMIT THIS FILE TO GIT.
+ *
+ * When someone opens this project in their EGDesk, these tables are created
+ * automatically in their dev database on first server start.
+ *
+ * Unlike egdesk.config.ts (auto-generated, gitignored), this file is the
+ * portable source of truth for your app's database structure.
+ */
+
+export const TABLES = ${JSON.stringify(tablesObj, null, 2)} as const;
+
+export type TableName = keyof typeof TABLES;
+export const TABLE_NAMES = Object.keys(TABLES) as TableName[];
+`;
+
+    fs.writeFileSync(schemaFilePath, content, 'utf8');
+    console.log(`✓ egdesk.schema.ts successfully updated with ${sortedNames.length} tables.`);
+  } catch (err: any) {
+    console.warn('⚠️ Could not update egdesk.schema.ts:', err.message);
+  }
 }

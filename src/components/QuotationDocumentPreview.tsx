@@ -65,20 +65,20 @@ export default function QuotationDocumentPreview({
 
   // Editable Supplier & Quote Terms State
   const [supplierInfo, setSupplierInfo] = useState({
-    businessNo: '123-45-67890',
-    companyName: '주식회사 캐드온 (CADON Inc.)',
-    ceoName: '홍 길 동',
-    address: '서울특별시 금천구 가산디지털1로 123, 캐드온타워 8층',
-    bizType: '제조업 / 서비스',
-    bizCategory: '정밀가공, 공장자동화, CAD/CAM 솔루션',
-    tel: '02-1234-5678',
-    fax: '02-1234-5679',
-    email: 'quote@cadon.co.kr',
-    manager: '기술영업팀 / 김영업 팀장 (010-9876-5432)',
+    businessNo: '',
+    companyName: '',
+    ceoName: '',
+    address: '',
+    bizType: '',
+    bizCategory: '',
+    tel: '',
+    fax: '',
+    email: '',
+    manager: '',
     paymentTerms: '세금계산서 발행 후 30일 이내 현금 결제 (협의 가능)',
     deliveryTerms: '발주 확정 후 30일 이내 납품 (도면 승인 기준)',
     validityTerms: '견적 제출일로부터 30일간 유효',
-    bankAccount: '기업은행 123-456789-01-012 (예금주: 주식회사 캐드온)',
+    bankAccount: '',
     remarks: '1. 본 견적서는 CAD 도면 정밀 분석 기반 표준 산출 견적서입니다.\n2. 사양 변경 시 견적 금액이 변동될 수 있습니다.'
   });
 
@@ -95,8 +95,8 @@ export default function QuotationDocumentPreview({
 
   // Client info from caseData
   const clientName = caseData?.case?.company_name || caseData?.company?.company_name || '고객사 귀하';
-  const projectName = caseData?.case?.project_name || caseData?.project?.project_name || '2026 설비 제작 프로젝트';
-  const quoteNo = quote?.quote_no || 'Q-20260901-002-V1';
+  const projectName = caseData?.case?.project_name || caseData?.project?.project_name || '-';
+  const quoteNo = quote?.quote_no || '-';
   const quoteDate = quote?.quote_date ? quote.quote_date.split('T')[0] : new Date().toISOString().split('T')[0];
 
   // Native Browser High-Fidelity Vector Print / PDF Export

@@ -100,23 +100,23 @@ export async function POST(
     const templatePath = template?.storage_path ? resolveStoragePath(template.storage_path) : path.join(getStorageSubdir('templates'), 'standard_quote_template.xlsx');
 
     const supplier = reqBody.supplier || {
-      business_no: '123-45-67890',
-      company_name: '주식회사 캐드온 (CADON Inc.)',
-      ceo_name: '홍 길 동',
-      address: '서울특별시 금천구 가산디지털1로 123, 캐드온타워 8층',
-      biz_type: '제조업 / 서비스',
-      biz_category: '정밀가공, 공장자동화, CAD/CAM 솔루션',
-      tel: '02-1234-5678',
-      fax: '02-1234-5679',
-      email: 'quote@cadon.co.kr',
-      manager: '기술영업팀 / 김영업 팀장 (010-9876-5432)'
+      business_no: '',
+      company_name: '',
+      ceo_name: '',
+      address: '',
+      biz_type: '',
+      biz_category: '',
+      tel: '',
+      fax: '',
+      email: '',
+      manager: ''
     };
 
     const terms = reqBody.terms || {
       delivery_terms: '발주 확정 후 30일 이내 납품 (도면 승인 기준)',
       payment_terms: '세금계산서 발행 후 30일 이내 현금 결제 (협의 가능)',
       validity_terms: '견적 제출일로부터 30일간 유효',
-      bank_account: '기업은행 123-456789-01-012 (예금주: 주식회사 캐드온)',
+      bank_account: '',
       remarks: '1. 본 견적서는 CAD 도면 정밀 분석 기반 표준 산출 견적서입니다.\n2. 사양 변경 시 견적 금액이 변동될 수 있습니다.'
     };
 

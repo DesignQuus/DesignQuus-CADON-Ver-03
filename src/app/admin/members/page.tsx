@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { 
   ShieldCheck, Users, Search, Plus, Edit, Trash2, Key, 
   RefreshCw, AlertTriangle, UserCheck, UserPlus, Phone, 
-  ShieldAlert, Building2, RotateCcw, CheckCircle, XCircle
+  ShieldAlert, Building2, RotateCcw, CheckCircle, XCircle, X
 } from "lucide-react";
 import { getTenantStorageKey } from "@/lib/tenant-client";
 
@@ -33,10 +33,10 @@ interface Company {
 
 const ROLE_LABELS: Record<string, { label: string; color: string }> = {
   SUPER_ADMIN: { label: "시스템 최고관리자", color: "bg-purple-100 text-purple-800 border-purple-200" },
-  TENANT_ADMIN: { label: "회원사 대표관리자", color: "bg-indigo-100 text-indigo-800 border-indigo-200" },
-  SALES_USER: { label: "영업/견적담당", color: "bg-blue-100 text-blue-800 border-blue-200" },
-  REVIEWER: { label: "도면/기술검토자", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
-  GUEST: { label: "게스트/조회전용", color: "bg-slate-100 text-slate-800 border-slate-200" },
+  TENANT_ADMIN: { label: "대표 관리자", color: "bg-indigo-100 text-indigo-800 border-indigo-200" },
+  SALES_USER: { label: "일반 사원 (실무)", color: "bg-blue-100 text-blue-800 border-blue-200" },
+  REVIEWER: { label: "일반 사원 (실무)", color: "bg-blue-100 text-blue-800 border-blue-200" },
+  GUEST: { label: "조회 전용", color: "bg-slate-100 text-slate-800 border-slate-200" },
 };
 
 export default function MembersManagementPage() {
@@ -80,7 +80,7 @@ export default function MembersManagementPage() {
   const [formRole, setFormRole] = useState<Operator["role"]>("SALES_USER");
   const [formEmployeeNumber, setFormEmployeeNumber] = useState("");
   const [formPhone, setFormPhone] = useState("");
-  const [formTenantId, setFormTenantId] = useState("comp_unassigned");
+  const [formTenantId, setFormTenantId] = useState("");
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -294,9 +294,10 @@ export default function MembersManagementPage() {
     setFormPassword("");
     setFormName("");
     setFormRole("SALES_USER");
-    setFormEmployeeNumber(`EMP-${Math.floor(1000 + Math.random() * 9000)}`);
+    setFormEmployeeNumber("");
     setFormPhone("");
-    setFormTenantId(targetTenantId || (selectedTenantFilter !== "ALL" ? selectedTenantFilter : (currentUser?.tenant_id || "comp_unassigned")));
+    const fallbackTenant = currentUser?.tenant_id || currentUser?.company_id || (companies[0]?.id || "");
+    setFormTenantId(targetTenantId || (selectedTenantFilter !== "ALL" ? selectedTenantFilter : fallbackTenant));
     setFormError("");
     setShowAddModal(true);
   };
@@ -311,12 +312,12 @@ export default function MembersManagementPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          login_id: formLoginId,
+          login_id: formLoginId.trim(),
           password: formPassword,
-          name: formName,
+          name: formName.trim(),
           role: formRole,
-          employee_number: formEmployeeNumber,
-          phone: formPhone,
+          employee_number: formEmployeeNumber.trim(),
+          phone: formPhone.trim(),
           tenant_id: formTenantId
         })
       });
@@ -343,7 +344,7 @@ export default function MembersManagementPage() {
     setFormRole(op.role);
     setFormEmployeeNumber(op.employee_number || "");
     setFormPhone(op.phone || "");
-    setFormTenantId(op.tenant_id || "comp_unassigned");
+    setFormTenantId(op.tenant_id || op.company_id || "");
     setFormPassword("");
     setFormError("");
     setShowEditModal(true);
@@ -483,13 +484,15 @@ export default function MembersManagementPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                임직원 및 회원사 관리 포탈
+                {currentUser?.role === "SUPER_ADMIN" ? "전체 임직원 통합 관리" : "소속 사원 계정 관리"}
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
-                  PublicSMS Architecture
+                  {currentUser?.role === "SUPER_ADMIN" ? "운영자 센터" : "회원사 전용"}
                 </span>
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                계층형 권한 통제, 사원번호 중복 방지, 회원사 데이터 격리, 소프트 삭제 및 종속성 복원 가드
+                {currentUser?.role === "SUPER_ADMIN"
+                  ? "계층형 권한 통제, 사원번호 중복 방지, 회원사 데이터 격리 관리"
+                  : "우리 회사 소속 사원(영업담당, 도면검토자 등)을 등록하고 계정 및 권한을 관리합니다."}
               </p>
             </div>
           </div>
@@ -519,7 +522,7 @@ export default function MembersManagementPage() {
             className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
-            <span>신규 임직원 등록</span>
+            <span>+ 사원 등록</span>
           </button>
         </div>
       </div>
@@ -542,7 +545,7 @@ export default function MembersManagementPage() {
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-4 justify-between items-center">
         {/* 탭 바 */}
         <div className="flex items-center space-x-1 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
-          {[
+          {(currentUser?.role === "SUPER_ADMIN" ? [
             { id: "all", label: "전체 활성" },
             { id: "SUPER_ADMIN", label: "최고관리자" },
             { id: "TENANT_ADMIN", label: "회원사 대표" },
@@ -550,7 +553,10 @@ export default function MembersManagementPage() {
             { id: "REVIEWER", label: "검토자" },
             { id: "deleted", label: "비활성/정지" },
             { id: "tenants", label: "🏢 회원사 대장" },
-          ].map((tab) => (
+          ] : [
+            { id: "all", label: "재직 사원 명부" },
+            { id: "deleted", label: "비활성/정지 계정" },
+          ]).map((tab) => (
             <button
               key={tab.id}
               onClick={() => handleSelectTab(tab.id)}
@@ -581,7 +587,6 @@ export default function MembersManagementPage() {
                 className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="ALL">전체 회원사</option>
-                <option value="comp_unassigned">미지정 회원사</option>
                 {companies.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.company_name} ({c.company_code})
@@ -846,10 +851,19 @@ export default function MembersManagementPage() {
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200">
-            <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
-              <UserPlus className="w-5 h-5 text-indigo-600" />
-              <span>신규 임직원 등록</span>
-            </h2>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+                <UserPlus className="w-5 h-5 text-indigo-600" />
+                <span>신규 사원 등록</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             {formError && (
               <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs">
@@ -857,16 +871,21 @@ export default function MembersManagementPage() {
               </div>
             )}
 
-            <form onSubmit={handleAddSubmit} className="space-y-3 text-xs">
+            <form onSubmit={handleAddSubmit} autoComplete="off" className="space-y-3.5 text-xs">
+              {/* 브라우저 자동완성 강제 주입 방지용 더미 필드 */}
+              <input type="text" name="fake_user_add" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+              <input type="password" name="fake_pwd_add" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">성명 *</label>
                 <input
                   type="text"
                   required
+                  autoComplete="off"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="홍길동"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  placeholder="사원 성명 입력"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
                 />
               </div>
 
@@ -875,10 +894,11 @@ export default function MembersManagementPage() {
                 <input
                   type="text"
                   required
+                  autoComplete="off"
                   value={formLoginId}
                   onChange={(e) => setFormLoginId(e.target.value)}
-                  placeholder="gildong"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  placeholder="사원 로그인 아이디 (예: 001, gildong)"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                 />
               </div>
 
@@ -887,48 +907,43 @@ export default function MembersManagementPage() {
                 <input
                   type="password"
                   required
+                  autoComplete="new-password"
                   value={formPassword}
                   onChange={(e) => setFormPassword(e.target.value)}
-                  placeholder="8자 이상 입력"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  placeholder="초기 비밀번호 입력"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">권한 등급 *</label>
-                  <select
-                    value={formRole}
-                    onChange={(e) => setFormRole(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                  >
-                    <option value="SALES_USER">영업/견적담당</option>
-                    <option value="REVIEWER">도면/기술검토자</option>
-                    <option value="TENANT_ADMIN">회원사 대표관리자</option>
-                    <option value="GUEST">게스트(조회전용)</option>
-                    {currentUser?.role === "SUPER_ADMIN" && (
-                      <option value="SUPER_ADMIN">시스템 최고관리자</option>
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">사원번호 *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">사원번호 (선택)</label>
                   <input
                     type="text"
-                    required
+                    autoComplete="off"
                     value={formEmployeeNumber}
                     onChange={(e) => setFormEmployeeNumber(e.target.value)}
-                    placeholder="EMP-001"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    placeholder="예: 001 (미입력 가능)"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">연락처 (선택)</label>
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    value={formPhone}
+                    onChange={(e) => setFormPhone(e.target.value)}
+                    placeholder="010-0000-0000"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
                   />
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-700">소속 회원사 *</label>
-                  {currentUser?.role === "SUPER_ADMIN" && (
+              {currentUser?.role === "SUPER_ADMIN" && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-700">소속 회원사 *</label>
                     <button
                       type="button"
                       onClick={() => handleOpenCompanyModal()}
@@ -936,33 +951,20 @@ export default function MembersManagementPage() {
                     >
                       + 신규 회원사 등록
                     </button>
-                  )}
+                  </div>
+                  <select
+                    value={formTenantId}
+                    onChange={(e) => setFormTenantId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                  >
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.company_name} ({c.id})
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <select
-                  value={formTenantId}
-                  onChange={(e) => setFormTenantId(e.target.value)}
-                  disabled={currentUser?.role !== "SUPER_ADMIN"}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="comp_unassigned">미지정 회원사 (comp_unassigned)</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.company_name} ({c.id})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">연락처</label>
-                <input
-                  type="text"
-                  value={formPhone}
-                  onChange={(e) => setFormPhone(e.target.value)}
-                  placeholder="010-0000-0000"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
+              )}
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
                 <button
@@ -975,7 +977,7 @@ export default function MembersManagementPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-xs cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? "등록 중..." : "등록 완료"}
                 </button>
@@ -989,10 +991,19 @@ export default function MembersManagementPage() {
       {showEditModal && editingOperator && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200">
-            <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
-              <Edit className="w-5 h-5 text-indigo-600" />
-              <span>임직원 정보 수정 ({editingOperator.login_id})</span>
-            </h2>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+                <Edit className="w-5 h-5 text-indigo-600" />
+                <span>사원 정보 수정 ({editingOperator.login_id})</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             {formError && (
               <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs">
@@ -1000,12 +1011,18 @@ export default function MembersManagementPage() {
               </div>
             )}
 
-            <form onSubmit={handleEditSubmit} className="space-y-3 text-xs">
+            <form onSubmit={handleEditSubmit} autoComplete="off" className="space-y-3.5 text-xs">
+              {/* 브라우저 자동완성 강제 주입 방지용 더미 필드 */}
+              <input type="text" name="fake_user_edit" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+              <input type="password" name="fake_pwd_edit" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">성명 *</label>
                 <input
                   type="text"
                   required
+                  autoComplete="off"
+                  name="edit_operator_name"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -1014,71 +1031,57 @@ export default function MembersManagementPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">권한 등급 *</label>
-                  <select
-                    value={formRole}
-                    onChange={(e) => setFormRole(e.target.value as any)}
-                    disabled={editingOperator.login_id === "admin"}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                  >
-                    <option value="SALES_USER">영업/견적담당</option>
-                    <option value="REVIEWER">도면/기술검토자</option>
-                    <option value="TENANT_ADMIN">회원사 대표관리자</option>
-                    <option value="GUEST">게스트(조회전용)</option>
-                    {currentUser?.role === "SUPER_ADMIN" && (
-                      <option value="SUPER_ADMIN">시스템 최고관리자</option>
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">사원번호 *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">사원번호</label>
                   <input
                     type="text"
-                    required
+                    autoComplete="off"
+                    name="edit_operator_emp_number"
                     value={formEmployeeNumber}
                     onChange={(e) => setFormEmployeeNumber(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">연락처</label>
+                  <input
+                    type="text"
+                    autoComplete="tel"
+                    name="edit_operator_phone"
+                    value={formPhone}
+                    onChange={(e) => setFormPhone(e.target.value)}
+                    placeholder="010-0000-0000"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">소속 회원사</label>
-                <select
-                  value={formTenantId}
-                  onChange={(e) => setFormTenantId(e.target.value)}
-                  disabled={currentUser?.role !== "SUPER_ADMIN"}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="comp_unassigned">미지정 회원사 (comp_unassigned)</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.company_name} ({c.id})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">연락처</label>
-                <input
-                  type="text"
-                  value={formPhone}
-                  onChange={(e) => setFormPhone(e.target.value)}
-                  placeholder="010-0000-0000"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
+              {currentUser?.role === "SUPER_ADMIN" && (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">소속 회원사</label>
+                  <select
+                    value={formTenantId}
+                    onChange={(e) => setFormTenantId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                  >
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.company_name} ({c.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">새 비밀번호 (미입력 시 기존 유지)</label>
                 <input
                   type="password"
+                  autoComplete="new-password"
+                  name="edit_operator_new_password"
                   value={formPassword}
                   onChange={(e) => setFormPassword(e.target.value)}
                   placeholder="변경할 경우에만 입력"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                 />
               </div>
 
@@ -1126,7 +1129,7 @@ export default function MembersManagementPage() {
                   required
                   value={formCompName}
                   onChange={(e) => setFormCompName(e.target.value)}
-                  placeholder="예: 세창 인터내쇼날(주), 대우조선해양 등"
+                  placeholder="예: (주)한국정밀, 대한엔지니어링 등"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -1138,7 +1141,7 @@ export default function MembersManagementPage() {
                   required
                   value={formCompCode}
                   onChange={(e) => setFormCompCode(e.target.value)}
-                  placeholder="예: SECHANG, CUST-1001"
+                  placeholder="예: COMP_001, CUST-1001"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                 />
               </div>
@@ -1183,7 +1186,7 @@ export default function MembersManagementPage() {
                           required={createAdminWithCompany}
                           value={compAdminName}
                           onChange={(e) => setCompAdminName(e.target.value)}
-                          placeholder="예: 홍길동 대표"
+                          placeholder="예: 대표자 성명"
                           className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         />
                       </div>

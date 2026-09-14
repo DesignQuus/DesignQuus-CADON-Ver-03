@@ -1,10 +1,939 @@
-import { redirect } from 'next/navigation';
-import { getSession } from '@/lib/auth';
+'use client';
 
-export default async function RootPage() {
-  const session = await getSession();
-  if (!session) {
-    redirect('/login');
+import React, { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  Layers,
+  FileText,
+  Building2,
+  Users,
+  ShieldCheck,
+  Sliders,
+  CheckCircle2,
+  Clock,
+  Plus,
+  ArrowRight,
+  TrendingUp,
+  Sparkles,
+  UploadCloud,
+  FileCode2,
+  Activity,
+  ChevronRight,
+  DollarSign,
+  AlertCircle,
+  ExternalLink,
+  ShieldAlert,
+  ArrowUpRight,
+  FileSpreadsheet,
+  Download,
+  Check
+} from 'lucide-react';
+
+interface UserProfile {
+  id: string;
+  name: string;
+  loginId: string;
+  role: string;
+  companyId?: string;
+  companyName?: string;
+}
+
+interface QuotationCase {
+  id: string;
+  case_no: string;
+  case_name: string;
+  company_name: string;
+  company_code: string;
+  lifecycle_stage: string;
+  drawings_count: number;
+  bom_items_count: number;
+  quote_total_amount?: number;
+  created_at: string;
+  created_by_name?: string;
+}
+
+interface CompanySummary {
+  id: string;
+  company_name: string;
+  is_active: number;
+  memberCount: number;
+  caseCount: number;
+}
+
+interface QuoteItem {
+  id: string;
+  quotation_case_id: string;
+  quote_no: string;
+  quote_version: number;
+  company_id: string;
+  status: string;
+  currency: string;
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  quote_date: string;
+  is_locked: number;
+  created_at: string;
+  case_no: string;
+  case_name: string;
+  company_name: string;
+  author_name: string;
+  item_count: number;
+}
+
+export default function HomePage() {
+  const router = useRouter();
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [cases, setCases] = useState<QuotationCase[]>([]);
+  const [quotes, setQuotes] = useState<QuoteItem[]>([]);
+  const [companies, setCompanies] = useState<CompanySummary[]>([]);
+  const [auditCount, setAuditCount] = useState<number>(0);
+  const [downloadingQuoteId, setDownloadingQuoteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 1. Check user session
+    fetch('/api/auth/me')
+      .then((res) => {
+        if (!res.ok) {
+          router.replace('/login');
+          return null;
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (!data || !data.user) {
+          router.replace('/login');
+          return;
+        }
+        if (data.user.role === 'SUPER_ADMIN') {
+          router.replace('/admin/companies');
+          return;
+        }
+
+        setUser(data.user);
+        try {
+          localStorage.setItem('cadon_user', JSON.stringify(data.user));
+        } catch {}
+
+        // 2. Fetch cases
+        fetch('/api/quotation-cases')
+          .then((r) => (r.ok ? r.json() : { cases: [] }))
+          .then((cData) => {
+            if (Array.isArray(cData.cases)) {
+              setCases(cData.cases);
+            }
+          })
+          .catch(() => {});
+
+        // 2-B. Fetch quotes for quote amount KPI & recent quotes list
+        fetch('/api/quotes')
+          .then((r) => (r.ok ? r.json() : { quotes: [] }))
+          .then((qData) => {
+            if (Array.isArray(qData.quotes)) {
+              setQuotes(qData.quotes);
+            }
+          })
+          .catch(() => {});
+
+        // 3. If SUPER_ADMIN, fetch company stats and audit logs
+        if (data.user.role === 'SUPER_ADMIN') {
+          fetch('/api/companies?include_stats=true')
+            .then((r) => (r.ok ? r.json() : { companies: [] }))
+            .then((compData) => {
+              if (Array.isArray(compData.companies)) {
+                setCompanies(compData.companies);
+              }
+            })
+            .catch(() => {});
+
+          fetch('/api/admin/audit-logs?limit=1')
+            .then((r) => (r.ok ? r.json() : { total: 0 }))
+            .then((aData) => {
+              if (typeof aData.total === 'number') {
+                setAuditCount(aData.total);
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {
+        router.replace('/login');
+      })
+      .finally(() => setLoading(false));
+  }, [router]);
+
+  // Statistics calculation
+  const stats = useMemo(() => {
+    const totalCases = cases.length;
+    let inProgressCount = 0;
+    let pendingApprovalCount = 0;
+    let completedCount = 0;
+    let totalDrawings = 0;
+
+    for (const c of cases) {
+      totalDrawings += Number(c.drawings_count || 0);
+      const stage = (c.lifecycle_stage || '').toUpperCase();
+      if (stage.includes('APPROV') || stage.includes('PENDING') || stage.includes('REVIEW')) {
+        pendingApprovalCount++;
+      } else if (stage.includes('COMPLETE') || stage.includes('ORDER') || stage.includes('FINAL')) {
+        completedCount++;
+      } else {
+        inProgressCount++;
+      }
+    }
+
+    const activeCompanies = companies.filter((c) => c.is_active === 1).length;
+    const totalMembers = companies.reduce((acc, c) => acc + (c.memberCount || 0), 0);
+
+    // Quote KPIs
+    const totalQuotesCount = quotes.length;
+    const totalQuoteAmount = quotes.reduce((acc, q) => acc + Number(q.total_amount || 0), 0);
+    const approvedQuoteAmount = quotes
+      .filter((q) => ['APPROVED', 'ISSUED'].includes(q.status))
+      .reduce((acc, q) => acc + Number(q.total_amount || 0), 0);
+    const pendingQuoteAmount = quotes
+      .filter((q) => q.status === 'DRAFT')
+      .reduce((acc, q) => acc + Number(q.total_amount || 0), 0);
+
+    return {
+      totalCases,
+      inProgressCount,
+      pendingApprovalCount,
+      completedCount,
+      totalDrawings,
+      totalCompanies: companies.length,
+      activeCompanies,
+      totalMembers,
+      totalQuotesCount,
+      totalQuoteAmount,
+      approvedQuoteAmount,
+      pendingQuoteAmount
+    };
+  }, [cases, companies, quotes]);
+
+  // Role Badge Formatter
+  const getRoleBadge = (role?: string) => {
+    switch (role) {
+      case 'SUPER_ADMIN':
+        return {
+          label: '시스템 최고관리자 (SUPER ADMIN)',
+          bg: 'bg-indigo-50 border-indigo-200 text-indigo-700',
+          dot: 'bg-indigo-500'
+        };
+      case 'TENANT_ADMIN':
+        return {
+          label: '회원사 대표관리자 (TENANT ADMIN)',
+          bg: 'bg-blue-50 border-blue-200 text-blue-700',
+          dot: 'bg-blue-500'
+        };
+      case 'MANAGER':
+        return {
+          label: '견적/승인 책임자 (MANAGER)',
+          bg: 'bg-purple-50 border-purple-200 text-purple-700',
+          dot: 'bg-purple-500'
+        };
+      default:
+        return {
+          label: '실무 사용자 (USER)',
+          bg: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+          dot: 'bg-emerald-500'
+        };
+    }
+  };
+
+  const roleInfo = getRoleBadge(user?.role);
+  const recentCases = useMemo(() => cases.slice(0, 5), [cases]);
+  const recentQuotes = useMemo(() => quotes.slice(0, 5), [quotes]);
+
+  const handleDownloadExcel = async (quoteId: string, quoteNo: string) => {
+    setDownloadingQuoteId(quoteId);
+    try {
+      const res = await fetch(`/api/quotes/${quoteId}/export-excel`);
+      if (!res.ok) {
+        alert('엑셀 다운로드에 실패했습니다.');
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `견적서_${quoteNo}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (e: any) {
+      alert('오류 발생: ' + e.message);
+    } finally {
+      setDownloadingQuoteId(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-sm font-semibold text-slate-500">대시보드를 불러오는 중입니다...</p>
+        </div>
+      </div>
+    );
   }
-  redirect('/cases');
+
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
+      {/* 1. Hero & Welcome Section */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 rounded-2xl p-6 sm:p-8 text-white shadow-xl shadow-slate-950/10">
+        <div className="absolute right-0 top-0 -mt-12 -mr-12 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute right-40 bottom-0 -mb-12 w-64 h-64 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/10 text-blue-200 border border-white/15 backdrop-blur-md">
+              <span className={`w-2 h-2 rounded-full ${roleInfo.dot}`}></span>
+              <span>{roleInfo.label}</span>
+              {user?.companyName && user.companyName !== '고객사 미지정' && (
+                <span className="border-l border-white/20 pl-2 text-white font-bold">{user.companyName}</span>
+              )}
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              안녕하세요, <span className="text-blue-400">{user?.name || '담당자'}</span>님! 👋
+            </h1>
+            <p className="text-sm sm:text-base text-slate-300 max-w-2xl leading-relaxed">
+              CADON AI 기반 3D/2D 도면 자동 파싱, 실시간 가상 BOM 추출 및 스마트 제조 원가 견적 관제 시스템입니다.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/quotes"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-600/30 transition-all hover:scale-[1.02] cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+              <span>공식 견적서 관리 (대장)</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+
+            <Link
+              href="/cases"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] cursor-pointer"
+            >
+              <FileText className="w-4 h-4" />
+              <span>도면 견적의뢰 관리</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+
+            {user?.role === 'SUPER_ADMIN' && (
+              <Link
+                href="/admin/companies"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold border border-white/20 backdrop-blur-md transition-all cursor-pointer"
+              >
+                <Building2 className="w-4 h-4 text-blue-300" />
+                <span>회원사 관리 센터</span>
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Key KPI Statistics Cards (견적 금액 중심 비즈니스 관제) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Total Quote Amount (누적 견적 산출액) */}
+        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">총 견적 산출액</span>
+            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+              <DollarSign className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-extrabold text-slate-900 font-mono">
+              ₩{stats.totalQuoteAmount.toLocaleString()}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-slate-500 flex items-center justify-between">
+            <span>공식 견적서 {stats.totalQuotesCount}건 발행</span>
+            <Link href="/quotes" className="text-blue-600 hover:underline font-bold text-[11px]">
+              견적대장 ➡️
+            </Link>
+          </p>
+        </div>
+
+        {/* Card 2: Approved / Ordered Amount (승인·수주 확정액) */}
+        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">승인·수주 확정액</span>
+            <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-extrabold text-emerald-600 font-mono">
+              ₩{stats.approvedQuoteAmount.toLocaleString()}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-slate-500 flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+            <span>최종 승인 및 발주 완료 견적</span>
+          </p>
+        </div>
+
+        {/* Card 3: Pending Quote & Approval (결재·산출 대기액) */}
+        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">결재·산출 대기액</span>
+            <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+              <Clock className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-extrabold text-amber-600 font-mono">
+              ₩{stats.pendingQuoteAmount.toLocaleString()}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-slate-500 flex items-center gap-1">
+            <Activity className="w-3.5 h-3.5 text-amber-500" />
+            <span>진행 중 {stats.inProgressCount}건 / 결재대기 {stats.pendingApprovalCount}건</span>
+          </p>
+        </div>
+
+        {/* Card 4: Total Cases & Drawings (도면 및 테넌트 현황) */}
+        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">도면 분석 및 테넌트</span>
+            <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+              <FileText className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-purple-600">{stats.totalCases}</span>
+            <span className="text-xs font-semibold text-slate-500">건 의뢰 (도면 {stats.totalDrawings}매)</span>
+          </div>
+          <p className="mt-2 text-xs text-slate-500 flex items-center gap-1">
+            <Building2 className="w-3.5 h-3.5 text-purple-500" />
+            <span>
+              {user?.role === 'SUPER_ADMIN'
+                ? `회원사 ${stats.activeCompanies}개사 가동 중`
+                : `${user?.companyName || '등록 고객사 연동 완료'}`}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      {/* 3. Smart Quick Action Hub */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-blue-600" />
+              <span>업무 퀵 액세스 허브 (Quick Actions)</span>
+            </h2>
+            <p className="text-xs text-slate-500">자주 사용하는 주요 핵심 기능으로 즉시 이동합니다.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Action 1: Official Quotes (공식 견적서 관리) */}
+          <Link
+            href="/quotes"
+            className="group bg-white p-5 rounded-xl border border-emerald-200 hover:border-emerald-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer ring-1 ring-emerald-100"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
+                <span>공식 견적서 관리 대장</span>
+                <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+              </h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                채번된 견적번호(Q-XXXX), 버전별 공급가/부가세/총액 조회 및 엑셀 다운로드
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-emerald-600">
+              <span>견적서 대장 바로가기</span>
+              <ChevronRight className="w-3.5 h-3.5 ml-1" />
+            </div>
+          </Link>
+
+          {/* Action 2: Cases (도면 의뢰 목록) */}
+          <Link
+            href="/cases"
+            className="group bg-white p-5 rounded-xl border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
+                <FileText className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center justify-between">
+                <span>견적의뢰 관리 대장</span>
+                <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
+              </h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                접수된 CAD 도면 목록을 조회하고, AI 가상 BOM 추출 및 단가 산출 작업을 진행합니다.
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-blue-600">
+              <span>목록 바로가기</span>
+              <ChevronRight className="w-3.5 h-3.5 ml-1" />
+            </div>
+          </Link>
+
+          {/* Action 2: New Case (공통) */}
+          <Link
+            href="/cases"
+            className="group bg-white p-5 rounded-xl border border-slate-200 hover:border-indigo-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
+                <UploadCloud className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors flex items-center justify-between">
+                <span>신규 도면 견적 등록</span>
+                <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+              </h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                2D/3D CAD 도면(DWG, STEP, PDF)을 업로드하여 신규 견적의뢰 건을 생성합니다.
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-indigo-600">
+              <span>견적 생성하기</span>
+              <ChevronRight className="w-3.5 h-3.5 ml-1" />
+            </div>
+          </Link>
+
+          {/* Action 3: 회원사 대표(TENANT_ADMIN) 전용 - 사원 관리 */}
+          {user?.role === 'TENANT_ADMIN' && (
+            <Link
+              href="/admin/members"
+              className="group bg-white p-5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+            >
+              <div>
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
+                  <Users className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
+                  <span>사원 관리 센터</span>
+                  <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+                </h3>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  소속 임직원 신규 등록, 계정 권한 관리 및 사원별 활동 상태를 관리합니다.
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-emerald-600">
+                <span>사원 목록 바로가기</span>
+                <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </div>
+            </Link>
+          )}
+
+          {/* Action 4: 회원사 대표(TENANT_ADMIN) 전용 - 사내 승인 및 결재 권한 */}
+          {user?.role === 'TENANT_ADMIN' && (
+            <Link
+              href="/admin/permissions"
+              className="group bg-white p-5 rounded-xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+            >
+              <div>
+                <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-purple-600 transition-colors flex items-center justify-between">
+                  <span>사내 승인 및 결재 관리</span>
+                  <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 transition-colors" />
+                </h3>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  사원별 견적 수정 권한 매트릭스를 확인하고, 접수된 결재 요청을 검토 및 승인합니다.
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-purple-600">
+                <span>결재함 바로가기</span>
+                <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </div>
+            </Link>
+          )}
+
+          {/* Action 5: 일반 실무 사원(SALES_USER) 전용 - AI 가상 BOM 분석 안내 */}
+          {user?.role === 'SALES_USER' && (
+            <div className="bg-gradient-to-br from-blue-50/70 to-indigo-50/50 p-5 rounded-xl border border-blue-100 flex flex-col justify-between">
+              <div>
+                <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold mb-3 shadow-xs">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                  <span>AI 도면 분석 & 견적 지원</span>
+                </h3>
+                <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                  도면 업로드 시 CADON AI가 형상·치수·재질을 자동 추출하여 공정별 가상 BOM 및 단가를 즉시 산출합니다.
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-blue-100/80 flex items-center text-xs font-bold text-blue-700">
+                <span>스마트 견적 프로세스 활성화</span>
+              </div>
+            </div>
+          )}
+
+          {/* Action 6: 최고관리자(SUPER_ADMIN) 전용 - 회원사 관리 센터 */}
+          {user?.role === 'SUPER_ADMIN' && (
+            <Link
+              href="/admin/companies"
+              className="group bg-white p-5 rounded-xl border border-blue-200 bg-blue-50/20 hover:border-blue-600 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold group-hover:scale-110 transition-transform shadow-xs">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-blue-100 text-blue-800">
+                    최고관리자
+                  </span>
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center justify-between">
+                  <span>회원사 관리 센터</span>
+                  <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                </h3>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  SaaS 회원사 등록, 사업자 인증 및 서비스 이용 상태를 총괄합니다.
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-blue-100 flex items-center text-xs font-bold text-blue-700">
+                <span>테넌트 관리 바로가기</span>
+                <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </div>
+            </Link>
+          )}
+
+          {/* Action 7: 최고관리자(SUPER_ADMIN) 전용 - 감사 로그 */}
+          {user?.role === 'SUPER_ADMIN' && (
+            <Link
+              href="/admin/audit"
+              className="group bg-white p-5 rounded-xl border border-slate-200 hover:border-slate-400 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+            >
+              <div>
+                <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors flex items-center justify-between">
+                  <span>사용자 활동 로그</span>
+                  <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
+                </h3>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  로그인, 도면 수정, 단가 승인 등 8대 감사 활동 로그를 모니터링합니다.
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-slate-600">
+                <span>감사 로그 조회</span>
+                <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </div>
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* 4. Recent Quotation Cases Table */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900 tracking-tight">최근 견적의뢰 내역</h2>
+            <p className="text-xs text-slate-500">최근 시스템에 등록되거나 갱신된 견적 건입니다.</p>
+          </div>
+          <Link
+            href="/cases"
+            className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+          >
+            <span>전체보기</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {recentCases.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">
+            <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+            <p className="text-sm font-semibold">등록된 견적의뢰가 없습니다.</p>
+            <p className="text-xs text-slate-400 mt-1">도면 파일을 업로드하여 첫 번째 견적을 생성해 보세요.</p>
+            <Link
+              href="/cases"
+              className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>견적의뢰 등록하러 가기</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-100">
+                <tr>
+                  <th className="py-3 px-4 font-bold">의뢰번호 / 명칭</th>
+                  <th className="py-3 px-4 font-bold">고객사</th>
+                  <th className="py-3 px-4 font-bold text-center">도면 수</th>
+                  <th className="py-3 px-4 font-bold text-center">BOM 항목</th>
+                  <th className="py-3 px-4 font-bold text-right">견적금액</th>
+                  <th className="py-3 px-4 font-bold text-center">진행 단계</th>
+                  <th className="py-3 px-4 font-bold text-right">상세</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {recentCases.map((c) => {
+                  const stageUpper = (c.lifecycle_stage || '').toUpperCase();
+                  let badgeColor = 'bg-slate-100 text-slate-700';
+                  let stageText = c.lifecycle_stage || '접수';
+
+                  if (stageUpper.includes('COMPLETE') || stageUpper.includes('FINAL')) {
+                    badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                    stageText = '견적완료';
+                  } else if (stageUpper.includes('APPROV') || stageUpper.includes('PENDING')) {
+                    badgeColor = 'bg-purple-50 text-purple-700 border-purple-200';
+                    stageText = '승인대기';
+                  } else if (stageUpper.includes('PARS') || stageUpper.includes('BOM')) {
+                    badgeColor = 'bg-blue-50 text-blue-700 border-blue-200';
+                    stageText = 'BOM추출';
+                  } else {
+                    badgeColor = 'bg-amber-50 text-amber-700 border-amber-200';
+                    stageText = '견적작성';
+                  }
+
+                  return (
+                    <tr
+                      key={c.id}
+                      onClick={() => router.push(`/cases/${c.id}`)}
+                      className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
+                    >
+                      <td className="py-3 px-4">
+                        <span className="font-mono text-[11px] text-blue-600 font-bold block">{c.case_no}</span>
+                        <span className="font-bold text-slate-800 text-xs block group-hover:text-blue-600 transition-colors">
+                          {c.case_name || '도면 견적의뢰'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">
+                        {c.company_name || '고객사 미지정'}
+                      </td>
+                      <td className="py-3 px-4 text-center font-semibold text-slate-700">
+                        {c.drawings_count || 0}
+                      </td>
+                      <td className="py-3 px-4 text-center font-semibold text-slate-700">
+                        {c.bom_items_count || 0}
+                      </td>
+                      <td className="py-3 px-4 text-right font-extrabold text-slate-900 font-mono">
+                        {c.quote_total_amount
+                          ? `₩${Number(c.quote_total_amount).toLocaleString()}`
+                          : '-'}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold border ${badgeColor}`}
+                        >
+                          {stageText}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <Link
+                          href={`/cases/${c.id}`}
+                          className="inline-flex items-center gap-1 text-slate-400 group-hover:text-blue-600 transition-colors"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* 4-B. Recent Official Quotes Table (최근 발행 공식 견적서 및 엑셀 다운로드) */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-50/50 via-white to-white">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+              <FileSpreadsheet className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                <span>최근 발행된 공식 견적서</span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                  {quotes.length}건 보관
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500">정식 채번 및 원가 단가가 매칭되어 발행된 견적서 목록입니다.</p>
+            </div>
+          </div>
+          <Link
+            href="/quotes"
+            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
+          >
+            <span>견적서 대장 전체보기</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {recentQuotes.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">
+            <FileSpreadsheet className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+            <p className="text-sm font-semibold">발행된 공식 견적서가 아직 없습니다.</p>
+            <p className="text-xs text-slate-400 mt-1">도면 의뢰건에서 [최종 견적서 즉시 산출]을 실행해보세요.</p>
+            <Link
+              href="/cases"
+              className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>견적의뢰에서 견적서 생성하기</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-100">
+                <tr>
+                  <th className="py-3 px-4 font-bold">견적번호 / 버전</th>
+                  <th className="py-3 px-4 font-bold">연동 케이스명</th>
+                  <th className="py-3 px-4 font-bold">고객사</th>
+                  <th className="py-3 px-4 font-bold text-center">품목 수</th>
+                  <th className="py-3 px-4 font-bold text-right">견적 총액 (VAT포함)</th>
+                  <th className="py-3 px-4 font-bold text-center">상태</th>
+                  <th className="py-3 px-4 font-bold text-center">원클릭 엑셀</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {recentQuotes.map((q) => {
+                  let statusBadge = 'bg-slate-100 text-slate-700 border-slate-200';
+                  let statusLabel = '임시저장 (DRAFT)';
+                  if (q.status === 'APPROVED') {
+                    statusBadge = 'bg-blue-50 text-blue-700 border-blue-200';
+                    statusLabel = '승인완료';
+                  } else if (q.status === 'ISSUED') {
+                    statusBadge = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                    statusLabel = '공식발행';
+                  }
+
+                  return (
+                    <tr
+                      key={q.id}
+                      className="hover:bg-emerald-50/30 transition-colors"
+                    >
+                      <td className="py-3 px-4">
+                        <div className="flex items-center space-x-1.5">
+                          <Link
+                            href={`/cases/${q.quotation_case_id}`}
+                            className="font-mono text-xs font-black text-blue-600 hover:text-blue-800 hover:underline"
+                            title="해당 도면 견적 워크벤치로 이동"
+                          >
+                            {q.quote_no}
+                          </Link>
+                          <span className="px-1.5 py-0.2 rounded font-mono text-[10px] font-bold bg-slate-100 text-slate-700">
+                            V{q.quote_version}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 block mt-0.5">
+                          {q.quote_date || new Date(q.created_at).toLocaleDateString('ko-KR')}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-slate-800 max-w-[200px] truncate">
+                        {q.case_name || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">
+                        {q.company_name || '미지정 고객사'}
+                      </td>
+                      <td className="py-3 px-4 text-center font-semibold text-slate-700 font-mono">
+                        {q.item_count || 0}개
+                      </td>
+                      <td className="py-3 px-4 text-right font-black text-slate-900 font-mono text-sm">
+                        ₩{Number(q.total_amount || 0).toLocaleString()}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10.5px] font-bold border ${statusBadge}`}>
+                          {statusLabel}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadExcel(q.id, q.quote_no)}
+                          disabled={downloadingQuoteId === q.id}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                          title="한국 표준 견적서 양식 Excel (.xlsx) 즉시 다운로드"
+                        >
+                          {downloadingQuoteId === q.id ? (
+                            <Clock className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5" />
+                          )}
+                          <span>엑셀출력</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* 5. Process Workflow Guide */}
+      <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-slate-50 rounded-2xl p-5 sm:p-6 border border-blue-100/80 shadow-2xs">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xs font-black tracking-wider text-blue-900 uppercase flex items-center gap-2">
+            <Activity className="w-4 h-4 text-blue-600" />
+            <span>CADON BOM AI 표준 분석 & 견적 워크플로우</span>
+          </h3>
+          <span className="text-[11px] font-semibold text-blue-600/80 hidden sm:inline-block">엔드투엔드 자동화 파이프라인</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="bg-white/95 backdrop-blur-xs p-4 rounded-xl border border-blue-100 shadow-2xs hover:shadow-xs hover:border-blue-300 transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">STEP 01</span>
+                <span className="text-[10px] text-slate-400 font-mono">Input & Parse</span>
+              </div>
+              <div className="text-xs font-bold text-slate-900">CAD 도면 업로드 & 벡터 파싱</div>
+              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                2D DWG/DXF 및 3D STEP 도면 업로드, 벡터 엔티티 및 도면 메타데이터 무손실 정밀 파싱
+              </p>
+            </div>
+          </div>
+          <div className="bg-white/95 backdrop-blur-xs p-4 rounded-xl border border-indigo-100 shadow-2xs hover:shadow-xs hover:border-indigo-300 transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">STEP 02</span>
+                <span className="text-[10px] text-slate-400 font-mono">BOM Structure</span>
+              </div>
+              <div className="text-xs font-bold text-slate-900">멀티레벨 BOM 자동 전개</div>
+              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                도곽·표제란·BOM 테이블 자동 감지 및 부품 규격, 재질, 조립 계층(Tree) 자동 정규화
+              </p>
+            </div>
+          </div>
+          <div className="bg-white/95 backdrop-blur-xs p-4 rounded-xl border border-purple-100 shadow-2xs hover:shadow-xs hover:border-purple-300 transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-black text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">STEP 03</span>
+                <span className="text-[10px] text-slate-400 font-mono">Cost & Matching</span>
+              </div>
+              <div className="text-xs font-bold text-slate-900">단가 마스터 매칭 & 원가 산출</div>
+              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                표준 단가 마스터 지능형 매칭 및 레이저·절곡·용접 등 공정별 임가공 제조원가 자동 계산
+              </p>
+            </div>
+          </div>
+          <div className="bg-white/95 backdrop-blur-xs p-4 rounded-xl border border-emerald-100 shadow-2xs hover:shadow-xs hover:border-emerald-300 transition-all flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">STEP 04</span>
+                <span className="text-[10px] text-slate-400 font-mono">Approval & Export</span>
+              </div>
+              <div className="text-xs font-bold text-slate-900">사내 전자결재 & 엑셀 배포</div>
+              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                사내 전결 권한 확인, 전자결재 승인 처리 및 공식 견적 패키지(XLSX) 원클릭 발행
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

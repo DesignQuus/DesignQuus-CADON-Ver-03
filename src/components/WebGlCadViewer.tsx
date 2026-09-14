@@ -99,6 +99,62 @@ export default function WebGlCadViewer({
     currentFileIdRef.current = activeFileId;
   }, [activeFileId]);
 
+  // 3. Zoom Camera to Extents or Specific Bounding Box (Robust with Auto-Retry)
+  const fitToExtents = useCallback((minX: number, minY: number, maxX: number, maxY: number, animate = true, retryCount = 0) => {
+    const camera = cameraRef.current;
+    const container = containerRef.current;
+    if (!camera || !container) {
+      if (retryCount < 30) {
+        setTimeout(() => fitToExtents(minX, minY, maxX, maxY, animate, retryCount + 1), 50);
+      }
+      return;
+    }
+
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (!w || !h || w <= 0 || h <= 0) {
+      if (retryCount < 30) {
+        setTimeout(() => fitToExtents(minX, minY, maxX, maxY, animate, retryCount + 1), 50);
+      }
+      return;
+    }
+
+    const margin = 1.12; // 12% margin for spacious AutoCAD look
+    const dx = Math.max(maxX - minX, 50) * margin;
+    const dy = Math.max(maxY - minY, 50) * margin;
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    const frustumSize = 1000;
+    const aspect = w / h;
+    const camWidth = frustumSize * aspect;
+    const camHeight = frustumSize;
+
+    const zoomX = camWidth / dx;
+    const zoomY = camHeight / dy;
+    const targetZoom = Math.max(Math.min(zoomX, zoomY), 0.00005);
+
+    if (typeof window !== 'undefined') {
+      (window as any).__cadDebugHistory = (window as any).__cadDebugHistory || [];
+      (window as any).__cadDebugHistory.push({
+        type: 'fitToExtents_success',
+        minX, minY, maxX, maxY, centerX, centerY, targetZoom, animate, w, h, retryCount,
+        time: Date.now()
+      });
+    }
+
+    if (animate) {
+      targetCamRef.current = { x: centerX, y: centerY, zoom: targetZoom };
+    } else {
+      targetCamRef.current = null;
+      camera.position.x = centerX;
+      camera.position.y = centerY;
+      camera.zoom = targetZoom;
+      camera.updateProjectionMatrix();
+    }
+  }, []);
+
   // 1. Initialize Three.js Scene, Camera, and Renderer
   useEffect(() => {
     const container = containerRef.current;
@@ -109,9 +165,9 @@ export default function WebGlCadViewer({
     const height = container.clientHeight || 600;
     const aspect = width / height;
 
-    // Scene with dark CAD background
+    // Scene with pure black CAD background (matching AutoCAD)
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0e1117);
+    scene.background = new THREE.Color(0x000000);
     sceneRef.current = scene;
 
     // Orthographic Camera (Perfect for 2D CAD engineering)
@@ -127,6 +183,11 @@ export default function WebGlCadViewer({
     camera.position.set(0, 0, 100);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
+    if (typeof window !== 'undefined') {
+      (window as any).__cadCamera = camera;
+      (window as any).__cadDebugHistory = (window as any).__cadDebugHistory || [];
+      (window as any).__cadDebugHistory.push({ type: 'camera_created', time: Date.now() });
+    }
 
     // WebGL Renderer with High Performance & Antialiasing
     const renderer = new THREE.WebGLRenderer({
@@ -209,7 +270,7 @@ export default function WebGlCadViewer({
 
               // Level of Detail (LOD): screen pixel height
               const pxH = item.h * scale;
-              if (pxH < 1.2) continue; // Skip sub-pixel text at far overview to prevent visual clutter
+              if (pxH < 2.0) continue; // Skip sub-pixel text at far overview
 
               // Project CAD world coordinates to screen pixel coordinates
               const sx = (item.x - cam.position.x) * scale + w / 2;
@@ -421,15 +482,10 @@ export default function WebGlCadViewer({
       // If a drawing sheet was focused and user is not manually panning/dragging, re-frame to real dimensions
       if (focusBboxRef.current && !isDraggingRef.current) {
         const fb = focusBboxRef.current;
-        const dx = Math.max(fb.max_x - fb.min_x, 100) * 1.15;
-        const dy = Math.max(fb.max_y - fb.min_y, 100) * 1.15;
-        const zoomX = (frustumSize * asp) / dx;
-        const zoomY = frustumSize / dy;
-        const targetZoom = Math.max(Math.min(zoomX, zoomY), 0.0001);
-        cam.position.x = (fb.min_x + fb.max_x) / 2;
-        cam.position.y = (fb.min_y + fb.max_y) / 2;
-        cam.zoom = targetZoom;
-        cam.updateProjectionMatrix();
+        fitToExtents(fb.min_x, fb.min_y, fb.max_x, fb.max_y, false);
+      } else if (!isDraggingRef.current && boundsRef.current.maxX > boundsRef.current.minX) {
+        // Automatically keep full drawing in view if user is in overall overview mode
+        fitToExtents(boundsRef.current.minX, boundsRef.current.minY, boundsRef.current.maxX, boundsRef.current.maxY, false);
       }
     };
 
@@ -465,11 +521,11 @@ export default function WebGlCadViewer({
         throw new Error(`CAD 바이너리 로드 대기 중 (${res.status})`);
       }
       
-      // Prevent race conditions: Ignore if user switched file during fetch
-      if (currentFileIdRef.current !== fetchId) return;
+      // Prevent race conditions: Ignore only if user switched to another non-empty file
+      if (fetchId && currentFileIdRef.current && fetchId !== currentFileIdRef.current) return;
 
       const arrayBuffer = await res.arrayBuffer();
-      if (currentFileIdRef.current !== fetchId) return; // Second check after async
+      if (fetchId && currentFileIdRef.current && fetchId !== currentFileIdRef.current) return; // Second check after async
       
       if (arrayBuffer.byteLength < 28) {
         throw new Error('유효하지 않은 CAD 바이너리 형식입니다.');
@@ -512,6 +568,7 @@ export default function WebGlCadViewer({
       }
 
       boundsRef.current = { minX, minY, maxX, maxY };
+      console.log('BINARY_BOUNDS_LOADED:', JSON.stringify({ minX, minY, maxX, maxY, numLines, numTris }));
       setTotalLines(numLines + numTris);
 
       const posCount = numLines * 6;
@@ -561,8 +618,11 @@ export default function WebGlCadViewer({
         }
       }
 
-      // Auto-fit to view
+      // Auto-fit to view with zero delay + delayed safety fit
       fitToExtents(minX, minY, maxX, maxY, false);
+      setTimeout(() => {
+        fitToExtents(minX, minY, maxX, maxY, false);
+      }, 120);
       setLoading(false);
     } catch (err: any) {
       if (currentFileIdRef.current !== fetchId) return; // Ignore errors for aborted requests
@@ -581,11 +641,12 @@ export default function WebGlCadViewer({
         ? `/api/quotation-cases/${caseId}/webgl-texts?fileId=${encodeURIComponent(fetchId)}&v=${Date.now()}`
         : `/api/quotation-cases/${caseId}/webgl-texts?v=${Date.now()}`;
       const res = await fetch(url);
-      if (currentFileIdRef.current !== fetchId) return;
+      if (fetchId && currentFileIdRef.current && fetchId !== currentFileIdRef.current) return;
       if (res.ok) {
         const data = await res.json();
-        if (currentFileIdRef.current !== fetchId) return;
+        if (fetchId && currentFileIdRef.current && fetchId !== currentFileIdRef.current) return;
         if (data && Array.isArray(data.texts)) {
+          console.log('CAD_TEXTS_LOADED:', data.texts.length);
           setCadTexts(data.texts);
         }
       } else if (res.status === 404 && retryAttempt < 2) {
@@ -597,7 +658,7 @@ export default function WebGlCadViewer({
     }
   }, [caseId, activeFileId]);
 
-  // 2.2 Fetch and Bind CAD Raster Image Planes (e.g. D&I Solution Logo) in Three.js
+  // 2.2 Fetch and Bind CAD Raster Image Planes in Three.js
   const loadRasters = useCallback(async () => {
     if (!caseId || !sceneRef.current) return;
     const fetchId = activeFileId;
@@ -962,65 +1023,20 @@ export default function WebGlCadViewer({
     overlaysGroupRef.current = group;
   }, [drawings, bomAreas, showOverlays, selectedDrawingIdx, highlightDrawingIds]);
 
-  // 3. Zoom Camera to Extents or Specific Bounding Box
-  const fitToExtents = (minX: number, minY: number, maxX: number, maxY: number, animate = true) => {
-    const camera = cameraRef.current;
-    const container = containerRef.current;
-    if (!camera || !container) return;
-
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    if (!w || !h || w <= 0 || h <= 0) return;
-
-    const margin = 1.15; // 15% margin
-    const dx = Math.max(maxX - minX, 50) * margin;
-    const dy = Math.max(maxY - minY, 50) * margin;
-
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-
-    const frustumSize = 1000;
-    const aspect = w / h;
-    const camWidth = frustumSize * aspect;
-    const camHeight = frustumSize;
-
-    const zoomX = camWidth / dx;
-    const zoomY = camHeight / dy;
-    const targetZoom = Math.max(Math.min(zoomX, zoomY), 0.0001);
-
-    if (animate) {
-      targetCamRef.current = { x: centerX, y: centerY, zoom: targetZoom };
-    } else {
-      camera.position.x = centerX;
-      camera.position.y = centerY;
-      camera.zoom = targetZoom;
-      camera.updateProjectionMatrix();
-    }
-  };
-
-  // 4. Focus on Specific Sheet when clicked in Excel Title Block Sheet or from other tabs
+  // 4. Focus on Specific Sheet when clicked or smoothly return to overall Extents
+  const prevFocusBboxRef = useRef(focusBbox);
   useEffect(() => {
-    if (!focusBbox) return;
-
-    let frameCount = 0;
-    const tryFocus = () => {
-      const camera = cameraRef.current;
-      const container = containerRef.current;
-      if (camera && container && container.clientWidth > 0 && container.clientHeight > 0) {
-        fitToExtents(focusBbox.min_x, focusBbox.min_y, focusBbox.max_x, focusBbox.max_y, true);
-        return;
+    if (!focusBbox) {
+      if (prevFocusBboxRef.current && boundsRef.current.maxX > boundsRef.current.minX) {
+        fitToExtents(boundsRef.current.minX, boundsRef.current.minY, boundsRef.current.maxX, boundsRef.current.maxY, true);
       }
-      frameCount++;
-      if (frameCount < 25) {
-        requestAnimationFrame(tryFocus);
-      }
-    };
+      prevFocusBboxRef.current = null;
+      return;
+    }
 
-    const timer = setTimeout(() => {
-      tryFocus();
-    }, 40);
-    return () => clearTimeout(timer);
-  }, [focusBbox]);
+    prevFocusBboxRef.current = focusBbox;
+    fitToExtents(focusBbox.min_x, focusBbox.min_y, focusBbox.max_x, focusBbox.max_y, true);
+  }, [focusBbox, fitToExtents]);
 
   // 5. Mouse Interaction: 60 FPS Zoom on Wheel (Native non-passive listener to block page scroll 100%)
   useEffect(() => {
@@ -1124,7 +1140,7 @@ export default function WebGlCadViewer({
     <div
       ref={containerRef}
       style={{ overscrollBehavior: 'contain' }}
-      className="relative w-full h-[680px] bg-[#0e1117] rounded-2xl overflow-hidden border border-slate-800 select-none cursor-grab active:cursor-grabbing shadow-inner overscroll-contain"
+      className="relative w-full h-[680px] bg-black rounded-2xl overflow-hidden border border-slate-800 select-none cursor-grab active:cursor-grabbing shadow-inner overscroll-contain"
     >
       <canvas
         ref={canvasRef}

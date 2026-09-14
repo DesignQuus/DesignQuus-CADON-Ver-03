@@ -67,14 +67,12 @@ export async function GET(
     }
   }
 
-  // Fallback to legacy case-level cache if fileId is not explicitly provided
-  if (!fileId) {
-    candidates.push(
-      path.join(derivedDir, `${id}__cad_texts.json`),
-      path.join(localDerived, `${id}__cad_texts.json`),
-      path.join(egdeskDerived, `${id}__cad_texts.json`)
-    );
-  }
+  // Always include case-level texts fallback
+  candidates.push(
+    path.join(derivedDir, `${id}__cad_texts.json`),
+    path.join(localDerived, `${id}__cad_texts.json`),
+    path.join(egdeskDerived, `${id}__cad_texts.json`)
+  );
 
   let targetTxt = '';
   for (const c of candidates) {

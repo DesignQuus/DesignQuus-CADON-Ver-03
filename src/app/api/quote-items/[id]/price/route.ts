@@ -89,7 +89,7 @@ export async function PATCH(
           unitPrice: newPrice,
           remark: remark || (effectiveSource === 'PRICE_MASTER' ? 'Price Master 적용' : '수기 단가 입력'),
           quotationCaseId: quote.quotation_case_id || null,
-          userId: session.userId || 'usr_sales1',
+          userId: session.userId || 'usr_admin',
           source: effectiveSource === 'PRICE_MASTER' ? 'PRICE_MASTER' : 'QUOTE_MANUAL'
         });
       } catch (poolErr) {

@@ -42,11 +42,11 @@ def create_package(case_dir: str, output_zip_path: str, manifest: dict):
         summary_text = f"""=======================================================
 CADON-BOM AI - 견적 도면 및 다단계 BOM 분석 보관 패키지
 =======================================================
-* 프로젝트명: {case_info.get('project_name', '인버터 조립 LINE')}
+* 프로젝트명: {case_info.get('project_name', '-')}
 * 견적건명: {case_info.get('case_name', '-')} (도번: {case_info.get('case_no', '-')})
-* 고객사: {case_info.get('customer', 'A&G/보그워너')}
-* 설계자: {case_info.get('designer', '이경중')} (일자: {case_info.get('design_date', '24.03.15')})
-* 제조사: 세창인터내쇼날(주) Sechang International Co.,Ltd.
+* 고객사: {case_info.get('customer', '-')}
+* 설계자: {case_info.get('designer', '-')} (일자: {case_info.get('design_date', '-')})
+* 제조사: {case_info.get('company', '-')}
 * 보관일시: {time.strftime('%Y-%m-%d %H:%M:%S')}
 * 총 도면 수량: {len(title_blocks)}개 시트 및 부품도
 * 총 BOM 품목: {len(bom_items)}개 산출 부품

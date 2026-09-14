@@ -72,12 +72,12 @@ async function runPhase5IntegrationTest() {
     console.log('✓ Found preserved case:', caseList[0].case_no, '-', caseList[0].case_name);
     console.log('✅ Zero-Data Loss Case Verification: PASS');
 
-    // 4. 신규 테넌트(세창 인터내쇼날 테스트사) 등록
-    console.log('\n--- 4. Registering Tenant Company ("세창 인터내쇼날") ---');
+    // 4. 신규 테넌트(테스트사) 등록
+    console.log('\n--- 4. Registering Tenant Company ("테스트 회원사") ---');
     await insertRows('companies', [{
       id: testCompanyId,
-      company_code: 'SECHANG',
-      company_name: '세창 인터내쇼날(주)',
+      company_code: 'TEST_CO',
+      company_name: '테스트 회원사(주)',
       company_type: 'CUSTOMER',
       is_active: 1,
       tenant_id: testCompanyId,
@@ -87,16 +87,16 @@ async function runPhase5IntegrationTest() {
     console.log('✓ Inserted test company:', testCompanyId);
 
     // 5. 해당 테넌트 소속의 대표관리자 및 사원 등록 (POST /api/operators)
-    console.log('\n--- 5. Registering Tenant Members under "세창 인터내쇼날" ---');
+    console.log('\n--- 5. Registering Tenant Members under "테스트 회원사" ---');
     const ownerRes = await fetch(`${BASE_URL}/api/operators`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cookie': sessionCookies },
       body: JSON.stringify({
-        login_id: 'sechang_ceo_' + Date.now(),
+        login_id: 'test_ceo_' + Date.now(),
         password: 'Password123!',
-        name: '세창 대표이사',
+        name: '테스트 대표이사',
         role: 'TENANT_ADMIN',
-        employee_number: 'SECHANG-CEO-01',
+        employee_number: 'TEST-CEO-01',
         phone: '010-9999-8888',
         tenant_id: testCompanyId
       })
@@ -110,11 +110,11 @@ async function runPhase5IntegrationTest() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Cookie': sessionCookies },
       body: JSON.stringify({
-        login_id: 'sechang_eng_' + Date.now(),
+        login_id: 'test_eng_' + Date.now(),
         password: 'Password123!',
-        name: '세창 설계엔지니어',
+        name: '테스트 설계엔지니어',
         role: 'REVIEWER',
-        employee_number: 'SECHANG-ENG-01',
+        employee_number: 'TEST-ENG-01',
         phone: '010-7777-6666',
         tenant_id: testCompanyId
       })
@@ -130,9 +130,9 @@ async function runPhase5IntegrationTest() {
       headers: { 'Cookie': sessionCookies }
     });
     const sechangOpsData = await sechangOpsRes.json();
-    console.log('Operators found under Sechang tenant:', sechangOpsData.operators?.length);
+    console.log('Operators found under test tenant:', sechangOpsData.operators?.length);
     if (!sechangOpsData.success || sechangOpsData.operators?.length !== 2) {
-      throw new Error(`Expected exactly 2 operators for Sechang, found: ${sechangOpsData.operators?.length}`);
+      throw new Error(`Expected exactly 2 operators for test tenant, found: ${sechangOpsData.operators?.length}`);
     }
     console.log('✅ Tenant Isolation Operator Scope: PASS');
 

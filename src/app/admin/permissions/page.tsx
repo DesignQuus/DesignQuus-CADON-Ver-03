@@ -211,6 +211,26 @@ export default function AdminPermissionsPage() {
     );
   };
 
+  if (!loading && currentUser && !['SUPER_ADMIN', 'TENANT_ADMIN'].includes(currentUser.role)) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mb-4">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-extrabold text-slate-900 mb-2">접근 권한이 없습니다</h2>
+        <p className="text-sm text-slate-500 max-w-md mb-6 leading-relaxed">
+          승인권한 설정 및 결재 관리 페이지는 최고관리자 또는 회원사 대표 관리자만 접근할 수 있는 보호된 관리 메뉴입니다.
+        </p>
+        <Link
+          href="/"
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-xs transition-colors"
+        >
+          견적 대시보드로 이동
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
       {/* 1. Header Banner */}
@@ -223,7 +243,7 @@ export default function AdminPermissionsPage() {
                 <span>Security & Approval Management</span>
               </div>
               <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-                최고관리자 승인권한 설정 및 결재 관리
+                {isSuperAdmin ? '최고관리자 승인권한 설정 및 결재 관리' : '사내 승인권한 설정 및 결재 관리'}
                 {isSuperAdmin && (
                   <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
                     최고관리자 제어 센터
@@ -231,7 +251,9 @@ export default function AdminPermissionsPage() {
                 )}
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                본인 견적건은 자유롭게 수정하고, 타 담당자의 견적건은 최고관리자의 승인을 거쳐 수정할 수 있도록 결재 및 권한 정책을 통제합니다.
+                {isSuperAdmin
+                  ? '본인 견적건은 자유롭게 수정하고, 타 담당자의 견적건은 최고관리자의 승인을 거쳐 수정할 수 있도록 결재 및 권한 정책을 통제합니다.'
+                  : '사내 견적건에 대한 수정 및 결재 승인 정책을 관리하고, 소속 담당자들의 승인 권한을 통제합니다.'}
               </p>
             </div>
 
@@ -295,7 +317,7 @@ export default function AdminPermissionsPage() {
               <div>
                 <div className="text-xs font-semibold text-slate-500">타 담당자 건 수정 정책</div>
                 <div className="text-sm font-bold text-slate-800 mt-1">
-                  {settings.cross_user_edit_policy === 'REQUIRE_APPROVAL' && '최고관리자 승인 필수'}
+                  {settings.cross_user_edit_policy === 'REQUIRE_APPROVAL' && (isSuperAdmin ? '최고관리자 승인 필수' : '대표 관리자 승인 필수')}
                   {settings.cross_user_edit_policy === 'ALLOW' && '자유 협업 허용'}
                   {settings.cross_user_edit_policy === 'DENY' && '타인 건 수정 완전 차단'}
                 </div>
@@ -308,7 +330,7 @@ export default function AdminPermissionsPage() {
               </div>
               <div>
                 <div className="text-xs font-semibold text-slate-500">관리 대상 견적 담당자</div>
-                <div className="text-2xl font-extrabold text-purple-700">5인</div>
+                <div className="text-2xl font-extrabold text-purple-700">{userPermissions.length || 0}인</div>
               </div>
             </div>
 
@@ -344,32 +366,30 @@ export default function AdminPermissionsPage() {
             </button>
 
             {isSuperAdmin && (
-              <>
-                <button
-                  onClick={() => setActiveTab('POLICY')}
-                  className={`pb-3 text-sm font-bold border-b-2 flex items-center space-x-2 transition-colors ${
-                    activeTab === 'POLICY'
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Sliders className="w-4 h-4" />
-                  <span>최고관리자 전역 승인 정책</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('MATRIX')}
-                  className={`pb-3 text-sm font-bold border-b-2 flex items-center space-x-2 transition-colors ${
-                    activeTab === 'MATRIX'
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Users className="w-4 h-4" />
-                  <span>5인 견적 담당자 권한 매트릭스</span>
-                </button>
-              </>
+              <button
+                onClick={() => setActiveTab('POLICY')}
+                className={`pb-3 text-sm font-bold border-b-2 flex items-center space-x-2 transition-colors ${
+                  activeTab === 'POLICY'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Sliders className="w-4 h-4" />
+                <span>최고관리자 전역 승인 정책</span>
+              </button>
             )}
+
+            <button
+              onClick={() => setActiveTab('MATRIX')}
+              className={`pb-3 text-sm font-bold border-b-2 flex items-center space-x-2 transition-colors ${
+                activeTab === 'MATRIX'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>견적 담당자 권한 매트릭스 ({userPermissions.length || 0}인)</span>
+            </button>
           </div>
         </div>
       </div>

@@ -1055,14 +1055,14 @@ export default function CadViewer({
           info.quantity ?? 1,
           info.unitPrice ?? 0,
           info.amount ?? 0,
-          d.project_name || '인버터 조립 LINE',
-          d.customer || 'A&G/보그워너',
-          d.designer || '이경중',
-          d.design_date || '24.03.15',
-          d.scale || '1/1',
-          d.revision || 'R00',
-          d.material || 'SS400',
-          d.company || '세창인터내쇼날(주)'
+          d.project_name || '-',
+          d.customer || '-',
+          d.designer || '-',
+          d.design_date || '-',
+          d.scale || '-',
+          d.revision || '-',
+          d.material || '-',
+          d.company || '-'
         ];
       });
 
@@ -2268,7 +2268,7 @@ export default function CadViewer({
                         {/* DWG No */}
                         <td className="py-2 px-3 border-r border-slate-800/70 font-bold text-amber-300">
                           <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                            <span>{d.drawing_no_raw || '240314-01-000'}</span>
+                            <span>{d.drawing_no_raw || '-'}</span>
                             {isDuplicate && (
                               <button
                                 onClick={(e) => {
@@ -2294,7 +2294,7 @@ export default function CadViewer({
 
                         {/* Sub Name (1행 컴팩트 폭 + 호버 시 자동 마키 스크롤) */}
                         <td className={`py-2 px-3 border-r border-slate-800/70 font-sans font-bold max-w-[170px] overflow-hidden ${!info.isIncluded ? 'line-through text-slate-500' : ''}`}>
-                          <HoverMarqueeText text={d.drawing_name_raw || 'MAIN CHAIN DRIVE-1'} />
+                          <HoverMarqueeText text={d.drawing_name_raw || '-'} />
                         </td>
 
                         {/* 💎 수량 (Q'ty) */}
@@ -2337,28 +2337,28 @@ export default function CadViewer({
                         </td>
 
                         {/* Project Name */}
-                        <td className="py-2 px-3 border-r border-slate-800/70 font-sans text-slate-300 truncate max-w-[140px]" title="인버터 조립 LINE">
-                          {d.project_name || '인버터 조립 LINE'}
+                        <td className="py-2 px-3 border-r border-slate-800/70 font-sans text-slate-300 truncate max-w-[140px]" title={d.project_name || '-'}>
+                          {d.project_name || '-'}
                         </td>
 
                         {/* 고객사 */}
                         <td className="py-2 px-3 border-r border-slate-800/70 font-sans text-amber-200">
-                          {d.customer || 'A&G/보그워너'}
+                          {d.customer || '-'}
                         </td>
 
                         {/* 설계자 */}
                         <td className="py-2 px-3 border-r border-slate-800/70 font-sans text-slate-300">
-                          {d.designer || '이경중'} <span className="text-slate-500 text-[10.5px]">({d.design_date || '24.03.15'})</span>
+                          {d.designer || '-'} <span className="text-slate-500 text-[10.5px]">({d.design_date || '-'})</span>
                         </td>
 
                         {/* 축척 / Rev */}
                         <td className="py-2 px-3 border-r border-slate-800/70 text-slate-300">
-                          {d.scale || '1/1'} <span className="text-slate-500">/</span> {d.revision || 'R00'}
+                          {d.scale || '-'} <span className="text-slate-500">/</span> {d.revision || '-'}
                         </td>
 
                         {/* 재질 */}
                         <td className="py-2 px-3 text-center font-sans text-emerald-300">
-                          {d.material || 'SS400'}
+                          {d.material || '-'}
                         </td>
                       </tr>
                     );

@@ -8,12 +8,11 @@ import {
   Layers, Database, FileSpreadsheet, RefreshCw, Lock, Unlock, Sparkles, Building2,
   Folder, Calendar, Check, X, ShieldAlert, ShieldCheck, Clock, Send, ArrowDown, ArrowLeft, Home, Eye, Download, Info, Trash2, Trash,
   Search, Plus, Pencil, ChevronDown, CheckSquare, Square, Coins, ExternalLink, MapPin,
-  Table, LayoutGrid, Filter, RotateCcw, User, AlertCircle, Brain, Archive, Copy
+  Table, LayoutGrid, Filter, RotateCcw, User, AlertCircle, Brain, Archive, Copy, Wrench
 } from 'lucide-react';
 import CadViewer from '@/components/CadViewer';
 import QuotationDocumentPreview from '@/components/QuotationDocumentPreview';
-
-
+import FabricationFeaturesPanel from '@/components/FabricationFeaturesPanel';
 
 export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -23,7 +22,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const [privacyReason, setPrivacyReason] = useState('');
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'cad' | 'structure' | 'approval' | 'quote' | 'excel'>('cad');
+  const [activeTab, setActiveTab] = useState<'cad' | 'structure' | 'approval' | 'quote' | 'excel' | 'features'>('cad');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -394,7 +393,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
     // 4. Fallback match by drawing / item name (avoid generic project name false positives)
     if (idx < 0 && (target.drawing_name || target.normalized_name || target.name_raw || target.item_name)) {
       const targetName = (target.drawing_name || target.normalized_name || target.name_raw || target.item_name || '').trim();
-      const genericNames = ['인버터 조립 LINE', 'MAIN_ASSEMBLY', 'SUB_ASSEMBLY', '도면', '기본도면'];
+      const genericNames = ['MAIN_ASSEMBLY', 'SUB_ASSEMBLY', '도면', '기본도면'];
       if (targetName && !genericNames.includes(targetName)) {
         idx = allDrawings.findIndex(
           (item: any) =>
@@ -2305,25 +2304,37 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             )}
           </div>
 
-          {/* Quick Stats */}
-          <div className="flex items-center space-x-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
-            <div className="text-center px-3 border-r border-slate-200">
-              <div className="text-xs text-slate-500 font-medium">도면 수</div>
-              <div className="text-lg font-bold text-slate-900">{drawings.length}</div>
-            </div>
-            <div className="text-center px-3 border-r border-slate-200">
-              <div className="text-xs text-slate-500 font-medium">추출 BOM</div>
-              <div className="text-lg font-bold text-slate-900">{flattenedBomItems.length}</div>
-            </div>
-            <div className="text-center px-3">
-              <div className="text-xs text-slate-500 font-medium">승인 품목</div>
-              <div className="text-lg font-bold text-blue-600">
-                {finalBomItems.filter((f: any) => f.approval_status === 'APPROVED').length} / {normalizedItems.length}
+            {/* Quick Stats */}
+            <div className="flex items-center space-x-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <div className="text-center px-3 border-r border-slate-200">
+                <div className="text-xs text-slate-500 font-medium">도면 수</div>
+                <div className="text-lg font-bold text-slate-900">{drawings.length}</div>
+              </div>
+              <div className="text-center px-3 border-r border-slate-200">
+                <div className="text-xs text-slate-500 font-medium">추출 BOM</div>
+                <div className="text-lg font-bold text-slate-900">{flattenedBomItems.length}</div>
+              </div>
+              <div className="text-center px-3">
+                <div className="text-xs text-slate-500 font-medium">승인 품목</div>
+                <div className="text-lg font-bold text-blue-600">
+                  {finalBomItems.filter((f: any) => f.approval_status === 'APPROVED').length} / {normalizedItems.length}
+                </div>
               </div>
             </div>
+
+            {/* ⚡ Fast Track: Instant Quote Generation Button */}
+            <button
+              type="button"
+              onClick={handleAutoApproveAndCreateQuote}
+              disabled={actionLoading}
+              className="btn-hover-effect px-3.5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-md hover:shadow-lg flex items-center space-x-2 cursor-pointer disabled:opacity-50 transition-all shrink-0 ring-2 ring-blue-300 animate-in fade-in"
+              title="검수 대기 중인 모든 도면 품목을 즉시 일괄 승인하고 최종 견적서를 산출하여 견적서 탭으로 이동합니다."
+            >
+              <Sparkles className={`w-4 h-4 text-amber-300 ${actionLoading ? 'animate-spin' : ''}`} />
+              <span>⚡ 최종 견적서 즉시 산출</span>
+            </button>
           </div>
         </div>
-      </div>
 
       {/* Approval Feedback Alert */}
       {approvalFeedback && (
@@ -2510,6 +2521,18 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
           </button>
 
           <button
+            onClick={() => setActiveTab('features')}
+            className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'features'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Wrench className="w-4 h-4" />
+            <span>3. ⚙️ 가공 피처 & 공정 원가</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('quote')}
             className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-colors cursor-pointer shrink-0 ${
               activeTab === 'quote'
@@ -2518,7 +2541,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             }`}
           >
             <Database className="w-4 h-4" />
-            <span>3. 견적서 산출 & 단가</span>
+            <span>4. 견적서 산출 & 단가</span>
           </button>
 
           <button
@@ -2530,7 +2553,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             }`}
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>4. 표준 견적서 미리보기 (PDF/Excel)</span>
+            <span>5. 표준 견적서 미리보기 (PDF/Excel)</span>
           </button>
 
           <button
@@ -2542,7 +2565,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>5. 도면구조 & 다단계 BOM</span>
+            <span>6. 도면구조 & 다단계 BOM</span>
           </button>
         </div>
 
@@ -3598,6 +3621,14 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
+      {/* TAB 3: Fabrication Features & Cost Breakdown (EGDesk Cost Engine) */}
+      {activeTab === 'features' && (
+        <FabricationFeaturesPanel
+          quotationCaseId={id}
+          onRefreshCase={fetchData}
+        />
+      )}
+
       {/* TAB 4: Standard Quotation Preview & PDF / Excel Export */}
       {activeTab === 'excel' && (
         <QuotationDocumentPreview
@@ -3652,9 +3683,9 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div className="text-slate-800 font-bold text-xs group-hover:text-blue-900 transition-colors">{d.drawing_name_raw}</div>
                       <div className="text-[11px] text-slate-500 pt-1 border-t border-blue-100 flex items-center justify-between">
-                        <span>프로젝트: {d.project_name || '인버터 조립 LINE'}</span>
+                        <span>프로젝트: {d.project_name || '-'}</span>
                         <span className="flex items-center space-x-0.5 text-blue-600 font-medium">
-                          <span>설계: {d.designer || '이경중'} | {d.scale || '1/5'}</span>
+                          <span>설계: {d.designer || '-'} | {d.scale || '-'}</span>
                           <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                         </span>
                       </div>
@@ -3687,7 +3718,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                         </div>
                         <div className="text-slate-700 font-medium group-hover:text-purple-950 transition-colors">{d.drawing_name_raw}</div>
                         <div className="text-[10.5px] text-slate-400 flex items-center justify-between pt-0.5">
-                          <span>재질: {d.material || 'SS400/S45C'} · Rev: {d.revision || 'R00'}</span>
+                          <span>재질: {d.material || '-'} · Rev: {d.revision || '-'}</span>
                           <span className="flex items-center space-x-0.5 text-purple-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
                             <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                           </span>

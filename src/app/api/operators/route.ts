@@ -92,10 +92,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: '아이디, 비밀번호, 이름은 필수 입력값입니다.' }, { status: 400 });
     }
 
-    if (!employeeNumber) {
-      return NextResponse.json({ success: false, error: '사원번호를 입력해주세요.' }, { status: 400 });
-    }
-
     // 권한별 테넌트 할당
     if (session.role !== 'SUPER_ADMIN') {
       tenantId = session.tenant_id || session.companyId || 'comp_unassigned';
@@ -110,12 +106,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: '이미 존재하는 아이디입니다.' }, { status: 400 });
     }
 
-    // 사원번호 중복 체크 (해당 테넌트 내 활성 사용자 기준)
-    const isEmpNumDuplicate = existingUsers.some(
-      (u: any) => !u.deleted_at && u.employee_number === employeeNumber && (u.tenant_id === tenantId || u.company_id === tenantId)
-    );
-    if (isEmpNumDuplicate) {
-      return NextResponse.json({ success: false, error: '해당 회사/테넌트에 이미 존재하는 사원번호입니다.' }, { status: 400 });
+    // 사원번호 자동 부여 (선택 입력)
+    let finalEmployeeNumber = employeeNumber;
+    if (!finalEmployeeNumber) {
+      const baseEmpNum = `EMP-${loginId}`;
+      const existsInTenant = existingUsers.some(
+        (u: any) => !u.deleted_at && u.employee_number === baseEmpNum && (u.tenant_id === tenantId || u.company_id === tenantId)
+      );
+      finalEmployeeNumber = existsInTenant ? `EMP-${loginId}-${Date.now().toString().slice(-4)}` : baseEmpNum;
+    } else {
+      // 직접 입력한 경우 사원번호 중복 체크 (해당 테넌트 내 활성 사용자 기준)
+      const isEmpNumDuplicate = existingUsers.some(
+        (u: any) => !u.deleted_at && u.employee_number === finalEmployeeNumber && (u.tenant_id === tenantId || u.company_id === tenantId)
+      );
+      if (isEmpNumDuplicate) {
+        return NextResponse.json({ success: false, error: '해당 회사/테넌트에 이미 존재하는 사원번호입니다.' }, { status: 400 });
+      }
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -130,7 +136,7 @@ export async function POST(req: Request) {
       role,
       company_id: tenantId,
       tenant_id: tenantId,
-      employee_number: employeeNumber,
+      employee_number: finalEmployeeNumber,
       phone,
       is_active: 1,
       uuid: newUserId,

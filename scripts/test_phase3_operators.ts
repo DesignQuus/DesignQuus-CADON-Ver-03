@@ -29,11 +29,11 @@ async function runPhase3Test() {
     'Cookie': `auth_token=${adminToken}; cadon_session=${adminToken}`
   };
 
-  const testTenant = 'tenant_sechang_test';
-  const ownerEmpNum = 'EMP-SECHANG-001';
-  const staffEmpNum = 'EMP-SECHANG-002';
-  const ownerLogin = 'sechang_boss_' + Date.now();
-  const staffLogin = 'sechang_staff_' + Date.now();
+  const testTenant = 'tenant_test_corp';
+  const ownerEmpNum = 'EMP-TEST-001';
+  const staffEmpNum = 'EMP-TEST-002';
+  const ownerLogin = 'test_boss_' + Date.now();
+  const staffLogin = 'test_staff_' + Date.now();
 
   let ownerId = '';
   let staffId = '';
@@ -47,7 +47,7 @@ async function runPhase3Test() {
       body: JSON.stringify({
         login_id: ownerLogin,
         password: 'Password123!',
-        name: '세창 대표이사',
+        name: '테스트 대표이사',
         role: 'TENANT_ADMIN',
         employee_number: ownerEmpNum,
         phone: '010-1111-2222',
@@ -68,7 +68,7 @@ async function runPhase3Test() {
       body: JSON.stringify({
         login_id: staffLogin,
         password: 'Password123!',
-        name: '세창 영업사원',
+        name: '테스트 영업사원',
         role: 'SALES_USER',
         employee_number: staffEmpNum,
         phone: '010-3333-4444',

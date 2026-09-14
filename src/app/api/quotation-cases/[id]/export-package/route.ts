@@ -32,10 +32,10 @@ export async function GET(
         case_id: qc.id,
         case_no: qc.case_no,
         case_name: qc.case_name,
-        project_name: '인버터 조립 LINE',
-        customer: 'A&G/보그워너',
-        designer: '이경중',
-        design_date: '24.03.15'
+        project_name: qc.project_name || drawings[0]?.project_name || '-',
+        customer: qc.customer_name || drawings[0]?.customer || '-',
+        designer: drawings[0]?.designer || '-',
+        design_date: drawings[0]?.design_date || '-'
       },
       dwg_path: dwgFile ? resolveStoragePath(dwgFile.storage_path) : null,
       dxf_path: dxfFile ? resolveStoragePath(dxfFile.storage_path) : null,

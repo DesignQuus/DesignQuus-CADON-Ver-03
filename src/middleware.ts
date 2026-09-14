@@ -24,6 +24,27 @@ function visitorUpstreamHeaders(request: NextRequest): Record<string, string> {
   return headers;
 }
 
+function workspaceUpstreamHeaders(request: NextRequest): Record<string, string> {
+  const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey) headers['X-Api-Key'] = apiKey;
+  const authorization = request.headers.get('authorization');
+  const asVisitor = request.headers.get('x-egdesk-as-visitor');
+  if (authorization) headers['Authorization'] = authorization;
+  if (asVisitor) headers['X-EGDesk-As-Visitor'] = asVisitor;
+  if (asVisitor === 'true' || authorization) {
+    const origin =
+      request.headers.get('x-visitor-origin') ||
+      request.headers.get('origin') ||
+      process.env.NEXT_PUBLIC_EGDESK_VISITOR_ORIGIN ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      request.nextUrl.origin;
+    headers['Origin'] = origin;
+    headers['X-Visitor-Origin'] = origin;
+  }
+  return headers;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -193,14 +214,11 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__drive_proxy')) {
     try {
       const body = await request.text();
-      const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['X-Api-Key'] = apiKey;
 
       const response = await fetch(`${apiUrl}/drive/tools/call`, {
         method: 'POST',
-        headers,
+        headers: workspaceUpstreamHeaders(request),
         body,
       });
       const result = await response.json();
@@ -216,14 +234,11 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__docs_proxy')) {
     try {
       const body = await request.text();
-      const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['X-Api-Key'] = apiKey;
 
       const response = await fetch(`${apiUrl}/docs/tools/call`, {
         method: 'POST',
-        headers,
+        headers: workspaceUpstreamHeaders(request),
         body,
       });
       const result = await response.json();
@@ -239,14 +254,11 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__slides_proxy')) {
     try {
       const body = await request.text();
-      const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['X-Api-Key'] = apiKey;
 
       const response = await fetch(`${apiUrl}/slides/tools/call`, {
         method: 'POST',
-        headers,
+        headers: workspaceUpstreamHeaders(request),
         body,
       });
       const result = await response.json();
@@ -262,14 +274,11 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__sheets_proxy')) {
     try {
       const body = await request.text();
-      const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['X-Api-Key'] = apiKey;
 
       const response = await fetch(`${apiUrl}/sheets/tools/call`, {
         method: 'POST',
-        headers,
+        headers: workspaceUpstreamHeaders(request),
         body,
       });
       const result = await response.json();
@@ -323,13 +332,10 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__gmail_proxy')) {
     try {
       const body = await request.text();
-      const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['X-Api-Key'] = apiKey;
       const response = await fetch(`${apiUrl}/gmail/tools/call`, {
         method: 'POST',
-        headers,
+        headers: workspaceUpstreamHeaders(request),
         body,
       });
       const result = await response.json();
@@ -345,13 +351,10 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__apps_script_proxy')) {
     try {
       const body = await request.text();
-      const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
       const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['X-Api-Key'] = apiKey;
       const response = await fetch(`${apiUrl}/apps-script/tools/call`, {
         method: 'POST',
-        headers,
+        headers: workspaceUpstreamHeaders(request),
         body,
       });
       const result = await response.json();

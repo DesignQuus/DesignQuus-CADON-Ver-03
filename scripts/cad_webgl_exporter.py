@@ -17,11 +17,28 @@ import ezdxf.colors
 
 def get_rgb(col):
     try:
+        # ACI standard primary colors with optimal CAD dark canvas vibrancy
+        ACI_PALETTE = {
+            1: (1.0, 0.2, 0.2),      # Red: Vivid CAD Red (never turn white!)
+            2: (1.0, 1.0, 0.0),      # Yellow
+            3: (0.0, 1.0, 0.0),      # Green
+            4: (0.0, 1.0, 1.0),      # Cyan
+            5: (0.25, 0.65, 1.0),    # Blue: Enhanced bright blue on dark canvas
+            6: (1.0, 0.2, 1.0),      # Magenta
+            7: (0.95, 0.95, 0.95),   # White on dark canvas
+            8: (0.55, 0.55, 0.55),   # Dark Grey
+            9: (0.78, 0.78, 0.78),   # Light Grey
+        }
+        if col in ACI_PALETTE:
+            return ACI_PALETTE[col]
+
         r, g, b = ezdxf.colors.aci2rgb(col)
-        lum = 0.299 * (r / 255.0) + 0.587 * (g / 255.0) + 0.114 * (b / 255.0)
-        # Invert or brighten dark colors (e.g. black text on white paper) so they shine clearly on dark canvas
-        if lum < 0.32:
+        # Only brighten if it's virtually pitch black on dark canvas
+        if max(r, g, b) < 45:
             return (0.92, 0.95, 0.98)
+        # If blue component is dominant and dark, boost brightness for dark canvas contrast
+        if b > 160 and r < 80 and g < 120:
+            return (0.25, 0.65, 1.0)
         return (r/255.0, g/255.0, b/255.0)
     except Exception:
         return (0.88, 0.92, 0.96)
@@ -804,22 +821,15 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     ml_txt['x'] = round(ml_txt['x'], 1)
                     ml_txt['y'] = round(ml_txt['y'], 1)
                     ml_txt['r'] = round(ml_txt['r'], 1)
-                    all_texts.append(ml_txt)
+            elif t == 'LEADER':
+                try:
+                    verts = list(e.vertices)
+                    for i in range(len(verts) - 1):
+                        add_seg((verts[i].x, verts[i].y), (verts[i+1].x, verts[i+1].y), rgb)
+                except Exception:
+                    pass
             elif t in ['OLE2FRAME', 'IMAGE']:
-                if is_mona200d:
-                    try:
-                        # Title block logo dedicated cell (under DESIGNED/CHECKED/APPROVED)
-                        all_rasters.append({
-                            'id': f"raster_logo_{len(all_rasters)+1}",
-                            'type': t,
-                            'x': 1886.9,
-                            'y': 98.2,
-                            'width': 380.0,
-                            'height': 86.0,
-                            'label': 'D&I Solution'
-                        })
-                    except Exception:
-                        pass
+                pass
             elif t == 'INSERT':
                 bname = getattr(e.dxf, 'name', None)
                 ins = (e.dxf.insert.x, e.dxf.insert.y)
@@ -881,6 +891,32 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                                 'ha': bt.get('ha', 0),
                                 'va': bt.get('va', 0)
                             })
+
+                # Extract dynamic block attributes (Title block, project info, drawing numbers)
+                for att in getattr(e, 'attribs', []):
+                    raw_att = att.dxf.text if hasattr(att.dxf, 'text') else ''
+                    cln_att = clean_txt(raw_att)
+                    if cln_att:
+                        att_h = getattr(att.dxf, 'height', 15.0)
+                        att_rot = getattr(att.dxf, 'rotation', 0.0)
+                        att_col = getattr(att.dxf, 'color', 256)
+                        att_lay = getattr(att.dxf, 'layer', lay_name)
+                        att_pos = att.dxf.insert
+                        if att_col == 256:
+                            _, att_hex = layer_colors.get(att_lay, ((0.92, 0.95, 0.98), '#f1f5f9'))
+                        else:
+                            att_rgb = get_rgb(att_col)
+                            att_hex = f"#{int(att_rgb[0]*255):02x}{int(att_rgb[1]*255):02x}{int(att_rgb[2]*255):02x}"
+                        all_texts.append({
+                            't': cln_att,
+                            'x': round(att_pos.x, 1),
+                            'y': round(att_pos.y, 1),
+                            'h': round(att_h, 1),
+                            'r': round(att_rot % 360, 1),
+                            'c': att_hex,
+                            'ha': 0,
+                            'va': 0
+                        })
 
         num_lines = len(pos_data) // 6
         num_tris = len(tri_pos_data) // 9

@@ -29,7 +29,7 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                 "layer": obj.get("layer", "")
             })
             
-    # Regular expression for full drawing numbers: e.g. 240314-01-000, 240314-DV1-001, 240324-01-001, 240324-01-C01
+    # Regular expression for full drawing numbers: e.g. YYMMDD-XX-XXX, 240001-01-001
     dwg_no_pat = re.compile(r'\b([0-9]{6}-[A-Za-z0-9]{1,4}-[A-Za-z0-9]{2,4})\b')
     dwg_fallback_pat = re.compile(r'(?:DWG\s*(?:NO)?[.:\s]*)([A-Za-z0-9_-]+)', re.IGNORECASE)
     
@@ -79,6 +79,19 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
             clusters.append({"dno": dno, "x": x, "y": y})
 
     
+    # Detect candidate for main assembly drawing number across clusters
+    main_dno_candidate = None
+    for cl in clusters:
+        cand_no = cl["dno"]
+        if re.search(r'-(00|01)-000$', cand_no):
+            main_dno_candidate = cand_no
+            break
+    if not main_dno_candidate:
+        for cl in clusters:
+            if cl["dno"].endswith("-000"):
+                main_dno_candidate = cl["dno"]
+                break
+
     # 3. Build drawings list
     all_extracted = []
     for idx, cl in enumerate(clusters, 1):
@@ -89,26 +102,28 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
         tb_texts = [t for t in all_texts if abs(t["x"] - cx) < 400 and abs(t["y"] - cy) < 250]
         
         name = None
-        mat = "SS400"
-        customer = "A&G/보그워너"
-        designer = "이경중"
-        design_date = "24.03.15"
+        mat = None
+        customer = None
+        designer = None
+        design_date = None
         scale = "1 / 1"
         rev = "R00"
-        company = "세창인터내쇼날(주) Sechang International Co.,Ltd."
-        proj_name = "인버터 조립 LINE"
+        company = None
+        proj_name = None
         
         for t in tb_texts:
             txt = t["text"].strip()
-            # Ignore metadata labels, dates, materials, and overall project title
+            # Ignore metadata labels, dates, materials
             if txt in [
                 "Project Name", "Project No.", "Sub Name", "DWG. No.", "REF. No.",
                 "SCALE", "REV.", "DESIGN", "CHECK", "APPROVE", "NO.", "DESCRIPTION",
-                "Q'TY", "MATAL", "REMAPK", "SPECIFICATION", "CUSTOMER", "인버터 조립 LINE"
-            ] or txt.endswith("조립 LINE") or txt.endswith("조립LINE"):
+                "Q'TY", "MATAL", "REMAPK", "SPECIFICATION", "CUSTOMER", "MATERIAL", "DATE"
+            ]:
                 continue
 
-            if any(k in txt for k in [
+            if any(k in txt.upper() for k in ["CO.", "LTD", "INC.", "CORP.", "주식회사", "(주)"]) and len(txt) > 3:
+                company = txt
+            elif any(k in txt for k in [
                 "PLATE", "SHAFT", "COVER", "RAIL", "BRACKET", "BLOCK", "PIN",
                 "GUIDE", "STOPPER", "BUSH", "PAD", "HINGE", "SENSOR", "BASE",
                 "SIDE", "ROLLER", "LOCKING", "CYLINDER", "UP_DOWN", "ASSY",
@@ -116,7 +131,7 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                 "CAP", "END", "TENSOR", "SPACER", "COLLAR", "FLANGE", "HOOK", "SPRING",
                 "ROD", "BAR", "WHEEL", "PULLEY", "GEAR", "SPROCKET"
             ]):
-                if not txt.startswith("2403") and len(txt) < 40 and not name:
+                if not re.match(r'^\d{4,}', txt) and len(txt) < 40 and not name:
                     name = txt
             elif any(k in txt for k in ["SS400", "S45C", "AL6061", "SUS304", "MC", "POM", "SKD11", "SCM440"]):
                 mat = txt
@@ -124,10 +139,6 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                 design_date = txt
             elif "1/" in txt or "1 /" in txt:
                 scale = txt
-            elif "보그워너" in txt or "A&G" in txt:
-                customer = txt
-            elif "이경중" in txt:
-                designer = txt
             elif txt.startswith("R0") or txt == "REV.0":
                 rev = txt
 
@@ -135,15 +146,15 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
         if not name and dno and not dno.endswith("-000"):
             for t in tb_texts:
                 txt = t["text"].strip()
-                if (txt in [
+                if txt in [
                     "Project Name", "Project No.", "Sub Name", "DWG. No.", "REF. No.",
                     "SCALE", "REV.", "DESIGN", "CHECK", "APPROVE", "NO.", "DESCRIPTION",
-                    "Q'TY", "MATAL", "REMAPK", "SPECIFICATION", "CUSTOMER", "인버터 조립 LINE"
-                ] or txt.endswith("조립 LINE") or txt.endswith("조립LINE")):
+                    "Q'TY", "MATAL", "REMAPK", "SPECIFICATION", "CUSTOMER", "MATERIAL", "DATE"
+                ]:
                     continue
-                if txt.startswith("2403") or re.match(r'^\d', txt) or txt in ["SS400", "S45C", "AL6061", "SUS304", "MC", "POM", "SKD11", "SCM440"]:
+                if re.match(r'^\d', txt) or txt in ["SS400", "S45C", "AL6061", "SUS304", "MC", "POM", "SKD11", "SCM440"]:
                     continue
-                if any(comp in txt for comp in ["세창", "Sechang", "보그워너", "A&G"]):
+                if any(k in txt.upper() for k in ["CO.", "LTD", "INC.", "CORP.", "주식회사", "(주)"]):
                     continue
                 if 2 <= len(txt) <= 35:
                     name = txt
@@ -151,12 +162,13 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
 
         if not name:
             if dno.endswith("-000"):
-                name = f"서브 조립도 ({dno.split('-')[1]})"
+                parts = dno.split('-')
+                name = f"서브 조립도 ({parts[1] if len(parts) > 1 else dno})"
             else:
                 name = f"단위 가공품 ({dno.split('-')[-1]})"
 
         # Classification
-        if dno.startswith("240314-0") and dno.endswith("-000"):
+        if re.search(r'-(00|01)-000$', dno):
             dtype = "MAIN_ASSEMBLY"
             level = 1
         elif dno.endswith("-000"):
@@ -209,26 +221,30 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                 "max_y": min(fbox["max_y"], tbox["max_y"])
             }
 
+        parent_no = None
+        if level > 1 and main_dno_candidate and main_dno_candidate != dno:
+            parent_no = main_dno_candidate
+
         all_extracted.append({
             "drawing_type": dtype,
             "level": level,
-            "parent_drawing_no": "240314-01-000" if level > 1 else None,
+            "parent_drawing_no": parent_no,
             "source_frame_handle": f"FRAME_{dno}",
             "frame_bbox": fbox,
             "title_block_bbox": tbox,
             "drawing_no_raw": dno,
             "drawing_no_normalized": dno.upper().replace(" ", ""),
             "drawing_name_raw": name,
-            "drawing_name_normalized": name.strip(),
-            "project_name": proj_name,
+            "drawing_name_normalized": name.strip() if name else "",
+            "project_name": proj_name or dno.split("-")[0],
             "project_no": dno.split("-")[0],
-            "customer": customer,
-            "designer": designer,
-            "design_date": design_date,
-            "company": company,
-            "revision": rev,
-            "material": mat,
-            "scale": scale,
+            "customer": customer or "-",
+            "designer": designer or "-",
+            "design_date": design_date or "-",
+            "company": company or "-",
+            "revision": rev or "R00",
+            "material": mat or "SS400",
+            "scale": scale or "1 / 1",
             "confidence_score": 0.98 if dtype == "MAIN_ASSEMBLY" else 0.95,
             "status": "APPROVED"
         })

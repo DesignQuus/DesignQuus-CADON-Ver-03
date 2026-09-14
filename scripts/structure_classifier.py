@@ -22,7 +22,7 @@ def classify_drawing_structure(drawings_data: dict) -> dict:
         existing_type = dwg.get("drawing_type")
         if existing_type in ["MAIN_ASSEMBLY", "SUB_ASSEMBLY", "SUB_PART"]:
             dtype = existing_type
-        elif no.startswith("240314-0") and no.endswith("-000"):
+        elif re.search(r'-(00|01)-000$', no):
             dtype = "MAIN_ASSEMBLY"
         elif no.endswith("-000"):
             dtype = "SUB_ASSEMBLY"

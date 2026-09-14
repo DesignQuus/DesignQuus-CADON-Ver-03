@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -16,11 +16,22 @@ import {
 } from 'lucide-react';
 
 export default function LoginPage() {
-  const [loginId, setLoginId] = useState('admin');
-  const [password, setPassword] = useState('Cadon1234!@');
+  const [loginId, setLoginId] = useState('');
+  const [password, setPassword] = useState('');
+  const [isReadOnly, setIsReadOnly] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  // 브라우저 캐시 자동완성 강제 주입 차단
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoginId('');
+      setPassword('');
+      setIsReadOnly(false);
+    }, 80);
+    return () => clearTimeout(timer);
+  }, []);
 
   const executeLogin = async (idToLogin: string, passToLogin: string) => {
     setError('');
@@ -48,7 +59,7 @@ export default function LoginPage() {
         } catch {}
 
         const params = new URLSearchParams(window.location.search);
-        const redirectUrl = params.get('redirect') || '/cases';
+        const redirectUrl = params.get('redirect') || (data.user?.role === 'SUPER_ADMIN' ? '/admin/companies' : '/');
         window.location.replace(redirectUrl);
       }
     } catch (err: any) {
@@ -68,12 +79,6 @@ export default function LoginPage() {
       return;
     }
     executeLogin(loginId.trim(), password);
-  };
-
-  const handleFillAdmin = () => {
-    setLoginId('admin');
-    setPassword('Cadon1234!@');
-    setError('');
   };
 
   return (
@@ -112,7 +117,11 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleLogin} autoComplete="off" className="space-y-4">
+          {/* 브라우저 자동완성 강제 주입 방지용 더미 필드 */}
+          <input type="text" name="fake_user_login" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+          <input type="password" name="fake_pwd_login" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+
           {/* Login ID Input */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -123,10 +132,13 @@ export default function LoginPage() {
               <input
                 type="text"
                 required
+                autoComplete="off"
+                readOnly={isReadOnly}
+                onFocus={() => setIsReadOnly(false)}
                 value={loginId}
                 onChange={(e) => setLoginId(e.target.value)}
-                placeholder="아이디를 입력하세요 (예: admin)"
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                placeholder="아이디를 입력하세요"
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
               />
             </div>
           </div>
@@ -143,6 +155,9 @@ export default function LoginPage() {
               <input
                 type="password"
                 required
+                autoComplete="new-password"
+                readOnly={isReadOnly}
+                onFocus={() => setIsReadOnly(false)}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="비밀번호를 입력하세요"
@@ -151,24 +166,10 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Quick Admin Fill Helper */}
-          <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 flex items-center justify-between">
-            <div className="text-[11px] text-blue-800 font-medium">
-              최고관리자 기본 계정: <span className="font-mono font-bold">admin</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleFillAdmin}
-              className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-white px-2.5 py-1 rounded-lg border border-blue-200 hover:border-blue-300 shadow-2xs transition-colors cursor-pointer"
-            >
-              자동 채우기
-            </button>
-          </div>
-
           {/* Tenant / Member Company Login Note */}
-          <div className="px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center space-x-2 text-[11px] text-slate-600">
-            <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span>회원사 임직원/대표는 발급받은 본인 계정으로 동일하게 로그인하시면 해당 회원사 모드로 자동 접속됩니다.</span>
+          <div className="px-3.5 py-2.5 bg-slate-50/90 rounded-xl border border-slate-200 flex items-center space-x-2.5 text-[11px] text-slate-600">
+            <Building className="w-4 h-4 text-slate-400 shrink-0" />
+            <span>회원사 및 본사 임직원은 발급받은 계정으로 로그인하시면 전용 모드로 접속됩니다.</span>
           </div>
 
           <button

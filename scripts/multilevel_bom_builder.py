@@ -16,8 +16,8 @@ def is_valid_mechanical_part(part_no: str, name: str) -> bool:
     name = str(name).strip() if name else ""
     part_no = str(part_no).strip() if part_no else ""
     
-    # Strictly allow true Drawing Numbers (e.g. 240314-XX-XXX)
-    if re.match(r'^240314-[A-Z0-9]{2,3}-[0-9]{3}$', part_no, re.I):
+    # Strictly allow true Drawing Numbers (e.g. 240314-XX-XXX or generic format)
+    if re.match(r'^[A-Z0-9]{3,10}-[A-Z0-9]{1,4}-[A-Z0-9]{2,4}$', part_no, re.I):
         return True
     
     # Reject machining notes, chamfers, counterbores, taps (e.g. 2-C3, 4-M8, 2-M8 C/B, 4-M5 TAP)
@@ -39,7 +39,7 @@ def is_valid_mechanical_part(part_no: str, name: str) -> bool:
         
     # Reject CAD boilerplates / table headers / dates / scales
     boilerplate = [
-        "DESCRIPTION", "SPECIFICATION", "SECHANG", "REPRODUCED",
+        "DESCRIPTION", "SPECIFICATION", "REPRODUCED",
         "DISCLOSED", "AUTHORIZE", "INTERNATIONAL", "Q'TY", "MATAL",
         "MATERIAL", "REMARK", "CHECK", "APPROVE", "DESIGN", "CUSTOMER",
         "SCALE", "REV.", "REF.", "1/", "2/", "3/"

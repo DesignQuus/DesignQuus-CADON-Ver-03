@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home, Users } from 'lucide-react';
+import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home, Users, Building2, LayoutDashboard, FileSpreadsheet } from 'lucide-react';
 
 export default function Navigation() {
   const [user, setUser] = useState<any>(null);
@@ -51,16 +51,22 @@ export default function Navigation() {
     <header className="no-print print:hidden bg-white border-b border-slate-200 sticky top-0 z-50 shadow-xs">
       <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <div className="flex items-center space-x-4 sm:space-x-6">
-          <Link href="/cases" className="flex items-center space-x-2" title="견적의뢰 관리 메인 대시보드로 이동">
-            <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm font-bold">
-              <Layers className="w-5 h-5" />
+          <Link
+            href={user?.role === 'SUPER_ADMIN' ? '/admin/companies' : '/'}
+            className="flex items-center space-x-2"
+            title={user?.role === 'SUPER_ADMIN' ? '최고관리자 회원사 관리 센터로 이동' : 'CADON 홈 대시보드로 이동'}
+          >
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white shadow-sm font-bold ${
+              user?.role === 'SUPER_ADMIN' ? 'bg-indigo-600' : 'bg-blue-600'
+            }`}>
+              {user?.role === 'SUPER_ADMIN' ? <Building2 className="w-5 h-5" /> : <Layers className="w-5 h-5" />}
             </div>
             <div>
               <span className="font-bold text-slate-900 text-lg leading-tight tracking-tight block">
-                CADON-BOM <span className="text-blue-600 font-extrabold">AI</span>
+                CADON-BOM <span className={user?.role === 'SUPER_ADMIN' ? 'text-indigo-600 font-extrabold' : 'text-blue-600 font-extrabold'}>AI</span>
               </span>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wider uppercase block">
-                Server POC Ver-02
+                {user?.role === 'SUPER_ADMIN' ? '👑 SaaS 운영자 센터' : 'BOM 견적 시스템'}
               </span>
             </div>
           </Link>
@@ -77,66 +83,101 @@ export default function Navigation() {
           )}
 
           <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-slate-200">
-            <Link
-              href="/cases"
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
-                pathname === '/cases'
-                  ? 'bg-blue-50 text-blue-700 font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>견적의뢰 관리</span>
-            </Link>
-            <Link
-              href="/admin/golden"
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
-                pathname.startsWith('/admin/golden')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>골든 데이터셋 검증</span>
-            </Link>
-            <Link
-              href="/admin/audit"
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
-                pathname.startsWith('/admin/audit')
-                  ? 'bg-blue-50 text-blue-700 font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4 text-blue-600" />
-              <span>사용자 활동 로그</span>
-            </Link>
-            <Link
-              href="/admin/permissions"
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
-                pathname.startsWith('/admin/permissions')
-                  ? 'bg-blue-50 text-blue-700 font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <Sliders className="w-4 h-4 text-purple-600" />
-              <span>승인권한 설정</span>
-              {pendingCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-white animate-pulse">
-                  {pendingCount}
-                </span>
-              )}
-            </Link>
-            <Link
-              href="/admin/members"
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
-                pathname.startsWith('/admin/members')
-                  ? 'bg-indigo-50 text-indigo-700 font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <Users className="w-4 h-4 text-indigo-600" />
-              <span>임직원 및 회원사 관리</span>
-            </Link>
+            {user?.role === 'SUPER_ADMIN' ? (
+              /* 최고관리자(SaaS 운영자) 전용 메뉴: 견적업무 배제, 회원사 및 테넌트 관리 전용 */
+              <>
+                <Link
+                  href="/admin/companies"
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                    pathname.startsWith('/admin/companies')
+                      ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Building2 className="w-4 h-4 text-blue-600" />
+                  <span>회원사 관리 센터</span>
+                </Link>
+                <Link
+                  href="/admin/audit"
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                    pathname.startsWith('/admin/audit')
+                      ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>플랫폼 보안/감사 로그</span>
+                </Link>
+              </>
+            ) : (
+              /* 일반 회원사 실무자 메뉴: 견적의뢰, BOM, 결재 승인, (대표관리자: 사원 관리) */
+              <>
+                <Link
+                  href="/"
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                    pathname === '/'
+                      ? 'bg-blue-50 text-blue-700 font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>대시보드</span>
+                </Link>
+                <Link
+                  href="/cases"
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                    pathname === '/cases'
+                      ? 'bg-blue-50 text-blue-700 font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>견적의뢰 관리</span>
+                </Link>
+                <Link
+                  href="/quotes"
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                    pathname.startsWith('/quotes')
+                      ? 'bg-blue-50 text-blue-700 font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <span>공식 견적서 관리</span>
+                </Link>
+                {user?.role === 'TENANT_ADMIN' && (
+                  <Link
+                    href="/admin/members"
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                      pathname.startsWith('/admin/members')
+                        ? 'bg-blue-50 text-blue-700 font-bold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Users className="w-4 h-4 text-indigo-600" />
+                    <span>사원 관리</span>
+                  </Link>
+                )}
+                {['SUPER_ADMIN', 'TENANT_ADMIN'].includes(user?.role) && (
+                  <Link
+                    href="/admin/permissions"
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                      pathname.startsWith('/admin/permissions')
+                        ? 'bg-blue-50 text-blue-700 font-bold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Sliders className="w-4 h-4 text-purple-600" />
+                    <span>승인권한 설정</span>
+                    {pendingCount > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-white animate-pulse">
+                        {pendingCount}
+                      </span>
+                    )}
+                  </Link>
+                )}
+              </>
+            )}
           </nav>
         </div>
 
