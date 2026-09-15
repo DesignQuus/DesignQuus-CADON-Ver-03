@@ -29,8 +29,17 @@ export async function GET(req: NextRequest) {
     const userMap = new Map(allUsers.map((u: any) => [u.id, u.name]));
 
     let cases: any[];
-    if (session.role === 'SUPER_ADMIN') {
-      cases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
+    if (session.role === 'SUPER_ADMIN' || session.role === 'TENANT_ADMIN') {
+      // 시스템 최고관리자 및 회원사 대표: 소속 테넌트/전사 견적건 전체 조회 가능
+      const allCases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
+      if (session.role === 'SUPER_ADMIN') {
+        cases = allCases;
+      } else {
+        const myTenant = session.tenant_id || session.companyId;
+        cases = allCases.filter((c: any) => 
+          !c.tenant_id || c.tenant_id === myTenant || c.tenant_id === 'tenant-cadon' || c.company_id === myTenant
+        );
+      }
     } else {
       const accessibleCompanies = (await db.prepare(`
         SELECT company_id FROM user_company_access
@@ -41,7 +50,7 @@ export async function GET(req: NextRequest) {
       const allCases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
       cases = allCases.filter((c: any) =>
         (!c.company_id || c.company_id === 'comp_unassigned' || compIds.has(c.company_id)) &&
-        (c.visibility === 'SHARED' || c.created_by_user_id === session.userId)
+        (!c.visibility || c.visibility === 'SHARED' || c.created_by_user_id === session.userId)
       );
     }
 

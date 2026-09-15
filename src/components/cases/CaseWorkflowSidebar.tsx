@@ -53,6 +53,8 @@ interface CaseWorkflowSidebarProps {
   onDragOver?: (e: React.DragEvent) => void;
   onDragLeave?: () => void;
   onDrop?: (e: React.DragEvent) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export default function CaseWorkflowSidebar({
@@ -66,11 +68,114 @@ export default function CaseWorkflowSidebar({
   onDragOver,
   onDragLeave,
   onDrop,
+  isCollapsed = false,
+  onToggleCollapse,
 }: CaseWorkflowSidebarProps) {
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
+  // 접힌 상태 (Slim Icon Mode)
+  if (isCollapsed) {
+    return (
+      <aside className="w-16 shrink-0 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col items-center py-3 space-y-4 select-none">
+        {/* Expand Button */}
+        <button
+          onClick={onToggleCollapse}
+          className="w-10 h-10 rounded-md bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 flex items-center justify-center transition-colors cursor-pointer"
+          title="파이프라인 사이드바 펼치기"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+
+        {/* Quick Upload Icon */}
+        <button
+          onClick={onSingleUploadClick}
+          className="w-10 h-10 rounded-md bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-all cursor-pointer shadow-xs"
+          title="도면 파일 업로드 (원스톱 쾌속)"
+        >
+          <UploadCloud className="w-5 h-5" />
+        </button>
+
+        <div className="w-8 border-t border-slate-200 my-1"></div>
+
+        {/* Tab 1: 전체 */}
+        <button
+          onClick={() => onSelectTab('ALL')}
+          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
+            selectedTab === 'ALL' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+          title={`전체 견적의뢰 (${counts.total}건)`}
+        >
+          <Layers className="w-4 h-4" />
+          <span className="text-[9px] font-bold mt-0.5">{counts.total}</span>
+        </button>
+
+        {/* Tab 2: 도면 대기 */}
+        <button
+          onClick={() => onSelectTab('PENDING')}
+          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
+            selectedTab === 'PENDING' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-600 hover:bg-amber-50 hover:text-amber-700'
+          }`}
+          title={`도면 대기 / 분석 대기 (${counts.pending}건)`}
+        >
+          <Clock className="w-4 h-4" />
+          <span className="text-[9px] font-bold mt-0.5">{counts.pending}</span>
+        </button>
+
+        {/* Tab 3: 분석완료 / 매칭중 */}
+        <button
+          onClick={() => onSelectTab('ANALYZED')}
+          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
+            selectedTab === 'ANALYZED' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-700'
+          }`}
+          title={`BOM 분석완료 / 단가 매칭중 (${counts.analyzed}건)`}
+        >
+          <Cpu className="w-4 h-4" />
+          <span className="text-[9px] font-bold mt-0.5">{counts.analyzed}</span>
+        </button>
+
+        {/* Tab 4: 견적준비완료 */}
+        <button
+          onClick={() => onSelectTab('READY_FOR_QUOTE')}
+          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
+            selectedTab === 'READY_FOR_QUOTE' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+          }`}
+          title={`견적 준비 완료 (${counts.ready}건)`}
+        >
+          <CheckCircle2 className="w-4 h-4" />
+          <span className="text-[9px] font-bold mt-0.5">{counts.ready}</span>
+        </button>
+
+        <div className="w-8 border-t border-slate-200 my-1"></div>
+
+        {/* 보관함 */}
+        <button
+          onClick={() => onSelectTab('ARCHIVED')}
+          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
+            selectedTab === 'ARCHIVED' ? 'bg-purple-600 text-white shadow-xs' : 'text-purple-600 hover:bg-purple-50'
+          }`}
+          title={`보관함 (${counts.archived ?? 0}건)`}
+        >
+          <span className="text-xs">📦</span>
+          <span className="text-[9px] font-bold mt-0.5">{counts.archived ?? 0}</span>
+        </button>
+
+        {/* 휴지통 */}
+        <button
+          onClick={() => onSelectTab('TRASHED')}
+          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
+            selectedTab === 'TRASHED' ? 'bg-rose-600 text-white shadow-xs' : 'text-rose-600 hover:bg-rose-50'
+          }`}
+          title={`휴지통 (${counts.trashed ?? 0}건)`}
+        >
+          <span className="text-xs">🗑️</span>
+          <span className="text-[9px] font-bold mt-0.5">{counts.trashed ?? 0}</span>
+        </button>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="w-full lg:w-80 shrink-0 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col overflow-hidden">
+    <aside className="w-full lg:w-80 shrink-0 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col overflow-hidden transition-all duration-200">
       {/* Sidebar Header */}
       <div className="p-3.5 border-b border-slate-200 bg-slate-50/80">
         <div className="flex items-center justify-between">
@@ -80,16 +185,27 @@ export default function CaseWorkflowSidebar({
               작업 파이프라인
             </h3>
           </div>
-          <button
-            onClick={() => onSelectTab('ALL')}
-            className={`btn-hover-effect-tab px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
-              selectedTab === 'ALL'
-                ? 'bg-blue-600 text-white shadow-2xs ring-2 ring-blue-300'
-                : 'bg-slate-200/90 text-slate-700 hover:bg-slate-300'
-            }`}
-          >
-            전체 ({counts.total})
-          </button>
+          <div className="flex items-center space-x-1.5">
+            <button
+              onClick={() => onSelectTab('ALL')}
+              className={`btn-hover-effect-tab px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                selectedTab === 'ALL'
+                  ? 'bg-blue-600 text-white shadow-2xs ring-2 ring-blue-300'
+                  : 'bg-slate-200/90 text-slate-700 hover:bg-slate-300'
+              }`}
+            >
+              전체 ({counts.total})
+            </button>
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                title="사이드바 접기 (테이블 넓게 보기)"
+              >
+                <ChevronRight className="w-4 h-4 rotate-180" />
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-[11px] text-slate-500 mt-0.5">
           도면 접수부터 최종 견적 발행까지 순서대로 진행합니다.
@@ -243,15 +359,18 @@ export default function CaseWorkflowSidebar({
           </div>
         </div>
 
-        {/* STEP 04: 검수 거버넌스 및 승인 결재 */}
+        {/* STEP 04: 견적 산출 & 최종 발행 */}
         <div className="rounded-md border border-slate-200 p-2.5 space-y-1.5 bg-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-1.5">
               <span className="w-5 h-5 rounded-full bg-slate-700 text-white text-[10px] font-extrabold flex items-center justify-center">
                 4
               </span>
-              <span className="text-xs font-bold text-slate-900">검수 & 결재 승인</span>
+              <span className="text-xs font-bold text-slate-900">견적 산출 & 발행</span>
             </div>
+            <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+              최종 단계
+            </span>
           </div>
 
           <div className="space-y-1.5 pt-1">
@@ -322,26 +441,12 @@ export default function CaseWorkflowSidebar({
                 </button>
               </>
             )}
-          </div>
-        </div>
 
-        {/* STEP 05: 견적서 발행 & 아카이브 */}
-        <div className="rounded-md border border-slate-200 p-2.5 space-y-1.5 bg-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-1.5">
-              <span className="w-5 h-5 rounded-full bg-slate-700 text-white text-[10px] font-extrabold flex items-center justify-center">
-                5
-              </span>
-              <span className="text-xs font-bold text-slate-900">견적서 발행 & 보관</span>
-            </div>
-          </div>
-
-          <div className="space-y-1.5 pt-1">
             <button
               onClick={() => {
-                alert('선택된 견적건들의 표준 엑셀 견적서를 일괄 ZIP 압축 다운로드합니다. (준비중)');
+                alert('산출 완료된 견적건들의 표준 엑셀 견적서를 일괄 ZIP 압축 다운로드합니다. (준비중)');
               }}
-              className="btn-hover-effect-secondary w-full px-3 py-2 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded text-xs font-bold transition-all flex items-center justify-between cursor-pointer group"
+              className="btn-hover-effect-secondary w-full px-3 py-2 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded text-xs font-bold transition-all flex items-center justify-between cursor-pointer group mt-1"
               title="산출 완료된 견적건들의 엑셀 견적서를 일괄 다운로드"
             >
               <span className="flex items-center space-x-2">
@@ -350,51 +455,45 @@ export default function CaseWorkflowSidebar({
               </span>
               <DownloadCloud className="w-4 h-4 text-emerald-600 group-hover:translate-y-0.5 transition-transform" />
             </button>
-
-            {/* Lifecycle Quick Nav: 보관함 & 휴지통 */}
-            <div className="grid grid-cols-2 gap-1.5 pt-1">
-              <button
-                type="button"
-                onClick={() => onSelectTab('ARCHIVED')}
-                className={`w-full px-2 py-1.5 rounded text-[11px] font-bold transition-all flex items-center justify-between border cursor-pointer ${
-                  selectedTab === 'ARCHIVED'
-                    ? 'bg-purple-600 text-white border-purple-700 shadow-2xs'
-                    : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200'
-                }`}
-                title="보류/이력 건 보관함"
-              >
-                <span>📦 보관함</span>
-                <span className={`px-1.5 py-0.2 rounded text-[10px] ${selectedTab === 'ARCHIVED' ? 'bg-purple-800 text-white' : 'bg-purple-200 text-purple-900'}`}>
-                  {counts.archived ?? 0}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onSelectTab('TRASHED')}
-                className={`w-full px-2 py-1.5 rounded text-[11px] font-bold transition-all flex items-center justify-between border cursor-pointer ${
-                  selectedTab === 'TRASHED'
-                    ? 'bg-rose-600 text-white border-rose-700 shadow-2xs'
-                    : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200'
-                }`}
-                title="삭제된 건 휴지통"
-              >
-                <span>🗑️ 휴지통</span>
-                <span className={`px-1.5 py-0.2 rounded text-[10px] ${selectedTab === 'TRASHED' ? 'bg-rose-800 text-white' : 'bg-rose-200 text-rose-900'}`}>
-                  {counts.trashed ?? 0}
-                </span>
-              </button>
-            </div>
           </div>
         </div>
-      </div>
 
-      {/* Sidebar Footer Info */}
-      <div className="p-3 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-500 flex items-center justify-between">
-        <span>접속: <strong className="text-slate-800 font-bold">{user?.name || '담당자'}</strong></span>
-        <span className="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded font-mono font-bold text-slate-700">
-          {user?.role === 'SUPER_ADMIN' ? '관리자' : '영업'}
-        </span>
+        {/* 보관 및 휴지통 서브 내비게이션 */}
+        <div className="pt-1">
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => onSelectTab('ARCHIVED')}
+              className={`w-full px-2 py-1.5 rounded text-[11px] font-bold transition-all flex items-center justify-between border cursor-pointer ${
+                selectedTab === 'ARCHIVED'
+                  ? 'bg-purple-600 text-white border-purple-700 shadow-2xs'
+                  : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200'
+              }`}
+              title="보류/이력 건 보관함"
+            >
+              <span>📦 보관함</span>
+              <span className={`px-1.5 py-0.2 rounded text-[10px] ${selectedTab === 'ARCHIVED' ? 'bg-purple-800 text-white' : 'bg-purple-200 text-purple-900'}`}>
+                {counts.archived ?? 0}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSelectTab('TRASHED')}
+              className={`w-full px-2 py-1.5 rounded text-[11px] font-bold transition-all flex items-center justify-between border cursor-pointer ${
+                selectedTab === 'TRASHED'
+                  ? 'bg-rose-600 text-white border-rose-700 shadow-2xs'
+                  : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200'
+              }`}
+              title="삭제된 건 휴지통"
+            >
+              <span>🗑️ 휴지통</span>
+              <span className={`px-1.5 py-0.2 rounded text-[10px] ${selectedTab === 'TRASHED' ? 'bg-rose-800 text-white' : 'bg-rose-200 text-rose-900'}`}>
+                {counts.trashed ?? 0}
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
     </aside>
   );

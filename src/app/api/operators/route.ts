@@ -19,13 +19,15 @@ function normalizeRows(res: any): any[] {
 export async function GET(req: Request) {
   try {
     const session = await getSessionUser();
-    if (!session || !['SUPER_ADMIN', 'TENANT_ADMIN'].includes(session.role)) {
-      return NextResponse.json({ success: false, error: '운영자 관리 권한이 없습니다.' }, { status: 403 });
+    if (!session) {
+      return NextResponse.json({ success: false, error: '인증이 필요합니다.' }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);
     const requestedTenantId = searchParams.get('tenant_id');
-    const includeDeleted = searchParams.get('include_deleted') === 'true';
+    const includeDeleted = session.role === 'SUPER_ADMIN' || session.role === 'TENANT_ADMIN'
+      ? searchParams.get('include_deleted') === 'true'
+      : false;
 
     const usersRes = await queryTable('users');
     const allUsers = normalizeRows(usersRes);
@@ -37,7 +39,7 @@ export async function GET(req: Request) {
         scopedUsers = allUsers.filter((u: any) => u.tenant_id === requestedTenantId || u.company_id === requestedTenantId);
       }
     } else {
-      // TENANT_ADMIN: 본인 테넌트만
+      // TENANT_ADMIN 및 일반 사원(SALES_USER): 본인 테넌트 임직원 목록만 조회
       const myTenant = session.tenant_id || session.companyId || 'comp_unassigned';
       scopedUsers = allUsers.filter((u: any) => (u.tenant_id === myTenant || u.company_id === myTenant));
     }
