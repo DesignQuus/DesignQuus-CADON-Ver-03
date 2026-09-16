@@ -776,6 +776,108 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'created_at', type: 'TEXT', notNull: true }
     ],
     uniqueKeyColumns: ['id']
+  },
+  // ── v2.0 확장 테이블 규격 ──
+  {
+    name: 'part_masters_v2',
+    displayName: 'v2.0 부품 식별 마스터',
+    description: '고객사+도번+Rev 결합 식별키 및 부품유형 관리',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'part_key', type: 'TEXT', notNull: true }, // 고객사코드:도번:Rev
+      { name: 'part_group_key', type: 'TEXT', notNull: true }, // 고객사코드:도번
+      { name: 'company_id', type: 'TEXT' },
+      { name: 'drawing_no', type: 'TEXT', notNull: true },
+      { name: 'revision', type: 'TEXT', notNull: true },
+      { name: 'part_name', type: 'TEXT', notNull: true },
+      { name: 'part_type', type: 'TEXT', notNull: true }, // CASTING, MACHINING, COMMERCIAL, UNCLASSIFIED
+      { name: 'standard_material', type: 'TEXT' },
+      { name: 'specification', type: 'TEXT' },
+      { name: 'last_unit_price', type: 'REAL' },
+      { name: 'last_quoted_at', type: 'TEXT' },
+      { name: 'usage_count', type: 'INTEGER' },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
+  },
+  {
+    name: 'price_history_v2',
+    displayName: 'v2.0 수량구간별 단가 이력',
+    description: '수량 구간, 시세 기준일, 산출 근거 스냅샷 및 수주 여부 보관',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'part_master_id', type: 'TEXT', notNull: true },
+      { name: 'part_key', type: 'TEXT', notNull: true },
+      { name: 'quotation_case_id', type: 'TEXT' },
+      { name: 'quote_item_id', type: 'TEXT' },
+      { name: 'qty_tier', type: 'TEXT', notNull: true }, // 1~9, 10~99, 100~
+      { name: 'lot_quantity', type: 'REAL', notNull: true },
+      { name: 'material_cost', type: 'REAL', notNull: true },
+      { name: 'process_cost', type: 'REAL', notNull: true },
+      { name: 'subtotal_cost', type: 'REAL', notNull: true },
+      { name: 'margin_rate', type: 'REAL', notNull: true },
+      { name: 'unit_price', type: 'REAL', notNull: true },
+      { name: 'material_base_date', type: 'TEXT' },
+      { name: 'price_basis_type', type: 'TEXT', notNull: true },
+      { name: 'basis_calc_json', type: 'TEXT' },
+      { name: 'is_ordered', type: 'INTEGER', notNull: true }, // 1: 수주가, 0: 견적가
+      { name: 'confirmed_by', type: 'TEXT' },
+      { name: 'effective_from', type: 'TEXT', notNull: true },
+      { name: 'effective_to', type: 'TEXT' },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
+  },
+  {
+    name: 'order_results',
+    displayName: '견적 수주/실주 결과 대장',
+    description: '견적건별 수주/실주 상태, 수주금액, 실주사유 및 학습 피드백',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'quotation_case_id', type: 'TEXT', notNull: true },
+      { name: 'case_no', type: 'TEXT', notNull: true },
+      { name: 'quote_id', type: 'TEXT' },
+      { name: 'order_status', type: 'TEXT', notNull: true }, // WON, LOST, PENDING
+      { name: 'order_amount', type: 'REAL' },
+      { name: 'lost_reason_category', type: 'TEXT' }, // PRICE, LEAD_TIME, SPEC, CANCEL, OTHER
+      { name: 'lost_reason_detail', type: 'TEXT' },
+      { name: 'feedback_notes', type: 'TEXT' },
+      { name: 'registered_by', type: 'TEXT' },
+      { name: 'registered_at', type: 'TEXT', notNull: true },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
+  },
+  {
+    name: 'material_rates',
+    displayName: '원자재 기준 시세표',
+    description: '주조재/가공재 월별 kg당 기준 시세',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'material_code', type: 'TEXT', notNull: true }, // SCS13, GCD450, SUS304, SS400
+      { name: 'material_name', type: 'TEXT', notNull: true },
+      { name: 'category', type: 'TEXT', notNull: true }, // CASTING, MACHINING
+      { name: 'unit_price_per_kg', type: 'REAL', notNull: true },
+      { name: 'density', type: 'REAL', notNull: true },
+      { name: 'effective_date', type: 'TEXT', notNull: true },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
+  },
+  {
+    name: 'process_rates',
+    displayName: '가공/공정 단가표',
+    description: '주조공정 및 기계가공(CNC선반/밀링) 시간/중량당 단가',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'process_code', type: 'TEXT', notNull: true },
+      { name: 'process_name', type: 'TEXT', notNull: true },
+      { name: 'unit_type', type: 'TEXT', notNull: true }, // PER_KG, PER_HOUR, PER_EA
+      { name: 'rate_amount', type: 'REAL', notNull: true },
+      { name: 'effective_date', type: 'TEXT', notNull: true },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
   }
 ];
 

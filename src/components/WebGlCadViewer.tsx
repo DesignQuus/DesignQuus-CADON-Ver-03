@@ -93,6 +93,12 @@ export default function WebGlCadViewer({
   // Smooth fly-to animation ref
   const targetCamRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
 
+  // 💡 On-demand rendering control: Only render when dirty (0% GPU idle)
+  const needsRenderRef = useRef(true);
+  const requestRender = useCallback(() => {
+    needsRenderRef.current = true;
+  }, []);
+
   // Track current active file id to prevent race conditions in async fetches
   const currentFileIdRef = useRef<string | undefined>(activeFileId);
   useEffect(() => {
@@ -153,6 +159,7 @@ export default function WebGlCadViewer({
       camera.zoom = targetZoom;
       camera.updateProjectionMatrix();
     }
+    needsRenderRef.current = true;
   }, []);
 
   // 1. Initialize Three.js Scene, Camera, and Renderer
@@ -199,10 +206,13 @@ export default function WebGlCadViewer({
     renderer.setSize(width, height);
     rendererRef.current = renderer;
 
-    // Animation Loop
+    // Animation Loop (Optimized with On-Demand Dirty Flag to eliminate 100% GPU idle load)
     const animate = () => {
+      let isMoving = false;
+
       // Smooth camera interpolation (Fly-to)
       if (targetCamRef.current && cameraRef.current) {
+        isMoving = true;
         const cam = cameraRef.current;
         const target = targetCamRef.current;
         cam.position.x += (target.x - cam.position.x) * 0.15;
@@ -222,6 +232,13 @@ export default function WebGlCadViewer({
           targetCamRef.current = null;
         }
       }
+
+      // 🛑 If no motion and not marked dirty, skip GPU draw calls entirely (0% GPU idle)
+      if (!needsRenderRef.current && !isMoving && !isDraggingRef.current) {
+        animationFrameIdRef.current = requestAnimationFrame(animate);
+        return;
+      }
+      needsRenderRef.current = false;
 
       renderer.render(scene, camera);
 
@@ -487,6 +504,7 @@ export default function WebGlCadViewer({
         // Automatically keep full drawing in view if user is in overall overview mode
         fitToExtents(boundsRef.current.minX, boundsRef.current.minY, boundsRef.current.maxX, boundsRef.current.maxY, false);
       }
+      needsRenderRef.current = true;
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
@@ -1077,6 +1095,7 @@ export default function WebGlCadViewer({
       camera.zoom = newZoom;
       camera.updateProjectionMatrix();
       targetCamRef.current = null; // Cancel any ongoing fly-to
+      needsRenderRef.current = true;
     };
 
     // Attach with passive: false so preventDefault() cancels window scroll
@@ -1091,6 +1110,7 @@ export default function WebGlCadViewer({
     isDraggingRef.current = true;
     lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     targetCamRef.current = null;
+    needsRenderRef.current = true;
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1111,10 +1131,12 @@ export default function WebGlCadViewer({
     camera.position.x -= dx * worldPerPixelX;
     camera.position.y += dy * worldPerPixelY;
     camera.updateProjectionMatrix();
+    needsRenderRef.current = true;
   };
 
   const handleMouseUp = () => {
     isDraggingRef.current = false;
+    needsRenderRef.current = true;
   };
 
   // Zoom Button Handlers

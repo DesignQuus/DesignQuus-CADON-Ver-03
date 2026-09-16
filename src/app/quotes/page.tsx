@@ -368,6 +368,39 @@ export default function QuotesListPage() {
                           </button>
 
                           <Link
+                            href={`/quotes/${q.quotation_case_id}/extract`}
+                            className="px-2 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center space-x-1"
+                            title="도면 표제란 및 BOM 추출 검증 (Step 3)"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>추출검증</span>
+                          </Link>
+
+                          <Link
+                            href={`/quotes/${q.quotation_case_id}/review`}
+                            className="px-2 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors flex items-center space-x-1"
+                            title="3분할 단가 검토 워크스페이스 (Step 5)"
+                          >
+                            <span>단가검토</span>
+                          </Link>
+
+                          <Link
+                            href={`/quotes/${q.quotation_case_id}/diff`}
+                            className="px-2 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors flex items-center space-x-1"
+                            title="이전 리비전 대비 변경점 비교"
+                          >
+                            <span>Diff비교</span>
+                          </Link>
+
+                          <Link
+                            href={`/quotes/${q.quotation_case_id}/publish`}
+                            className="px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center space-x-1"
+                            title="2종 견적서 출력 및 수주 피드백"
+                          >
+                            <span>견적발행</span>
+                          </Link>
+
+                          <Link
                             href={`/cases/${q.quotation_case_id}`}
                             className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                             title="도면 분석 상세 보기"

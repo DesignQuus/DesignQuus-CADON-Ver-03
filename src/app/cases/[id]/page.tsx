@@ -13,6 +13,7 @@ import {
 import CadViewer from '@/components/CadViewer';
 import QuotationDocumentPreview from '@/components/QuotationDocumentPreview';
 import FabricationFeaturesPanel from '@/components/FabricationFeaturesPanel';
+import PipelineNavigator from '@/components/common/PipelineNavigator';
 
 export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -2493,90 +2494,31 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {/* Tabs Navigation */}
-      <div className="no-print print:hidden flex items-center justify-between border-b border-slate-200 pb-1 gap-2 overflow-x-auto">
-        <div className="flex items-center space-x-2 shrink-0">
-          <button
-            onClick={() => setActiveTab('cad')}
-            className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-colors cursor-pointer shrink-0 ${
-              activeTab === 'cad'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Upload className="w-4 h-4" />
-            <span>1. 도면등록 & 뷰어</span>
-          </button>
+      {/* 🚀 CADON v2.0: 3단계 직관적 파이프라인 네비게이터 */}
+      <div className="no-print print:hidden mb-1">
+        <PipelineNavigator 
+          caseId={id} 
+          currentStep={1}
+          stats={{
+            unconfirmedCount: data?.drawings?.length || 0,
+            hasRevisionDiff: false
+          }}
+        />
 
-          <button
-            onClick={() => setActiveTab('approval')}
-            className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-colors cursor-pointer shrink-0 ${
-              activeTab === 'approval'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
+        {/* 3분할 워크스페이스 직접 진입 퀵 배너 */}
+        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white px-5 py-2 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="px-2 py-0.5 rounded bg-white/20 font-bold text-[11px]">v2.0 추천 워크플로우</span>
+            <span className="font-medium">1단계 도면 확인 후, 바로 <strong>2단계 3분할 단가 검토 워크스페이스</strong>에서 단축키로 검토를 진행할 수 있습니다.</span>
+          </div>
+          <Link
+            href={`/quotes/${id}/review`}
+            className="px-3.5 py-1 bg-white text-blue-800 hover:bg-blue-50 font-bold text-xs rounded-lg shadow-sm flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
           >
-            <Sparkles className="w-4 h-4" />
-            <span>2. 마스터 매칭 & 검수자 승인</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('features')}
-            className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-colors cursor-pointer shrink-0 ${
-              activeTab === 'features'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Wrench className="w-4 h-4" />
-            <span>3. ⚙️ 가공 피처 & 공정 원가</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('quote')}
-            className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-colors cursor-pointer shrink-0 ${
-              activeTab === 'quote'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Database className="w-4 h-4" />
-            <span>4. 견적서 산출 & 단가</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('excel')}
-            className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-colors cursor-pointer shrink-0 ${
-              activeTab === 'excel'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>5. 표준 견적서 미리보기 (PDF/Excel)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('structure')}
-            className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center space-x-2 transition-colors cursor-pointer shrink-0 ${
-              activeTab === 'structure'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            <span>6. 도면구조 & 다단계 BOM</span>
-          </button>
+            <span>2단계 3분할 워크스페이스 바로가기</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
-
-        <Link
-          href="/cases"
-          className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 font-bold text-xs transition-colors shrink-0 shadow-2xs group cursor-pointer"
-          title="견적의뢰 관리 메인 목록(대시보드)으로 돌아가기"
-        >
-          <ArrowLeft className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 group-hover:-translate-x-0.5 transition-transform" />
-          <span>견적 목록 메인</span>
-        </Link>
       </div>
 
       {/* TAB 1: CAD File Upload & Viewer (PROMPT 03, 04, 05, 06, 18-R1, 18-R2) */}

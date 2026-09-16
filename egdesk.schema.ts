@@ -114,7 +114,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 18,
-    "rowCount": 37
+    "rowCount": 74
   },
   "cad_app_settings": {
     "name": "cad_app_settings",
@@ -163,7 +163,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 19,
-    "rowCount": 20001
+    "rowCount": 40002
   },
   "cad_parse_runs": {
     "name": "cad_parse_runs",
@@ -190,7 +190,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 18,
-    "rowCount": 1
+    "rowCount": 2
   },
   "case_archives": {
     "name": "case_archives",
@@ -266,7 +266,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 16,
-    "rowCount": 121
+    "rowCount": 242
   },
   "drawings": {
     "name": "drawings",
@@ -303,7 +303,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 28,
-    "rowCount": 123
+    "rowCount": 246
   },
   "dwg_conversion_runs": {
     "name": "dwg_conversion_runs",
@@ -339,7 +339,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 27,
-    "rowCount": 1
+    "rowCount": 2
   },
   "excel_templates": {
     "name": "excel_templates",
@@ -430,7 +430,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 21,
-    "rowCount": 125
+    "rowCount": 250
   },
   "golden_cases": {
     "name": "golden_cases",
@@ -555,6 +555,32 @@ export const TABLES = {
     "columnCount": 22,
     "rowCount": 0
   },
+  "material_rates": {
+    "name": "material_rates",
+    "displayName": "원자재 기준 시세표",
+    "description": "주조재/가공재 월별 kg당 기준 시세",
+    "columns": [
+      "id",
+      "_version",
+      "material_code",
+      "material_name",
+      "category",
+      "unit_price_per_kg",
+      "density",
+      "effective_date",
+      "created_at",
+      "tenant_id",
+      "uuid",
+      "updated_at",
+      "updated_by",
+      "deleted_at",
+      "deleted_by",
+      "restored_at",
+      "restored_by"
+    ],
+    "columnCount": 17,
+    "rowCount": 0
+  },
   "normalized_bom_items": {
     "name": "normalized_bom_items",
     "displayName": "정규화 BOM 아이템",
@@ -586,6 +612,36 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 24,
+    "rowCount": 0
+  },
+  "order_results": {
+    "name": "order_results",
+    "displayName": "견적 수주/실주 결과 대장",
+    "description": "견적건별 수주/실주 상태, 수주금액, 실주사유 및 학습 피드백",
+    "columns": [
+      "id",
+      "_version",
+      "quotation_case_id",
+      "case_no",
+      "quote_id",
+      "order_status",
+      "order_amount",
+      "lost_reason_category",
+      "lost_reason_detail",
+      "feedback_notes",
+      "registered_by",
+      "registered_at",
+      "created_at",
+      "tenant_id",
+      "uuid",
+      "updated_at",
+      "updated_by",
+      "deleted_at",
+      "deleted_by",
+      "restored_at",
+      "restored_by"
+    ],
+    "columnCount": 21,
     "rowCount": 0
   },
   "part_cost_breakdowns": {
@@ -659,6 +715,76 @@ export const TABLES = {
     "columnCount": 30,
     "rowCount": 0
   },
+  "part_masters_v2": {
+    "name": "part_masters_v2",
+    "displayName": "v2.0 부품 식별 마스터",
+    "description": "고객사+도번+Rev 결합 식별키 및 부품유형 관리",
+    "columns": [
+      "id",
+      "_version",
+      "part_key",
+      "part_group_key",
+      "company_id",
+      "drawing_no",
+      "revision",
+      "part_name",
+      "part_type",
+      "standard_material",
+      "specification",
+      "last_unit_price",
+      "last_quoted_at",
+      "usage_count",
+      "created_at",
+      "tenant_id",
+      "uuid",
+      "updated_at",
+      "updated_by",
+      "deleted_at",
+      "deleted_by",
+      "restored_at",
+      "restored_by"
+    ],
+    "columnCount": 23,
+    "rowCount": 0
+  },
+  "price_history_v2": {
+    "name": "price_history_v2",
+    "displayName": "v2.0 수량구간별 단가 이력",
+    "description": "수량 구간, 시세 기준일, 산출 근거 스냅샷 및 수주 여부 보관",
+    "columns": [
+      "id",
+      "_version",
+      "part_master_id",
+      "part_key",
+      "quotation_case_id",
+      "quote_item_id",
+      "qty_tier",
+      "lot_quantity",
+      "material_cost",
+      "process_cost",
+      "subtotal_cost",
+      "margin_rate",
+      "unit_price",
+      "material_base_date",
+      "price_basis_type",
+      "basis_calc_json",
+      "is_ordered",
+      "confirmed_by",
+      "effective_from",
+      "effective_to",
+      "created_at",
+      "tenant_id",
+      "uuid",
+      "updated_at",
+      "updated_by",
+      "deleted_at",
+      "deleted_by",
+      "restored_at",
+      "restored_by"
+    ],
+    "columnCount": 29,
+    "rowCount": 0
+  },
   "price_masters": {
     "name": "price_masters",
     "displayName": "기준 단가 마스터",
@@ -685,6 +811,31 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 19,
+    "rowCount": 0
+  },
+  "process_rates": {
+    "name": "process_rates",
+    "displayName": "가공/공정 단가표",
+    "description": "주조공정 및 기계가공(CNC선반/밀링) 시간/중량당 단가",
+    "columns": [
+      "id",
+      "_version",
+      "process_code",
+      "process_name",
+      "unit_type",
+      "rate_amount",
+      "effective_date",
+      "created_at",
+      "tenant_id",
+      "uuid",
+      "updated_at",
+      "updated_by",
+      "deleted_at",
+      "deleted_by",
+      "restored_at",
+      "restored_by"
+    ],
+    "columnCount": 16,
     "rowCount": 0
   },
   "product_masters": {
@@ -767,7 +918,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 20,
-    "rowCount": 1
+    "rowCount": 2
   },
   "quote_exports": {
     "name": "quote_exports",
@@ -908,7 +1059,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 26,
-    "rowCount": 622
+    "rowCount": 1244
   },
   "system_approval_settings": {
     "name": "system_approval_settings",
@@ -1011,7 +1162,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 22,
-    "rowCount": 2
+    "rowCount": 6
   },
   "user_activity_logs": {
     "name": "user_activity_logs",
@@ -1040,7 +1191,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 20,
-    "rowCount": 39
+    "rowCount": 49
   },
   "user_approval_permissions": {
     "name": "user_approval_permissions",
