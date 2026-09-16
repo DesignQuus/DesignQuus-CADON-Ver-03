@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import CaseWorkflowSidebar, { WorkflowTab } from '@/components/cases/CaseWorkflowSidebar';
@@ -164,7 +165,7 @@ export default function CasesPage() {
 
   const fetchCompanies = async () => {
     try {
-      const res = await fetch('/api/companies');
+      const res = await apiFetch('/api/companies');
       if (res.ok) {
         const data = await res.json();
         const compList = data.companies || [];
@@ -180,7 +181,7 @@ export default function CasesPage() {
 
   const fetchOperators = async () => {
     try {
-      const res = await fetch('/api/operators');
+      const res = await apiFetch('/api/operators');
       if (res.ok) {
         const data = await res.json();
         setOperators(data.operators || []);
@@ -192,7 +193,7 @@ export default function CasesPage() {
 
   const fetchCases = async () => {
     try {
-      const res = await fetch('/api/quotation-cases');
+      const res = await apiFetch('/api/quotation-cases');
       if (res.status === 401) {
         window.location.href = '/login';
         return;
@@ -223,7 +224,7 @@ export default function CasesPage() {
       // 1. Create a new case automatically
       const cleanName = file.name.replace(/\.[^/.]+$/, "");
       const autoCaseName = `${cleanName} 견적의뢰 (DWG 자동분석)`;
-      const createRes = await fetch('/api/quotation-cases', {
+      const createRes = await apiFetch('/api/quotation-cases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -244,7 +245,7 @@ export default function CasesPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const uploadRes = await fetch(`/api/quotation-cases/${newCaseId}/upload`, {
+      const uploadRes = await apiFetch(`/api/quotation-cases/${newCaseId}/upload`, {
         method: 'POST',
         body: formData
       });
@@ -257,7 +258,7 @@ export default function CasesPage() {
       // 3. Automatically analyze CAD drawing so WebGL binary & drawing sheets are fully generated!
       setQuickUploadStatus(`'${file.name}' CAD 도면 자동 분석 및 WebGL 렌더링 준비 중...`);
       try {
-        await fetch(`/api/quotation-cases/${newCaseId}/analyze`, {
+        await apiFetch(`/api/quotation-cases/${newCaseId}/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fileId: uploadJson.file.id })
@@ -279,7 +280,7 @@ export default function CasesPage() {
     fetchCases();
     fetchCompanies();
     fetchOperators();
-    fetch('/api/auth/me')
+    apiFetch('/api/auth/me')
       .then((res) => (res.ok ? res.json() : { user: null }))
       .then((data) => {
         setUser(data.user);
@@ -348,7 +349,7 @@ export default function CasesPage() {
     const finalReason = archiveReasonType === 'CUSTOM' ? (archiveCustomReason.trim() || '기타 보관') : archiveReasonType;
     setLifecycleLoading(true);
     try {
-      const res = await fetch('/api/quotation-cases/bulk-lifecycle', {
+      const res = await apiFetch('/api/quotation-cases/bulk-lifecycle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -379,7 +380,7 @@ export default function CasesPage() {
     }
     setLifecycleLoading(true);
     try {
-      const res = await fetch('/api/quotation-cases/bulk-lifecycle', {
+      const res = await apiFetch('/api/quotation-cases/bulk-lifecycle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -405,7 +406,7 @@ export default function CasesPage() {
     if (ids.length === 0) return;
     setLifecycleLoading(true);
     try {
-      const res = await fetch('/api/quotation-cases/bulk-lifecycle', {
+      const res = await apiFetch('/api/quotation-cases/bulk-lifecycle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -434,7 +435,7 @@ export default function CasesPage() {
     }
     setLifecycleLoading(true);
     try {
-      const res = await fetch('/api/quotation-cases/bulk-lifecycle', {
+      const res = await apiFetch('/api/quotation-cases/bulk-lifecycle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -481,7 +482,7 @@ export default function CasesPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch('/api/quotation-cases', {
+      const res = await apiFetch('/api/quotation-cases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyId, projectId, caseName })
@@ -497,9 +498,10 @@ export default function CasesPage() {
   };
 
   // Lifecycle Partitions
-  const activeCases = useMemo(() => cases.filter(c => !c.lifecycle_status || c.lifecycle_status === 'ACTIVE'), [cases]);
-  const archivedCases = useMemo(() => cases.filter(c => c.lifecycle_status === 'ARCHIVED'), [cases]);
-  const trashedCases = useMemo(() => cases.filter(c => c.lifecycle_status === 'TRASHED'), [cases]);
+  const isCaseDeleted = (c: any) => Boolean(c.deleted_at) && c.deleted_at !== 'NULL' && c.deleted_at !== 'null';
+  const trashedCases = useMemo(() => cases.filter(c => isCaseDeleted(c) || c.lifecycle_status === 'TRASHED'), [cases]);
+  const archivedCases = useMemo(() => cases.filter(c => !isCaseDeleted(c) && (c.lifecycle_status === 'ARCHIVED' || c.status === 'ARCHIVED')), [cases]);
+  const activeCases = useMemo(() => cases.filter(c => !isCaseDeleted(c) && c.lifecycle_status !== 'TRASHED' && c.lifecycle_status !== 'ARCHIVED' && c.status !== 'ARCHIVED'), [cases]);
 
   // KPI Calculations
   const currentTabBaseCases = useMemo(() => {
@@ -1300,7 +1302,7 @@ export default function CasesPage() {
                                   📦 보관 ({c.archive_reason || '보류'})
                                 </span>
                               )}
-                              {c.lifecycle_status === 'TRASHED' && (
+                              {(c.lifecycle_status === 'TRASHED' || Boolean(c.deleted_at)) && (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 shrink-0">
                                   🗑️ 휴지통
                                 </span>
@@ -1465,7 +1467,7 @@ export default function CasesPage() {
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </>
-                              ) : selectedTab === 'TRASHED' || c.lifecycle_status === 'TRASHED' ? (
+                              ) : selectedTab === 'TRASHED' || c.lifecycle_status === 'TRASHED' || Boolean(c.deleted_at) ? (
                                 <>
                                   <button
                                     type="button"

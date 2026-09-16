@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { ZoomIn, ZoomOut, RotateCcw, Sparkles, RefreshCw, Layers, Scan, CheckCircle2, Crosshair, FileText, ExternalLink, AlertTriangle, X, Check, Info, ShieldCheck, ChevronRight } from 'lucide-react';
@@ -739,7 +740,7 @@ export default function WebGlCadViewer({
     if (!caseId || ocrLoading) return;
     setOcrLoading(true);
     try {
-      const res = await fetch(`/api/quotation-cases/${caseId}/ocr`, {
+      const res = await apiFetch(`/api/quotation-cases/${caseId}/ocr`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -776,7 +777,7 @@ export default function WebGlCadViewer({
   const fetchVirtualBom = useCallback(async () => {
     if (!caseId) return;
     try {
-      const res = await fetch(`/api/quotation-cases/${caseId}/virtual-bom`);
+      const res = await apiFetch(`/api/quotation-cases/${caseId}/virtual-bom`);
       if (res.ok) {
         const d = await res.json();
         setVirtualBomData(d);
@@ -801,7 +802,7 @@ export default function WebGlCadViewer({
         setApplyingVirtualBom(false);
         return;
       }
-      const res = await fetch(`/api/quotation-cases/${caseId}/virtual-bom`, {
+      const res = await apiFetch(`/api/quotation-cases/${caseId}/virtual-bom`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

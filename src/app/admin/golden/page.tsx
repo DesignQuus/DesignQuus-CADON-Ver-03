@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, ShieldCheck, Play, RefreshCw, AlertTriangle, Layers, Database, FileSpreadsheet, Lock } from 'lucide-react';
 
@@ -10,7 +11,7 @@ export default function GoldenDatasetPage() {
   const handleRunEvaluation = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/golden/evaluate', {
+      const res = await apiFetch('/api/golden/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ goldenCaseId: 'gcase_001' })

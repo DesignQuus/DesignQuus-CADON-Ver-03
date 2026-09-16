@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useMemo } from "react";
 import { 
   ShieldCheck, Users, Search, Plus, Edit, Trash2, Key, 
@@ -107,7 +108,7 @@ export default function MembersManagementPage() {
   // 인증 확인
   useEffect(() => {
     setAuthChecking(true);
-    fetch("/api/auth/me")
+    apiFetch("/api/auth/me")
       .then((res) => {
         if (res.status === 401) {
           // 비로그인 상태: 로그인 페이지로 즉시 리다이렉트
@@ -151,7 +152,7 @@ export default function MembersManagementPage() {
       
       const [opRes, compRes] = await Promise.all([
         fetch(opUrl),
-        fetch("/api/companies")
+        apiFetch("/api/companies")
       ]);
 
       const opData = await opRes.json();
@@ -236,7 +237,7 @@ export default function MembersManagementPage() {
     setIsSubmittingCompany(true);
     try {
       // 1. 회사 생성
-      const res = await fetch("/api/companies", {
+      const res = await apiFetch("/api/companies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -255,7 +256,7 @@ export default function MembersManagementPage() {
 
       // 2. 대표 계정 동시 생성 옵션 처리
       if (createAdminWithCompany && newCompId) {
-        const opRes = await fetch("/api/operators", {
+        const opRes = await apiFetch("/api/operators", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -308,7 +309,7 @@ export default function MembersManagementPage() {
     setFormError("");
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/operators", {
+      const res = await apiFetch("/api/operators", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -357,7 +358,7 @@ export default function MembersManagementPage() {
     setFormError("");
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/operators", {
+      const res = await apiFetch("/api/operators", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -390,7 +391,7 @@ export default function MembersManagementPage() {
   const handleDelete = async (op: Operator) => {
     if (!confirm(`'${op.name}' (${op.login_id}) 계정을 비활성화하시겠습니까?`)) return;
     try {
-      const res = await fetch(`/api/operators?id=${op.id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/operators?id=${op.id}`, { method: "DELETE" });
       const data = await res.json();
       if (!data.success) {
         alert(data.error || "계정 비활성화에 실패했습니다.");
@@ -408,7 +409,7 @@ export default function MembersManagementPage() {
   const handleRestore = async (op: Operator) => {
     if (!confirm(`'${op.name}' (${op.login_id}) 계정을 복원하시겠습니까?`)) return;
     try {
-      const res = await fetch("/api/operators", {
+      const res = await apiFetch("/api/operators", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -460,7 +461,7 @@ export default function MembersManagementPage() {
         <div className="pt-2 flex justify-center space-x-2">
           <button
             onClick={() => {
-              fetch("/api/auth/logout", { method: "POST" }).finally(() => {
+              apiFetch("/api/auth/logout", { method: "POST" }).finally(() => {
                 window.location.replace("/login?redirect=/admin/members");
               });
             }}

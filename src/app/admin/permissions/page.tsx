@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -100,14 +101,14 @@ export default function AdminPermissionsPage() {
     setLoading(true);
     try {
       // 1. Fetch current session
-      const meRes = await fetch('/api/auth/me');
+      const meRes = await apiFetch('/api/auth/me');
       if (meRes.ok) {
         const meData = await meRes.json();
         setCurrentUser(meData.user);
       }
 
       // 2. Fetch permissions & global settings
-      const permRes = await fetch('/api/admin/permissions');
+      const permRes = await apiFetch('/api/admin/permissions');
       if (permRes.ok) {
         const permData = await permRes.json();
         if (permData.settings) setSettings(permData.settings);
@@ -115,7 +116,7 @@ export default function AdminPermissionsPage() {
       }
 
       // 3. Fetch requests
-      const reqRes = await fetch(`/api/approvals?status=${requestFilter}`);
+      const reqRes = await apiFetch(`/api/approvals?status=${requestFilter}`);
       if (reqRes.ok) {
         const reqData = await reqRes.json();
         setRequests(reqData.requests || []);
@@ -143,7 +144,7 @@ export default function AdminPermissionsPage() {
     setSaving(true);
     setStatusMessage(null);
     try {
-      const res = await fetch('/api/admin/permissions', {
+      const res = await apiFetch('/api/admin/permissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -177,7 +178,7 @@ export default function AdminPermissionsPage() {
     if (!selectedReq) return;
     setDecisionLoading(true);
     try {
-      const res = await fetch(`/api/approvals/${selectedReq.id}/decision`, {
+      const res = await apiFetch(`/api/approvals/${selectedReq.id}/decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

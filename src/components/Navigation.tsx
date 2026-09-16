@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
@@ -17,13 +18,13 @@ export default function Navigation() {
       if (cached) setUser(JSON.parse(cached));
     } catch {}
 
-    fetch('/api/auth/me')
+    apiFetch('/api/auth/me')
       .then((res) => (res.ok ? res.json() : { user: null }))
       .then((data) => {
         setUser(data.user);
         if (data.user) {
           try { localStorage.setItem('cadon_user', JSON.stringify(data.user)); } catch {}
-          fetch('/api/admin/permissions')
+          apiFetch('/api/admin/permissions')
             .then((r) => (r.ok ? r.json() : null))
             .then((pData) => {
               if (pData?.pendingCount !== undefined) {
@@ -40,7 +41,7 @@ export default function Navigation() {
 
   const handleLogout = async () => {
     try { localStorage.removeItem('cadon_user'); } catch {}
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await apiFetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
     router.push('/login');
   };

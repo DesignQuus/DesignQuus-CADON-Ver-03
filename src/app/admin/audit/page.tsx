@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState } from 'react';
 import {
   ShieldCheck,
@@ -49,7 +50,7 @@ export default function AuditLogsPage() {
       if (selectedType) params.set('activityType', selectedType);
       if (searchQuery) params.set('search', searchQuery);
 
-      const res = await fetch(`/api/admin/audit-logs?${params.toString()}`);
+      const res = await apiFetch(`/api/admin/audit-logs?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setLogs(data.logs || []);

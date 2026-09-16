@@ -915,9 +915,15 @@ export const TABLES = {
       "deleted_at",
       "deleted_by",
       "restored_at",
-      "restored_by"
+      "restored_by",
+      "lifecycle_status",
+      "trashed_at",
+      "trashed_by_user_id",
+      "archived_at",
+      "archive_reason",
+      "visibility"
     ],
-    "columnCount": 20,
+    "columnCount": 26,
     "rowCount": 2
   },
   "quote_exports": {

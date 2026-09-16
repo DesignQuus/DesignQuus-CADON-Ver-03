@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -62,7 +63,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     async function loadData() {
       setLoading(true);
       try {
-        const res = await fetch(`/api/quotation-cases/${caseId}`);
+        const res = await apiFetch(`/api/quotation-cases/${caseId}`);
         if (res.ok) {
           const json = await res.json();
           setCaseInfo(json.case);
@@ -142,7 +143,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
     // API 호출 (백그라운드 동기화 및 DB 축적)
     try {
-      await fetch(`/api/quotes/${caseId}/confirm-line`, {
+      await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -44,7 +44,6 @@ export default function ReviewCadViewer({ caseId, selectedBalloonNo }: ReviewCad
       <div className="flex-1 w-full h-full relative">
         <CadViewer
           caseId={caseId}
-          onSelectPart={() => {}}
           className="w-full h-full"
         />
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -94,7 +95,7 @@ export default function HomePage() {
 
   useEffect(() => {
     // 1. Check user session
-    fetch('/api/auth/me')
+    apiFetch('/api/auth/me')
       .then((res) => {
         if (!res.ok) {
           router.replace('/login');
@@ -118,7 +119,7 @@ export default function HomePage() {
         } catch {}
 
         // 2. Fetch cases
-        fetch('/api/quotation-cases')
+        apiFetch('/api/quotation-cases')
           .then((r) => (r.ok ? r.json() : { cases: [] }))
           .then((cData) => {
             if (Array.isArray(cData.cases)) {
@@ -128,7 +129,7 @@ export default function HomePage() {
           .catch(() => {});
 
         // 2-B. Fetch quotes for quote amount KPI & recent quotes list
-        fetch('/api/quotes')
+        apiFetch('/api/quotes')
           .then((r) => (r.ok ? r.json() : { quotes: [] }))
           .then((qData) => {
             if (Array.isArray(qData.quotes)) {
@@ -139,7 +140,7 @@ export default function HomePage() {
 
         // 3. If SUPER_ADMIN, fetch company stats and audit logs
         if (data.user.role === 'SUPER_ADMIN') {
-          fetch('/api/companies?include_stats=true')
+          apiFetch('/api/companies?include_stats=true')
             .then((r) => (r.ok ? r.json() : { companies: [] }))
             .then((compData) => {
               if (Array.isArray(compData.companies)) {
@@ -148,7 +149,7 @@ export default function HomePage() {
             })
             .catch(() => {});
 
-          fetch('/api/admin/audit-logs?limit=1')
+          apiFetch('/api/admin/audit-logs?limit=1')
             .then((r) => (r.ok ? r.json() : { total: 0 }))
             .then((aData) => {
               if (typeof aData.total === 'number') {
@@ -250,7 +251,7 @@ export default function HomePage() {
   const handleDownloadExcel = async (quoteId: string, quoteNo: string) => {
     setDownloadingQuoteId(quoteId);
     try {
-      const res = await fetch(`/api/quotes/${quoteId}/export-excel`);
+      const res = await apiFetch(`/api/quotes/${quoteId}/export-excel`);
       if (!res.ok) {
         alert('엑셀 다운로드에 실패했습니다.');
         return;

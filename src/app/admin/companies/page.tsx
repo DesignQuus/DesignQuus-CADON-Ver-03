@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -79,7 +80,7 @@ export default function AdminCompaniesPage() {
   // 1. 인증 확인 (SUPER_ADMIN 전용)
   useEffect(() => {
     setAuthChecking(true);
-    fetch('/api/auth/me')
+    apiFetch('/api/auth/me')
       .then((res) => {
         if (!res.ok) {
           window.location.replace('/login?redirect=/admin/companies');
@@ -108,7 +109,7 @@ export default function AdminCompaniesPage() {
     setIsLoading(true);
     setErrorMsg('');
     try {
-      const res = await fetch('/api/companies?include_stats=true&include_deleted=true');
+      const res = await apiFetch('/api/companies?include_stats=true&include_deleted=true');
       const data = await res.json();
       if (data.success) {
         setCompanies(data.companies || []);
@@ -186,7 +187,7 @@ export default function AdminCompaniesPage() {
     setIsSubmitting(true);
     setModalError('');
     try {
-      const res = await fetch('/api/companies', {
+      const res = await apiFetch('/api/companies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -241,7 +242,7 @@ export default function AdminCompaniesPage() {
     setIsSubmitting(true);
     setModalError('');
     try {
-      const res = await fetch('/api/companies', {
+      const res = await apiFetch('/api/companies', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -279,7 +280,7 @@ export default function AdminCompaniesPage() {
     if (!window.confirm(confirmText)) return;
 
     try {
-      const res = await fetch(`/api/companies?id=${encodeURIComponent(c.id)}`, {
+      const res = await apiFetch(`/api/companies?id=${encodeURIComponent(c.id)}`, {
         method: 'DELETE'
       });
       const data = await res.json();
@@ -300,7 +301,7 @@ export default function AdminCompaniesPage() {
     if (!window.confirm(`회원사 '${c.company_name}'의 서비스를 정상 가동 상태로 복원하시겠습니까?`)) return;
 
     try {
-      const res = await fetch('/api/companies', {
+      const res = await apiFetch('/api/companies', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: c.id })

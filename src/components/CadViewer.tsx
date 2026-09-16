@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import {
   ZoomIn, ZoomOut, RotateCcw, Eye, Layers, Move, ExternalLink,
@@ -208,7 +209,7 @@ export default function CadViewer({
     if (!caseId) return false;
     setLoadingSvg(true);
     try {
-      const res = await fetch(`/api/quotation-cases/${caseId}/vector-svg`);
+      const res = await apiFetch(`/api/quotation-cases/${caseId}/vector-svg`);
       if (res.ok) {
         const svgText = await res.text();
         if (svgText && svgText.includes('<svg')) {
@@ -232,7 +233,7 @@ export default function CadViewer({
   // Load CAD Executable Settings from SQLite
   const loadCadSettings = useCallback(async () => {
     try {
-      const res = await fetch('/api/cad-settings');
+      const res = await apiFetch('/api/cad-settings');
       if (res.ok) {
         const data = await res.json();
         setFastviewPathInput(data.fastviewPath || '');
@@ -266,7 +267,7 @@ export default function CadViewer({
     setSettingsMsg(null);
 
     try {
-      const res = await fetch('/api/cad-settings', {
+      const res = await apiFetch('/api/cad-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'test', exePath: targetPath })
@@ -290,7 +291,7 @@ export default function CadViewer({
     setSettingsLoading(true);
     setSettingsMsg(null);
     try {
-      const res = await fetch('/api/cad-settings', {
+      const res = await apiFetch('/api/cad-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -330,7 +331,7 @@ export default function CadViewer({
     setOpeningFastView(true);
     setCadStatusMsg(null);
     try {
-      const res = await fetch(`/api/quotation-cases/${caseId}/open-cad`, {
+      const res = await apiFetch(`/api/quotation-cases/${caseId}/open-cad`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ app: 'free_viewer' })
@@ -369,7 +370,7 @@ export default function CadViewer({
     setOpeningCad(true);
     setCadStatusMsg(null);
     try {
-      const res = await fetch(`/api/quotation-cases/${caseId}/open-cad`, {
+      const res = await apiFetch(`/api/quotation-cases/${caseId}/open-cad`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ app: 'autocad' })
@@ -399,7 +400,7 @@ export default function CadViewer({
     if (!caseId) return;
     setArchiving(true);
     try {
-      const res = await fetch(`/api/quotation-cases/${caseId}/archive-snapshot`, {
+      const res = await apiFetch(`/api/quotation-cases/${caseId}/archive-snapshot`, {
         method: 'POST'
       });
       const data = await res.json();
@@ -420,7 +421,7 @@ export default function CadViewer({
   const handleOpenFolder = async () => {
     if (!caseId) return;
     try {
-      const res = await fetch(`/api/quotation-cases/${caseId}/open-cad`, {
+      const res = await apiFetch(`/api/quotation-cases/${caseId}/open-cad`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ app: 'folder' })

@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState } from 'react';
 import {
   Wrench, Layers, RefreshCw, CheckCircle2, AlertCircle, Edit3,
@@ -29,7 +30,7 @@ export default function FabricationFeaturesPanel({ quotationCaseId, onRefreshCas
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/quotation-cases/${quotationCaseId}/features`);
+      const res = await apiFetch(`/api/quotation-cases/${quotationCaseId}/features`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '가공 피처 조회 실패');
       setFeatures(data.features || []);
@@ -70,7 +71,7 @@ export default function FabricationFeaturesPanel({ quotationCaseId, onRefreshCas
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch(`/api/quotation-cases/${quotationCaseId}/features`, {
+      const res = await apiFetch(`/api/quotation-cases/${quotationCaseId}/features`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formValues)

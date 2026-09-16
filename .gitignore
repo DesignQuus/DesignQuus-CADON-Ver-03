@@ -70,3 +70,4 @@ test_*.png
 # OS metadata
 .DS_Store
 Thumbs.db
+.backup/

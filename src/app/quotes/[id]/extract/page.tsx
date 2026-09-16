@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -35,7 +36,7 @@ export default function ExtractVerificationPage({ params }: { params: Promise<{ 
     async function loadCase() {
       setLoading(true);
       try {
-        const res = await fetch(`/api/quotation-cases/${caseId}`);
+        const res = await apiFetch(`/api/quotation-cases/${caseId}`);
         if (res.ok) {
           const json = await res.json();
           setCaseInfo(json.case);
@@ -103,7 +104,7 @@ export default function ExtractVerificationPage({ params }: { params: Promise<{ 
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/quotes/${caseId}/extract-verify`, {
+      const res = await apiFetch(`/api/quotes/${caseId}/extract-verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

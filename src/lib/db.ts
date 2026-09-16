@@ -150,6 +150,8 @@ export async function executeDmlOrQuery(sql: string, params: any[] = []): Promis
           const val = pMatch[2].trim();
           if (val === '?') {
             updates[col] = params[pIdx++];
+          } else if (val.toUpperCase() === 'NULL') {
+            updates[col] = null;
           } else if (val.startsWith("'") && val.endsWith("'")) {
             updates[col] = val.slice(1, -1).replace(/''/g, "'");
           } else if (!isNaN(Number(val))) {

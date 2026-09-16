@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -118,7 +119,7 @@ export default function RevisionDiffPage({ params }: { params: Promise<{ id: str
     async function load() {
       setLoading(true);
       try {
-        const res = await fetch(`/api/quotation-cases/${caseId}`);
+        const res = await apiFetch(`/api/quotation-cases/${caseId}`);
         if (res.ok) {
           const json = await res.json();
           setCaseInfo(json.case);
@@ -149,7 +150,7 @@ export default function RevisionDiffPage({ params }: { params: Promise<{ id: str
 
     setInheriting(true);
     try {
-      const res = await fetch(`/api/quotes/${caseId}/inherit-prices`, {
+      const res = await apiFetch(`/api/quotes/${caseId}/inherit-prices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identicalItemIds: identicalIds })

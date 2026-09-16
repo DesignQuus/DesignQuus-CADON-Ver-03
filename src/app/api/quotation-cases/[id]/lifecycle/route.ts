@@ -52,9 +52,8 @@ export async function PATCH(
     if (action === 'TRASH') {
       await db.prepare(`
         UPDATE quotation_cases
-        SET lifecycle_status = 'TRASHED',
-            trashed_at = ?,
-            trashed_by_user_id = ?,
+        SET deleted_at = ?,
+            deleted_by = ?,
             updated_at = ?
         WHERE id = ?
       `).run(now, session.userId, now, id);
@@ -72,14 +71,13 @@ export async function PATCH(
     if (action === 'RESTORE') {
       await db.prepare(`
         UPDATE quotation_cases
-        SET lifecycle_status = 'ACTIVE',
-            archived_at = NULL,
-            archive_reason = NULL,
-            trashed_at = NULL,
-            trashed_by_user_id = NULL,
+        SET deleted_at = NULL,
+            deleted_by = NULL,
+            restored_at = ?,
+            restored_by = ?,
             updated_at = ?
         WHERE id = ?
-      `).run(now, id);
+      `).run(now, session.userId, now, id);
 
       await recordActivity(req, session, {
         activityType: 'CASE_RESTORE',
@@ -92,8 +90,9 @@ export async function PATCH(
     }
 
     if (action === 'PERMANENT_DELETE') {
-      if (!isSuperAdmin && !isOwner) {
-        return NextResponse.json({ error: '영구 삭제 권한이 없습니다 (담당자 또는 최고관리자 전용).' }, { status: 403 });
+      const isTenantAdmin = session.role === 'TENANT_ADMIN' || session.role === 'SUPER_ADMIN';
+      if (!isTenantAdmin && !isOwner) {
+        return NextResponse.json({ error: '영구 삭제 권한이 없습니다 (담당자 또는 관리자 전용).' }, { status: 403 });
       }
 
       const files = (await db.prepare('SELECT * FROM uploaded_files WHERE quotation_case_id = ?').all(id)) as any[];

@@ -50,9 +50,8 @@ export async function POST(req: NextRequest) {
       } else if (action === 'TRASH') {
         await db.prepare(`
           UPDATE quotation_cases
-          SET lifecycle_status = 'TRASHED',
-              trashed_at = ?,
-              trashed_by_user_id = ?,
+          SET deleted_at = ?,
+              deleted_by = ?,
               updated_at = ?
           WHERE id = ?
         `).run(now, session.userId, now, id);
@@ -67,14 +66,13 @@ export async function POST(req: NextRequest) {
       } else if (action === 'RESTORE') {
         await db.prepare(`
           UPDATE quotation_cases
-          SET lifecycle_status = 'ACTIVE',
-              archived_at = NULL,
-              archive_reason = NULL,
-              trashed_at = NULL,
-              trashed_by_user_id = NULL,
+          SET deleted_at = NULL,
+              deleted_by = NULL,
+              restored_at = ?,
+              restored_by = ?,
               updated_at = ?
           WHERE id = ?
-        `).run(now, id);
+        `).run(now, session.userId, now, id);
 
         await recordActivity(req, session, {
           activityType: 'CASE_RESTORE',
@@ -84,7 +82,8 @@ export async function POST(req: NextRequest) {
         });
         successCount++;
       } else if (action === 'PERMANENT_DELETE') {
-        if (!isSuperAdmin && !isOwner) continue;
+        const isTenantAdmin = session.role === 'TENANT_ADMIN' || session.role === 'SUPER_ADMIN';
+        if (!isTenantAdmin && !isOwner) continue;
 
         const files = (await db.prepare('SELECT * FROM uploaded_files WHERE quotation_case_id = ?').all(id)) as any[];
 

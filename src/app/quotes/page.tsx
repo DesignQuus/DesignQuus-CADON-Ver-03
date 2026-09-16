@@ -1,5 +1,6 @@
 'use client';
 
+import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
@@ -56,7 +57,7 @@ export default function QuotesListPage() {
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
 
-      const res = await fetch(`/api/quotes?${params.toString()}`);
+      const res = await apiFetch(`/api/quotes?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setQuotes(data.quotes || []);
@@ -81,7 +82,7 @@ export default function QuotesListPage() {
   const handleDownloadExcel = async (quoteId: string, quoteNo: string) => {
     setDownloadingId(quoteId);
     try {
-      const res = await fetch(`/api/quotes/${quoteId}/export-excel`);
+      const res = await apiFetch(`/api/quotes/${quoteId}/export-excel`);
       if (!res.ok) throw new Error('엑셀 생성 실패');
 
       const blob = await res.blob();
