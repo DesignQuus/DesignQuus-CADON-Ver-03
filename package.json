@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 4000",
+    "dev": "next dev --turbopack -p 4005",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -22,7 +22,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@egdesk/next-api-plugin": "^1.5.64",
+    "@egdesk/next-api-plugin": "^1.5.70",
     "@tailwindcss/postcss": "^4.0.9",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.13.9",

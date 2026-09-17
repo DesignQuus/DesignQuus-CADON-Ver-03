@@ -38,9 +38,10 @@ export async function POST(
         WHERE quotation_case_id = ?
       `).run(flagVal, excludeReasonStr, id);
     } else if (excludeDuplicates) {
-      // 💎 Senior Manager Preset: Keep 1st instance of duplicates, exclude others
+      // 💎 Senior Manager Preset: 도면번호와 품명이 모두 동일한 진짜 중복본만 2번째 이후 제외하고,
+      // 도면번호가 같더라도 품명이 다른 공용 부품(STAY-BAR-1 vs STAY-BAR-2 등)은 견적에 안전하게 유지합니다.
       const allDwgs = (await db.prepare(`
-        SELECT id, drawing_no_raw, drawing_index 
+        SELECT id, drawing_no_raw, drawing_name_raw, drawing_index 
         FROM drawings 
         WHERE quotation_case_id = ? 
         ORDER BY drawing_index ASC
@@ -52,11 +53,13 @@ export async function POST(
 
       for (const d of allDwgs) {
         const no = (d.drawing_no_raw || '').trim();
+        const name = (d.drawing_name_raw || '').trim();
         if (!no) continue;
-        if (seen.has(no)) {
+        const key = `${no}___${name}`;
+        if (seen.has(key)) {
           idsToExclude.push(d.id);
         } else {
-          seen.add(no);
+          seen.add(key);
           idsToInclude.push(d.id);
         }
       }
@@ -159,17 +162,20 @@ export async function POST(
         `).run(latestQuote.id);
       } else if (excludeDuplicates) {
         // Sync quote items with excluded drawings
-        const excludedDwgNos = ((await db.prepare(`
-          SELECT drawing_no_raw FROM drawings WHERE quotation_case_id = ? AND is_quote_included = 0
-        `).all(id)) as any[]).map((r: any) => r.drawing_no_raw);
+        const excludedDwgs = (await db.prepare(`
+          SELECT drawing_no_raw, drawing_name_raw FROM drawings WHERE quotation_case_id = ? AND is_quote_included = 0
+        `).all(id)) as any[];
 
-        if (excludedDwgNos.length > 0) {
-          const exPl = excludedDwgNos.map(() => '?').join(',');
-          await db.prepare(`
-            UPDATE quote_items 
-            SET is_included = 0
-            WHERE quote_id = ? AND drawing_no IN (${exPl})
-          `).run(latestQuote.id, ...excludedDwgNos);
+        for (const ex of excludedDwgs) {
+          const no = (ex.drawing_no_raw || '').trim();
+          const name = (ex.drawing_name_raw || '').trim();
+          if (no && name) {
+            await db.prepare(`
+              UPDATE quote_items 
+              SET is_included = 0
+              WHERE quote_id = ? AND drawing_no = ? AND item_name = ?
+            `).run(latestQuote.id, no, name);
+          }
         }
       } else if (Array.isArray(drawingNos) && drawingNos.length > 0) {
         const placeholders = drawingNos.map(() => '?').join(',');

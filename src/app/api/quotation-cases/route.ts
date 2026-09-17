@@ -48,10 +48,14 @@ export async function GET(req: NextRequest) {
       const compIds = new Set(accessibleCompanies.map((c: any) => c.company_id));
 
       const allCases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
-      cases = allCases.filter((c: any) =>
-        (!c.company_id || c.company_id === 'comp_unassigned' || compIds.has(c.company_id)) &&
-        (!c.visibility || c.visibility === 'SHARED' || c.created_by_user_id === session.userId)
-      );
+      cases = allCases.filter((c: any) => {
+        const isOwner = c.created_by_user_id === session.userId;
+        const isMyTenant = !c.tenant_id || c.tenant_id === session.tenant_id || c.tenant_id === session.companyId || c.tenant_id === 'tenant-cadon';
+        const hasCompanyAccess = compIds.size === 0 || !c.company_id || c.company_id === 'comp_unassigned' || compIds.has(c.company_id);
+        const hasVisibility = !c.visibility || c.visibility === 'SHARED' || isOwner;
+
+        return (isOwner || (isMyTenant && hasCompanyAccess)) && hasVisibility;
+      });
     }
 
     for (const c of cases) {

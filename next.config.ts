@@ -25,6 +25,7 @@ const getLocalIPs = () => {
   }
 };
 
+
 console.log('🔍 DEBUG next.config: EGDESK_BASE_PATH env var =', process.env.EGDESK_BASE_PATH);
 
 const nextConfig: NextConfig = {
@@ -50,6 +51,8 @@ const nextConfig: NextConfig = {
         '127.0.0.1:3000',
         'localhost:4000',
         '127.0.0.1:4000',
+        'localhost:4005',
+        '127.0.0.1:4005',
         '*.loca.lt',
         '*.ngrok.io',
         '*.ngrok-free.app',

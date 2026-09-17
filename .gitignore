@@ -71,3 +71,4 @@ test_*.png
 .DS_Store
 Thumbs.db
 .backup/
+test file/

@@ -25,7 +25,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'cad' | 'structure' | 'approval' | 'quote' | 'excel' | 'features'>('cad');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -2306,35 +2306,35 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             )}
           </div>
 
-            {/* Quick Stats */}
-            <div className="flex items-center space-x-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <div className="text-center px-3 border-r border-slate-200">
-                <div className="text-xs text-slate-500 font-medium">도면 수</div>
-                <div className="text-lg font-bold text-slate-900">{drawings.length}</div>
+            {/* 📊 수량 정합성 워터폴(Waterfall) 인포 바 */}
+            <div className="flex items-center space-x-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
+              <div className="text-center px-2.5 border-r border-slate-200">
+                <div className="text-[10px] text-slate-500 font-medium">총 도면</div>
+                <div className="text-sm font-bold text-slate-900 font-mono">{drawings.length}장</div>
               </div>
-              <div className="text-center px-3 border-r border-slate-200">
-                <div className="text-xs text-slate-500 font-medium">추출 BOM</div>
-                <div className="text-lg font-bold text-slate-900">{flattenedBomItems.length}</div>
+              <div className="text-center px-2.5 border-r border-slate-200">
+                <div className="text-[10px] text-slate-500 font-medium">조립도 (제외)</div>
+                <div className="text-sm font-bold text-slate-600 font-mono">
+                  {drawings.filter((d: any) => d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY').length}장
+                </div>
               </div>
-              <div className="text-center px-3">
-                <div className="text-xs text-slate-500 font-medium">승인 품목</div>
-                <div className="text-lg font-bold text-blue-600">
-                  {finalBomItems.filter((f: any) => f.approval_status === 'APPROVED').length} / {normalizedItems.length}
+              <div className="text-center px-2.5">
+                <div className="text-[10px] text-indigo-700 font-bold">견적 대상 부품</div>
+                <div className="text-sm font-bold text-blue-700 font-mono">
+                  {drawings.filter((d: any) => d.drawing_type !== 'MAIN_ASSEMBLY' && d.drawing_type !== 'SUB_ASSEMBLY' && d.is_quote_included !== 0).length || normalizedItems.length}종
                 </div>
               </div>
             </div>
 
-            {/* ⚡ Fast Track: Instant Quote Generation Button */}
-            <button
-              type="button"
-              onClick={handleAutoApproveAndCreateQuote}
-              disabled={actionLoading}
-              className="btn-hover-effect px-3.5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-md hover:shadow-lg flex items-center space-x-2 cursor-pointer disabled:opacity-50 transition-all shrink-0 ring-2 ring-blue-300 animate-in fade-in"
-              title="검수 대기 중인 모든 도면 품목을 즉시 일괄 승인하고 최종 견적서를 산출하여 견적서 탭으로 이동합니다."
+            {/* 🚀 Next Step Primary Action: 2단계 3분할 단가 검토 워크스페이스 */}
+            <Link
+              href={`/quotes/${id}/review`}
+              className="btn-hover-effect px-4 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl text-xs font-extrabold shadow-md hover:shadow-lg flex items-center space-x-1.5 cursor-pointer transition-all shrink-0 ring-2 ring-indigo-300"
+              title="1단계 도면 검증 후, 2단계 3분할 통합 단가 검토 워크스페이스로 이동합니다."
             >
-              <Sparkles className={`w-4 h-4 text-amber-300 ${actionLoading ? 'animate-spin' : ''}`} />
-              <span>⚡ 최종 견적서 즉시 산출</span>
-            </button>
+              <span>2단계: 3분할 단가 검토 진행</span>
+              <ChevronRight className="w-4 h-4 text-white" />
+            </Link>
           </div>
         </div>
 
@@ -2506,17 +2506,17 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
           }}
         />
 
-        {/* 3분할 워크스페이스 직접 진입 퀵 배너 */}
-        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white px-5 py-2 flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="px-2 py-0.5 rounded bg-white/20 font-bold text-[11px]">v2.0 추천 워크플로우</span>
-            <span className="font-medium">1단계 도면 확인 후, 바로 <strong>2단계 3분할 단가 검토 워크스페이스</strong>에서 단축키로 검토를 진행할 수 있습니다.</span>
+        {/* 3분할 워크스페이스 퀵 네비게이션 팁 */}
+        <div className="bg-slate-900 text-slate-200 px-4 py-1.5 flex items-center justify-between text-xs border-b border-slate-800">
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="px-1.5 py-0.5 rounded bg-blue-600/60 font-semibold text-[10px] text-white">가이드</span>
+            <span className="text-slate-300">1단계에서 도면 및 표제란 정보를 검토한 후, 상단 <strong>[2단계: 3분할 단가 검토 진행]</strong>을 클릭하여 부품별 단가 계산을 진행하세요.</span>
           </div>
           <Link
             href={`/quotes/${id}/review`}
-            className="px-3.5 py-1 bg-white text-blue-800 hover:bg-blue-50 font-bold text-xs rounded-lg shadow-sm flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
+            className="text-blue-400 hover:text-blue-300 font-semibold text-[11px] flex items-center gap-1 shrink-0"
           >
-            <span>2단계 3분할 워크스페이스 바로가기</span>
+            <span>2단계 바로가기</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>

@@ -32,7 +32,8 @@ export async function PATCH(
       const archiveReason = reason || '일정 보류';
       await db.prepare(`
         UPDATE quotation_cases
-        SET lifecycle_status = 'ARCHIVED',
+        SET status = 'ARCHIVED',
+            lifecycle_status = 'ARCHIVED',
             archived_at = ?,
             archive_reason = ?,
             updated_at = ?
@@ -71,7 +72,11 @@ export async function PATCH(
     if (action === 'RESTORE') {
       await db.prepare(`
         UPDATE quotation_cases
-        SET deleted_at = NULL,
+        SET status = 'ANALYZED',
+            lifecycle_status = NULL,
+            archived_at = NULL,
+            archive_reason = NULL,
+            deleted_at = NULL,
             deleted_by = NULL,
             restored_at = ?,
             restored_by = ?,
@@ -91,8 +96,12 @@ export async function PATCH(
 
     if (action === 'PERMANENT_DELETE') {
       const isTenantAdmin = session.role === 'TENANT_ADMIN' || session.role === 'SUPER_ADMIN';
-      if (!isTenantAdmin && !isOwner) {
-        return NextResponse.json({ error: '영구 삭제 권한이 없습니다 (담당자 또는 관리자 전용).' }, { status: 403 });
+      const isTrasher = qc.deleted_by === session.userId;
+      // [방안 B] 본인 작성자(isOwner), 최고관리자/대표(isTenantAdmin), 또는 본인이 직접 휴지통으로 이동시킨 사용자(isTrasher) 영구 삭제 허용
+      if (!isTenantAdmin && !isOwner && !isTrasher) {
+        return NextResponse.json({
+          error: `영구 삭제 권한이 없습니다. (타 담당자 [${qc.created_by_name || '최고관리자'}] 건으로 최고관리자 권한이 필요합니다)`
+        }, { status: 403 });
       }
 
       const files = (await db.prepare('SELECT * FROM uploaded_files WHERE quotation_case_id = ?').all(id)) as any[];

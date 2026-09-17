@@ -111,6 +111,20 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
         company = None
         proj_name = None
         
+        # Extract Customer from proximity to "CUSTOMER" label
+        cust_labels = [t for t in tb_texts if t["text"].strip().upper() == "CUSTOMER"]
+        if cust_labels:
+            cl = cust_labels[0]
+            cand = [
+                t for t in tb_texts 
+                if t != cl 
+                and abs(t["x"] - cl["x"]) < 120 
+                and abs(t["y"] - cl["y"]) < 30
+                and t["text"].strip().upper() not in ["CUSTOMER", "DATE", "SCALE", "REV.", "DESIGN", "CHECK", "APPROVE"]
+            ]
+            if cand:
+                customer = cand[0]["text"].strip()
+
         for t in tb_texts:
             txt = t["text"].strip()
             # Ignore metadata labels, dates, materials
@@ -121,8 +135,14 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
             ]:
                 continue
 
-            if any(k in txt.upper() for k in ["CO.", "LTD", "INC.", "CORP.", "주식회사", "(주)"]) and len(txt) > 3:
-                company = txt
+            # Fallback customer match if not caught by proximity
+            if not customer and any(k in txt for k in ["보그워너", "A&G", "현대", "기아", "삼성", "LG", "한화"]):
+                customer = txt
+
+            compact = re.sub(r'\s+', '', txt).upper()
+            if (any(k in compact for k in ["CO.,LTD", "CO.,", "LTD", "INC.", "CORP.", "INTERNATIONAL"]) or any(k in compact for k in ["주식회사", "(주)", "㈜"])) and len(compact) > 3:
+                if not customer or txt != customer:
+                    company = re.sub(r'\s+', ' ', txt).strip()
             elif any(k in txt for k in [
                 "PLATE", "SHAFT", "COVER", "RAIL", "BRACKET", "BLOCK", "PIN",
                 "GUIDE", "STOPPER", "BUSH", "PAD", "HINGE", "SENSOR", "BASE",

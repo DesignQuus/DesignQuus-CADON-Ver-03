@@ -179,6 +179,20 @@ export default function CadViewer({
   const [openedFolderInfo, setOpenedFolderInfo] = useState<{ path: string; name: string } | null>(null);
   const [copiedPath, setCopiedPath] = useState(false);
 
+  // 💎 Phase 2: Price Columns Visibility & Quality Filter
+  const [showPriceColumns, setShowPriceColumns] = useState(false);
+  const [qualityFilter, setQualityFilter] = useState<'ALL' | 'NO_MATERIAL' | 'PARTS' | 'ASSY' | 'DUPLICATES' | 'EXCLUDED'>('ALL');
+
+  // 💎 Phase 3: Multi-select & Bulk Operation State
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [isMaterialDropdownOpen, setIsMaterialDropdownOpen] = useState(false);
+  const [customMaterialInput, setCustomMaterialInput] = useState('');
+  const [showCustomMaterialModal, setShowCustomMaterialModal] = useState(false);
+  const [bulkExcludeReason, setBulkExcludeReason] = useState('고객 사급품');
+  const [showBulkExcludeModal, setShowBulkExcludeModal] = useState(false);
+  const bulkBarRef = useRef<HTMLDivElement>(null);
+
   // 💎 HD Vector SVG state
   const [hdSvgContent, setHdSvgContent] = useState<string | null>(null);
   const [loadingSvg, setLoadingSvg] = useState(false);
@@ -803,15 +817,143 @@ export default function CadViewer({
     return { groupCount, rowCount };
   }, [duplicateMap]);
 
-  // 💎 Filtered Drawings for Display (handles filterDuplicatesOnly)
+  // 💎 도면번호와 품명이 모두 동일한 진짜 중복본(Exact Duplicate) 집계
+  const exactDuplicateMap = useMemo(() => {
+    const map = new Map<string, any[]>();
+    drawings.forEach(d => {
+      const no = (d.drawing_no_raw || '').trim();
+      const name = (d.drawing_name_raw || '').trim();
+      if (!no) return;
+      const key = `${no}___${name}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(d);
+    });
+    return map;
+  }, [drawings]);
+
+  const exactDuplicateStats = useMemo(() => {
+    let groupCount = 0;
+    let rowCount = 0;
+    exactDuplicateMap.forEach(items => {
+      if (items.length > 1) {
+        groupCount++;
+        rowCount += items.length;
+      }
+    });
+    return { groupCount, rowCount, redundantCount: rowCount - groupCount };
+  }, [exactDuplicateMap]);
+
+  // 💎 Quality Filter Statistics
+  const qualityStats = useMemo(() => {
+    let noMaterial = 0;
+    let parts = 0;
+    let assy = 0;
+    let excluded = 0;
+
+    (drawings || []).forEach(d => {
+      const isAssy = d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY';
+      const mat = (d.material || '').trim();
+      const hasMaterial = mat !== '' && mat !== '-';
+      const isInc = d.is_quote_included !== 0;
+
+      if (!isAssy && !hasMaterial) noMaterial++;
+      if (!isAssy) parts++;
+      if (isAssy) assy++;
+      if (!isInc) excluded++;
+    });
+
+    return { noMaterial, parts, assy, excluded, duplicates: duplicateStats.rowCount };
+  }, [drawings, duplicateStats]);
+
+  // 💎 Filtered Drawings for Display (handles qualityFilter and filterDuplicatesOnly)
   const displayedDrawings = useMemo(() => {
-    if (!filterDuplicatesOnly) return hierarchicalDrawings;
     return hierarchicalDrawings.filter(d => {
       const rawNo = (d.drawing_no_raw || '').trim();
-      const group = duplicateMap.get(rawNo);
-      return group && group.length > 1;
+      const isAssy = d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY';
+      const mat = (d.material || '').trim();
+      const hasMaterial = mat !== '' && mat !== '-';
+      const isInc = d.is_quote_included !== 0;
+
+      if (qualityFilter === 'NO_MATERIAL') {
+        return !hasMaterial && !isAssy;
+      }
+      if (qualityFilter === 'PARTS') {
+        return !isAssy;
+      }
+      if (qualityFilter === 'ASSY') {
+        return isAssy;
+      }
+      if (qualityFilter === 'DUPLICATES' || filterDuplicatesOnly) {
+        const group = duplicateMap.get(rawNo);
+        return group && group.length > 1;
+      }
+      if (qualityFilter === 'EXCLUDED') {
+        return !isInc;
+      }
+      return true;
     });
-  }, [hierarchicalDrawings, filterDuplicatesOnly, duplicateMap]);
+  }, [hierarchicalDrawings, qualityFilter, filterDuplicatesOnly, duplicateMap]);
+
+  // 💎 Phase 3: Row Selection & Bulk Update Handlers
+  const toggleRowSelection = useCallback((id: string) => {
+    setSelectedRowIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllRows = useCallback(() => {
+    if (selectedRowIds.size === displayedDrawings.length && displayedDrawings.length > 0) {
+      setSelectedRowIds(new Set());
+    } else {
+      setSelectedRowIds(new Set(displayedDrawings.map(d => d.id).filter(Boolean)));
+    }
+  }, [displayedDrawings, selectedRowIds.size]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedRowIds(new Set());
+  }, []);
+
+  const handleBulkUpdate = useCallback(async (updates: {
+    material?: string;
+    drawing_type?: string;
+    is_quote_included?: number;
+    exclude_reason?: string;
+  }) => {
+    if (selectedRowIds.size === 0 || !caseId) return;
+    setIsBulkUpdating(true);
+    try {
+      const res = await apiFetch(`/api/quotation-cases/${caseId}/drawings/bulk-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          drawingIds: Array.from(selectedRowIds),
+          updates
+        })
+      });
+      if (res.ok) {
+        setSelectedRowIds(new Set());
+        setIsMaterialDropdownOpen(false);
+        setShowCustomMaterialModal(false);
+        setShowBulkExcludeModal(false);
+        if (onBomUpdated) {
+          await onBomUpdated();
+        }
+      } else {
+        const err = await res.json();
+        alert(err.error || '일괄 수정 중 오류가 발생했습니다.');
+      }
+    } catch (e: any) {
+      alert('일괄 수정 요청 실패: ' + (e?.message || String(e)));
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  }, [caseId, selectedRowIds, onBomUpdated]);
 
   // 💎 Active Duplicate Group in CAD View
   const activeDuplicateGroup = useMemo(() => {
@@ -1965,49 +2107,49 @@ export default function CadViewer({
       {/* 2. SHEET VIEW MODE: 100% Full-Width, 0px Margin Excel Spreadsheet Grid   */}
       {/* ========================================================================= */}
       <div className={viewMode === 'SHEET' ? 'flex-1 min-h-[500px] h-[calc(100vh-220px)] overflow-hidden flex flex-col bg-[#070e1b] rounded-xl my-1 border border-slate-800/80 animate-in fade-in' : 'hidden'}>
-          {/* Sheet Header Summary Bar */}
-          <div className="flex flex-wrap items-center justify-between px-4 py-2.5 bg-slate-950 border-b border-slate-800 text-xs gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="font-bold text-white flex items-center space-x-1.5">
-                <FileSpreadsheet className="w-4 h-4 text-amber-400" />
-                <span>표제란 엑셀 시트 전수 목록</span>
-              </span>
-              <span className="text-slate-400 text-[11px]">
-                메인 조립도 <strong className="text-blue-400">{mainDrawings.length}개</strong>
-                {subAssyDrawings.length > 0 && (
-                  <> · 서브 조립도 <strong className="text-emerald-400">{subAssyDrawings.length}개</strong></>
-                )}
-                · 단위 부품도 <strong className="text-purple-400">{partDrawings.length}개</strong> (총 {drawings.length}개)
-              </span>
+          {/* Sheet Header Summary & Quality Filter Chips Bar */}
+          <div className="flex flex-col bg-slate-950 border-b border-slate-800 text-xs shrink-0">
+            {/* Upper Summary Bar */}
+            <div className="flex flex-wrap items-center justify-between px-4 py-2 border-b border-slate-900 gap-2">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="font-bold text-white flex items-center space-x-1.5 text-xs">
+                  <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+                  <span>표제란 엑셀 시트</span>
+                </span>
+                <span className="text-slate-400 text-[11px]">
+                  메인 조립 <strong className="text-blue-400">{mainDrawings.length}</strong> · 서브 조립 <strong className="text-emerald-400">{subAssyDrawings.length}</strong> · 단위 부품 <strong className="text-purple-400">{partDrawings.length}</strong> (총 {drawings.length}개)
+                </span>
 
-              {/* Tree Quick Controls */}
-              <div className="flex items-center space-x-1.5 ml-1 border-l border-slate-800 pl-2.5">
-                <button
-                  onClick={expandAll}
-                  className="px-2 py-0.5 text-[10.5px] bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700 transition-colors cursor-pointer"
-                  title="모든 조립도 계층 펼치기"
-                >
-                  전체 펼치기
-                </button>
-                <button
-                  onClick={collapseAll}
-                  className="px-2 py-0.5 text-[10.5px] bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700 transition-colors cursor-pointer"
-                  title="메인 조립도만 남기고 하위 접기"
-                >
-                  전체 접기
-                </button>
-              </div>
-
-              {/* 💎 Quotation Live Summary Bar & Quick Toggles */}
-              <div className="flex items-center space-x-2 border-l border-slate-800 pl-2.5">
-                <div className="flex items-center space-x-1.5 px-2.5 py-0.5 bg-blue-950/70 border border-blue-500/40 rounded-lg shadow-2xs">
-                  <span className="text-[10.5px] text-blue-300">견적 포함:</span>
-                  <span className="text-[11px] font-bold text-white font-mono">{quoteSummary.includedParts} / {quoteSummary.totalParts}개</span>
-                  <span className="text-slate-600 text-[10px]">|</span>
-                  <span className="text-[10.5px] text-emerald-300">공급가액:</span>
-                  <span className="text-[11.5px] font-bold text-emerald-400 font-mono">₩{quoteSummary.totalSubtotal.toLocaleString()}</span>
+                {/* Tree Quick Controls */}
+                <div className="flex items-center space-x-1 border-l border-slate-800 pl-2">
+                  <button
+                    onClick={expandAll}
+                    className="px-2 py-0.5 text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700 transition-colors cursor-pointer"
+                    title="모든 조립도 계층 펼치기"
+                  >
+                    전체 펼치기
+                  </button>
+                  <button
+                    onClick={collapseAll}
+                    className="px-2 py-0.5 text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded border border-slate-700 transition-colors cursor-pointer"
+                    title="메인 조립도만 남기고 하위 접기"
+                  >
+                    전체 접기
+                  </button>
                 </div>
-                <div className="flex items-center space-x-1">
+
+                {/* Quotation Live Summary */}
+                <div className="flex items-center space-x-2 border-l border-slate-800 pl-2">
+                  <div className="flex items-center space-x-1.5 px-2 py-0.5 bg-blue-950/70 border border-blue-500/40 rounded text-[11px]">
+                    <span className="text-blue-300">견적 포함:</span>
+                    <span className="font-bold text-white font-mono">{quoteSummary.includedParts}/{quoteSummary.totalParts}</span>
+                    {showPriceColumns && (
+                      <>
+                        <span className="text-slate-600">|</span>
+                        <span className="font-bold text-emerald-400 font-mono">₩{quoteSummary.totalSubtotal.toLocaleString()}</span>
+                      </>
+                    )}
+                  </div>
                   <button
                     onClick={() => onToggleAllQuoteDrawings && onToggleAllQuoteDrawings(true)}
                     className="px-2 py-0.5 text-[10px] bg-blue-900/50 hover:bg-blue-800 text-blue-200 hover:text-white rounded border border-blue-600/50 transition-colors cursor-pointer"
@@ -2022,57 +2164,151 @@ export default function CadViewer({
                   >
                     전체 제외
                   </button>
-                  {duplicateStats.rowCount > duplicateStats.groupCount && (
-                    <button
-                      type="button"
-                      onClick={() => onExcludeDuplicates && onExcludeDuplicates()}
-                      className="px-2.5 py-0.5 text-[10px] bg-purple-950/80 hover:bg-purple-900 text-purple-200 hover:text-white rounded border border-purple-500/50 transition-colors cursor-pointer font-bold flex items-center space-x-1 shadow-2xs"
-                      title="동일 도면 번호 중복 배치 시 1번째 원본만 견적에 남기고 2번째 이후 중복본은 견적에서 자동 일괄 제외합니다."
-                    >
-                      <Sparkles className="w-3 h-3 text-purple-400" />
-                      <span>중복본 일괄 제외 ({duplicateStats.rowCount - duplicateStats.groupCount}건)</span>
-                    </button>
-                  )}
                 </div>
+              </div>
 
-                {/* ⚠️ Duplicate Drawings Quick Filter Toggle */}
-                {duplicateStats.rowCount > 0 && (
+              {/* Right Side Tools: Price Column Toggle & Duplicate Redundancy */}
+              <div className="flex items-center space-x-1.5">
+                {exactDuplicateStats.redundantCount > 0 && (
                   <button
-                    onClick={() => setFilterDuplicatesOnly(!filterDuplicatesOnly)}
-                    className={`px-2.5 py-1 text-[11px] rounded-lg font-bold flex items-center space-x-1.5 transition-all cursor-pointer whitespace-nowrap shadow-xs ${
-                      filterDuplicatesOnly
-                        ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300 font-extrabold shadow-amber-400/20'
-                        : 'bg-amber-950/50 hover:bg-amber-900/70 border border-amber-500/50 text-amber-300'
-                    }`}
-                    title={
-                      filterDuplicatesOnly
-                        ? `전체 ${drawings.length}개 도면으로 복귀`
-                        : `동일 도면 번호 중복 항목만 모아보기 (총 ${duplicateStats.rowCount}건 / ${duplicateStats.groupCount}개 그룹)`
-                    }
+                    type="button"
+                    onClick={() => onExcludeDuplicates && onExcludeDuplicates()}
+                    className="px-2.5 py-1 text-[11px] bg-purple-950/90 hover:bg-purple-900 text-purple-200 hover:text-white rounded-lg border border-purple-500/50 transition-colors cursor-pointer font-bold flex items-center space-x-1 shadow-2xs"
+                    title="동일 도면 번호 및 동일 품명 중복 배치 시 1번째 원본만 견적에 남기고 2번째 이후 중복본은 견적에서 자동 일괄 제외합니다."
                   >
-                    <AlertTriangle className={`w-3.5 h-3.5 ${filterDuplicatesOnly ? 'text-slate-950' : 'text-amber-400'}`} />
-                    <span>
-                      {filterDuplicatesOnly
-                        ? `중복 필터 해제 (${displayedDrawings.length}건 표시 중)`
-                        : `중복 도면만 보기 (${duplicateStats.rowCount}건)`}
-                    </span>
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                    <span>중복본 일괄 제외 ({exactDuplicateStats.redundantCount}건)</span>
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setShowPriceColumns(!showPriceColumns)}
+                  className={`px-2.5 py-1 text-[11px] rounded-lg font-bold flex items-center space-x-1 transition-all cursor-pointer border ${
+                    showPriceColumns
+                      ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300 hover:bg-emerald-900'
+                      : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                  title={showPriceColumns ? '단가/금액 컬럼을 숨겨 부품 식별 정보 영역을 넓힙니다' : '단가/금액 컬럼을 표시합니다'}
+                >
+                  <span>₩</span>
+                  <span>단가 컬럼 {showPriceColumns ? '숨김' : '표시'}</span>
+                </button>
               </div>
             </div>
 
-            <div className="text-[11px] text-emerald-400 flex items-center space-x-1.5">
-              <Check className="w-3.5 h-3.5 shrink-0" />
-              <span>💡 행을 클릭(또는 더블클릭)하면 해당 도면 위치로 정밀 줌인됩니다.</span>
+            {/* Lower Quality Filter Chips Bar */}
+            <div className="flex flex-wrap items-center justify-between px-4 py-1.5 bg-slate-900/60 border-t border-slate-800/80 gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10.5px] font-bold text-slate-400 mr-1">상태 필터:</span>
+                
+                {/* 1. All */}
+                <button
+                  onClick={() => setQualityFilter('ALL')}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+                    qualityFilter === 'ALL'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  전체 ({drawings.length})
+                </button>
+
+                {/* 2. No Material Warning Filter */}
+                <button
+                  onClick={() => setQualityFilter(qualityFilter === 'NO_MATERIAL' ? 'ALL' : 'NO_MATERIAL')}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-all cursor-pointer flex items-center space-x-1 ${
+                    qualityFilter === 'NO_MATERIAL'
+                      ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-300 shadow-xs'
+                      : qualityStats.noMaterial > 0
+                      ? 'bg-amber-950/60 border border-amber-500/50 text-amber-300 hover:bg-amber-900/60'
+                      : 'bg-slate-800/50 text-slate-500 cursor-default'
+                  }`}
+                  title="표제란에 재질이 기재되지 않은 단위 부품 모아보기"
+                >
+                  <span>⚠️ 재질 미기재</span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-black/30 text-[10px] font-mono">{qualityStats.noMaterial}건</span>
+                </button>
+
+                {/* 3. Unit Parts */}
+                <button
+                  onClick={() => setQualityFilter(qualityFilter === 'PARTS' ? 'ALL' : 'PARTS')}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
+                    qualityFilter === 'PARTS'
+                      ? 'bg-purple-600 text-white shadow-xs font-bold'
+                      : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  📄 단위 부품 ({qualityStats.parts})
+                </button>
+
+                {/* 4. Assemblies */}
+                <button
+                  onClick={() => setQualityFilter(qualityFilter === 'ASSY' ? 'ALL' : 'ASSY')}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
+                    qualityFilter === 'ASSY'
+                      ? 'bg-blue-600 text-white shadow-xs font-bold'
+                      : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  📦 조립도 ({qualityStats.assy})
+                </button>
+
+                {/* 5. Duplicates */}
+                {qualityStats.duplicates > 0 && (
+                  <button
+                    onClick={() => setQualityFilter(qualityFilter === 'DUPLICATES' ? 'ALL' : 'DUPLICATES')}
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-all cursor-pointer flex items-center space-x-1 ${
+                      qualityFilter === 'DUPLICATES'
+                        ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300 shadow-xs'
+                        : 'bg-amber-950/50 border border-amber-500/40 text-amber-300 hover:bg-amber-900/60'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>중복/공용 ({qualityStats.duplicates})</span>
+                  </button>
+                )}
+
+                {/* 6. Excluded */}
+                {qualityStats.excluded > 0 && (
+                  <button
+                    onClick={() => setQualityFilter(qualityFilter === 'EXCLUDED' ? 'ALL' : 'EXCLUDED')}
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
+                      qualityFilter === 'EXCLUDED'
+                        ? 'bg-rose-600 text-white shadow-xs font-bold'
+                        : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400'
+                    }`}
+                  >
+                    🚫 견적 제외 ({qualityStats.excluded})
+                  </button>
+                )}
+              </div>
+
+              <div className="text-[10.5px] text-slate-400 flex items-center space-x-1">
+                <span>표시 중: <strong className="text-white font-mono">{displayedDrawings.length}</strong> / {drawings.length}개</span>
+              </div>
             </div>
           </div>
 
           {/* Spreadsheet Table Body */}
-          <div className="flex-1 overflow-auto text-xs">
+          <div className="flex-1 overflow-auto text-xs relative">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-950 text-slate-300 border-b border-slate-800 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10 shadow-xs">
-                  <th className="py-2 px-2 w-10 text-center border-r border-slate-800">No.</th>
+                  {/* Multi-select Master Checkbox */}
+                  <th className="py-2 px-2 w-9 text-center border-r border-slate-800">
+                    <TriStateCheckbox
+                      state={
+                        selectedRowIds.size === 0
+                          ? 'unchecked'
+                          : selectedRowIds.size === displayedDrawings.length && displayedDrawings.length > 0
+                          ? 'checked'
+                          : 'indeterminate'
+                      }
+                      onChange={toggleSelectAllRows}
+                      title={selectedRowIds.size === displayedDrawings.length ? '전체 선택 해제' : '표시된 도면 전체 선택'}
+                    />
+                  </th>
+                  <th className="py-2 px-1.5 w-10 text-center border-r border-slate-800">No.</th>
                   <th className="py-2 px-1 text-center w-12 border-r border-slate-800">
                     <div className="flex flex-col items-center justify-center space-y-0.5">
                       <span className="text-[10px] text-slate-400">견적</span>
@@ -2083,25 +2319,35 @@ export default function CadViewer({
                       />
                     </div>
                   </th>
-                  <th className="py-2 px-2.5 w-44 border-r border-slate-800">도면 구분 (계층)</th>
-                  <th className="py-2 px-1.5 w-20 text-center border-r border-slate-800">위치</th>
-                  <th className="py-2 px-2.5 w-36 border-r border-slate-800">도면 번호 (DWG. No.)</th>
-                  <th className="py-2 px-2.5 w-44 max-w-[170px] border-r border-slate-800">Sub Name (품명)</th>
-                  <th className="py-2 px-2 w-24 text-right border-r border-slate-800">
+                  <th className="py-2 px-2.5 w-40 border-r border-slate-800">도면 구분 (계층)</th>
+                  <th className="py-2 px-1.5 w-14 text-center border-r border-slate-800">위치</th>
+                  <th className="py-2 px-2.5 w-44 border-r border-slate-800">도면 번호 (DWG. No.)</th>
+                  <th className="py-2 px-2.5 min-w-[160px] max-w-[220px] border-r border-slate-800">Sub Name (품명)</th>
+                  
+                  {/* 재질 (품명 바로 옆으로 전진 배치하여 가독성 극대화) */}
+                  <th className="py-2 px-2.5 w-28 text-center border-r border-slate-800">재질 (Material)</th>
+
+                  <th className="py-2 px-2 w-20 text-right border-r border-slate-800">
                     <div className="flex items-center justify-end space-x-1 whitespace-nowrap" title={`견적 포함 수량 합계: ${quoteSummary.includedQty} EA / 전체 수량: ${quoteSummary.totalQty} EA`}>
                       <span>수량</span>
                       <span className="text-[9.5px] text-blue-300 bg-blue-950/80 px-1 py-0.5 rounded border border-blue-500/40 font-mono font-bold">
-                        ({quoteSummary.includedQty} EA)
+                        ({quoteSummary.includedQty})
                       </span>
                     </div>
                   </th>
-                  <th className="py-2 px-2 w-24 text-right border-r border-slate-800">단가 (원)</th>
-                  <th className="py-2 px-2.5 w-28 text-right border-r border-slate-800">금액 (원)</th>
-                  <th className="py-2 px-2 w-24 border-r border-slate-800">Project</th>
-                  <th className="py-2 px-2 w-20 border-r border-slate-800">고객사</th>
-                  <th className="py-2 px-2 w-24 border-r border-slate-800">설계자/일자</th>
-                  <th className="py-2 px-2 w-20 border-r border-slate-800">축척/Rev</th>
-                  <th className="py-2 px-2.5 text-center">재질</th>
+
+                  {/* 조건부: 단가 및 금액 컬럼 (단가 컬럼 토글 시만 노출) */}
+                  {showPriceColumns && (
+                    <>
+                      <th className="py-2 px-2 w-24 text-right border-r border-slate-800">단가 (원)</th>
+                      <th className="py-2 px-2.5 w-28 text-right border-r border-slate-800">금액 (원)</th>
+                    </>
+                  )}
+
+                  <th className="py-2 px-2 w-24 border-r border-slate-800">축척/Rev</th>
+                  <th className="py-2 px-2 w-28 border-r border-slate-800">설계자/일자</th>
+                  <th className="py-2 px-2 w-28 border-r border-slate-800">Project</th>
+                  <th className="py-2 px-2 w-24">고객사</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80 font-mono text-[11.5px]">
@@ -2120,15 +2366,21 @@ export default function CadViewer({
                     const uniqueNamesInGroup = isDuplicate ? new Set(dupGroup.map((g: any) => (g.drawing_name_raw || '').trim())) : new Set();
                     const isSharedDwgPart = uniqueNamesInGroup.size > 1;
 
+                    const isRowSelected = selectedRowIds.has(d.id);
+                    const matStr = (d.material || '').trim();
+                    const hasMaterial = matStr !== '' && matStr !== '-';
+
                     return (
                       <tr
                         key={d.id || i}
                         onClick={() => handleZoomToRow(d)}
                         onDoubleClick={() => handleZoomToRow(d)}
-                        title="클릭 시 웹 CAD 화면에서 이 도면 위치로 줌인합니다."
+                        title="클릭 시 웹 CAD 화면에서 이 도면 위치로 정밀 줌인합니다."
                         className={`transition-colors duration-100 cursor-pointer ${
-                          !info.isIncluded
-                            ? 'bg-slate-950/80 text-slate-300 hover:bg-slate-900 hover:text-white border-l-2 border-l-rose-500/70'
+                          isRowSelected
+                            ? 'bg-blue-950/70 border-l-2 border-l-blue-400 text-blue-100'
+                            : !info.isIncluded
+                            ? 'bg-slate-950/80 text-slate-400 hover:bg-slate-900 border-l-2 border-l-rose-500/70'
                             : isMain
                             ? 'bg-blue-950/35 hover:bg-blue-900/50 text-blue-100 font-semibold'
                             : isSubAssy
@@ -2136,12 +2388,28 @@ export default function CadViewer({
                             : 'bg-slate-900/40 hover:bg-slate-800/80 text-slate-300'
                         }`}
                       >
+                        {/* Multi-Select Row Checkbox */}
+                        <td
+                          className="py-2 px-2 text-center border-r border-slate-800/70"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleRowSelection(d.id);
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isRowSelected}
+                            onChange={() => toggleRowSelection(d.id)}
+                            className="rounded border-slate-600 bg-slate-900 text-blue-600 focus:ring-0 cursor-pointer w-3.5 h-3.5"
+                          />
+                        </td>
+
                         {/* No. */}
-                        <td className="py-2 px-2.5 text-center border-r border-slate-800/70 font-sans text-slate-400">
+                        <td className="py-2 px-1.5 text-center border-r border-slate-800/70 font-sans text-slate-400">
                           {i + 1}
                         </td>
 
-                        {/* 💎 견적 체크박스 (Tri-State 지원 & 제외 사유 태깅) */}
+                        {/* 견적 체크박스 */}
                         <td 
                           className="py-2 px-2 text-center border-r border-slate-800/70 relative"
                           onClick={(e) => e.stopPropagation()}
@@ -2174,7 +2442,7 @@ export default function CadViewer({
                                     setReasonMenuDwgId(reasonMenuDwgId === (d.id || d.drawing_no_raw) ? null : (d.id || d.drawing_no_raw));
                                   }}
                                   className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-950/80 text-rose-300 border border-rose-700/70 hover:bg-rose-900 transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
-                                  title="클릭 시 견적 제외 사유(고객 사급품, 중복 도면 등)를 선택합니다."
+                                  title="클릭 시 견적 제외 사유를 선택합니다."
                                 >
                                   제외{d.exclude_reason ? `:${d.exclude_reason.slice(0, 4)}` : ''}
                                 </button>
@@ -2276,7 +2544,7 @@ export default function CadViewer({
                                   isSharedDwgPart
                                     ? '동일 도면 번호 공유 부품 (품명 상이)'
                                     : '동일 도면 번호 복수 배치'
-                                }: 전체 ${dupTotal}개 위치 중 ${dupIndex}번째 (클릭 시 CAD에서 전체 동시 비교)`}
+                                }: 전체 ${dupTotal}개 위치 중 ${dupIndex}번째`}
                               >
                                 {isSharedDwgPart ? `공용 ${dupIndex}/${dupTotal}` : `중복 ${dupIndex}/${dupTotal}`}
                               </button>
@@ -2284,12 +2552,27 @@ export default function CadViewer({
                           </div>
                         </td>
 
-                        {/* Sub Name (1행 컴팩트 폭 + 호버 시 자동 마키 스크롤) */}
-                        <td className={`py-2 px-2.5 border-r border-slate-800/70 font-sans font-bold max-w-[170px] overflow-hidden ${!info.isIncluded ? 'text-slate-300' : 'text-slate-100'}`}>
+                        {/* Sub Name (품명) */}
+                        <td className={`py-2 px-2.5 border-r border-slate-800/70 font-sans font-bold min-w-[160px] max-w-[220px] overflow-hidden ${!info.isIncluded ? 'text-slate-400' : 'text-slate-100'}`}>
                           <HoverMarqueeText text={d.drawing_name_raw || '-'} />
                         </td>
 
-                        {/* 💎 수량 (Q'ty) */}
+                        {/* 재질 (Material) - 품명 옆에 배치하여 누락 여부 즉시 확인 */}
+                        <td className="py-1.5 px-2 text-center border-r border-slate-800/70 font-sans text-[11px]">
+                          {isAssy ? (
+                            <span className="text-slate-500 text-[10px]">-</span>
+                          ) : hasMaterial ? (
+                            <span className="px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-bold font-mono">
+                              {matStr}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-500/60 text-amber-300 font-bold text-[10px] inline-flex items-center space-x-0.5" title="표제란 재질 미기재 - 일괄 변경 툴바로 지정 가능">
+                              <span>⚠️ 미기재</span>
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 수량 (Q'ty) */}
                         <td className="py-2 px-2.5 border-r border-slate-800/70 text-right font-mono text-slate-300">
                           {isAssy ? (
                             <span className="text-slate-500 text-[10px]">-</span>
@@ -2298,34 +2581,46 @@ export default function CadViewer({
                           )}
                         </td>
 
-                        {/* 💎 단가 (Unit Price) */}
-                        <td className="py-2 px-2.5 border-r border-slate-800/70 text-right font-mono text-slate-300">
-                          {isAssy ? (
-                            <span className="text-slate-500 text-[10px]">-</span>
-                          ) : info.unitPrice > 0 ? (
-                            <span>₩{info.unitPrice.toLocaleString()}</span>
-                          ) : (
-                            <span className="text-slate-500">0</span>
-                          )}
+                        {/* 조건부: 단가 및 금액 컬럼 */}
+                        {showPriceColumns && (
+                          <>
+                            <td className="py-2 px-2.5 border-r border-slate-800/70 text-right font-mono text-slate-300">
+                              {isAssy ? (
+                                <span className="text-slate-500 text-[10px]">-</span>
+                              ) : info.unitPrice > 0 ? (
+                                <span>₩{info.unitPrice.toLocaleString()}</span>
+                              ) : (
+                                <span className="text-slate-500">0</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-800/70 text-right font-mono font-bold">
+                              {isAssy ? (
+                                info.amount > 0 ? (
+                                  <span className="text-cyan-400 text-[11px]" title="하위 포함 부품 금액 소계">
+                                    소계 ₩{info.amount.toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-600 text-[10px]">소계 ₩0</span>
+                                )
+                              ) : !info.isIncluded ? (
+                                <span className="text-slate-600 text-[10.5px]">₩0 (제외)</span>
+                              ) : info.amount > 0 ? (
+                                <span className="text-emerald-400">₩{info.amount.toLocaleString()}</span>
+                              ) : (
+                                <span className="text-slate-500">₩0</span>
+                              )}
+                            </td>
+                          </>
+                        )}
+
+                        {/* 축척 / Rev */}
+                        <td className="py-1.5 px-2 border-r border-slate-800/70 text-slate-400 text-[11px]">
+                          {d.scale || '-'} <span className="text-slate-600">/</span> {d.revision || '-'}
                         </td>
 
-                        {/* 💎 금액 (Amount) */}
-                        <td className="py-2 px-3 border-r border-slate-800/70 text-right font-mono font-bold">
-                          {isAssy ? (
-                            info.amount > 0 ? (
-                              <span className="text-cyan-400 text-[11px]" title="하위 포함 부품 금액 소계">
-                                소계 ₩{info.amount.toLocaleString()}
-                              </span>
-                            ) : (
-                              <span className="text-slate-600 text-[10px]">소계 ₩0</span>
-                            )
-                          ) : !info.isIncluded ? (
-                            <span className="text-slate-600 text-[10.5px]">₩0 (제외)</span>
-                          ) : info.amount > 0 ? (
-                            <span className="text-emerald-400">₩{info.amount.toLocaleString()}</span>
-                          ) : (
-                            <span className="text-slate-500">₩0</span>
-                          )}
+                        {/* 설계자 */}
+                        <td className="py-1.5 px-2 border-r border-slate-800/70 font-sans text-slate-400 text-[11px]">
+                          {d.designer || '-'} <span className="text-slate-600 text-[10px]">({d.design_date || '-'})</span>
                         </td>
 
                         {/* Project Name */}
@@ -2334,36 +2629,145 @@ export default function CadViewer({
                         </td>
 
                         {/* 고객사 */}
-                        <td className="py-1.5 px-2 border-r border-slate-800/70 font-sans text-slate-400 text-[11px] truncate max-w-[80px]" title={d.customer || '-'}>
+                        <td className="py-1.5 px-2 font-sans text-slate-400 text-[11px] truncate max-w-[80px]" title={d.customer || '-'}>
                           {d.customer || '-'}
-                        </td>
-
-                        {/* 설계자 */}
-                        <td className="py-1.5 px-2 border-r border-slate-800/70 font-sans text-slate-400 text-[11px]">
-                          {d.designer || '-'} <span className="text-slate-600 text-[10px]">({d.design_date || '-'})</span>
-                        </td>
-
-                        {/* 축척 / Rev */}
-                        <td className="py-1.5 px-2 border-r border-slate-800/70 text-slate-400 text-[11px]">
-                          {d.scale || '-'} <span className="text-slate-600">/</span> {d.revision || '-'}
-                        </td>
-
-                        {/* 재질 */}
-                        <td className="py-1.5 px-2 text-center font-sans text-emerald-400 font-medium text-[11px]">
-                          {d.material || '-'}
                         </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan={14} className="py-12 text-center text-slate-500 font-sans">
-                      검색 조건과 일치하는 도면 표제란 데이터가 없습니다.
+                    <td colSpan={showPriceColumns ? 15 : 13} className="py-12 text-center text-slate-500 font-sans">
+                      검색 및 필터 조건과 일치하는 도면 데이터가 없습니다.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+
+            {/* 💎 Phase 3: Floating Action Toolbar for Multi-Selected Rows */}
+            {selectedRowIds.size > 0 && (
+              <div 
+                ref={bulkBarRef}
+                className="sticky bottom-3 left-4 right-4 mx-auto w-[calc(100%-2rem)] max-w-4xl bg-slate-900/95 backdrop-blur-md border border-blue-500/60 rounded-2xl shadow-2xl p-3 z-30 flex flex-wrap items-center justify-between gap-3 text-white animate-in slide-in-from-bottom-3"
+              >
+                <div className="flex items-center space-x-3">
+                  <span className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-sm shadow-md">
+                    {selectedRowIds.size}
+                  </span>
+                  <div>
+                    <span className="text-xs font-bold text-white block">도면 {selectedRowIds.size}건 선택됨</span>
+                    <span className="text-[10px] text-slate-400">선택된 도면에 대해 재질 또는 견적 상태를 일괄 적용합니다.</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Bulk Material Menu */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      disabled={isBulkUpdating}
+                      onClick={() => setIsMaterialDropdownOpen(!isMaterialDropdownOpen)}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                    >
+                      <span>재질 일괄 변경</span>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+
+                    {isMaterialDropdownOpen && (
+                      <div className="absolute right-0 bottom-full mb-2 w-64 bg-slate-950 border border-slate-700 rounded-2xl shadow-2xl p-3 z-50 space-y-2">
+                        <div className="text-[11px] font-bold text-slate-300 pb-1.5 border-b border-slate-800 flex justify-between items-center">
+                          <span>표준 재질 프리셋</span>
+                          <span className="text-[10px] text-blue-400">{selectedRowIds.size}개 도면 적용</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {['SS400', 'S45C', 'AL6061', 'SUS304', 'SUS316', 'SKD11', 'MC-NYLON', 'POM'].map(mat => (
+                            <button
+                              key={mat}
+                              type="button"
+                              onClick={() => handleBulkUpdate({ material: mat })}
+                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-blue-600 text-slate-200 hover:text-white rounded-lg text-xs font-mono font-bold transition-colors text-left"
+                            >
+                              {mat}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="pt-2 border-t border-slate-800 flex items-center space-x-1.5">
+                          <input
+                            type="text"
+                            placeholder="기타 재질 직접 입력..."
+                            value={customMaterialInput}
+                            onChange={(e) => setCustomMaterialInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && customMaterialInput.trim()) {
+                                handleBulkUpdate({ material: customMaterialInput.trim() });
+                              }
+                            }}
+                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                          />
+                          <button
+                            type="button"
+                            disabled={!customMaterialInput.trim() || isBulkUpdating}
+                            onClick={() => handleBulkUpdate({ material: customMaterialInput.trim() })}
+                            className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                          >
+                            적용
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bulk Drawing Type (Part vs SubAssy) */}
+                  <button
+                    type="button"
+                    disabled={isBulkUpdating}
+                    onClick={() => handleBulkUpdate({ drawing_type: 'UNIT_PART' })}
+                    className="px-2.5 py-1.5 bg-purple-950/90 hover:bg-purple-900 text-purple-200 rounded-xl text-xs font-bold border border-purple-500/50 transition-colors cursor-pointer disabled:opacity-50"
+                    title="선택된 도면을 단위 부품으로 일괄 지정"
+                  >
+                    단위부품 지정
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isBulkUpdating}
+                    onClick={() => handleBulkUpdate({ drawing_type: 'SUB_ASSEMBLY' })}
+                    className="px-2.5 py-1.5 bg-emerald-950/90 hover:bg-emerald-900 text-emerald-200 rounded-xl text-xs font-bold border border-emerald-500/50 transition-colors cursor-pointer disabled:opacity-50"
+                    title="선택된 도면을 서브 조립도로 일괄 지정"
+                  >
+                    서브조립 지정
+                  </button>
+
+                  {/* Bulk Quote Inclusion */}
+                  <button
+                    type="button"
+                    disabled={isBulkUpdating}
+                    onClick={() => handleBulkUpdate({ is_quote_included: 1 })}
+                    className="px-2.5 py-1.5 bg-blue-900/80 hover:bg-blue-800 text-blue-200 rounded-xl text-xs font-bold border border-blue-500/40 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    견적 포함
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isBulkUpdating}
+                    onClick={() => handleBulkUpdate({ is_quote_included: 0, exclude_reason: '견적 담당자 일괄 제외' })}
+                    className="px-2.5 py-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-200 rounded-xl text-xs font-bold border border-rose-500/40 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    견적 제외
+                  </button>
+
+                  {/* Clear Selection */}
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="선택 해제"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -50,7 +50,7 @@ test('1단계: LOW 신뢰도 품목이 존재하면 2단계 진행이 차단되�
 });
 
 test('1단계: 모든 품목 신뢰도 보강 완료 시 2단계 진행 허용', () => {
-  const enriched = mockDrawings.map((d) => ({ ...d, confidence: 'HIGH' as const }));
+  const enriched = mockDrawings.map((d) => ({ ...d, confidence: 'HIGH' as string }));
   const canProceed = !enriched.some((d) => d.confidence === 'LOW');
   assert.strictEqual(canProceed, true, '모든 부품 신뢰도가 보강되어 승인 가능해야 함');
 });
@@ -75,9 +75,9 @@ const reviewLines: MockReviewLine[] = [
 ];
 
 test('2단계: 미확정 행이 남아있을 경우 3단계 결재/발행 상신 차단', () => {
-  const unconfirmedCount = reviewLines.filter((l) => l.status !== 'CONFIRMED').length;
+  const unconfirmedCount: number = reviewLines.filter((l) => l.status !== 'CONFIRMED').length;
   assert.strictEqual(unconfirmedCount, 1, '미확정 1건이 남아있어야 함');
-  const canPublish = unconfirmedCount === 0;
+  const canPublish = (unconfirmedCount as number) === 0;
   assert.strictEqual(canPublish, false, '미확정 행 존재 시 결재/발행 버튼 비활성화');
 });
 

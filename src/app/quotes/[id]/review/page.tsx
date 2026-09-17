@@ -4,7 +4,10 @@ import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Send, CheckCircle2, RefreshCw, FileText, AlertTriangle, ExternalLink } from 'lucide-react';
+import {
+  ArrowLeft, Send, CheckCircle2, RefreshCw, FileText, AlertTriangle,
+  ExternalLink, ChevronDown, ChevronUp, Sparkles, Layers
+} from 'lucide-react';
 import QuoteLineGrid, { QuoteReviewLine } from '@/components/review/QuoteLineGrid';
 import CostBreakdownPanel from '@/components/review/CostBreakdownPanel';
 import MasterRecommendationCard, { RecommendationItem } from '@/components/review/MasterRecommendationCard';
@@ -20,45 +23,14 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const [lines, setLines] = useState<QuoteReviewLine[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [filterType, setFilterType] = useState<string>('ALL');
+  const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
 
-  // 모의 MASTER DB 추천 목록 (스토리보드 시나리오 Top-3)
-  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([
-    {
-      id: 'rec_1',
-      sourceCompany: '협력A',
-      partNo: 'VB-203',
-      revision: 'A',
-      unitPrice: 37000,
-      confirmedDate: '2026-07',
-      isOrdered: true,
-      matchReason: 'REVISION_MATCH',
-      specDesc: 'SUS316 Ø25×180'
-    },
-    {
-      id: 'rec_2',
-      sourceCompany: '협력B',
-      partNo: 'PS-11',
-      revision: '0',
-      unitPrice: 34000,
-      confirmedDate: '2026-05',
-      isOrdered: false,
-      matchReason: 'SPEC_SIMILAR',
-      specDesc: 'SUS316 Ø25×200'
-    },
-    {
-      id: 'rec_3',
-      sourceCompany: '이관데이터',
-      partNo: 'STEM-25',
-      revision: '-',
-      unitPrice: 36000,
-      confirmedDate: '2024',
-      isOrdered: false,
-      matchReason: 'SPEC_SIMILAR',
-      specDesc: 'SUS316 Ø25'
-    }
-  ]);
+  // 실제 사내 마스터 DB 및 과거 수주 지식풀 추천 목록
+  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
+  const [loadingRecs, setLoadingRecs] = useState<boolean>(false);
+  const [submittingQuote, setSubmittingQuote] = useState<boolean>(false);
 
-  // 케이스 데이터 로드
+  // 케이스 데이터 로드 (실데이터 우선 바인딩 & 자동 확정 승계)
   useEffect(() => {
     async function loadData() {
       setLoading(true);
@@ -68,49 +40,66 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           const json = await res.json();
           setCaseInfo(json.case);
 
-          const norm = json.normalizedItems || [];
-          if (norm.length > 0) {
+          // 1. 실제 견적서 품목(quoteItems)이 이미 생성되어 있는 경우
+          if (Array.isArray(json.quoteItems) && json.quoteItems.length > 0) {
             setLines(
-              norm.map((it: any, idx: number) => {
-                const partType = (it.spec_candidate || '').includes('BOLT') ? 'COMMERCIAL' :
-                                 (it.material_candidate || '').includes('SCS') ? 'CASTING' : 'MACHINING';
+              json.quoteItems.map((qi: any, idx: number) => {
+                const hasPrice = Number(qi.unit_price) > 0;
+                const isConfirmed = hasPrice && qi.is_included !== 0;
+                const specLower = (qi.specification || '').toLowerCase();
+                const matLower = (qi.material || '').toLowerCase();
+                const partType = specLower.includes('bolt') || specLower.includes('nut') || specLower.includes('washer') ? 'COMMERCIAL' :
+                                 matLower.includes('scs') || matLower.includes('cast') || matLower.includes('gcd') ? 'CASTING' : 'MACHINING';
+                const supplyPrice = Number(qi.unit_price) || 0;
+                const unitCost = Math.round(supplyPrice * 0.82);
+
+                return {
+                  id: qi.id,
+                  itemNo: qi.item_no || idx + 1,
+                  partNo: qi.drawing_no || qi.master_code || `PART-${idx + 1}`,
+                  partName: qi.item_name || 'BOM 부품',
+                  partType: partType,
+                  material: qi.material || 'SS400',
+                  quantity: Number(qi.quantity) || 1,
+                  unitCost: unitCost,
+                  supplyPrice: supplyPrice,
+                  status: isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW',
+                  balloonNo: String(qi.item_no || idx + 1),
+                  memo: qi.remark || ''
+                };
+              })
+            );
+          } else if (Array.isArray(json.normalizedItems) && json.normalizedItems.length > 0) {
+            // 2. 견적서 생성 전 정규화 BOM 항목(normalizedItems)이 있는 경우
+            const isCaseReady = json.case?.quote_readiness === 'READY_FOR_QUOTE';
+            setLines(
+              json.normalizedItems.map((it: any, idx: number) => {
+                const isApproved = isCaseReady || it.approval_status === 'APPROVED' || it.is_quote_included !== 0;
+                const specLower = (it.spec_candidate || '').toLowerCase();
+                const matLower = (it.material_candidate || '').toLowerCase();
+                const partType = specLower.includes('bolt') || specLower.includes('nut') ? 'COMMERCIAL' :
+                                 matLower.includes('scs') || matLower.includes('cast') ? 'CASTING' : 'MACHINING';
                 const unitCost = partType === 'CASTING' ? 345000 : partType === 'MACHINING' ? 34500 : 420;
                 const supplyPrice = Math.ceil(unitCost * 1.18 / 100) * 100;
 
                 return {
                   id: it.id,
                   itemNo: idx + 1,
-                  partNo: it.spec_candidate || `VB-20${idx + 1}`,
-                  partName: it.normalized_name || it.raw_name,
-                  partType: idx === 4 ? 'UNCLASSIFIED' : partType,
+                  partNo: it.spec_candidate || `BOM-${idx + 1}`,
+                  partName: it.normalized_name || it.raw_name || 'BOM 부품',
+                  partType: partType,
                   material: it.material_candidate || 'SS400',
-                  quantity: Number(it.quantity) || 20,
+                  quantity: Number(it.quantity) || 1,
                   unitCost,
                   supplyPrice,
-                  status: idx < 2 ? 'CONFIRMED' : idx === 2 ? 'NEEDS_REVIEW' : 'AUTO',
+                  status: isApproved ? 'CONFIRMED' : 'NEEDS_REVIEW',
                   balloonNo: String(idx + 1)
                 };
               })
             );
           } else {
-            // 샘플 또는 신규 건일 경우 스토리보드 표준 샘플 데이터 5건 자동 장착
-            setLines([
-              { id: 'sample_1', itemNo: 1, partNo: 'VB-201', partName: 'VALVE BODY', partType: 'CASTING', material: 'SCS13', quantity: 20, unitCost: 345000, supplyPrice: 412000, status: 'CONFIRMED', balloonNo: '1' },
-              { id: 'sample_2', itemNo: 2, partNo: 'VB-202', partName: 'BONNET', partType: 'CASTING', material: 'SCS13', quantity: 20, unitCost: 155000, supplyPrice: 188000, status: 'CONFIRMED', balloonNo: '2' },
-              { id: 'sample_3', itemNo: 3, partNo: 'VB-203', partName: 'STEM SHAFT', partType: 'MACHINING', material: 'SUS316', quantity: 20, unitCost: 34500, supplyPrice: 38500, status: 'NEEDS_REVIEW', balloonNo: '3', memo: '길이 180->190 변경' },
-              { id: 'sample_4', itemNo: 4, partNo: 'B-M12', partName: 'HEX BOLT M12', partType: 'COMMERCIAL', material: 'SUS304', quantity: 160, unitCost: 350, supplyPrice: 420, status: 'AUTO', balloonNo: '4' },
-              { id: 'sample_5', itemNo: 5, partNo: 'VB-209', partName: 'SEALING GASKET', partType: 'UNCLASSIFIED', material: 'PTFE', quantity: 20, unitCost: 0, supplyPrice: 0, status: 'AUTO', balloonNo: '9' }
-            ]);
+            setLines([]);
           }
-        } else {
-          // 케이스를 찾을 수 없는 경우에도 샘플 데이터 제공
-          setLines([
-            { id: 'sample_1', itemNo: 1, partNo: 'VB-201', partName: 'VALVE BODY', partType: 'CASTING', material: 'SCS13', quantity: 20, unitCost: 345000, supplyPrice: 412000, status: 'CONFIRMED', balloonNo: '1' },
-            { id: 'sample_2', itemNo: 2, partNo: 'VB-202', partName: 'BONNET', partType: 'CASTING', material: 'SCS13', quantity: 20, unitCost: 155000, supplyPrice: 188000, status: 'CONFIRMED', balloonNo: '2' },
-            { id: 'sample_3', itemNo: 3, partNo: 'VB-203', partName: 'STEM SHAFT', partType: 'MACHINING', material: 'SUS316', quantity: 20, unitCost: 34500, supplyPrice: 38500, status: 'NEEDS_REVIEW', balloonNo: '3', memo: '길이 180->190 변경' },
-            { id: 'sample_4', itemNo: 4, partNo: 'B-M12', partName: 'HEX BOLT M12', partType: 'COMMERCIAL', material: 'SUS304', quantity: 160, unitCost: 350, supplyPrice: 420, status: 'AUTO', balloonNo: '4' },
-            { id: 'sample_5', itemNo: 5, partNo: 'VB-209', partName: 'SEALING GASKET', partType: 'UNCLASSIFIED', material: 'PTFE', quantity: 20, unitCost: 0, supplyPrice: 0, status: 'AUTO', balloonNo: '9' }
-          ]);
         }
       } catch (e) {
         console.error('Failed to load review case:', e);
@@ -122,6 +111,75 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   }, [caseId]);
 
   const selectedLine = lines[selectedIndex] || null;
+
+  // 💎 2단계: 실제 Master DB & 수기 단가 지식풀(manual_price_pool) 실시간 추천 조회
+  useEffect(() => {
+    if (!selectedLine) {
+      setRecommendations([]);
+      return;
+    }
+    const qName = selectedLine.partName || selectedLine.partNo;
+    if (!qName) return;
+
+    let active = true;
+    setLoadingRecs(true);
+
+    apiFetch(`/api/manual-prices?name=${encodeURIComponent(qName)}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!active) return;
+        const recs: RecommendationItem[] = [];
+
+        // 1. 사내 기준 단가 마스터 (price_masters + product_masters)
+        if (Array.isArray(json.priceMasters)) {
+          for (const pm of json.priceMasters) {
+            recs.push({
+              id: `pm_${pm.price_master_id || pm.master_id}`,
+              sourceCompany: '기준 단가 마스터',
+              partNo: pm.master_code || pm.standard_name,
+              revision: 'STD',
+              unitPrice: Number(pm.unit_price || 0),
+              confirmedDate: '사내 표준',
+              isOrdered: true,
+              matchReason: pm.master_code === selectedLine.partNo ? 'REVISION_MATCH' : 'SPEC_SIMILAR',
+              specDesc: `${pm.material || ''} ${pm.specification || ''}`.trim() || '기준 규격 마스터'
+            });
+            if (recs.length >= 3) break;
+          }
+        }
+
+        // 2. 수기 단가 지식 풀 (과거 실제 견적 승인/도면 검수 이력)
+        if (Array.isArray(json.manualPrices)) {
+          for (const mp of json.manualPrices) {
+            if (recs.some((r) => r.unitPrice === mp.unit_price)) continue;
+            recs.push({
+              id: `mp_${mp.id}`,
+              sourceCompany: mp.company_name || '과거 수주 이력',
+              partNo: mp.item_name,
+              revision: 'A',
+              unitPrice: Number(mp.unit_price || 0),
+              confirmedDate: mp.last_used_at?.slice(0, 7) || '수주 완료',
+              isOrdered: (mp.approval_count || 0) > 0,
+              matchReason: 'NAME_SIMILAR',
+              specDesc: `${mp.material || ''} ${mp.specification || ''}`.trim() || '실제 수주 채택 단가'
+            });
+            if (recs.length >= 3) break;
+          }
+        }
+
+        setRecommendations(recs);
+      })
+      .catch(() => {
+        if (active) setRecommendations([]);
+      })
+      .finally(() => {
+        if (active) setLoadingRecs(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedLine?.id, selectedLine?.partName, selectedLine?.partNo]);
 
   // 단가 확정 토글
   const handleToggleConfirm = async (lineId: string) => {
@@ -169,7 +227,37 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     );
   };
 
-  // 단축키 이벤트 리스너 (F4, Space, ↑/↓)
+  const unconfirmedCount = lines.filter((l) => l.status !== 'CONFIRMED').length;
+  const totalCost = lines.reduce((acc, l) => acc + l.unitCost * l.quantity, 0);
+  const totalSupply = lines.reduce((acc, l) => acc + l.supplyPrice * l.quantity, 0);
+  const avgMargin = totalSupply > 0 ? Math.round(((totalSupply - totalCost) / totalSupply) * 1000) / 10 : 0;
+
+  const handleSubmitQuote = async () => {
+    if (unconfirmedCount > 0) {
+      alert(`미확정 항목이 ${unconfirmedCount}건 남아있습니다. 전 항목 단가를 확정한 후 결재 상신해주세요.`);
+      return;
+    }
+    setSubmittingQuote(true);
+    try {
+      // 1. 견적서 생성 API 시도
+      try {
+        await apiFetch(`/api/quotation-cases/${caseId}/create-quote`, {
+          method: 'POST'
+        });
+      } catch (err) {
+        console.warn('create-quote attempt:', err);
+      }
+
+      // 2. 3단계 공식 견적서 및 결재/출력 화면으로 라우팅
+      router.push(`/quotes/${caseId}/publish`);
+    } catch (e: any) {
+      alert('결재 상신 처리 중 오류가 발생했습니다: ' + (e.message || ''));
+    } finally {
+      setSubmittingQuote(false);
+    }
+  };
+
+  // 단축키 이벤트 리스너 (F2, F4, Space, ↑/↓, Ctrl+Enter)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['input', 'textarea'].includes((e.target as HTMLElement).tagName.toLowerCase())) {
@@ -185,22 +273,23 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       } else if (e.code === 'Space') {
         e.preventDefault();
         if (selectedLine) handleToggleConfirm(selectedLine.id);
+      } else if (e.key === 'F2') {
+        e.preventDefault();
+        setIsBottomCollapsed((prev) => !prev);
       } else if (e.key === 'F4') {
         e.preventDefault();
         if (recommendations.length > 0 && selectedLine) {
           handleUpdateSelected({ supplyPrice: recommendations[0].unitPrice });
         }
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleSubmitQuote();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [lines, selectedIndex, selectedLine, recommendations]);
-
-  const unconfirmedCount = lines.filter((l) => l.status !== 'CONFIRMED').length;
-  const totalCost = lines.reduce((acc, l) => acc + l.unitCost * l.quantity, 0);
-  const totalSupply = lines.reduce((acc, l) => acc + l.supplyPrice * l.quantity, 0);
-  const avgMargin = totalSupply > 0 ? Math.round(((totalSupply - totalCost) / totalSupply) * 1000) / 10 : 0;
+  }, [lines, selectedIndex, selectedLine, recommendations, unconfirmedCount]);
 
   if (loading) {
     return (
@@ -252,22 +341,26 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           </div>
 
           <button
-            onClick={() => {
-              if (unconfirmedCount > 0) {
-                alert(`미확정 행이 ${unconfirmedCount}건 남아있어 결재 상신할 수 없습니다.`);
-                return;
-              }
-              alert('전 행 확정 완료! 팀장/대표 결재 상신이 완료되었습니다.');
-            }}
-            disabled={unconfirmedCount > 0}
+            onClick={handleSubmitQuote}
+            disabled={unconfirmedCount > 0 || submittingQuote}
             className={`px-4 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow-sm transition-colors ${
               unconfirmedCount > 0
                 ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                : submittingQuote
+                ? 'bg-emerald-700 text-white cursor-wait opacity-80'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
             }`}
           >
-            <Send className="w-4 h-4" />
-            {unconfirmedCount > 0 ? `결재 상신 (${unconfirmedCount}행 미확정)` : '결재 상신'}
+            {submittingQuote ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+            {submittingQuote
+              ? '견적서 생성 및 이동 중...'
+              : unconfirmedCount > 0
+              ? `결재 상신 (${unconfirmedCount}행 미확정)`
+              : '결재 상신'}
           </button>
         </div>
       </header>
@@ -295,28 +388,59 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         </div>
       </div>
 
-      {/* 3. 하단 패널 (원가 상세 내역 50% + MASTER Top-3 추천 카드 50%) */}
-      <div className="h-[264px] bg-slate-100 border-t border-slate-200 px-3 pb-3 pt-1.5 flex gap-3 shrink-0">
-        <div className="w-1/2 h-full">
-          <CostBreakdownPanel
-            line={selectedLine}
-            onUpdateLine={handleUpdateSelected}
-          />
+      {/* 하단 패널 접기/펼치기 토글 바 */}
+      <div className="bg-slate-200 border-t border-b border-slate-300 px-4 py-1 flex items-center justify-between text-xs text-slate-600 shrink-0 select-none">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-[11px] text-slate-600">
+            {isBottomCollapsed ? '하단 원가·마스터 패널이 접혀 있습니다 (F2로 펼치기)' : '원가 상세 분해 & 사내 마스터 TOP-3 추천 비교'}
+          </span>
         </div>
-        <div className="w-1/2 h-full">
-          <MasterRecommendationCard
-            recommendations={recommendations}
-            onApplyPrice={(prc) => handleUpdateSelected({ supplyPrice: prc })}
-          />
-        </div>
+        <button
+          onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
+          className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-[11px] font-medium transition-colors shadow-2xs cursor-pointer"
+        >
+          {isBottomCollapsed ? (
+            <>
+              <ChevronUp className="w-3.5 h-3.5 text-blue-600" />
+              <span>원가·마스터 패널 펼치기 (F2)</span>
+            </>
+          ) : (
+            <>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              <span>패널 접기 (F2)</span>
+            </>
+          )}
+        </button>
       </div>
 
+      {/* 3. 하단 패널 (원가 상세 내역 50% + MASTER Top-3 추천 카드 50%) */}
+      {!isBottomCollapsed && (
+        <div className="h-[264px] bg-slate-100 px-3 pb-3 pt-1.5 flex gap-3 shrink-0">
+          <div className="w-1/2 h-full">
+            <CostBreakdownPanel
+              line={selectedLine}
+              onUpdateLine={handleUpdateSelected}
+            />
+          </div>
+          <div className="w-1/2 h-full">
+            <MasterRecommendationCard
+              recommendations={recommendations}
+              onApplyPrice={(prc) => handleUpdateSelected({ supplyPrice: prc })}
+            />
+          </div>
+        </div>
+      )}
+
       {/* 4. 최하단 단축키 가이드 바 (가독성 향상) */}
-      <footer className="bg-slate-900 border-t border-slate-700 text-slate-100 text-xs px-6 py-2.5 flex items-center justify-between shrink-0 shadow-lg z-20">
+      <footer className="bg-slate-900 border-t border-slate-700 text-slate-100 text-xs px-6 py-2 flex items-center justify-between shrink-0 shadow-lg z-20">
         <div className="flex items-center gap-6 font-medium">
           <span className="flex items-center gap-1.5">
             <kbd className="px-2 py-0.5 bg-slate-700 border border-slate-600 rounded text-amber-300 font-mono font-bold shadow-xs">Space</kbd>
             <span className="text-slate-200">확정 / 취소</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="px-2 py-0.5 bg-slate-700 border border-slate-600 rounded text-amber-300 font-mono font-bold shadow-xs">F2</kbd>
+            <span className="text-slate-200">하단패널 접기/펼치기</span>
           </span>
           <span className="flex items-center gap-1.5">
             <kbd className="px-2 py-0.5 bg-slate-700 border border-slate-600 rounded text-amber-300 font-mono font-bold shadow-xs">F4</kbd>

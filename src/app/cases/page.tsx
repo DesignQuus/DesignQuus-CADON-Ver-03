@@ -22,6 +22,7 @@ import {
   Sliders,
   DollarSign,
   FileSpreadsheet,
+  DownloadCloud,
   Layers,
   ChevronRight,
   TrendingUp,
@@ -45,7 +46,8 @@ import {
   Trash2,
   RotateCcw,
   Trash,
-  AlertTriangle
+  AlertTriangle,
+  Filter
 } from 'lucide-react';
 
 type SortField = 'date' | 'amount' | 'drawings' | 'bom' | 'case_no' | 'case_name';
@@ -152,8 +154,27 @@ export default function CasesPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
 
-  // Sidebar Collapsed State (테이블 넓게 보기 지원)
+  // Persistent Sidebar Collapsed State (테이블 넓게 보기 지원 & 로컬스토리지 기억)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cadon_sidebar_collapsed');
+      if (saved !== null) {
+        setIsSidebarCollapsed(saved === 'true');
+      }
+    } catch {}
+  }, []);
+
+  const handleToggleSidebar = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('cadon_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Drag & Drop Quick Upload States (Local & Global)
   const [isDragging, setIsDragging] = useState(false);
@@ -161,6 +182,7 @@ export default function CasesPage() {
   const [quickUploading, setQuickUploading] = useState(false);
   const [quickUploadStatus, setQuickUploadStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const batchFileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   const fetchCompanies = async () => {
@@ -276,6 +298,90 @@ export default function CasesPage() {
     }
   }, [router]);
 
+  // Multi-file DWG/DXF Batch Upload & Auto Case Creation Handler
+  const handleBatchUploadFiles = React.useCallback(async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    const validFiles = fileArray.filter(f => {
+      const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+      return ['.dwg', '.dxf'].includes(ext);
+    });
+
+    if (validFiles.length === 0) {
+      alert('업로드할 유효한 CAD 도면 파일(.dwg 또는 .dxf)이 없습니다.');
+      return;
+    }
+
+    if (validFiles.length === 1) {
+      return handleQuickUploadFile(validFiles[0]);
+    }
+
+    setQuickUploading(true);
+    setQuickUploadStatus(`선택한 도면 ${validFiles.length}장으로 신규 통합 견적 프로젝트 생성 중...`);
+
+    try {
+      // 1. Create a new case automatically
+      const firstCleanName = validFiles[0].name.replace(/\.[^/.]+$/, "");
+      const autoCaseName = `${firstCleanName} 외 ${validFiles.length - 1}건 (도면 ${validFiles.length}장 일괄 분석)`;
+      const createRes = await apiFetch('/api/quotation-cases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: 'comp_unassigned',
+          projectId: 'proj_unassigned',
+          caseName: autoCaseName
+        })
+      });
+
+      if (!createRes.ok) {
+        throw new Error('신규 견적 프로젝트 생성에 실패했습니다.');
+      }
+      const createData = await createRes.json();
+      const newCaseId = createData.caseId;
+
+      // 2. Upload all files sequentially
+      const uploadedFileIds: string[] = [];
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        setQuickUploadStatus(`도면 업로드 중... (${i + 1}/${validFiles.length}) - ${file.name}`);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadRes = await apiFetch(`/api/quotation-cases/${newCaseId}/upload`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (uploadRes.ok) {
+          const uploadJson = await uploadRes.json();
+          if (uploadJson?.file?.id) {
+            uploadedFileIds.push(uploadJson.file.id);
+          }
+        }
+      }
+
+      // 3. Automatically analyze CAD drawings
+      setQuickUploadStatus(`업로드된 도면 ${uploadedFileIds.length}장 AI BOM 자동 분석 및 렌더링 준비 중...`);
+      for (let i = 0; i < uploadedFileIds.length; i++) {
+        try {
+          await apiFetch(`/api/quotation-cases/${newCaseId}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileId: uploadedFileIds[i] })
+          });
+        } catch (analyzeErr) {
+          console.warn('Auto analysis warning for file:', uploadedFileIds[i], analyzeErr);
+        }
+      }
+
+      // 4. Redirect to the case workbench
+      setQuickUploadStatus('워크벤치로 이동 중...');
+      router.push(`/cases/${newCaseId}`);
+    } catch (err: any) {
+      alert(err.message || '다중 도면 일괄 등록 중 오류가 발생했습니다.');
+      setQuickUploading(false);
+    }
+  }, [handleQuickUploadFile, router]);
+
   useEffect(() => {
     fetchCases();
     fetchCompanies();
@@ -319,7 +425,11 @@ export default function CasesPage() {
       dragCounter = 0;
       setGlobalDragging(false);
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        handleQuickUploadFile(e.dataTransfer.files[0]);
+        if (e.dataTransfer.files.length > 1) {
+          handleBatchUploadFiles(e.dataTransfer.files);
+        } else {
+          handleQuickUploadFile(e.dataTransfer.files[0]);
+        }
       }
     };
 
@@ -334,7 +444,7 @@ export default function CasesPage() {
       window.removeEventListener('dragover', handleWindowDragOver);
       window.removeEventListener('drop', handleWindowDrop);
     };
-  }, [handleQuickUploadFile]);
+  }, [handleQuickUploadFile, handleBatchUploadFiles]);
 
   // Lifecycle Action Handlers
   const openArchiveModal = (ids: string[]) => {
@@ -443,11 +553,17 @@ export default function CasesPage() {
           action: 'PERMANENT_DELETE'
         })
       });
-      if (res.ok) {
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.success) {
         setSelectedCaseIds(prev => prev.filter(id => !ids.includes(id)));
         await fetchCases();
+
+        if (d.skippedCount > 0 && d.processedCount > 0) {
+          alert(`선택한 ${d.totalRequested}건 중 ${d.processedCount}건이 영구 삭제되었습니다.\n\n⚠️ 제외된 ${d.skippedCount}건: 타 담당자의 보안 견적건으로 최고관리자(admin) 계정 권한이 필요하여 보존되었습니다.`);
+        } else if (d.skippedCount > 0 && d.processedCount === 0) {
+          alert(`영구 삭제할 수 없습니다.\n\n⚠️ ${d.skippedItems?.[0]?.reason || '타 담당자의 견적건은 본인 작성자 또는 최고관리자만 영구 삭제할 수 있습니다.'}`);
+        }
       } else {
-        const d = await res.json();
         alert(d.error || '영구 삭제 실패');
       }
     } catch (err: any) {
@@ -457,24 +573,71 @@ export default function CasesPage() {
     }
   };
 
+  const [exportingExcel, setExportingExcel] = useState(false);
+
+  const handleBulkExportExcel = async (targetCaseIds?: string[]) => {
+    const ids = targetCaseIds && targetCaseIds.length > 0 ? targetCaseIds : selectedCaseIds;
+    if (!ids || ids.length === 0) {
+      alert('일괄 엑셀 다운로드할 견적건을 선택해주세요.');
+      return;
+    }
+
+    setExportingExcel(true);
+    try {
+      const res = await apiFetch('/api/quotation-cases/bulk-export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caseIds: ids })
+      });
+
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || '엑셀 압축 파일 생성에 실패했습니다.');
+      }
+
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get('Content-Disposition');
+      let filename = `CADON_BOM_견적서일괄_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.zip`;
+      if (contentDisposition && contentDisposition.includes('filename=')) {
+        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+        if (matches && matches[1]) {
+          filename = decodeURIComponent(matches[1].replace(/['"]/g, ''));
+        }
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      alert('엑셀 일괄 다운로드 중 오류: ' + err.message);
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   // Reset pagination when search, tab, or pageSize changes
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedTab, searchQuery, pageSize, filterManager, filterCompany]);
 
   const handleBatchUploadPrompt = () => {
-    if (confirm('도면이 여러 개인 경우:\n\n1. [확인]: 하나의 견적건으로 묶어서 처리 (통합 BOM 합산)\n2. [취소]: 각각 개별 견적건으로 쪼개서 처리')) {
-      alert('[통합 견적 처리 모드] 여러 도면의 BOM을 하나로 합산합니다. (개발 예정)');
-    } else {
-      alert('[개별 견적 처리 모드] 각 도면마다 별도의 견적건을 생성합니다. (개발 예정)');
-    }
+    batchFileInputRef.current?.click();
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleQuickUploadFile(e.dataTransfer.files[0]);
+      if (e.dataTransfer.files.length > 1) {
+        handleBatchUploadFiles(e.dataTransfer.files);
+      } else {
+        handleQuickUploadFile(e.dataTransfer.files[0]);
+      }
     }
   };
 
@@ -577,19 +740,52 @@ export default function CasesPage() {
     return counts;
   }, [currentTabBaseCases]);
   
-  const secureVaultCount = activeCases.filter(c => c.visibility === 'PRIVATE').length;
-  
-  const totalCasesCount = activeCases.length;
-  const readyCount = activeCases.filter(c => c.quote_readiness === 'READY_FOR_QUOTE').length;
-  const analyzedCount = activeCases.filter(c => c.status === 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE').length;
-  const pendingCount = activeCases.filter(c => c.status !== 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE').length;
-  const pendingApprovalCount = activeCases.filter(c => c.visibility === 'PRIVATE_PENDING').length;
-  const archivedCount = archivedCases.length;
-  const trashedCount = trashedCases.length;
+  // Dynamically scoped cases by active Manager and Company filters
+  const scopeActiveCases = useMemo(() => {
+    return activeCases.filter(c => {
+      if (filterManager !== 'ALL' && c.created_by_user_id !== filterManager) return false;
+      if (filterCompany !== 'ALL' && c.company_name !== filterCompany) return false;
+      return true;
+    });
+  }, [activeCases, filterManager, filterCompany]);
 
-  const totalDrawingsSum = activeCases.reduce((acc, c) => acc + (c.drawings_count || c.files_count || 0), 0);
-  const totalBomItemsSum = activeCases.reduce((acc, c) => acc + (c.bom_items_count || 0), 0);
-  const totalQuotedAmountSum = activeCases.reduce((acc, c) => acc + (c.quote_total_amount || 0), 0);
+  const scopeArchivedCases = useMemo(() => {
+    return archivedCases.filter(c => {
+      if (filterManager !== 'ALL' && c.created_by_user_id !== filterManager) return false;
+      if (filterCompany !== 'ALL' && c.company_name !== filterCompany) return false;
+      return true;
+    });
+  }, [archivedCases, filterManager, filterCompany]);
+
+  const scopeTrashedCases = useMemo(() => {
+    return trashedCases.filter(c => {
+      if (filterManager !== 'ALL' && c.created_by_user_id !== filterManager) return false;
+      if (filterCompany !== 'ALL' && c.company_name !== filterCompany) return false;
+      return true;
+    });
+  }, [trashedCases, filterManager, filterCompany]);
+
+  const secureVaultCount = scopeActiveCases.filter(c => c.visibility === 'PRIVATE').length;
+  
+  const totalCasesCount = scopeActiveCases.length;
+  const readyCount = scopeActiveCases.filter(c => c.quote_readiness === 'READY_FOR_QUOTE').length;
+  const analyzedCount = scopeActiveCases.filter(c => c.status === 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE').length;
+  const pendingCount = scopeActiveCases.filter(c => c.status !== 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE').length;
+  const pendingApprovalCount = scopeActiveCases.filter(c => c.visibility === 'PRIVATE_PENDING').length;
+  const archivedCount = scopeArchivedCases.length;
+  const trashedCount = scopeTrashedCases.length;
+
+  const latestReadyCase = useMemo(() => {
+    return scopeActiveCases.find(c => c.quote_readiness === 'READY_FOR_QUOTE') || null;
+  }, [scopeActiveCases]);
+
+  const readyCaseIds = useMemo(() => {
+    return scopeActiveCases.filter(c => c.quote_readiness === 'READY_FOR_QUOTE').map(c => c.id);
+  }, [scopeActiveCases]);
+
+  const totalDrawingsSum = scopeActiveCases.reduce((acc, c) => acc + (c.drawings_count || c.files_count || 0), 0);
+  const totalBomItemsSum = scopeActiveCases.reduce((acc, c) => acc + (c.bom_items_count || 0), 0);
+  const totalQuotedAmountSum = scopeActiveCases.reduce((acc, c) => acc + (c.quote_total_amount || 0), 0);
 
   // Filtered cases list
   const filteredCases = currentTabBaseCases.filter(c => {
@@ -695,6 +891,33 @@ export default function CasesPage() {
     );
   };
 
+  // [Solution 3] 지능형 필터 완화: 탭을 클릭했을 때 현재 고객사 필터로 인해 0건이 되면 고객사 필터를 자동으로 'ALL'로 완화하여 데이터가 즉시 보이도록 처리
+  const handleSelectTab = (tab: any) => {
+    setSelectedTab(tab);
+    if (filterCompany !== 'ALL') {
+      const willHaveItems = activeCases.some(c => {
+        if (tab === 'PENDING') return c.status !== 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE';
+        if (tab === 'ANALYZED') return c.status === 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE';
+        if (tab === 'READY_FOR_QUOTE') return c.quote_readiness === 'READY_FOR_QUOTE';
+        if (tab === 'ARCHIVED') return c.status === 'ARCHIVED' || c.lifecycle_status === 'ARCHIVED';
+        if (tab === 'TRASHED') return isCaseDeleted(c) || c.lifecycle_status === 'TRASHED';
+        return true;
+      });
+      const hasItemWithCurrentCompany = activeCases.some(c => {
+        if (c.company_name !== filterCompany) return false;
+        if (tab === 'PENDING') return c.status !== 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE';
+        if (tab === 'ANALYZED') return c.status === 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE';
+        if (tab === 'READY_FOR_QUOTE') return c.quote_readiness === 'READY_FOR_QUOTE';
+        if (tab === 'ARCHIVED') return c.status === 'ARCHIVED' || c.lifecycle_status === 'ARCHIVED';
+        if (tab === 'TRASHED') return isCaseDeleted(c) || c.lifecycle_status === 'TRASHED';
+        return true;
+      });
+      if (willHaveItems && !hasItemWithCurrentCompany) {
+        setFilterCompany('ALL');
+      }
+    }
+  };
+
   return (
     <div className="space-y-3 w-full pb-10">
       {/* Global Drag & Drop Overlay */}
@@ -728,7 +951,7 @@ export default function CasesPage() {
         </div>
       )}
 
-      {/* Hidden File Input for Dropzone */}
+      {/* Hidden File Input for Single Upload */}
       <input
         type="file"
         ref={fileInputRef}
@@ -741,12 +964,26 @@ export default function CasesPage() {
         className="hidden"
       />
 
+      {/* Hidden File Input for Batch Multiple Upload */}
+      <input
+        type="file"
+        ref={batchFileInputRef}
+        accept=".dwg,.dxf"
+        multiple
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleBatchUploadFiles(e.target.files);
+          }
+        }}
+        className="hidden"
+      />
+
       {/* Main Two-Column Workflow Layout */}
       <div className="flex flex-col lg:flex-row gap-4 items-start">
         {/* Left Column: Vertical Workflow Pipeline Sidebar (With Integrated Drag & Drop Zone & Collapsible) */}
         <CaseWorkflowSidebar
           selectedTab={selectedTab}
-          onSelectTab={setSelectedTab}
+          onSelectTab={handleSelectTab}
           counts={{
             total: totalCasesCount,
             pending: pendingCount,
@@ -757,6 +994,7 @@ export default function CasesPage() {
             archived: archivedCount,
             trashed: trashedCount,
           }}
+          latestReadyCase={latestReadyCase}
           user={user}
           onSingleUploadClick={() => fileInputRef.current?.click()}
           onBatchUploadClick={handleBatchUploadPrompt}
@@ -765,7 +1003,9 @@ export default function CasesPage() {
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
           isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
+          onToggleCollapse={handleToggleSidebar}
+          onBulkExportExcel={() => handleBulkExportExcel(readyCaseIds)}
+          isExportingExcel={exportingExcel}
         />
 
         {/* Right Column: Main Workbench */}
@@ -842,19 +1082,31 @@ export default function CasesPage() {
                   {totalQuotedAmountSum.toLocaleString()} <span className="text-[11px] font-medium text-slate-500">원</span>
                 </div>
               </div>
-            </div>
           </div>
+        </div>
 
-
-
-      {/* Zone 4: Enterprise High-Density Table / Card Grid Section */}
-      <div className="space-y-2.5">
+        {/* Zone 4: Enterprise High-Density Table / Card Grid Section */}
+        <div className="space-y-2.5">
         {/* Top Control Toolbar (Unified & High Density) */}
         <div className="bg-white p-2.5 rounded border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
           {/* Status Tabs */}
           <div className="flex flex-wrap items-center gap-1">
             <button
-              onClick={() => setSelectedTab('ALL')}
+              type="button"
+              onClick={handleToggleSidebar}
+              className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 border flex items-center space-x-1.5 ${
+                isSidebarCollapsed
+                  ? 'bg-blue-50 text-blue-700 border-blue-300 shadow-2xs hover:bg-blue-100'
+                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+              }`}
+              title={isSidebarCollapsed ? '좌측 파이프라인 사이드바 펼치기' : '좌측 사이드바 접기 (테이블 100% 넓게 보기)'}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>{isSidebarCollapsed ? '파이프라인 열기' : '넓게보기'}</span>
+            </button>
+
+            <button
+              onClick={() => handleSelectTab('ALL')}
               className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 ${
                 selectedTab === 'ALL'
                   ? 'bg-blue-600 text-white shadow-xs'
@@ -864,7 +1116,7 @@ export default function CasesPage() {
               전체 ({totalCasesCount})
             </button>
             <button
-              onClick={() => setSelectedTab('READY_FOR_QUOTE')}
+              onClick={() => handleSelectTab('READY_FOR_QUOTE')}
               className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                 selectedTab === 'READY_FOR_QUOTE'
                   ? 'bg-emerald-600 text-white shadow-xs'
@@ -874,7 +1126,7 @@ export default function CasesPage() {
               <span>견적준비완료 ({readyCount})</span>
             </button>
             <button
-              onClick={() => setSelectedTab('ANALYZED')}
+              onClick={() => handleSelectTab('ANALYZED')}
               className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                 selectedTab === 'ANALYZED'
                   ? 'bg-blue-600 text-white shadow-xs'
@@ -884,7 +1136,7 @@ export default function CasesPage() {
               <span>분석완료 ({analyzedCount})</span>
             </button>
             <button
-              onClick={() => setSelectedTab('PENDING')}
+              onClick={() => handleSelectTab('PENDING')}
               className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                 selectedTab === 'PENDING'
                   ? 'bg-amber-600 text-white shadow-xs'
@@ -896,7 +1148,7 @@ export default function CasesPage() {
             {user?.role === 'SUPER_ADMIN' && (
               <>
                 <button
-                  onClick={() => setSelectedTab('PRIVATE_APPROVAL')}
+                  onClick={() => handleSelectTab('PRIVATE_APPROVAL')}
                   className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                     selectedTab === 'PRIVATE_APPROVAL'
                       ? 'bg-red-600 text-white shadow-xs'
@@ -906,7 +1158,7 @@ export default function CasesPage() {
                   <span>결재 대기 ({pendingApprovalCount})</span>
                 </button>
                 <button
-                  onClick={() => setSelectedTab('SECURE_VAULT')}
+                  onClick={() => handleSelectTab('SECURE_VAULT')}
                   className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                     selectedTab === 'SECURE_VAULT'
                       ? 'bg-slate-800 text-white shadow-xs'
@@ -920,7 +1172,7 @@ export default function CasesPage() {
             <span className="text-slate-300 mx-0.5">|</span>
             {/* Archive Tab */}
             <button
-              onClick={() => setSelectedTab('ARCHIVED')}
+              onClick={() => handleSelectTab('ARCHIVED')}
               className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                 selectedTab === 'ARCHIVED'
                   ? 'bg-purple-700 text-white shadow-xs font-black'
@@ -933,7 +1185,7 @@ export default function CasesPage() {
 
             {/* Trash Tab */}
             <button
-              onClick={() => setSelectedTab('TRASHED')}
+              onClick={() => handleSelectTab('TRASHED')}
               className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                 selectedTab === 'TRASHED'
                   ? 'bg-rose-700 text-white shadow-xs font-black'
@@ -947,6 +1199,11 @@ export default function CasesPage() {
 
           {/* Right Controls: Compact Single Row (Manager Filter, Company Filter, Search, Rows, View Mode) */}
           <div className="flex items-center gap-1.5 shrink-0 flex-wrap xl:flex-nowrap">
+            {/* [Solution 4] 실시간 자동 저장 인디케이터 */}
+            <div className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-50/80 border border-emerald-200/80 rounded text-[11px] font-bold text-emerald-700 shrink-0 select-none" title="모든 도면 및 견적 데이터는 실시간으로 영구 자동 저장되고 있습니다.">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>실시간 자동 저장됨</span>
+            </div>
             {/* 1. [👤 내 담당건] 1-클릭 빠른 토글 칩 (사원 & 대표 공통 지원) */}
             {user && (
               <button
@@ -1113,8 +1370,17 @@ export default function CasesPage() {
                 ) : (
                   <>
                     <button
+                      onClick={() => handleBulkExportExcel(selectedCaseIds)}
+                      disabled={lifecycleLoading || exportingExcel}
+                      className="btn-hover-effect-tab px-2.5 py-1 rounded-[3px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center space-x-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                      title="선택된 견적건의 모든 BOM 및 견적서를 엑셀 파일(XLSX)로 생성하여 ZIP 파일로 일괄 다운로드합니다."
+                    >
+                      <DownloadCloud className="w-3.5 h-3.5" />
+                      <span>{exportingExcel ? 'ZIP 패키징 중...' : '선택건 엑셀 일괄 다운로드 (ZIP)'}</span>
+                    </button>
+                    <button
                       onClick={() => openArchiveModal(selectedCaseIds)}
-                      disabled={lifecycleLoading}
+                      disabled={lifecycleLoading || exportingExcel}
                       className="btn-hover-effect-tab px-2.5 py-1 rounded-[3px] bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs flex items-center space-x-1 shadow-2xs cursor-pointer disabled:opacity-50"
                     >
                       <Archive className="w-3.5 h-3.5" />
@@ -1122,7 +1388,7 @@ export default function CasesPage() {
                     </button>
                     <button
                       onClick={() => handleTrashCases(selectedCaseIds)}
-                      disabled={lifecycleLoading}
+                      disabled={lifecycleLoading || exportingExcel}
                       className="btn-hover-effect-tab px-2.5 py-1 rounded-[3px] bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center space-x-1 shadow-2xs cursor-pointer disabled:opacity-50"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1243,14 +1509,78 @@ export default function CasesPage() {
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-800 text-[13px]">
                   {paginatedCases.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="py-16 text-center text-slate-500">
-                        <Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                        <p className="font-bold text-sm text-slate-700">
-                          {searchQuery ? `'${searchQuery}' 검색 조건에 맞는 견적 건이 없습니다.` : '해당 필터 조건의 견적 건이 없습니다.'}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-1">
-                          검색어나 상단 상태 탭을 변경해 보세요.
-                        </p>
+                      <td colSpan={11} className="py-12 px-4 text-center">
+                        <div className="max-w-lg mx-auto bg-slate-50/90 border border-slate-200 rounded-2xl p-6 shadow-2xs">
+                          <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">
+                            <Filter className="w-6 h-6" />
+                          </div>
+                          <h4 className="font-extrabold text-slate-900 text-sm mb-1">
+                            선택하신 필터 조건에 일치하는 견적 건이 없습니다
+                          </h4>
+                          
+                          {/* Active filters badges */}
+                          <div className="flex flex-wrap items-center justify-center gap-1.5 my-3 text-xs">
+                            <span className="text-slate-500 text-[11px] font-medium mr-1">적용된 조건:</span>
+                            {selectedTab !== 'ALL' && (
+                              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold border border-amber-200">
+                                탭: {selectedTab === 'PENDING' ? '도면대기' : selectedTab === 'READY_FOR_QUOTE' ? '견적준비완료' : selectedTab === 'ANALYZED' ? '분석완료' : selectedTab === 'ARCHIVED' ? '보관함' : selectedTab === 'TRASHED' ? '휴지통' : selectedTab}
+                              </span>
+                            )}
+                            {filterManager !== 'ALL' && (
+                              <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 font-bold border border-blue-200">
+                                담당자: {uniqueManagers.find(m => m.id === filterManager)?.name || filterManager}
+                              </span>
+                            )}
+                            {filterCompany !== 'ALL' && (
+                              <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 font-bold border border-purple-200">
+                                고객사: {filterCompany}
+                              </span>
+                            )}
+                            {searchQuery.trim() && (
+                              <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold border border-emerald-200">
+                                검색어: &ldquo;{searchQuery.trim()}&rdquo;
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                            필터 조건이 좁게 설정되어 결과가 숨겨졌습니다.<br />
+                            아래 버튼을 클릭하시면 <strong>원클릭으로 필터를 초기화</strong>하여 전체 견적 건을 확인하실 수 있습니다.
+                          </p>
+
+                          {/* Quick Recovery Action Buttons */}
+                          <div className="flex flex-wrap items-center justify-center gap-2">
+                            {(filterManager !== 'ALL' || filterCompany !== 'ALL' || searchQuery.trim()) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFilterManager('ALL');
+                                  setFilterCompany('ALL');
+                                  setSearchQuery('');
+                                }}
+                                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5 cursor-pointer"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                <span>필터(담당자/고객사/검색) 전체 해제</span>
+                              </button>
+                            )}
+
+                            {selectedTab !== 'ALL' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTab('ALL');
+                                  setFilterManager('ALL');
+                                  setFilterCompany('ALL');
+                                  setSearchQuery('');
+                                }}
+                                className="px-3.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center space-x-1.5 cursor-pointer"
+                              >
+                                <span>전체 목록 처음부터 보기</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   ) : (

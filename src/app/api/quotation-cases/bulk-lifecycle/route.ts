@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     const isSuperAdmin = session.role === 'SUPER_ADMIN';
 
     let successCount = 0;
+    const skippedItems: any[] = [];
 
     for (const id of caseIds) {
       const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
@@ -33,7 +34,8 @@ export async function POST(req: NextRequest) {
         const archiveReason = reason || '일정 보류';
         await db.prepare(`
           UPDATE quotation_cases
-          SET lifecycle_status = 'ARCHIVED',
+          SET status = 'ARCHIVED',
+              lifecycle_status = 'ARCHIVED',
               archived_at = ?,
               archive_reason = ?,
               updated_at = ?
@@ -66,7 +68,11 @@ export async function POST(req: NextRequest) {
       } else if (action === 'RESTORE') {
         await db.prepare(`
           UPDATE quotation_cases
-          SET deleted_at = NULL,
+          SET status = 'ANALYZED',
+              lifecycle_status = NULL,
+              archived_at = NULL,
+              archive_reason = NULL,
+              deleted_at = NULL,
               deleted_by = NULL,
               restored_at = ?,
               restored_by = ?,
@@ -83,7 +89,17 @@ export async function POST(req: NextRequest) {
         successCount++;
       } else if (action === 'PERMANENT_DELETE') {
         const isTenantAdmin = session.role === 'TENANT_ADMIN' || session.role === 'SUPER_ADMIN';
-        if (!isTenantAdmin && !isOwner) continue;
+        const isTrasher = qc.deleted_by === session.userId;
+        // [방안 B] 본인 작성자(isOwner), 최고관리자/대표(isTenantAdmin), 또는 본인이 직접 휴지통으로 이동시킨 사용자(isTrasher) 영구 삭제 허용
+        if (!isTenantAdmin && !isOwner && !isTrasher) {
+          skippedItems.push({
+            id,
+            case_no: qc.case_no,
+            case_name: qc.case_name,
+            reason: `타 담당자(${qc.created_by_name || '최고관리자'})의 견적건으로 최고관리자 권한이 필요합니다.`
+          });
+          continue;
+        }
 
         const files = (await db.prepare('SELECT * FROM uploaded_files WHERE quotation_case_id = ?').all(id)) as any[];
 
@@ -150,7 +166,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, processedCount: successCount });
+    return NextResponse.json({
+      success: true,
+      action,
+      processedCount: successCount,
+      skippedCount: skippedItems.length,
+      skippedItems,
+      totalRequested: caseIds.length
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || '일괄 처리 중 오류 발생' }, { status: 500 });
   }

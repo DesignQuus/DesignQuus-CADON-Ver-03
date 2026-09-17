@@ -250,6 +250,29 @@ export async function processCadFilePipeline(
       created_at: now
     }));
     await insertRows('drawings', dwgRows);
+
+    // Auto-link Customer from Title Block to quotation_cases if unassigned
+    const detectedCustomer = structureResult.drawings.find((d: any) => d.customer && d.customer !== '-' && d.customer !== '')?.customer;
+    if (detectedCustomer) {
+      try {
+        const caseRow = await db.prepare('SELECT company_id FROM quotation_cases WHERE id = ?').get(quotationCaseId);
+        if (caseRow && (!caseRow.company_id || caseRow.company_id === 'comp_unassigned')) {
+          let comp = await db.prepare('SELECT id FROM companies WHERE company_name = ?').get(detectedCustomer);
+          if (!comp) {
+            const newCompId = `comp_${Date.now()}`;
+            const compCode = `CUST-${Date.now().toString().slice(-4)}`;
+            await db.prepare(`
+              INSERT INTO companies (id, company_code, company_name, company_type, is_active, created_at, updated_at)
+              VALUES (?, ?, ?, 'CUSTOMER', 1, ?, ?)
+            `).run(newCompId, compCode, detectedCustomer, now, now);
+            comp = { id: newCompId };
+          }
+          await db.prepare('UPDATE quotation_cases SET company_id = ?, updated_at = ? WHERE id = ?').run(comp.id, now, quotationCaseId);
+        }
+      } catch (custErr) {
+        console.warn('Auto customer link warning:', custErr);
+      }
+    }
   }
 
   if (structureResult.relationships && structureResult.relationships.length > 0) {

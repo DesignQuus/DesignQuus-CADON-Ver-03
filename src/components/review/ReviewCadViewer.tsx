@@ -44,7 +44,8 @@ export default function ReviewCadViewer({ caseId, selectedBalloonNo }: ReviewCad
       <div className="flex-1 w-full h-full relative">
         <CadViewer
           caseId={caseId}
-          className="w-full h-full"
+          cadObjects={[]}
+          drawings={[]}
         />
 
         {/* 선택된 풍선 하이라이트 오버레이 (시각화 힌트) */}

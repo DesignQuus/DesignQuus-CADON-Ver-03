@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import {
   UploadCloud,
   FileCode2,
@@ -16,7 +17,9 @@ import {
   ChevronRight,
   Plus,
   Copy,
-  DownloadCloud
+  DownloadCloud,
+  Zap,
+  ArrowRight
 } from 'lucide-react';
 
 export type WorkflowTab =
@@ -42,6 +45,7 @@ interface CaseWorkflowSidebarProps {
     archived?: number;
     trashed?: number;
   };
+  latestReadyCase?: { id: string; case_no: string; case_name?: string } | null;
   user: {
     userId?: string;
     name?: string;
@@ -55,12 +59,15 @@ interface CaseWorkflowSidebarProps {
   onDrop?: (e: React.DragEvent) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  onBulkExportExcel?: () => void;
+  isExportingExcel?: boolean;
 }
 
 export default function CaseWorkflowSidebar({
   selectedTab,
   onSelectTab,
   counts,
+  latestReadyCase,
   user,
   onSingleUploadClick,
   onBatchUploadClick,
@@ -70,6 +77,8 @@ export default function CaseWorkflowSidebar({
   onDrop,
   isCollapsed = false,
   onToggleCollapse,
+  onBulkExportExcel,
+  isExportingExcel = false,
 }: CaseWorkflowSidebarProps) {
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
@@ -133,17 +142,28 @@ export default function CaseWorkflowSidebar({
           <span className="text-[9px] font-bold mt-0.5">{counts.analyzed}</span>
         </button>
 
-        {/* Tab 4: 견적준비완료 */}
-        <button
-          onClick={() => onSelectTab('READY_FOR_QUOTE')}
-          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
-            selectedTab === 'READY_FOR_QUOTE' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
-          }`}
-          title={`견적 준비 완료 (${counts.ready}건)`}
-        >
-          <CheckCircle2 className="w-4 h-4" />
-          <span className="text-[9px] font-bold mt-0.5">{counts.ready}</span>
-        </button>
+        {/* Tab 4: 견적준비완료 (단일 건 시 즉시 직행) */}
+        {counts.ready === 1 && latestReadyCase ? (
+          <Link
+            href={`/cases/${latestReadyCase.id}?tab=quote`}
+            className="w-10 h-10 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white flex flex-col items-center justify-center relative cursor-pointer transition-all shadow-xs group"
+            title={`[${latestReadyCase.case_no}] 견적서 즉시 발행 화면으로 직행`}
+          >
+            <Zap className="w-4 h-4 text-emerald-100 group-hover:scale-115 transition-transform" />
+            <span className="text-[8.5px] font-extrabold mt-0.5">발행</span>
+          </Link>
+        ) : (
+          <button
+            onClick={() => onSelectTab('READY_FOR_QUOTE')}
+            className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
+              selectedTab === 'READY_FOR_QUOTE' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+            }`}
+            title={`견적 준비 완료 (${counts.ready}건)`}
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span className="text-[9px] font-bold mt-0.5">{counts.ready}</span>
+          </button>
+        )}
 
         <div className="w-8 border-t border-slate-200 my-1"></div>
 
@@ -277,14 +297,18 @@ export default function CaseWorkflowSidebar({
             </button>
 
             <button
-              onClick={() => alert('기존 유사 견적을 복제하여 신규 도면으로 등록하는 기능입니다. (준비중)')}
+              type="button"
+              onClick={() => alert('기존 견적 복제는 견적 목록 테이블 각 행 우측의 복제 아이콘을 클릭하여 내 담당으로 즉시 복제하실 수 있습니다.')}
               className="btn-hover-effect-secondary w-full px-3 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded text-[11px] font-semibold transition-all flex items-center justify-between cursor-pointer group"
+              title="기존 견적을 복제하여 신규 견적으로 생성 (테이블 행 메뉴에서 지원)"
             >
               <span className="flex items-center space-x-1.5">
                 <Copy className="w-3.5 h-3.5 text-slate-400 group-hover:scale-115 transition-transform" />
                 <span>기존 유사 견적 복제</span>
               </span>
-              <span className="text-[9px] text-slate-400">준비중</span>
+              <span className="text-[9.5px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded font-bold border border-blue-200">
+                행 메뉴 지원
+              </span>
             </button>
           </div>
         </div>
@@ -298,11 +322,16 @@ export default function CaseWorkflowSidebar({
               </span>
               <span className="text-xs font-bold text-slate-900">CAD 도면 AI 분석</span>
             </div>
+            <span className="text-[9.5px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+              조회 필터
+            </span>
           </div>
 
           <div className="space-y-1 pt-1">
             <button
+              type="button"
               onClick={() => onSelectTab('PENDING')}
+              title="도면 등록 및 AI 분석 대기 상태인 견적 건만 목록 필터링"
               className={`btn-hover-effect-tab w-full px-2.5 py-2 rounded text-xs font-semibold transition-all flex items-center justify-between cursor-pointer border ${
                 selectedTab === 'PENDING'
                   ? 'bg-amber-500 text-white font-bold shadow-xs border-amber-600 ring-2 ring-amber-300/50'
@@ -333,11 +362,16 @@ export default function CaseWorkflowSidebar({
               </span>
               <span className="text-xs font-bold text-slate-900">부품·단가 최적화</span>
             </div>
+            <span className="text-[9.5px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+              조회 필터
+            </span>
           </div>
 
           <div className="space-y-1 pt-1">
             <button
+              type="button"
               onClick={() => onSelectTab('ANALYZED')}
+              title="BOM 추출 및 단가 매칭 진행 중인 견적 건만 목록 필터링"
               className={`btn-hover-effect-tab w-full px-2.5 py-2 rounded text-xs font-semibold transition-all flex items-center justify-between cursor-pointer border ${
                 selectedTab === 'ANALYZED'
                   ? 'bg-blue-600 text-white font-bold shadow-xs border-blue-700 ring-2 ring-blue-300/50'
@@ -442,19 +476,75 @@ export default function CaseWorkflowSidebar({
               </>
             )}
 
-            <button
-              onClick={() => {
-                alert('산출 완료된 견적건들의 표준 엑셀 견적서를 일괄 ZIP 압축 다운로드합니다. (준비중)');
-              }}
-              className="btn-hover-effect-secondary w-full px-3 py-2 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded text-xs font-bold transition-all flex items-center justify-between cursor-pointer group mt-1"
-              title="산출 완료된 견적건들의 엑셀 견적서를 일괄 다운로드"
-            >
-              <span className="flex items-center space-x-2">
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-115 transition-transform" />
-                <span>표준 엑셀 일괄 발행</span>
-              </span>
-              <DownloadCloud className="w-4 h-4 text-emerald-600 group-hover:translate-y-0.5 transition-transform" />
-            </button>
+            {/* [1단계/4단계 조치] 스마트 맥락 인지(Context-Aware) 견적서 즉시 발행 CTA 및 엑셀 일괄 다운로드 */}
+            {counts.ready === 1 && latestReadyCase ? (
+              <div className="space-y-1.5 mt-1.5">
+                <Link
+                  href={`/cases/${latestReadyCase.id}?tab=quote`}
+                  className="btn-hover-effect-primary w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all flex items-center justify-between shadow-xs group cursor-pointer"
+                  title={`[${latestReadyCase.case_no}] 최종 견적서 즉시 산출 및 발행 화면으로 직행`}
+                >
+                  <span className="flex items-center space-x-1.5 min-w-0">
+                    <Zap className="w-4 h-4 text-emerald-200 group-hover:scale-110 transition-transform shrink-0" />
+                    <span className="truncate font-extrabold">[{latestReadyCase.case_no}] 견적서 발행</span>
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 text-emerald-200 group-hover:translate-x-1 transition-transform shrink-0" />
+                </Link>
+                {onBulkExportExcel && (
+                  <button
+                    type="button"
+                    onClick={onBulkExportExcel}
+                    disabled={isExportingExcel}
+                    className="w-full px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded text-[11px] font-bold flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 transition-colors shadow-2xs"
+                    title={`[${latestReadyCase.case_no}] 견적 BOM 엑셀 다운로드 (ZIP)`}
+                  >
+                    <DownloadCloud className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>{isExportingExcel ? '엑셀 압축 중...' : '엑셀 견적서 다운로드 (ZIP)'}</span>
+                  </button>
+                )}
+              </div>
+            ) : counts.ready > 1 ? (
+              <div className="space-y-1.5 mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => onSelectTab('READY_FOR_QUOTE')}
+                  className="btn-hover-effect-secondary w-full px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded text-xs font-bold transition-all flex items-center justify-between cursor-pointer group"
+                  title="준비완료된 모든 견적건 보기"
+                >
+                  <span className="flex items-center space-x-2">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-115 transition-transform" />
+                    <span>준비완료 ({counts.ready}건) 필터 조회</span>
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+                {onBulkExportExcel && (
+                  <button
+                    type="button"
+                    onClick={onBulkExportExcel}
+                    disabled={isExportingExcel}
+                    className="btn-hover-effect-primary w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all flex items-center justify-between shadow-xs cursor-pointer group disabled:opacity-50"
+                    title={`준비완료된 ${counts.ready}건의 모든 견적서를 엑셀로 자동 변환하여 ZIP으로 일괄 다운로드`}
+                  >
+                    <span className="flex items-center space-x-1.5">
+                      <DownloadCloud className="w-4 h-4 text-emerald-200 group-hover:scale-110 transition-transform" />
+                      <span>{isExportingExcel ? 'ZIP 패키징 중...' : `일괄 엑셀 다운로드 (${counts.ready}건)`}</span>
+                    </span>
+                    <span className="text-[10px] bg-emerald-700 px-1.5 py-0.5 rounded text-white font-mono font-bold">ZIP</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div
+                className="w-full px-3 py-2 bg-slate-50 text-slate-400 border border-slate-200 rounded text-[11px] font-medium flex items-center justify-between mt-1 select-none"
+                title="견적 준비 완료(READY_FOR_QUOTE) 상태인 건이 없습니다."
+              >
+                <span className="flex items-center space-x-1.5">
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-slate-400" />
+                  <span>견적 준비 대기건 없음</span>
+                </span>
+                <span className="text-[10px] text-slate-400">0건</span>
+              </div>
+            )}
           </div>
         </div>
 

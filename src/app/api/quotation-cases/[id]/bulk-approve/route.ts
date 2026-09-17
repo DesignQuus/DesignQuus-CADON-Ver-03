@@ -32,6 +32,39 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const approveAll = body.approveAll ?? true;
 
+    // Self-healing: ensure normalized_bom_items exist if flattened_bom_items exist
+    const normCountCheck = (await db.prepare('SELECT COUNT(*) as cnt FROM normalized_bom_items WHERE quotation_case_id = ?').get(id)) as any;
+    if (!normCountCheck?.cnt || normCountCheck.cnt === 0) {
+      const flats = (await db.prepare('SELECT * FROM flattened_bom_items WHERE quotation_case_id = ?').all(id)) as any[];
+      if (flats.length > 0) {
+        const nowTime = new Date().toISOString();
+        const normRows = flats.map((fb: any, idx: number) => {
+          const normId = fb.id ? fb.id.replace('fb_', 'norm_') : `norm_${id}_${idx + 1}`;
+          const rawName = fb.name || fb.part_no || `부품-${idx + 1}`;
+          return {
+            id: normId,
+            quotation_case_id: id,
+            raw_item_id: fb.id,
+            raw_name: rawName,
+            normalized_name: rawName,
+            search_name: rawName.replace(/\s+/g, ''),
+            direction: null,
+            spec_candidate: fb.specification || '-',
+            material_candidate: fb.material || 'SS400',
+            quantity: Number(fb.total_quantity) || 1,
+            unit: fb.unit || 'EA',
+            status: 'NORMALIZED',
+            is_quote_included: 1,
+            created_at: nowTime
+          };
+        });
+        const { insertRows } = await import('../../../../../../egdesk-helpers');
+        for (let i = 0; i < normRows.length; i += 50) {
+          await insertRows('normalized_bom_items', normRows.slice(i, i + 50));
+        }
+      }
+    }
+
     const unapprovedItems = (approveAll && !body.onlyMatched
       ? await db.prepare(`
           SELECT 

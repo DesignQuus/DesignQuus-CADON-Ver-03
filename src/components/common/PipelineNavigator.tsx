@@ -20,12 +20,14 @@ export interface PipelineNavigatorProps {
     hasRevisionDiff?: boolean;
     marginWarning?: boolean;
   };
+  showHomeLink?: boolean;
 }
 
 export default function PipelineNavigator({
   caseId,
   currentStep,
-  stats = {}
+  stats = {},
+  showHomeLink = false
 }: PipelineNavigatorProps) {
   const steps = [
     {
@@ -110,16 +112,18 @@ export default function PipelineNavigator({
         })}
       </div>
 
-      <div className="flex items-center gap-2">
-        <Link
-          href="/quotes"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 font-bold text-xs transition-colors shadow-2xs"
-          title="견적 목록으로 돌아가기"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">견적 목록 메인</span>
-        </Link>
-      </div>
+      {showHomeLink && (
+        <div className="flex items-center gap-2">
+          <Link
+            href="/cases"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 font-bold text-xs transition-colors shadow-2xs"
+            title="견적의뢰 목록으로 돌아가기"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">견적의뢰 목록</span>
+          </Link>
+        </div>
+      )}
     </nav>
   );
 }
