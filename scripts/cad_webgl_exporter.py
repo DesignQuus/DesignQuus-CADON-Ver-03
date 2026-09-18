@@ -14,6 +14,7 @@ import re
 import io
 import base64
 import array
+import shutil
 import ezdxf
 import ezdxf.colors
 
@@ -1356,6 +1357,31 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                 json.dump({'rasters': all_rasters}, f, ensure_ascii=False)
             except Exception:
                 json.dump({'rasters': all_rasters}, f, ensure_ascii=True)
+
+        # Auto-sync to both local storage/derived and EGDesk AppData storage/derived if they differ
+        try:
+            appdata = os.environ.get('APPDATA') or os.path.expanduser('~\\AppData\\Roaming')
+            proj_id = os.environ.get('NEXT_PUBLIC_EGDESK_PROJECT_ID', '8dd35536-8cbb-4e1c-bb65-b35f2920cb03')
+            env_name = os.environ.get('NEXT_PUBLIC_EGDESK_ENV', 'development')
+            egdesk_derived = os.path.join(appdata, 'egdesk', 'user-data', env_name, 'projects', proj_id, 'storage', 'derived')
+            local_derived = os.path.abspath(os.path.join('storage', 'derived'))
+            
+            target_dirs = set()
+            for cand in [egdesk_derived, local_derived]:
+                if os.path.exists(cand):
+                    target_dirs.add(os.path.abspath(cand))
+            
+            cur_dir = os.path.abspath(os.path.dirname(output_bin_path))
+            for t_dir in target_dirs:
+                if t_dir != cur_dir:
+                    base_bin = os.path.basename(output_bin_path)
+                    shutil.copyfile(output_bin_path, os.path.join(t_dir, base_bin))
+                    if os.path.exists(output_txt_path):
+                        shutil.copyfile(output_txt_path, os.path.join(t_dir, os.path.basename(output_txt_path)))
+                    if os.path.exists(output_raster_path):
+                        shutil.copyfile(output_raster_path, os.path.join(t_dir, os.path.basename(output_raster_path)))
+        except Exception:
+            pass
 
         file_size = os.path.getsize(output_bin_path)
         duration_ms = int((time.time() - start_time) * 1000)

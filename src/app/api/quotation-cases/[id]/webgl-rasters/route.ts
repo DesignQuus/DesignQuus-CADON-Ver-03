@@ -54,5 +54,13 @@ export async function GET(
 
   // Only return genuine rasters extracted from CAD file
   // Never inject dummy / hardcoded logos
-  return NextResponse.json({ rasters });
+  return new NextResponse(JSON.stringify({ rasters }), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    }
+  });
 }
