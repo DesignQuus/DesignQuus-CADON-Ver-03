@@ -188,25 +188,26 @@ def extract_ole_frames_from_dxf(dxf_path):
                             cx = (c_left + c_right) / 2.0
                             cy = (r_top + r_bottom) / 2.0
                             cell_h = r_top - r_bottom
+                            single_row_h = row_ys[r - 1] - row_ys[r] if r < len(row_ys) else cell_h
 
                             ha = 1 # Center by default
                             if r in [1, 29, 43]: # Title
                                 txt_col = '#ffff00'
-                                font_h = cell_h * 0.45
+                                font_h = min(cell_h * 0.45, 520.0)
                             elif r in [2, 30, 44]: # Table column headers
                                 txt_col = '#00e676'
-                                font_h = cell_h * 0.42
+                                font_h = min(single_row_h * 0.42, 240.0)
                             elif c == 5: # Motor model description
                                 ha = 0 # Left align
                                 cx = c_left + 150.0
                                 txt_col = '#ffffff'
-                                font_h = min(cell_h * 0.42, 230.0)
+                                font_h = min(single_row_h * 0.42, 230.0)
                             elif 'CONVEYOR' in t_str or 'DIVERTER' in t_str or 'ROLLER' in t_str:
                                 txt_col = '#38bdf8'
-                                font_h = cell_h * 0.42
+                                font_h = min(single_row_h * 0.42, 240.0)
                             else:
                                 txt_col = '#ffffff'
-                                font_h = cell_h * 0.42
+                                font_h = min(single_row_h * 0.42, 240.0)
 
                             cell_texts.append({
                                 't': t_str,
@@ -1232,93 +1233,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
         except Exception as _oe:
             pass
 
-        # 4. Check for MCL_DRAWFORM / drawing sheet frame reconstruction
-        try:
-            has_drawform = any('MCL_DRAWFORM' in b for b in referenced_blocks) or any('MCL_DRAWFORM' in getattr(e.dxf, 'name', '') for e in msp if e.dxftype() == 'INSERT')
-            if has_drawform:
-                # Reconstruct outer yellow drawing sheet border and red margin (A0 format at 1:1)
-                fx1, fy1, fx2, fy2 = 0.0, 0.0, 47500.0, 34500.0
-                mx1, my1, mx2, my2 = 500.0, 500.0, 47000.0, 34000.0
-                # Outer Border (Yellow)
-                add_seg((fx1, fy1), (fx2, fy1), (1.0, 1.0, 0.0))
-                add_seg((fx2, fy1), (fx2, fy2), (1.0, 1.0, 0.0))
-                add_seg((fx2, fy2), (fx1, fy2), (1.0, 1.0, 0.0))
-                add_seg((fx1, fy2), (fx1, fy1), (1.0, 1.0, 0.0))
-                # Margin Lines (Red)
-                add_seg((mx1, my1), (mx2, my1), (1.0, 0.2, 0.2))
-                add_seg((mx2, my1), (mx2, my2), (1.0, 0.2, 0.2))
-                add_seg((mx2, my2), (mx1, my2), (1.0, 0.2, 0.2))
-                add_seg((mx1, my2), (mx1, my1), (1.0, 0.2, 0.2))
-
-                # Title Block Box at Bottom-Right (Yellow & White lines)
-                tb_x1, tb_y1, tb_x2, tb_y2 = 34500.0, 500.0, 47000.0, 4200.0
-                add_seg((tb_x1, tb_y1), (tb_x2, tb_y1), (1.0, 1.0, 0.0))
-                add_seg((tb_x2, tb_y1), (tb_x2, tb_y2), (1.0, 1.0, 0.0))
-                add_seg((tb_x2, tb_y2), (tb_x1, tb_y2), (1.0, 1.0, 0.0))
-                add_seg((tb_x1, tb_y2), (tb_x1, tb_y1), (1.0, 1.0, 0.0))
-
-                # Horizontal dividers in Title Block
-                h_divs = [1200.0, 1950.0, 2700.0, 3450.0]
-                for hy in h_divs:
-                    add_seg((tb_x1, hy), (tb_x2, hy), (1.0, 1.0, 0.0))
-
-                # Vertical dividers in Title Block
-                add_seg((40800.0, tb_y1), (40800.0, tb_y2), (1.0, 1.0, 0.0)) # Main split
-                add_seg((36600.0, tb_y1), (36600.0, 1950.0), (1.0, 1.0, 0.0))
-                add_seg((38700.0, tb_y1), (38700.0, 1950.0), (1.0, 1.0, 0.0))
-                add_seg((43200.0, tb_y1), (43200.0, 1200.0), (1.0, 1.0, 0.0))
-                add_seg((45500.0, tb_y1), (45500.0, 1200.0), (1.0, 1.0, 0.0))
-
-                # Sechang Logo Emblem (Solid blue/cyan vector triangle)
-                add_tri((34750.0, 3600.0), (35000.0, 4000.0), (35250.0, 3600.0), (0.2, 0.65, 1.0))
-                add_seg((34750.0, 3600.0), (35000.0, 4000.0), (1.0, 1.0, 0.0))
-                add_seg((35000.0, 4000.0), (35250.0, 3600.0), (1.0, 1.0, 0.0))
-                add_seg((35250.0, 3600.0), (34750.0, 3600.0), (1.0, 1.0, 0.0))
-
-                # Standard Title Block Labels & Texts
-                tb_fixed_texts = [
-                    {'t': '세창인터내쇼날(주)', 'x': 35450.0, 'y': 3820.0, 'h': 240.0, 'r': 0.0, 'c': '#38bdf8', 'ha': 0, 'va': 2},
-                    {'t': 'SECHANG INTERNATIONAL CO., LTD.', 'x': 35450.0, 'y': 3580.0, 'h': 130.0, 'r': 0.0, 'c': '#ffffff', 'ha': 0, 'va': 2},
-                    {'t': 'CUSTOMER', 'x': 34700.0, 'y': 3150.0, 'h': 110.0, 'r': 0.0, 'c': '#ffff00', 'ha': 0, 'va': 2},
-                    {'t': 'PROJECT', 'x': 34700.0, 'y': 2400.0, 'h': 110.0, 'r': 0.0, 'c': '#ffff00', 'ha': 0, 'va': 2},
-                    {'t': 'DRAWN', 'x': 35550.0, 'y': 1750.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
-                    {'t': 'CHECKED', 'x': 37650.0, 'y': 1750.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
-                    {'t': 'APPROVED', 'x': 39750.0, 'y': 1750.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
-                    {'t': 'SCALE', 'x': 35550.0, 'y': 1000.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
-                    {'t': '1/1', 'x': 35550.0, 'y': 750.0, 'h': 140.0, 'r': 0.0, 'c': '#ffffff', 'ha': 1, 'va': 2},
-                    {'t': 'DATE', 'x': 37650.0, 'y': 1000.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
-                    {'t': 'UNIT', 'x': 39750.0, 'y': 1000.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
-                    {'t': 'MM', 'x': 39750.0, 'y': 750.0, 'h': 140.0, 'r': 0.0, 'c': '#ffffff', 'ha': 1, 'va': 2},
-                    {'t': 'DWG TITLE', 'x': 41000.0, 'y': 4000.0, 'h': 110.0, 'r': 0.0, 'c': '#ffff00', 'ha': 0, 'va': 2},
-                    {'t': 'DWG NO.', 'x': 41000.0, 'y': 2550.0, 'h': 110.0, 'r': 0.0, 'c': '#ffff00', 'ha': 0, 'va': 2},
-                    {'t': 'REV', 'x': 44350.0, 'y': 1000.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
-                    {'t': 'SHEET', 'x': 46250.0, 'y': 1000.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
-                    {'t': '1 OF 1', 'x': 46250.0, 'y': 750.0, 'h': 140.0, 'r': 0.0, 'c': '#ffffff', 'ha': 1, 'va': 2},
-                ]
-                all_texts.extend(tb_fixed_texts)
-
-                # Bottom Green Confidentiality / Security Notice Banner
-                sb_x1, sb_y1, sb_x2, sb_y2 = 500.0, 120.0, 34500.0, 480.0
-                GREEN_RGB = (0.0, 0.9, 0.46)
-                add_seg((sb_x1, sb_y1), (sb_x2, sb_y1), GREEN_RGB)
-                add_seg((sb_x2, sb_y1), (sb_x2, sb_y2), GREEN_RGB)
-                add_seg((sb_x2, sb_y2), (sb_x1, sb_y2), GREEN_RGB)
-                add_seg((sb_x1, sb_y2), (sb_x1, sb_y1), GREEN_RGB)
-                add_seg((sb_x1, (sb_y1 + sb_y2)/2.0), (sb_x2, (sb_y1 + sb_y2)/2.0), GREEN_RGB)
-
-                sec_text = "THIS DRAWING AND SPECIFICATION IS PROPERTY OF SECHANG INTERNATIONAL CO., LTD. AND SHOULD NOT BE REPRODUCED, COPIED OR USED IN WHOLE OR IN PART AS THE BASIS FOR MANUFACTURE OR SALE OF APPARATUS WITHOUT WRITTEN PERMISSION."
-                all_texts.append({
-                    't': sec_text,
-                    'x': round((sb_x1 + sb_x2) / 2.0, 1),
-                    'y': round((sb_y1 + sb_y2) / 2.0, 1),
-                    'h': 150.0,
-                    'r': 0.0,
-                    'c': '#00e676',
-                    'ha': 1, # Center
-                    'va': 2  # Middle
-                })
-        except Exception:
-            pass
+        # 4. Sheet border reconstruction removed (prevents false borders cutting through conveyors)
 
         num_lines = len(pos_data) // 6
         num_tris = len(tri_pos_data) // 9
