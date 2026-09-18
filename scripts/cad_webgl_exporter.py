@@ -15,6 +15,8 @@ import io
 import base64
 import array
 import shutil
+import sqlite3
+import glob
 import ezdxf
 import ezdxf.colors
 
@@ -1233,45 +1235,143 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
         except Exception as _oe:
             pass
 
-        # 4. Smart Auto-Fitting Drawing Sheet Frame & Genuine Title Block Reconstruction
-        # Detects main conveyor layout bounds and aligns with A&G Dongyang Automotive title block
+        # 4. AutoCAD Standard Drawing Sheet Frame & Genuine Title Block Reconstruction
+        # Reconstructs standard drawing frames (도곽) for ALL drawing sheets in the project
         try:
-            has_mcl = any('MCL_DRAWFORM' in b for b in referenced_blocks) or any('MCL_DRAWFORM' in getattr(e.dxf, 'name', '') for e in msp if e.dxftype() == 'INSERT')
-            if has_mcl:
-                # Outer Yellow Border (encompassing main conveyor up to tables at X=48,900)
-                fx1, fy1, fx2, fy2 = 500.0, 500.0, 48900.0, 34500.0
-                mx1, my1, mx2, my2 = 1000.0, 1000.0, 48600.0, 34000.0
-                YELLOW_RGB = (1.0, 1.0, 0.0)
-                RED_RGB = (1.0, 0.2, 0.2)
+            YELLOW_RGB = (1.0, 1.0, 0.0)
+            RED_RGB = (1.0, 0.2, 0.2)
 
-                # Outer Border (Yellow)
-                add_seg((fx1, fy1), (fx2, fy1), YELLOW_RGB)
-                add_seg((fx2, fy1), (fx2, fy2), YELLOW_RGB)
-                add_seg((fx2, fy2), (fx1, fy2), YELLOW_RGB)
-                add_seg((fx1, fy2), (fx1, fy1), YELLOW_RGB)
+            # Discover Case ID & query user_data.db for all registered drawing sheets
+            case_id_match = re.search(r'(case_\d+)', output_bin_path) or re.search(r'(case_\d+)', dxf_path)
+            case_id = case_id_match.group(1) if case_id_match else None
 
-                # Inner Margin (Red)
-                add_seg((mx1, my1), (mx2, my1), RED_RGB)
-                add_seg((mx2, my1), (mx2, my2), RED_RGB)
-                add_seg((mx2, my2), (mx1, my2), RED_RGB)
-                add_seg((mx1, my2), (mx1, my1), RED_RGB)
+            db_drawings = []
+            if case_id:
+                appdata = os.environ.get('APPDATA', '')
+                candidate_dbs = []
+                if appdata:
+                    candidate_dbs.extend(glob.glob(os.path.join(appdata, 'egdesk', 'user-data', 'development', 'projects', '*', 'user_data.db')))
+                candidate_dbs.extend([
+                    os.path.join(os.path.dirname(__file__), '..', 'storage', 'user_data.db'),
+                    os.path.join(os.path.dirname(__file__), '..', 'storage', 'cadon.db')
+                ])
+                for db_path in candidate_dbs:
+                    if os.path.exists(db_path):
+                        try:
+                            _conn = sqlite3.connect(db_path)
+                            _cur = _conn.cursor()
+                            _cur.execute('SELECT drawing_index, drawing_no_raw, drawing_name_raw, drawing_type, frame_bbox_json, title_block_bbox_json FROM drawings WHERE quotation_case_id = ? ORDER BY drawing_index', (case_id,))
+                            rows = _cur.fetchall()
+                            _conn.close()
+                            if rows:
+                                db_drawings = rows
+                                break
+                        except Exception:
+                            pass
 
-                # Genuine Title Block Grid (Matches A&G Dongyang Automotive text locations)
-                # Text anchors: A&G at 32440, LAY-OUT at 41306, 240314-00-000 at 41306, R00 at 48246
-                tbx1, tby1, tbx2, tby2 = 31500.0, 1000.0, 48600.0, 4200.0
-                add_seg((tbx1, tby1), (tbx2, tby1), YELLOW_RGB)
-                add_seg((tbx2, tby1), (tbx2, tby2), YELLOW_RGB)
-                add_seg((tbx2, tby2), (tbx1, tby2), YELLOW_RGB)
-                add_seg((tbx1, tby2), (tbx1, tby1), YELLOW_RGB)
+            if db_drawings:
+                for d in db_drawings:
+                    d_idx, d_no, d_name, d_type, f_json, t_json = d
+                    f = json.loads(f_json) if f_json else None
+                    if not f or 'min_x' not in f:
+                        continue
 
-                # Horizontal Title Block Dividers
-                for hy in [1750.0, 2550.0, 3350.0]:
-                    add_seg((tbx1, hy), (tbx2, hy), YELLOW_RGB)
+                    fx1, fy1, fx2, fy2 = float(f['min_x']), float(f['min_y']), float(f['max_x']), float(f['max_y'])
+                    fw, fh = fx2 - fx1, fy2 - fy1
+                    if fw < 50.0 or fh < 50.0:
+                        continue
 
-                # Vertical Title Block Dividers
-                for vx in [34500.0, 39500.0, 47000.0]:
-                    add_seg((vx, tby1), (vx, tby2), YELLOW_RGB)
-                add_seg((45500.0, tby1), (45500.0, 2550.0), YELLOW_RGB)
+                    if d_idx == 1 and fw > 30000.0:
+                        # Main Conveyor Layout: Smart auto-fit to avoid cutting conveyor machinery (X <= 48,336)
+                        # and cleanly end before specification tables (X = 49,140)
+                        sfx1, sfy1, sfx2, sfy2 = 500.0, 500.0, 48900.0, 34500.0
+                        smx1, smy1, smx2, smy2 = 1000.0, 1000.0, 48600.0, 34000.0
+
+                        # Outer Border (Yellow)
+                        add_seg((sfx1, sfy1), (sfx2, sfy1), YELLOW_RGB)
+                        add_seg((sfx2, sfy1), (sfx2, sfy2), YELLOW_RGB)
+                        add_seg((sfx2, sfy2), (sfx1, sfy2), YELLOW_RGB)
+                        add_seg((sfx1, sfy2), (sfx1, sfy1), YELLOW_RGB)
+
+                        # Inner Margin (Red)
+                        add_seg((smx1, smy1), (smx2, smy1), RED_RGB)
+                        add_seg((smx2, smy1), (smx2, smy2), RED_RGB)
+                        add_seg((smx2, smy2), (smx1, smy2), RED_RGB)
+                        add_seg((smx1, smy2), (smx1, smy1), RED_RGB)
+
+                        # Genuine Title Block Grid (Matches A&G Dongyang Automotive text locations)
+                        tbx1, tby1, tbx2, tby2 = 31500.0, 1000.0, 48600.0, 4200.0
+                        add_seg((tbx1, tby1), (tbx2, tby1), YELLOW_RGB)
+                        add_seg((tbx2, tby1), (tbx2, tby2), YELLOW_RGB)
+                        add_seg((tbx2, tby2), (tbx1, tby2), YELLOW_RGB)
+                        add_seg((tbx1, tby2), (tbx1, tby1), YELLOW_RGB)
+
+                        # Horizontal Title Block Dividers
+                        for hy in [1750.0, 2550.0, 3350.0]:
+                            add_seg((tbx1, hy), (tbx2, hy), YELLOW_RGB)
+
+                        # Vertical Title Block Dividers
+                        for vx in [34500.0, 39500.0, 47000.0]:
+                            add_seg((vx, tby1), (vx, tby2), YELLOW_RGB)
+                        add_seg((45500.0, tby1), (45500.0, 2550.0), YELLOW_RGB)
+                    else:
+                        # All Other Drawings (Sub-assemblies & Sub-parts):
+                        # Outer Sheet Border (Yellow)
+                        add_seg((fx1, fy1), (fx2, fy1), YELLOW_RGB)
+                        add_seg((fx2, fy1), (fx2, fy2), YELLOW_RGB)
+                        add_seg((fx2, fy2), (fx1, fy2), YELLOW_RGB)
+                        add_seg((fx1, fy2), (fx1, fy1), YELLOW_RGB)
+
+                        # Inner Margin (Red)
+                        if fw >= 2000.0:
+                            margin = min(fw, fh) * 0.02
+                        elif fw >= 800.0:
+                            margin = min(fw, fh) * 0.025
+                        else:
+                            margin = min(min(fw, fh) * 0.035, 12.0)
+
+                        mx1, my1 = fx1 + margin, fy1 + margin
+                        mx2, my2 = fx2 - margin, fy2 - margin
+                        add_seg((mx1, my1), (mx2, my1), RED_RGB)
+                        add_seg((mx2, my1), (mx2, my2), RED_RGB)
+                        add_seg((mx2, my2), (mx1, my2), RED_RGB)
+                        add_seg((mx1, my2), (mx1, my1), RED_RGB)
+
+                        # Title Block Grid (Yellow)
+                        if t_json:
+                            t = json.loads(t_json)
+                            tbx1 = max(mx1, min(float(t.get('min_x', mx1)), mx2))
+                            tbx2 = max(mx1, min(float(t.get('max_x', mx2)), mx2))
+                            tby1 = max(my1, min(float(t.get('min_y', my1)), my2))
+                            tby2 = max(my1, min(float(t.get('max_y', my2)), my2))
+                            if (tbx2 - tbx1) > 15.0 and (tby2 - tby1) > 8.0:
+                                add_seg((tbx1, tby1), (tbx2, tby1), YELLOW_RGB)
+                                add_seg((tbx2, tby1), (tbx2, tby2), YELLOW_RGB)
+                                add_seg((tbx2, tby2), (tbx1, tby2), YELLOW_RGB)
+                                add_seg((tbx1, tby2), (tbx1, tby1), YELLOW_RGB)
+                                # Sub-dividers
+                                add_seg((tbx1, (tby1 + tby2) / 2.0), (tbx2, (tby1 + tby2) / 2.0), YELLOW_RGB)
+                                if (tbx2 - tbx1) > 60.0:
+                                    add_seg(((tbx1 + tbx2) / 2.0, tby1), ((tbx1 + tbx2) / 2.0, tby2), YELLOW_RGB)
+            else:
+                # Fallback if DB not available: check MCL_DRAWFORM in DXF
+                has_mcl = any('MCL_DRAWFORM' in b for b in referenced_blocks) or any('MCL_DRAWFORM' in getattr(e.dxf, 'name', '') for e in msp if e.dxftype() == 'INSERT')
+                if has_mcl:
+                    fx1, fy1, fx2, fy2 = 500.0, 500.0, 48900.0, 34500.0
+                    mx1, my1, mx2, my2 = 1000.0, 1000.0, 48600.0, 34000.0
+                    add_seg((fx1, fy1), (fx2, fy1), YELLOW_RGB)
+                    add_seg((fx2, fy1), (fx2, fy2), YELLOW_RGB)
+                    add_seg((fx2, fy2), (fx1, fy2), YELLOW_RGB)
+                    add_seg((fx1, fy2), (fx1, fy1), YELLOW_RGB)
+                    add_seg((mx1, my1), (mx2, my1), RED_RGB)
+                    add_seg((mx2, my1), (mx2, my2), RED_RGB)
+                    add_seg((mx2, my2), (mx1, my2), RED_RGB)
+                    add_seg((mx1, my2), (mx1, my1), RED_RGB)
+                    tbx1, tby1, tbx2, tby2 = 31500.0, 1000.0, 48600.0, 4200.0
+                    add_seg((tbx1, tby1), (tbx2, tby1), YELLOW_RGB)
+                    add_seg((tbx2, tby1), (tbx2, tby2), YELLOW_RGB)
+                    add_seg((tbx2, tby2), (tbx1, tby2), YELLOW_RGB)
+                    add_seg((tbx1, tby2), (tbx1, tby1), YELLOW_RGB)
         except Exception:
             pass
 
