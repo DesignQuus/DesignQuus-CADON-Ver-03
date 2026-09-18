@@ -136,7 +136,7 @@ def parse_dxf_file(dxf_path: str) -> dict:
                 geom_data = {"start": [s[0], s[1]], "end": [end[0], end[1]]}
             elif t in ['LWPOLYLINE', 'POLYLINE']:
                 pts = list(e.points()) if t == 'POLYLINE' else [(p[0], p[1]) for p in e.get_points()]
-                geom_data = {"points": [[p[0], p[1]] for p in pts], "is_closed": getattr(e, 'is_closed', False)}
+                geom_data = {"points": [[p[0], p[1]] for p in pts], "is_closed": (getattr(e, 'closed', False) or getattr(e, 'is_closed', False))}
             elif t in ['TEXT', 'MTEXT']:
                 ins = e.dxf.insert
                 rot = getattr(e.dxf, 'rotation', 0.0)

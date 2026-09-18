@@ -2315,15 +2315,6 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            {/* 🚀 Next Step Primary Action: 2단계 3분할 단가 검토 워크스페이스 */}
-            <Link
-              href={`/quotes/${id}/review`}
-              className="btn-hover-effect px-4 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl text-xs font-extrabold shadow-md hover:shadow-lg flex items-center space-x-1.5 cursor-pointer transition-all shrink-0 ring-2 ring-indigo-300"
-              title="1단계 도면 검증 후, 2단계 3분할 통합 단가 검토 워크스페이스로 이동합니다."
-            >
-              <span>2단계: 3분할 단가 검토 진행</span>
-              <ChevronRight className="w-4 h-4 text-white" />
-            </Link>
           </div>
         </div>
 
@@ -2499,7 +2490,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         <div className="bg-slate-900 text-slate-200 px-4 py-1.5 flex items-center justify-between text-xs border-b border-slate-800">
           <div className="flex items-center gap-2 text-[11px]">
             <span className="px-1.5 py-0.5 rounded bg-blue-600 font-semibold text-[10px] text-white">가이드</span>
-            <span className="text-slate-300">1단계에서 도면 및 표제란 정보를 검토한 후, 상단 <strong>[2단계: 3분할 단가 검토 진행]</strong>을 클릭하여 부품별 단가 계산을 진행하세요. (조립도 16건은 자동 예외 처리됨)</span>
+            <span className="text-slate-300">1단계에서 도면 및 표제란 정보를 검토한 후, 상단 <strong>[2단계: 3분할 통합 단가 검토]</strong> 탭을 클릭하여 부품별 단가 계산을 진행하세요. (조립도 16건은 자동 예외 처리됨)</span>
           </div>
         </div>
       </div>

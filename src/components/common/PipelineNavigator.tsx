@@ -9,8 +9,7 @@ import {
   ArrowLeft, 
   ChevronRight, 
   CheckCircle2,
-  AlertCircle,
-  Database
+  AlertCircle
 } from 'lucide-react';
 
 export interface PipelineNavigatorProps {
@@ -113,18 +112,8 @@ export default function PipelineNavigator({
         })}
       </div>
 
-      <div className="flex items-center gap-2">
-        <Link
-          href="/admin/masters"
-          target="_blank"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs transition-colors shadow-2xs"
-          title="사내 표준 마스터 품목, 단가 및 가공 임률 설정 대장"
-        >
-          <Database className="w-3.5 h-3.5 text-blue-600" />
-          <span className="hidden sm:inline">마스터 기준정보</span>
-        </Link>
-
-        {showHomeLink && (
+      {showHomeLink && (
+        <div className="flex items-center gap-2">
           <Link
             href="/cases"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 font-bold text-xs transition-colors shadow-2xs"
@@ -133,8 +122,8 @@ export default function PipelineNavigator({
             <ArrowLeft className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">견적의뢰 목록</span>
           </Link>
-        )}
-      </div>
+        </div>
+      )}
     </nav>
   );
 }

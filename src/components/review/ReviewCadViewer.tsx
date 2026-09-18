@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, RotateCcw, Ruler, Layers } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
 import CadViewer from '@/components/CadViewer';
 
 interface ReviewCadViewerProps {
@@ -27,7 +26,39 @@ export default function ReviewCadViewer({
   selectedBalloonNo,
   selectedPartNo
 }: ReviewCadViewerProps) {
-  const [measureMode, setMeasureMode] = useState(false);
+  const [showBalloonNotice, setShowBalloonNotice] = useState(true);
+
+  // 로컬 저장소에서 사용자 선호 알림 풍선 노출 설정 복원
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cadon_balloon_notice_enabled');
+      if (saved !== null) {
+        setShowBalloonNotice(saved === 'true');
+      }
+    } catch {}
+  }, []);
+
+  const toggleBalloonNotice = () => {
+    setShowBalloonNotice((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('cadon_balloon_notice_enabled', String(next));
+      } catch {}
+    });
+  };
+
+  // 단축키 Alt+B 로 풍선 알림 즉시 토글
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['input', 'textarea'].includes((e.target as HTMLElement).tagName.toLowerCase())) return;
+      if (e.altKey && (e.key === 'b' || e.key === 'B' || e.key === 'ㅠ')) {
+        e.preventDefault();
+        toggleBalloonNotice();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // 선택된 BOM 행과 매칭되는 도면 인덱스 자동 추적 및 줌인 포커스
   const externalFocusIdx = useMemo(() => {
@@ -59,35 +90,9 @@ export default function ReviewCadViewer({
   }, [drawings, selectedPartNo, selectedBalloonNo]);
 
   return (
-    <div className="relative w-full h-full bg-slate-900 rounded-xl overflow-hidden border border-slate-700 shadow-sm flex flex-col">
-      {/* 1. 상단 툴바 */}
-      <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-slate-800/90 backdrop-blur-xs p-1.5 rounded-lg border border-slate-700 text-slate-300 text-xs shadow-md">
-        <span className="font-bold text-slate-100 px-2 py-0.5 bg-blue-600 rounded text-[11px]">
-          도면 뷰어
-        </span>
-
-        {selectedBalloonNo && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold text-[11px] border border-amber-500/30">
-            풍선 포커스: {selectedBalloonNo}번 {selectedPartNo ? `(${selectedPartNo})` : ''}
-          </span>
-        )}
-
-        <div className="h-4 w-px bg-slate-700 mx-1" />
-
-        <button
-          onClick={() => setMeasureMode(!measureMode)}
-          className={`px-2 py-1 rounded flex items-center gap-1 transition-colors ${
-            measureMode ? 'bg-blue-600 text-white' : 'hover:bg-slate-700 text-slate-300'
-          }`}
-          title="치수 측정 모드"
-        >
-          <Ruler className="w-3.5 h-3.5" />
-          <span>측정</span>
-        </button>
-      </div>
-
-      {/* 2. 도면 캔버스 (실제 CAD 벡터 뷰어) */}
-      <div className="flex-1 w-full h-full relative">
+    <div className="relative w-full h-full bg-slate-900 rounded-xl overflow-hidden border border-slate-700 shadow-sm flex flex-col p-2.5">
+      {/* 2단계 견적 검토 통합 CAD 뷰어 (상단 1줄 전문가 툴바 내장) */}
+      <div className="flex-1 w-full h-full relative overflow-hidden flex flex-col">
         <CadViewer
           caseId={caseId}
           cadObjects={cadObjects}
@@ -99,11 +104,16 @@ export default function ReviewCadViewer({
           selectedFile={allFiles.length > 0 ? allFiles[0] : null}
           externalFocusIdx={externalFocusIdx}
           isSidebarOpen={false}
+          isReviewMode={true}
+          showBalloonNotice={showBalloonNotice}
+          onToggleBalloonNotice={toggleBalloonNotice}
+          selectedBalloonNo={selectedBalloonNo}
+          selectedPartNo={selectedPartNo}
         />
 
-        {/* 선택된 풍선 하이라이트 오버레이 (시각화 힌트) */}
-        {selectedBalloonNo && (
-          <div className="absolute bottom-4 left-4 z-10 bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300 flex items-center gap-2">
+        {/* 선택된 풍선 하이라이트 오버레이 (시각화 힌트 - 풍선알림 ON 시에만 노출) */}
+        {showBalloonNotice && selectedBalloonNo && (
+          <div className="absolute bottom-4 left-4 z-10 bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300 flex items-center gap-2 shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
             <span>선택 행 풍선 [{selectedBalloonNo}] {externalFocusIdx !== null ? '도면 영역 줌 포커스 완료' : '동기화 중'}</span>
           </div>

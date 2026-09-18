@@ -7,7 +7,7 @@ import {
   CheckCircle2, FileText, X, Search, ShieldCheck, Archive, Download,
   PanelLeftClose, PanelLeftOpen, FileSpreadsheet, ChevronDown, ChevronRight,
   Maximize2, Sparkles, Filter, Check, Settings, Play, RefreshCw, AlertCircle, AlertTriangle,
-  FolderOpen, Copy
+  FolderOpen, Copy, MessageSquare, Ruler
 } from 'lucide-react';
 import WebGlCadViewer from './WebGlCadViewer';
 
@@ -60,7 +60,7 @@ function HoverMarqueeText({ text }: { text: string }) {
 function TriStateCheckbox({
   state,
   onChange,
-  disabled = false,
+  disabled,
   title
 }: {
   state: 'checked' | 'unchecked' | 'indeterminate';
@@ -71,11 +71,11 @@ function TriStateCheckbox({
   return (
     <button
       type="button"
-      disabled={disabled}
       onClick={(e) => {
         e.stopPropagation();
-        onChange();
+        if (!disabled) onChange();
       }}
+      disabled={disabled}
       title={title}
       className={`w-4 h-4 rounded flex items-center justify-center border transition-all cursor-pointer select-none ${
         state === 'checked'
@@ -113,6 +113,11 @@ interface CadViewerProps {
   allFiles?: any[];
   onSelectFile?: (fileId: string) => void;
   onBomUpdated?: () => Promise<void> | void;
+  isReviewMode?: boolean;
+  showBalloonNotice?: boolean;
+  onToggleBalloonNotice?: () => void;
+  selectedBalloonNo?: string;
+  selectedPartNo?: string;
 }
 
 export default function CadViewer({
@@ -136,7 +141,12 @@ export default function CadViewer({
   isAnalyzing = false,
   allFiles = [],
   onSelectFile,
-  onBomUpdated
+  onBomUpdated,
+  isReviewMode = false,
+  showBalloonNotice = true,
+  onToggleBalloonNotice,
+  selectedBalloonNo,
+  selectedPartNo
 }: CadViewerProps) {
   // Mode switcher: 'CAD' (2D Vector Viewer) vs 'SHEET' (Full-width Excel Grid)
   const [viewMode, setViewMode] = useState<'CAD' | 'SHEET'>('CAD');
@@ -1057,7 +1067,11 @@ export default function CadViewer({
       leafNos.forEach(no => {
         const leafDwg = drawingMap.get(no);
         const item = quoteItemMap.get(no);
-        const dwgInc = leafDwg?.is_quote_included !== undefined ? leafDwg.is_quote_included === 1 : true;
+        // 단위 부품은 0이 아닌 경우(null, undefined, 1) 기본 포함
+        const isLeafAssy = leafDwg?.drawing_type === 'MAIN_ASSEMBLY' || leafDwg?.drawing_type === 'SUB_ASSEMBLY';
+        const dwgInc = isLeafAssy 
+          ? (leafDwg?.is_quote_included === 1) 
+          : (leafDwg?.is_quote_included !== 0);
         const isInc = item ? (item.is_included !== 0 && dwgInc) : dwgInc;
         if (isInc) {
           checkedCount++;
@@ -1082,12 +1096,14 @@ export default function CadViewer({
         quantity: 1,
         unitPrice: 0,
         amount: subtotal,
-        isIncluded: checkState !== 'unchecked',
-        excludeReason: d.exclude_reason || null
+        // 조립도 자체는 단품 가공 견적이 아니므로 견적 대상에서 항상 자동 제외
+        isIncluded: false,
+        excludeReason: d.exclude_reason || '조립도 (가공품 제외)'
       };
     } else {
       const item = quoteItemMap.get(d.drawing_no_raw) || quoteItemMap.get(d.drawing_name_raw);
-      const dwgInc = d.is_quote_included !== undefined ? d.is_quote_included === 1 : true;
+      // 단위 부품: 0으로 명시된 경우만 제외, null/undefined/1은 기본 포함
+      const dwgInc = d.is_quote_included !== 0;
       const isIncluded = item ? (item.is_included !== 0 && dwgInc) : dwgInc;
       const unitPrice = item?.unit_price ?? 0;
       const quantity = item?.quantity ?? 1;
@@ -1120,7 +1136,8 @@ export default function CadViewer({
         totalParts++;
         const leafDwg = drawingMap.get(d.drawing_no_raw) || d;
         const item = quoteItemMap.get(d.drawing_no_raw) || quoteItemMap.get(d.drawing_name_raw);
-        const dwgInc = leafDwg?.is_quote_included !== undefined ? leafDwg.is_quote_included === 1 : true;
+        // 단위 부품: 0으로 명시된 경우만 제외, null/undefined/1은 기본 포함
+        const dwgInc = leafDwg?.is_quote_included !== 0;
         const isInc = item ? (item.is_included !== 0 && dwgInc) : dwgInc;
         const q = Number(item?.quantity) || 1;
         totalQty += q;
@@ -1649,7 +1666,159 @@ export default function CadViewer({
 
 
       {/* Top Professional Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-800 text-xs">
+      {isReviewMode ? (
+        /* 🚀 2단계 견적 검토 전용: 1줄 통합 전문가 CAD 도구 툴바 */
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 mb-2 border-b border-slate-800 text-xs px-1 shrink-0">
+          {/* [Left Group] 도면 선택 & 외부 CAD 연동 */}
+          <div className="flex items-center space-x-2 shrink-0">
+            {/* 1. 도면 계층/시트 선택 드롭다운 */}
+            {drawings.length > 0 && (
+              <select
+                value={selectedDrawingIdx}
+                onChange={(e) => {
+                  const idx = Number(e.target.value);
+                  setSelectedDrawingIdx(idx);
+                  if (idx >= 0 && drawings[idx]) {
+                    const d = drawings[idx];
+                    try {
+                      const fbox = typeof d.frame_bbox_json === 'string' ? JSON.parse(d.frame_bbox_json) : d.frame_bbox;
+                      const tbox = typeof d.title_block_bbox_json === 'string' ? JSON.parse(d.title_block_bbox_json) : d.title_block_bbox;
+                      const targetBox = fbox || tbox;
+                      if (targetBox && typeof targetBox.min_x === 'number') {
+                        setWebGlFocusBbox({
+                          min_x: targetBox.min_x,
+                          min_y: targetBox.min_y,
+                          max_x: targetBox.max_x,
+                          max_y: targetBox.max_y
+                        });
+                      }
+                    } catch {}
+                  } else {
+                    setWebGlFocusBbox(null);
+                  }
+                }}
+                className="bg-slate-900 hover:bg-slate-850 text-slate-100 font-bold px-3 py-1.5 rounded-lg border border-slate-700 text-xs focus:outline-hidden focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[240px] xl:max-w-[280px] truncate shadow-2xs"
+                title="도면 시트 선택"
+              >
+                <option value="-1">🌐 전체 도면 보기 ({drawings.length}개 시트)</option>
+                {mainDrawings.length > 0 && (
+                  <optgroup label={`── 📁 메인 조립도 (${mainDrawings.length}개) ──`}>
+                    {mainDrawings.map((d) => {
+                      const originalIdx = drawings.indexOf(d);
+                      return (
+                        <option key={d.id || originalIdx} value={originalIdx}>
+                          📁 {d.drawing_no_raw}: {d.drawing_name_raw}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                )}
+                {subAssyDrawings.length > 0 && (
+                  <optgroup label={`── 📂 서브 조립도 (${subAssyDrawings.length}개) ──`}>
+                    {subAssyDrawings.map((d) => {
+                      const originalIdx = drawings.indexOf(d);
+                      return (
+                        <option key={d.id || originalIdx} value={originalIdx}>
+                          📂 {d.drawing_no_raw}: {d.drawing_name_raw}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                )}
+                {partDrawings.length > 0 && (
+                  <optgroup label={`── 📄 단위 부품도 (${partDrawings.length}개) ──`}>
+                    {partDrawings.map((d) => {
+                      const originalIdx = drawings.indexOf(d);
+                      return (
+                        <option key={d.id || originalIdx} value={originalIdx}>
+                          📄 {d.drawing_no_raw}: {d.drawing_name_raw}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                )}
+              </select>
+            )}
+
+            {/* 2. AutoCAD 원클릭 실행 */}
+            {caseId && (
+              <button
+                onClick={handleOpenAutoCad}
+                disabled={openingCad}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap shadow-2xs"
+                title={isAutocadInstalled ? "현재 도면을 PC에 설치된 AutoCAD 프로그램에서 직접 열기" : "AutoCAD 프로그램 연결"}
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-rose-400" />
+                <span>AutoCAD</span>
+              </button>
+            )}
+          </div>
+
+          {/* [Right Group] 도구 모음: 풍선알림, 영역표시, TXT, CAD설정 */}
+          <div className="flex items-center space-x-1.5 shrink-0">
+            {/* 3. 풍선 알림 On/Off 토글 */}
+            {onToggleBalloonNotice && (
+              <button
+                onClick={onToggleBalloonNotice}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer whitespace-nowrap shadow-2xs ${
+                  showBalloonNotice
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                }`}
+                title={showBalloonNotice ? '도면 풍선 알림 끄기 (Alt+B)' : '도면 풍선 알림 켜기 (Alt+B)'}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>풍선알림 {showBalloonNotice ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
+
+            {/* 풍선 포커스 안내 뱃지 */}
+            {showBalloonNotice && selectedBalloonNo && (
+              <span className="hidden xl:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/15 text-amber-300 font-bold text-xs border border-amber-500/30 animate-in fade-in duration-150">
+                풍선 {selectedBalloonNo}번 {selectedPartNo ? `(${selectedPartNo})` : ''}
+              </span>
+            )}
+
+            {/* 4. 영역 표시 토글 */}
+            <button
+              onClick={() => setShowOverlays(!showOverlays)}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors flex items-center space-x-1 cursor-pointer whitespace-nowrap shadow-2xs ${
+                showOverlays
+                  ? 'bg-blue-600/30 border-blue-500 text-blue-300'
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+              title="프레임/표제란/BOM 영역 하이라이트 토글"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>영역 표시</span>
+            </button>
+
+            {/* 5. TXT 텍스트 레이어 토글 */}
+            <button
+              onClick={() => setShowTexts(!showTexts)}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shadow-2xs ${
+                showTexts
+                  ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300'
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+              title="CAD 텍스트 레이어 토글"
+            >
+              TXT
+            </button>
+
+            {/* 6. CAD 설정 모달 버튼 */}
+            <button
+              onClick={handleOpenSettingsModal}
+              className="p-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer shadow-2xs"
+              title="CAD 프로그램 실행 경로 및 렌더링 설정"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* 1단계용 기본 전문 툴바 */
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-800 text-xs">
         {/* Left: Sidebar Toggle + Mode Switcher Tabs */}
         <div className="flex items-center space-x-2.5 shrink-0">
           {onToggleSidebar && (
@@ -1980,6 +2149,7 @@ export default function CadViewer({
           )}
         </div>
       </div>
+      )}
 
       {/* 📁 Interactive Desktop File Location & Foreground Notice Banner */}
       {openedFolderInfo && (
@@ -2294,22 +2464,11 @@ export default function CadViewer({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-950 text-slate-300 border-b border-slate-800 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10 shadow-xs">
-                  {/* Multi-select Master Checkbox */}
-                  <th className="py-2 px-2 w-9 text-center border-r border-slate-800">
-                    <TriStateCheckbox
-                      state={
-                        selectedRowIds.size === 0
-                          ? 'unchecked'
-                          : selectedRowIds.size === displayedDrawings.length && displayedDrawings.length > 0
-                          ? 'checked'
-                          : 'indeterminate'
-                      }
-                      onChange={toggleSelectAllRows}
-                      title={selectedRowIds.size === displayedDrawings.length ? '전체 선택 해제' : '표시된 도면 전체 선택'}
-                    />
-                  </th>
-                  <th className="py-2 px-1.5 w-10 text-center border-r border-slate-800">No.</th>
-                  <th className="py-2 px-1 text-center w-12 border-r border-slate-800">
+                  {/* 1. No. (맨 앞 1열 배치) */}
+                  <th className="py-2 px-2 w-12 text-center border-r border-slate-800 font-mono">No.</th>
+                  
+                  {/* 2. 견적 포함/제외 열 */}
+                  <th className="py-2 px-1 text-center w-14 border-r border-slate-800">
                     <div className="flex flex-col items-center justify-center space-y-0.5">
                       <span className="text-[10px] text-slate-400">견적</span>
                       <TriStateCheckbox
@@ -2388,86 +2547,87 @@ export default function CadViewer({
                             : 'bg-slate-900/40 hover:bg-slate-800/80 text-slate-300'
                         }`}
                       >
-                        {/* Multi-Select Row Checkbox */}
-                        <td
-                          className="py-2 px-2 text-center border-r border-slate-800/70"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleRowSelection(d.id);
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isRowSelected}
-                            onChange={() => toggleRowSelection(d.id)}
-                            className="rounded border-slate-600 bg-slate-900 text-blue-600 focus:ring-0 cursor-pointer w-3.5 h-3.5"
-                          />
-                        </td>
-
-                        {/* No. */}
-                        <td className="py-2 px-1.5 text-center border-r border-slate-800/70 font-sans text-slate-400">
+                        {/* 1. No. (맨 앞 1열) */}
+                        <td className="py-2 px-2 text-center border-r border-slate-800/70 font-mono text-slate-400 font-bold">
                           {i + 1}
                         </td>
 
-                        {/* 견적 체크박스 */}
+                        {/* 견적 체크박스 / 조립도 제외 표시 */}
                         <td 
                           className="py-2 px-2 text-center border-r border-slate-800/70 relative"
                           onClick={(e) => e.stopPropagation()}
                           onDoubleClick={(e) => e.stopPropagation()}
                         >
                           <div className="flex flex-col items-center justify-center space-y-1">
-                            <TriStateCheckbox
-                              state={info.checkState}
-                              onChange={() => {
-                                if (isAssy) {
-                                  const subtree = getAllSubtreeNos(d.drawing_no_raw);
-                                  const target = info.checkState !== 'checked';
-                                  onToggleQuoteItem && onToggleQuoteItem(subtree, target);
-                                } else {
-                                  onToggleQuoteItem && onToggleQuoteItem([d.drawing_no_raw], !info.isIncluded);
-                                }
-                              }}
-                              title={
-                                isAssy
-                                  ? `조립도 및 하위 부품(${info.checkedCount}/${info.leafCount}개) 견적 포함/제외 일괄 토글`
-                                  : info.isIncluded ? '견적 포함됨 (클릭 시 견적 제외)' : '견적 제외됨 (클릭 시 견적 포함)'
-                              }
-                            />
-                            {!info.isIncluded && (
-                              <div className="relative">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setReasonMenuDwgId(reasonMenuDwgId === (d.id || d.drawing_no_raw) ? null : (d.id || d.drawing_no_raw));
-                                  }}
-                                  className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-950/80 text-rose-300 border border-rose-700/70 hover:bg-rose-900 transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
-                                  title="클릭 시 견적 제외 사유를 선택합니다."
+                            {isAssy ? (
+                              <>
+                                <span 
+                                  className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-950/80 text-purple-300 border border-purple-700/60 whitespace-nowrap inline-block shadow-2xs"
+                                  title="조립품(상위 조립도)은 단품 가공 견적이 아니므로 자동 제외 처리됩니다."
                                 >
-                                  제외{d.exclude_reason ? `:${d.exclude_reason.slice(0, 4)}` : ''}
-                                </button>
-                                {reasonMenuDwgId === (d.id || d.drawing_no_raw) && (
-                                  <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 w-32 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50 py-1 text-[10.5px] font-sans text-left">
-                                    <div className="px-2 py-0.5 text-[9.5px] text-slate-400 font-bold border-b border-slate-800">
-                                      제외 사유 선택
-                                    </div>
-                                    {['중복 도면', '고객 사급품', '참고 도면', '시중 구매품', '2차 발주분', '단순 제외'].map((reasonOption) => (
-                                      <button
-                                        key={reasonOption}
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setReasonMenuDwgId(null);
-                                          onToggleQuoteItem && onToggleQuoteItem([d.drawing_no_raw], false, reasonOption);
-                                        }}
-                                        className="w-full px-2 py-1 hover:bg-slate-800 text-slate-200 text-left font-medium transition-colors"
-                                      >
-                                        {reasonOption}
-                                      </button>
-                                    ))}
+                                  📦 조립제외
+                                </span>
+                                <div className="flex items-center space-x-1 text-[9px] text-slate-400">
+                                  <TriStateCheckbox
+                                    state={info.checkState}
+                                    onChange={() => {
+                                      const subtree = getAllSubtreeNos(d.drawing_no_raw);
+                                      const target = info.checkState !== 'checked';
+                                      onToggleQuoteItem && onToggleQuoteItem(subtree, target);
+                                    }}
+                                    title={`하위 단위부품(${info.checkedCount}/${info.leafCount}개) 견적 포함/제외 일괄 토글`}
+                                  />
+                                  <span className="font-mono text-[9px] text-slate-400">
+                                    {info.checkedCount}/{info.leafCount}
+                                  </span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <TriStateCheckbox
+                                  state={info.checkState}
+                                  onChange={() => {
+                                    onToggleQuoteItem && onToggleQuoteItem([d.drawing_no_raw], !info.isIncluded);
+                                  }}
+                                  title={info.isIncluded ? '견적 포함됨 (클릭 시 견적 제외)' : '견적 제외됨 (클릭 시 견적 포함)'}
+                                />
+                                {!info.isIncluded && (
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setReasonMenuDwgId(reasonMenuDwgId === (d.id || d.drawing_no_raw) ? null : (d.id || d.drawing_no_raw));
+                                      }}
+                                      className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-950/80 text-rose-300 border border-rose-700/70 hover:bg-rose-900 transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
+                                      title="클릭 시 견적 제외 사유를 선택합니다."
+                                    >
+                                      제외{d.exclude_reason ? `:${d.exclude_reason.slice(0, 4)}` : ''}
+                                    </button>
+                                    {reasonMenuDwgId === (d.id || d.drawing_no_raw) && (
+                                      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 w-32 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50 py-1 text-[10.5px] font-sans text-left">
+                                        <div className="px-2 py-0.5 text-[9.5px] text-slate-400 font-bold border-b border-slate-800">
+                                          제외 사유 선택
+                                        </div>
+                                        {['중복 도면', '고객 사급품', '참고 도면', '시중 구매품', '2차 발주분', '단순 제외'].map((reasonOption) => (
+                                          <button
+                                            key={reasonOption}
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setReasonMenuDwgId(null);
+                                              onToggleQuoteItem && onToggleQuoteItem([d.drawing_no_raw], false, reasonOption);
+                                            }}
+                                            className="w-full px-2 py-1 hover:bg-slate-800 text-slate-200 text-left font-medium transition-colors"
+                                          >
+                                            {reasonOption}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
-                              </div>
+                              </>
                             )}
                           </div>
                         </td>

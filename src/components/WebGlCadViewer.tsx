@@ -405,7 +405,9 @@ export default function WebGlCadViewer({
               const lineSpacing = fontSize * 1.3;
 
               // Maximum allowed width in local coordinates if defined_width ('w') was specified
-              const maxW = (item as any).w ? ((item as any).w * scale) / 0.85 : undefined;
+              // Scale maxW proportionally if the fontSize was clamped (i.e. increased to minimum 6px)
+              const fontScaleRatio = fontSize / (item.h * scale);
+              const maxW = (item as any).w ? (((item as any).w * scale * fontScaleRatio) / 0.85) : undefined;
 
               const renderTextLines = (targetX: number, targetY: number) => {
                 tctx.save();

@@ -18,6 +18,8 @@ export interface QuoteReviewLine {
   memo?: string;
   specification?: string;
   isAssembly?: boolean;
+  isIncluded?: boolean;
+  excludeReason?: string;
 }
 
 interface QuoteLineGridProps {
@@ -37,16 +39,23 @@ export default function QuoteLineGrid({
   filterType,
   onFilterChange
 }: QuoteLineGridProps) {
+  // 견적 대상 부품 (조립도 및 명시적 제외 품목 제외)
+  const quoteTargetLines = lines.filter((l) => !l.isAssembly && l.isIncluded !== false);
+  const assemblyCount = lines.filter((l) => l.isAssembly || l.isIncluded === false).length;
+  const unconfirmedCount = quoteTargetLines.filter((l) => l.status !== 'CONFIRMED').length;
+
   const filtered = lines.filter((l) => {
-    if (filterType === 'NEEDS_REVIEW') return l.status === 'NEEDS_REVIEW';
-    if (filterType === 'UNCONFIRMED') return l.status !== 'CONFIRMED';
-    if (['MACHINING', 'SHEET_METAL', 'CASTING', 'COMMERCIAL', 'ELECTRICAL', 'ASSEMBLY'].includes(filterType)) {
-      return l.partType === filterType;
+    // 기본 ALL 뷰: 조립도는 견적 리스트에서 자동 제외/해제 처리됨!
+    if (filterType === 'ALL') return !l.isAssembly && l.isIncluded !== false;
+    if (filterType === 'WITH_ASSEMBLY') return true;
+    if (filterType === 'NEEDS_REVIEW') return (!l.isAssembly && l.isIncluded !== false) && l.status === 'NEEDS_REVIEW';
+    if (filterType === 'UNCONFIRMED') return (!l.isAssembly && l.isIncluded !== false) && l.status !== 'CONFIRMED';
+    if (filterType === 'ASSEMBLY') return l.isAssembly || l.isIncluded === false;
+    if (['MACHINING', 'SHEET_METAL', 'CASTING', 'COMMERCIAL', 'ELECTRICAL'].includes(filterType)) {
+      return l.partType === filterType && !l.isAssembly && l.isIncluded !== false;
     }
     return true;
   });
-
-  const unconfirmedCount = lines.filter((l) => !l.isAssembly && l.status !== 'CONFIRMED').length;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full overflow-hidden">
@@ -57,8 +66,13 @@ export default function QuoteLineGrid({
           <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
             unconfirmedCount === 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
           }`}>
-            미확정 {unconfirmedCount}/{lines.length}
+            미확정 {unconfirmedCount}/{quoteTargetLines.length}
           </span>
+          {assemblyCount > 0 && (
+            <span className="text-[10.5px] px-2 py-0.5 rounded-full font-medium bg-purple-50 text-purple-700 border border-purple-200">
+              조립도 {assemblyCount}건 자동제외
+            </span>
+          )}
         </div>
 
         <select
@@ -66,7 +80,7 @@ export default function QuoteLineGrid({
           onChange={(e) => onFilterChange(e.target.value)}
           className="text-xs px-2 py-1 border border-slate-200 rounded-md bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
-          <option value="ALL">전체 보기</option>
+          <option value="ALL">견적 대상 전체 ({quoteTargetLines.length}건)</option>
           <option value="NEEDS_REVIEW">검토필요 항목</option>
           <option value="UNCONFIRMED">미확정 항목</option>
           <option value="MACHINING">가공품만</option>
@@ -74,7 +88,8 @@ export default function QuoteLineGrid({
           <option value="CASTING">주조품만</option>
           <option value="COMMERCIAL">규격철물만</option>
           <option value="ELECTRICAL">전장/공압만</option>
-          <option value="ASSEMBLY">조립품만</option>
+          <option value="ASSEMBLY">조립도(견적제외, {assemblyCount}건)</option>
+          <option value="WITH_ASSEMBLY">조립도 포함 전체 ({lines.length}건)</option>
         </select>
       </div>
 
@@ -106,7 +121,7 @@ export default function QuoteLineGrid({
                   onClick={() => onSelectIndex(lines.indexOf(row))}
                   className={`cursor-pointer transition-colors ${
                     isSelected ? 'bg-blue-50/90 ring-1 ring-blue-500 font-semibold' : 'hover:bg-slate-50'
-                  }`}
+                  } ${row.isAssembly ? 'bg-slate-50/70 opacity-75' : ''}`}
                 >
                   <td className="p-2 text-center text-slate-400 font-mono">{row.itemNo}</td>
                   <td className="p-2">
@@ -115,7 +130,12 @@ export default function QuoteLineGrid({
                     </span>
                     <span className="font-mono text-slate-900">{row.partNo}</span>
                   </td>
-                  <td className="p-2 truncate max-w-[140px]" title={row.partName}>{row.partName}</td>
+                  <td className="p-2 truncate max-w-[140px]" title={row.partName}>
+                    {row.partName}
+                    {row.isAssembly && (
+                      <span className="ml-1 px-1 py-0.2 text-[9px] rounded bg-purple-100 text-purple-700 font-bold">조립제외</span>
+                    )}
+                  </td>
                   <td className="p-2 text-center">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
                       row.partType === 'MACHINING' ? 'bg-blue-100 text-blue-800' :
@@ -137,23 +157,29 @@ export default function QuoteLineGrid({
                   <td className="p-2 truncate">{row.material}</td>
                   <td className="p-2 text-center font-mono">{row.quantity}</td>
                   <td className="p-2 text-right font-mono text-slate-500">
-                    {row.unitCost > 0 ? `₩${row.unitCost.toLocaleString()}` : '-'}
+                    {row.isAssembly ? '-' : (row.unitCost > 0 ? `₩${row.unitCost.toLocaleString()}` : '-')}
                   </td>
                   <td className="p-2 text-right font-mono text-blue-700 font-bold">
-                    {row.supplyPrice > 0 ? `₩${row.supplyPrice.toLocaleString()}` : '-'}
+                    {row.isAssembly ? '-' : (row.supplyPrice > 0 ? `₩${row.supplyPrice.toLocaleString()}` : '-')}
                   </td>
                   <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => onToggleConfirm(row.id)}
-                      disabled={row.partType === 'UNCLASSIFIED'}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                        isConfirmed ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800' :
-                        isNeedsReview ? 'bg-amber-100 hover:bg-amber-200 text-amber-800' :
-                        'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                      }`}
-                    >
-                      {isConfirmed ? '확정' : isNeedsReview ? '검토필요' : '자동'}
-                    </button>
+                    {row.isAssembly ? (
+                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                        조립제외
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onToggleConfirm(row.id)}
+                        disabled={row.partType === 'UNCLASSIFIED'}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                          isConfirmed ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800' :
+                          isNeedsReview ? 'bg-amber-100 hover:bg-amber-200 text-amber-800' :
+                          'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {isConfirmed ? '확정' : isNeedsReview ? '검토' : '미확정'}
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

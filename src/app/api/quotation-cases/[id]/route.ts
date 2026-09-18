@@ -155,6 +155,29 @@ export async function GET(
     }
   }
 
+  // 💎 Self-healing: 조립도는 항상 is_quote_included = 0 (자동 제외), 단위 부품은 기본 1 (포함)
+  for (const d of drawings) {
+    const isAssy = d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY' ||
+                   (d.drawing_no_raw && d.drawing_no_raw.endsWith('-000')) ||
+                   (d.drawing_name_raw && d.drawing_name_raw.includes('조립도'));
+    if (isAssy) {
+      if (d.is_quote_included !== 0) {
+        d.is_quote_included = 0;
+        d.exclude_reason = '조립도 (가공품 제외)';
+        await db.prepare(`
+          UPDATE drawings SET is_quote_included = 0, exclude_reason = '조립도 (가공품 제외)' WHERE id = ?
+        `).run(d.id);
+      }
+    } else {
+      if (d.is_quote_included === null || d.is_quote_included === undefined) {
+        d.is_quote_included = 1;
+        await db.prepare(`
+          UPDATE drawings SET is_quote_included = 1 WHERE id = ?
+        `).run(d.id);
+      }
+    }
+  }
+
   // 💎 Self-healing: Ensure normalized_bom_items exist if flattenedBomItems or drawings exist
   const normCountCheck = (await db.prepare('SELECT COUNT(*) as cnt FROM normalized_bom_items WHERE quotation_case_id = ?').get(id)) as any;
   if (!normCountCheck?.cnt || normCountCheck.cnt === 0) {

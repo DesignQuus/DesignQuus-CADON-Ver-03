@@ -214,8 +214,12 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
         if matched_frame:
             fbox = matched_frame
         elif dno.endswith("-00-000"):
-            # Top-level overall layout frame
-            fbox = {"min_x": 0, "min_y": 0, "max_x": 50400, "max_y": 40065}
+            # Top-level overall layout frame fallback to dynamic global CAD bounds
+            gb = cad_data.get("global_bounds", {})
+            if gb and gb.get("width", 0) > 0:
+                fbox = {"min_x": gb["min_x"], "min_y": gb["min_y"], "max_x": gb["max_x"], "max_y": gb["max_y"]}
+            else:
+                fbox = {"min_x": 0, "min_y": 0, "max_x": cx + 1000, "max_y": cy + 1000}
         elif dtype == "MAIN_ASSEMBLY":
             fbox = {
                 "min_x": cx - 5000, "min_y": cy - 200,

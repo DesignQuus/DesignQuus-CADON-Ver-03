@@ -108,6 +108,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                 const supplyPrice = Number(qi.unit_price) || 0;
                 const unitCost = Math.round(supplyPrice * 0.82);
 
+                const isIncluded = !isAssembly && qi.is_included !== 0;
+
                 return {
                   id: qi.id,
                   itemNo: qi.item_no || idx + 1,
@@ -116,13 +118,15 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType: partType,
                   material: qi.material || 'SS400',
                   quantity: Number(qi.quantity) || 1,
-                  unitCost: unitCost,
-                  supplyPrice: supplyPrice,
-                  status: isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW',
+                  unitCost: isAssembly ? 0 : unitCost,
+                  supplyPrice: isAssembly ? 0 : supplyPrice,
+                  status: isAssembly ? 'CONFIRMED' : (hasPrice && isIncluded ? 'CONFIRMED' : 'NEEDS_REVIEW'),
                   balloonNo: String(qi.item_no || idx + 1),
                   memo: qi.remark || '',
                   specification: qi.specification || '',
-                  isAssembly
+                  isAssembly,
+                  isIncluded,
+                  excludeReason: isAssembly ? '조립도 (가공품 제외)' : (isIncluded ? undefined : '견적 제외')
                 };
               })
             );
@@ -173,6 +177,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                                  partType === 'MACHINING' ? 34500 :
                                  partType === 'ELECTRICAL' ? 185000 : 420;
                 const supplyPrice = isAssembly ? 0 : Math.ceil(unitCost * 1.18 / 100) * 100;
+                const isIncluded = !isAssembly && it.is_quote_included !== 0;
 
                 return {
                   id: it.id,
@@ -184,10 +189,12 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   quantity: Number(it.quantity) || 1,
                   unitCost,
                   supplyPrice,
-                  status: isApproved ? 'CONFIRMED' : 'NEEDS_REVIEW',
+                  status: isAssembly ? 'CONFIRMED' : (isApproved && isIncluded ? 'CONFIRMED' : 'NEEDS_REVIEW'),
                   balloonNo: String(idx + 1),
                   specification: it.specification || it.spec_candidate || '',
-                  isAssembly
+                  isAssembly,
+                  isIncluded,
+                  excludeReason: isAssembly ? '조립도 (가공품 제외)' : (isIncluded ? undefined : '견적 제외')
                 };
               })
             );
@@ -226,6 +233,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                                  partType === 'MACHINING' ? 34500 :
                                  partType === 'ELECTRICAL' ? 185000 : 420;
                 const supplyPrice = isAssembly ? 0 : Math.ceil(unitCost * 1.18 / 100) * 100;
+                const isIncluded = !isAssembly && d.is_quote_included !== 0;
 
                 return {
                   id: d.id || `dwg_${idx + 1}`,
@@ -240,7 +248,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   status: isAssembly ? 'CONFIRMED' : 'NEEDS_REVIEW',
                   balloonNo: String(idx + 1),
                   specification: d.scale || '',
-                  isAssembly
+                  isAssembly,
+                  isIncluded,
+                  excludeReason: isAssembly ? '조립도 (가공품 제외)' : (isIncluded ? undefined : '견적 제외')
                 };
               })
             );
@@ -593,9 +603,10 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     }
   };
 
-  const unconfirmedCount = lines.filter((l) => !l.isAssembly && l.status !== 'CONFIRMED').length;
-  const totalCost = lines.reduce((acc, l) => acc + (l.isAssembly ? 0 : l.unitCost * l.quantity), 0);
-  const totalSupply = lines.reduce((acc, l) => acc + (l.isAssembly ? 0 : l.supplyPrice * l.quantity), 0);
+  const quoteActiveLines = lines.filter((l) => !l.isAssembly && l.isIncluded !== false);
+  const unconfirmedCount = quoteActiveLines.filter((l) => l.status !== 'CONFIRMED').length;
+  const totalCost = quoteActiveLines.reduce((acc, l) => acc + (l.unitCost * l.quantity), 0);
+  const totalSupply = quoteActiveLines.reduce((acc, l) => acc + (l.supplyPrice * l.quantity), 0);
   const avgMargin = totalSupply > 0 ? Math.round(((totalSupply - totalCost) / totalSupply) * 1000) / 10 : 0;
 
   const handleSubmitQuote = async () => {
