@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, insertRows } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { resolveStoragePath, getStorageSubdir } from '@/lib/storage';
 import { checkCasePermission } from '@/lib/permissions';
@@ -8,6 +8,7 @@ import { getLearnedPricePool } from '@/lib/self-learning';
 import fs from 'fs';
 import path from 'path';
 
+// Updated route handler - CADON v2.0
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -150,7 +151,64 @@ export async function GET(
       const betterName = partNameMap.get(pno);
       if (betterName) {
         d.drawing_name_raw = betterName;
-        d.drawing_name_normalized = betterName;
+      }
+    }
+  }
+
+  // 💎 Self-healing: Ensure normalized_bom_items exist if flattenedBomItems or drawings exist
+  const normCountCheck = (await db.prepare('SELECT COUNT(*) as cnt FROM normalized_bom_items WHERE quotation_case_id = ?').get(id)) as any;
+  if (!normCountCheck?.cnt || normCountCheck.cnt === 0) {
+    const nowTime = new Date().toISOString();
+    let normRows: any[] = [];
+
+    if (flattenedBomItems.length > 0) {
+      normRows = flattenedBomItems.map((fb: any, idx: number) => {
+        const normId = fb.id ? fb.id.replace('fb_', 'norm_') : `norm_${id}_${idx + 1}`;
+        const rawName = fb.name || fb.part_no || `부품-${idx + 1}`;
+        return {
+          id: normId,
+          quotation_case_id: id,
+          raw_item_id: fb.id,
+          raw_name: rawName,
+          normalized_name: rawName,
+          search_name: rawName.replace(/\s+/g, ''),
+          direction: null,
+          spec_candidate: fb.specification || '-',
+          material_candidate: fb.material || 'SS400',
+          quantity: Number(fb.total_quantity) || 1,
+          unit: fb.unit || 'EA',
+          status: 'NORMALIZED',
+          is_quote_included: 1,
+          created_at: nowTime
+        };
+      });
+    } else if (drawings.length > 0) {
+      normRows = drawings.map((d: any, idx: number) => {
+        const normId = `norm_${id}_${idx + 1}`;
+        const rawName = d.drawing_name_raw || d.drawing_no_raw || `부품-${idx + 1}`;
+        const isAssy = d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY';
+        return {
+          id: normId,
+          quotation_case_id: id,
+          raw_item_id: d.id,
+          raw_name: rawName,
+          normalized_name: d.drawing_name_normalized || rawName,
+          search_name: rawName.replace(/\s+/g, ''),
+          direction: null,
+          spec_candidate: d.scale || '-',
+          material_candidate: d.material || 'SS400',
+          quantity: 1,
+          unit: 'EA',
+          status: 'NORMALIZED',
+          is_quote_included: isAssy ? 0 : (d.is_quote_included ?? 1),
+          created_at: nowTime
+        };
+      });
+    }
+
+    if (normRows.length > 0) {
+      for (let i = 0; i < normRows.length; i += 50) {
+        await insertRows('normalized_bom_items', normRows.slice(i, i + 50));
       }
     }
   }
@@ -390,3 +448,4 @@ export async function PATCH(
     return NextResponse.json({ error: err.message || '견적건 정보 업데이트 실패' }, { status: 500 });
   }
 }
+

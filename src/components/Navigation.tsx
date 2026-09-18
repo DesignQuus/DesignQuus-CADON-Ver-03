@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home, Users, Building2, LayoutDashboard, FileSpreadsheet } from 'lucide-react';
+import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home, Users, Building2, LayoutDashboard, FileSpreadsheet, Database } from 'lucide-react';
 
 export default function Navigation() {
   const [user, setUser] = useState<any>(null);
@@ -72,16 +72,6 @@ export default function Navigation() {
             </div>
           </Link>
 
-          {pathname.startsWith('/cases/') && (
-            <Link
-              href="/cases"
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-all shadow-2xs cursor-pointer group"
-              title="견적의뢰 관리 메인 목록(대시보드)으로 이동"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
-              <span>견적 메인목록</span>
-            </Link>
-          )}
 
           <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-slate-200">
             {user?.role === 'SUPER_ADMIN' ? (
@@ -145,6 +135,18 @@ export default function Navigation() {
                 >
                   <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
                   <span>공식 견적서 관리</span>
+                </Link>
+                <Link
+                  href="/admin/masters"
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                    pathname.startsWith('/admin/masters')
+                      ? 'bg-blue-50 text-blue-700 font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                  title="자재·가공비·외주비 마스터 단가표 관리"
+                >
+                  <Database className="w-4 h-4 text-amber-600" />
+                  <span>마스터 기준정보</span>
                 </Link>
                 {user?.role === 'TENANT_ADMIN' && (
                   <Link

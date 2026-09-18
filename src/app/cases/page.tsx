@@ -784,6 +784,9 @@ export default function CasesPage() {
   }, [scopeActiveCases]);
 
   const totalDrawingsSum = scopeActiveCases.reduce((acc, c) => acc + (c.drawings_count || c.files_count || 0), 0);
+  const archivedDrawingsSum = scopeArchivedCases.reduce((acc, c) => acc + (c.drawings_count || c.files_count || 0), 0);
+  const allTotalDrawingsSum = totalDrawingsSum + archivedDrawingsSum;
+  const allTotalCasesCount = scopeActiveCases.length + scopeArchivedCases.length;
   const totalBomItemsSum = scopeActiveCases.reduce((acc, c) => acc + (c.bom_items_count || 0), 0);
   const totalQuotedAmountSum = scopeActiveCases.reduce((acc, c) => acc + (c.quote_total_amount || 0), 0);
 
@@ -1032,7 +1035,22 @@ export default function CasesPage() {
                 <div className="text-[9.5px] font-semibold text-slate-400">분석 도면</div>
                 <div className="font-mono font-extrabold text-sm text-slate-900 leading-tight">
                   {totalDrawingsSum.toLocaleString()} <span className="text-[11px] font-medium text-slate-500">장</span>
+                  {archivedCount > 0 && (
+                    <span className="text-[10px] font-bold text-slate-400 ml-1" title="보관함 포함 전사 누적 분석 도면 총수">
+                      (누적 {allTotalDrawingsSum.toLocaleString()}장)
+                    </span>
+                  )}
                 </div>
+                {archivedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTab('ARCHIVED')}
+                    className="text-[9.5px] text-purple-700 hover:text-purple-900 font-bold hover:underline cursor-pointer flex items-center justify-end gap-1 mt-0.5"
+                    title="보관함에 안전 보관된 2건(246장) 즉시 조회"
+                  >
+                    <span>📦 보관함 {archivedCount}건 ({archivedDrawingsSum.toLocaleString()}장)</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1113,7 +1131,7 @@ export default function CasesPage() {
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
-              전체 ({totalCasesCount})
+              진행중 전체 ({totalCasesCount})
             </button>
             <button
               onClick={() => handleSelectTab('READY_FOR_QUOTE')}
@@ -1308,14 +1326,50 @@ export default function CasesPage() {
         {/* Sub-bar: Filtering Summary & Bulk Selection Status */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-700 font-medium bg-slate-50 px-4 py-2.5 rounded-[3px] border border-slate-200/80 gap-2">
           <div className="flex items-center flex-wrap gap-2">
-            <span>
-              조회 결과: <strong className="text-slate-900 font-bold">{filteredCases.length}건</strong>
-              {filteredCases.length !== totalCasesCount && ` (전체 ${totalCasesCount}건 중)`}
-            </span>
+            {selectedTab === 'ARCHIVED' ? (
+              <span>
+                보관함: <strong className="text-purple-900 font-bold">{filteredCases.length}건</strong>
+                <span className="text-slate-500 font-medium ml-1">(전체 DB 누적 {allTotalCasesCount}건 중)</span>
+              </span>
+            ) : (
+              <span>
+                진행중: <strong className="text-blue-900 font-bold">{filteredCases.length}건</strong>
+                <span className="text-slate-500 font-medium ml-1">(전체 DB 누적 {allTotalCasesCount}건)</span>
+              </span>
+            )}
             <span className="text-slate-400">•</span>
             <span>
               합산 견적액: <strong className="text-blue-700 font-mono font-bold text-sm">₩{filteredTotalAmount.toLocaleString()}</strong>
             </span>
+
+            {selectedTab === 'ARCHIVED' ? (
+              <>
+                <span className="text-slate-400">•</span>
+                <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold text-[11px] flex items-center gap-1 border border-purple-300">
+                  <Archive className="w-3 h-3 text-purple-600" />
+                  보관함 모드 조회 중 (총 {filteredCases.length}건)
+                </span>
+                <button
+                  onClick={() => handleSelectTab('ALL')}
+                  className="px-2.5 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white shadow-2xs text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1"
+                  title="진행중인 활성 견적 목록으로 돌아가기"
+                >
+                  <span>← 진행중 견적 보기</span>
+                </button>
+              </>
+            ) : archivedCount > 0 ? (
+              <>
+                <span className="text-slate-400">•</span>
+                <button
+                  onClick={() => handleSelectTab('ARCHIVED')}
+                  className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 text-[11px] font-extrabold cursor-pointer transition-colors shadow-2xs"
+                  title="보관함에 보관된 완료/보류 견적건 2건 즉시 조회"
+                >
+                  <Archive className="w-3 h-3 text-purple-600" />
+                  <span>보관함 {archivedCount}건 바로보기 ➔</span>
+                </button>
+              </>
+            ) : null}
 
             {selectedCaseIds.length > 0 && (
               <div className="flex items-center flex-wrap gap-2 ml-2">

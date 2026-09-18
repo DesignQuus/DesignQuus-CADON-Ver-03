@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 /**
  * EGDesk Database Proxy Middleware
  *
- * Intercepts __user_data_proxy, __browser_recording_proxy, __internal_knowledge_proxy, __company_research_proxy, __kakao_proxy, __drive_proxy, __sheets_proxy, __docs_proxy, __slides_proxy, __egdesk_http_proxy, __gmail_proxy, __apps_script_proxy, __visitor_auth_proxy, and __visitor_google_proxy requests
+ * Intercepts __user_data_proxy, __browser_recording_proxy, __business_identity_proxy, __company_research_proxy, __kakao_proxy, __drive_proxy, __sheets_proxy, __docs_proxy, __slides_proxy, __egdesk_http_proxy, __gmail_proxy, __apps_script_proxy, __visitor_auth_proxy, and __visitor_google_proxy requests
  * and forwards them to the EGDesk MCP HTTP server.
  * This allows CORS-free database access in both local and tunneled environments.
  *
@@ -115,7 +115,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (pathname.includes('__internal_knowledge_proxy')) {
+  if (pathname.includes('__business_identity_proxy')) {
     try {
       const body = await request.text();
 
@@ -130,7 +130,7 @@ export async function middleware(request: NextRequest) {
         headers['X-Api-Key'] = apiKey;
       }
 
-      const response = await fetch(`${apiUrl}/internal-knowledge/tools/call`, {
+      const response = await fetch(`${apiUrl}/business-identity/tools/call`, {
         method: 'POST',
         headers,
         body,

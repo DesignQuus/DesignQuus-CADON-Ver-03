@@ -1927,14 +1927,6 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               담당자 변경
             </Link>
           </div>
-
-          <Link
-            href="/cases"
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer"
-          >
-            <Layers className="w-3.5 h-3.5 text-blue-400" />
-            <span>메인 대시보드</span>
-          </Link>
         </div>
       </div>
 
@@ -2250,15 +2242,6 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         {/* Quick Return, Lifecycle Actions & Quick Stats */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
           <div className="flex items-center gap-1.5">
-            <Link
-              href="/cases"
-              className="inline-flex items-center justify-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl text-xs font-bold text-slate-700 hover:text-blue-700 transition-all shadow-2xs group cursor-pointer"
-              title="견적의뢰 관리 전체 목록(대시보드)으로 이동"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-600 group-hover:-translate-x-0.5 transition-transform" />
-              <span>전체 목록</span>
-            </Link>
-
             {qc?.lifecycle_status === 'ARCHIVED' ? (
               <button
                 type="button"
@@ -2308,20 +2291,26 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
             {/* 📊 수량 정합성 워터폴(Waterfall) 인포 바 */}
             <div className="flex items-center space-x-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
-              <div className="text-center px-2.5 border-r border-slate-200">
+              <div className="text-center px-2 border-r border-slate-200" title="분석 완료된 CAD 도면 장수">
                 <div className="text-[10px] text-slate-500 font-medium">총 도면</div>
                 <div className="text-sm font-bold text-slate-900 font-mono">{drawings.length}장</div>
               </div>
-              <div className="text-center px-2.5 border-r border-slate-200">
-                <div className="text-[10px] text-slate-500 font-medium">조립도 (제외)</div>
+              <div className="text-center px-2 border-r border-slate-200" title="단일 가공비 계산에서 제외되는 유닛/메인 조립도">
+                <div className="text-[10px] text-slate-500 font-medium">조립도(제외)</div>
                 <div className="text-sm font-bold text-slate-600 font-mono">
                   {drawings.filter((d: any) => d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY').length}장
                 </div>
               </div>
-              <div className="text-center px-2.5">
-                <div className="text-[10px] text-indigo-700 font-bold">견적 대상 부품</div>
+              <div className="text-center px-2 border-r border-slate-200" title={`도면 123장 + 도면 없는 규격/구매품 ${Math.max(0, normalizedItems.length - drawings.length)}개`}>
+                <div className="text-[10px] text-slate-500 font-medium">정규화 BOM</div>
+                <div className="text-sm font-bold text-slate-800 font-mono">
+                  {normalizedItems.length || drawings.length}개
+                </div>
+              </div>
+              <div className="text-center px-2" title="실제 2단계 단가 검토 및 견적 대상 (가공품 107 + 규격품 2)">
+                <div className="text-[10px] text-indigo-700 font-bold">견적 대상</div>
                 <div className="text-sm font-bold text-blue-700 font-mono">
-                  {drawings.filter((d: any) => d.drawing_type !== 'MAIN_ASSEMBLY' && d.drawing_type !== 'SUB_ASSEMBLY' && d.is_quote_included !== 0).length || normalizedItems.length}종
+                  {normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length || (drawings.length - 16)}종
                 </div>
               </div>
             </div>
@@ -2501,7 +2490,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
           caseId={id} 
           currentStep={1}
           stats={{
-            unconfirmedCount: data?.drawings?.length || 0,
+            unconfirmedCount: normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length || (drawings.length - 16),
             hasRevisionDiff: false
           }}
         />
@@ -2509,16 +2498,9 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         {/* 3분할 워크스페이스 퀵 네비게이션 팁 */}
         <div className="bg-slate-900 text-slate-200 px-4 py-1.5 flex items-center justify-between text-xs border-b border-slate-800">
           <div className="flex items-center gap-2 text-[11px]">
-            <span className="px-1.5 py-0.5 rounded bg-blue-600/60 font-semibold text-[10px] text-white">가이드</span>
-            <span className="text-slate-300">1단계에서 도면 및 표제란 정보를 검토한 후, 상단 <strong>[2단계: 3분할 단가 검토 진행]</strong>을 클릭하여 부품별 단가 계산을 진행하세요.</span>
+            <span className="px-1.5 py-0.5 rounded bg-blue-600 font-semibold text-[10px] text-white">가이드</span>
+            <span className="text-slate-300">1단계에서 도면 및 표제란 정보를 검토한 후, 상단 <strong>[2단계: 3분할 단가 검토 진행]</strong>을 클릭하여 부품별 단가 계산을 진행하세요. (조립도 16건은 자동 예외 처리됨)</span>
           </div>
-          <Link
-            href={`/quotes/${id}/review`}
-            className="text-blue-400 hover:text-blue-300 font-semibold text-[11px] flex items-center gap-1 shrink-0"
-          >
-            <span>2단계 바로가기</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Link>
         </div>
       </div>
 
@@ -2575,7 +2557,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                     handleProcessFile(e.dataTransfer.files[0]);
                   }
                 }}
-                className={`border-2 border-dashed rounded-2xl p-5 text-center transition-all ${
+                className={`border-2 border-dashed rounded-2xl ${files.length > 0 ? 'p-3' : 'p-5'} text-center transition-all ${
                   isDragging
                     ? 'border-blue-600 bg-blue-50 scale-[1.02] shadow-md ring-4 ring-blue-100'
                     : 'border-slate-200 hover:border-blue-500 bg-slate-50/50'
@@ -2589,16 +2571,16 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                   className="hidden"
                 />
                 <label htmlFor="file-upload" className="cursor-pointer block">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-2.5 transition-colors ${
+                  <div className={`${files.length > 0 ? 'w-8 h-8 rounded-xl mb-1.5' : 'w-12 h-12 rounded-2xl mb-2.5'} flex items-center justify-center mx-auto transition-colors ${
                     isDragging ? 'bg-blue-600 text-white animate-bounce' : 'bg-blue-100 text-blue-600'
                   }`}>
-                    <Upload className="w-6 h-6" />
+                    <Upload className={files.length > 0 ? "w-4 h-4" : "w-6 h-6"} />
                   </div>
                   <span className="text-xs font-bold text-slate-900 block">
-                    {isDragging ? '🚀 파일을 놓으면 즉시 분석 시작!' : 'DWG 또는 DXF 도면 드래그 & 드롭'}
+                    {isDragging ? '🚀 파일을 놓으면 즉시 분석 시작!' : files.length > 0 ? '+ 추가 도면 파일 드래그 & 드롭' : 'DWG 또는 DXF 도면 드래그 & 드롭'}
                   </span>
-                  <span className="text-[11px] text-slate-400 mt-1 block">
-                    (클릭하여 파일 선택 가능 / 지원: .dwg, .dxf)
+                  <span className="text-[11px] text-slate-400 mt-0.5 block">
+                    {files.length > 0 ? '(클릭하여 파일 추가)' : '(클릭하여 파일 선택 가능 / 지원: .dwg, .dxf)'}
                   </span>
                 </label>
               </div>
@@ -2636,11 +2618,11 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                       }`}
                       title={fileViewMode === 'ALL' ? '모든 등록 도면의 데이터를 통합하여 보고 있습니다' : '선택한 파일의 도면만 단독으로 보고 있습니다'}
                     >
-                      <span>{fileViewMode === 'ALL' ? '📂 전체 통합 보기' : '📄 개별 도면 보기'}</span>
+                      <span>{fileViewMode === 'ALL' ? '📂 전체 도면 통합 보기' : '📄 개별 도면 보기'}</span>
                       <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                         fileViewMode === 'ALL' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-700 border border-slate-200'
-                      }`}>
-                        {fileViewMode === 'ALL' ? `총 ${allDrawings.length}개` : `${drawings.length}개`}
+                      }`} title={`CAD 도면 ${drawings.length}장 / 정규화 BOM ${normalizedItems.length}개 품목 연동`}>
+                        {fileViewMode === 'ALL' ? `${drawings.length}장` : `${drawings.length}장`}
                       </span>
                     </button>
                   )}

@@ -725,8 +725,10 @@ export default function WebGlCadViewer({
           const mesh = new THREE.Mesh(geom, mat);
           mesh.position.set(r.x, r.y, -0.2);
           group.add(mesh);
+          needsRenderRef.current = true;
         });
       }
+      needsRenderRef.current = true;
 
       scene.add(group);
       rasterGroupRef.current = group;

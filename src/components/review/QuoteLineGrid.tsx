@@ -8,7 +8,7 @@ export interface QuoteReviewLine {
   itemNo: number;
   partNo: string;
   partName: string;
-  partType: 'CASTING' | 'MACHINING' | 'COMMERCIAL' | 'UNCLASSIFIED';
+  partType: 'MACHINING' | 'SHEET_METAL' | 'CASTING' | 'COMMERCIAL' | 'ELECTRICAL' | 'ASSEMBLY' | 'UNCLASSIFIED';
   material: string;
   quantity: number;
   unitCost: number;
@@ -16,6 +16,8 @@ export interface QuoteReviewLine {
   status: 'CONFIRMED' | 'NEEDS_REVIEW' | 'AUTO';
   balloonNo?: string;
   memo?: string;
+  specification?: string;
+  isAssembly?: boolean;
 }
 
 interface QuoteLineGridProps {
@@ -38,11 +40,13 @@ export default function QuoteLineGrid({
   const filtered = lines.filter((l) => {
     if (filterType === 'NEEDS_REVIEW') return l.status === 'NEEDS_REVIEW';
     if (filterType === 'UNCONFIRMED') return l.status !== 'CONFIRMED';
-    if (['CASTING', 'MACHINING', 'COMMERCIAL'].includes(filterType)) return l.partType === filterType;
+    if (['MACHINING', 'SHEET_METAL', 'CASTING', 'COMMERCIAL', 'ELECTRICAL', 'ASSEMBLY'].includes(filterType)) {
+      return l.partType === filterType;
+    }
     return true;
   });
 
-  const unconfirmedCount = lines.filter((l) => l.status !== 'CONFIRMED').length;
+  const unconfirmedCount = lines.filter((l) => !l.isAssembly && l.status !== 'CONFIRMED').length;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full overflow-hidden">
@@ -65,9 +69,12 @@ export default function QuoteLineGrid({
           <option value="ALL">전체 보기</option>
           <option value="NEEDS_REVIEW">검토필요 항목</option>
           <option value="UNCONFIRMED">미확정 항목</option>
-          <option value="CASTING">주조품만</option>
           <option value="MACHINING">가공품만</option>
-          <option value="COMMERCIAL">구매품만</option>
+          <option value="SHEET_METAL">판금/제관만</option>
+          <option value="CASTING">주조품만</option>
+          <option value="COMMERCIAL">규격철물만</option>
+          <option value="ELECTRICAL">전장/공압만</option>
+          <option value="ASSEMBLY">조립품만</option>
         </select>
       </div>
 
@@ -79,7 +86,7 @@ export default function QuoteLineGrid({
               <th className="p-2 w-10 text-center">No</th>
               <th className="p-2 w-20">풍선/도번</th>
               <th className="p-2">품명</th>
-              <th className="p-2 w-16 text-center">유형</th>
+              <th className="p-2 w-20 text-center">유형</th>
               <th className="p-2 w-16">재질</th>
               <th className="p-2 w-12 text-center">수량</th>
               <th className="p-2 w-20 text-right">단위원가</th>
@@ -111,14 +118,20 @@ export default function QuoteLineGrid({
                   <td className="p-2 truncate max-w-[140px]" title={row.partName}>{row.partName}</td>
                   <td className="p-2 text-center">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                      row.partType === 'CASTING' ? 'bg-orange-100 text-orange-800' :
                       row.partType === 'MACHINING' ? 'bg-blue-100 text-blue-800' :
+                      row.partType === 'SHEET_METAL' ? 'bg-cyan-100 text-cyan-800' :
+                      row.partType === 'CASTING' ? 'bg-orange-100 text-orange-800' :
                       row.partType === 'COMMERCIAL' ? 'bg-emerald-100 text-emerald-800' :
+                      row.partType === 'ELECTRICAL' ? 'bg-purple-100 text-purple-800' :
+                      row.partType === 'ASSEMBLY' ? 'bg-indigo-100 text-indigo-800' :
                       'bg-rose-100 text-rose-800'
                     }`}>
-                      {row.partType === 'CASTING' ? '주조' :
-                       row.partType === 'MACHINING' ? '가공' :
-                       row.partType === 'COMMERCIAL' ? '구매' : '미분류'}
+                      {row.partType === 'MACHINING' ? '가공' :
+                       row.partType === 'SHEET_METAL' ? '판금' :
+                       row.partType === 'CASTING' ? '주조' :
+                       row.partType === 'COMMERCIAL' ? '철물' :
+                       row.partType === 'ELECTRICAL' ? '전장' :
+                       row.partType === 'ASSEMBLY' ? '조립' : '미분류'}
                     </span>
                   </td>
                   <td className="p-2 truncate">{row.material}</td>

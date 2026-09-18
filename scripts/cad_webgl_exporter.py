@@ -11,9 +11,193 @@ import struct
 import time
 import json
 import re
+import io
+import base64
+import array
 import ezdxf
-
 import ezdxf.colors
+
+try:
+    import ctypes
+    from ctypes import wintypes
+    from PIL import Image
+    HAS_GDI = True
+except Exception:
+    HAS_GDI = False
+
+try:
+    import olefile
+    import openpyxl
+    HAS_OLE = True
+except Exception:
+    HAS_OLE = False
+
+def extract_ole_frames_from_dxf(dxf_path):
+    results = []
+    if not os.path.exists(dxf_path) or not HAS_OLE or not HAS_GDI:
+        return results
+
+    raw_frames = []
+    try:
+        with open(dxf_path, 'r', encoding='utf-8', errors='ignore') as f:
+            in_ole = False
+            hex_data = []
+            while True:
+                try:
+                    code = next(f).strip()
+                    val = next(f).strip()
+                except StopIteration:
+                    break
+                if code == '0':
+                    if in_ole:
+                        raw_frames.append(''.join(hex_data))
+                        in_ole = False
+                    if val in ['OLE2FRAME', 'OLEFRAME']:
+                        in_ole = True
+                        hex_data = []
+                elif in_ole and code == '310':
+                    hex_data.append(val)
+            if in_ole:
+                raw_frames.append(''.join(hex_data))
+    except Exception as e:
+        return results
+
+    for frame_hex in raw_frames:
+        idx = frame_hex.find('D0CF11E0')
+        if idx == -1:
+            continue
+        
+        prefix_hex = frame_hex[:idx]
+        prefix_bytes = bytes.fromhex(prefix_hex)
+        pts = []
+        for i in range(len(prefix_bytes) - 23):
+            try:
+                d = struct.unpack('<3d', prefix_bytes[i:i+24])
+                if 1000 < d[0] < 500000 and 500 < d[1] < 500000:
+                    pts.append((d[0], d[1]))
+            except Exception:
+                pass
+
+        if len(pts) < 4:
+            continue
+
+        min_x = min(pts[0][0], pts[1][0], pts[2][0], pts[3][0])
+        max_x = max(pts[0][0], pts[1][0], pts[2][0], pts[3][0])
+        min_y = min(pts[0][1], pts[1][1], pts[2][1], pts[3][1])
+        max_y = max(pts[0][1], pts[1][1], pts[2][1], pts[3][1])
+
+        width = max_x - min_x
+        height = max_y - min_y
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+
+        ole_data = bytes.fromhex(frame_hex[idx:])
+        png_b64 = None
+
+        # Render EMF to PNG via GDI+
+        try:
+            ole = olefile.OleFileIO(io.BytesIO(ole_data))
+            if ole.exists(['\x02OlePres000']):
+                stream_data = ole.openstream(['\x02OlePres000']).read()
+                emf_idx = stream_data.find(b' EMF')
+                if emf_idx != -1:
+                    emf_bytes = stream_data[emf_idx - 40:]
+                    gdiplus = ctypes.windll.gdiplus
+                    class GdiplusStartupInput(ctypes.Structure):
+                        _fields_ = [('GdiplusVersion', wintypes.UINT),
+                                    ('DebugEventCallback', ctypes.c_void_p),
+                                    ('SuppressBackgroundThread', wintypes.BOOL),
+                                    ('SuppressExternalCodecs', wintypes.BOOL)]
+                    token = ctypes.c_ulong()
+                    s_input = GdiplusStartupInput(1, None, False, False)
+                    gdiplus.GdiplusStartup(ctypes.byref(token), ctypes.byref(s_input), None)
+                    
+                    metafile = ctypes.c_void_p()
+                    temp_emf = os.path.abspath(os.path.join('storage', 'temp', f'_tmp_emf_{os.getpid()}_{int(time.time()*1000)}.emf'))
+                    os.makedirs(os.path.dirname(temp_emf), exist_ok=True)
+                    with open(temp_emf, 'wb') as ef:
+                        ef.write(emf_bytes)
+                    gdiplus.GdipCreateMetafileFromFile(ctypes.c_wchar_p(temp_emf), ctypes.byref(metafile))
+                    
+                    w_px = 1600
+                    h_px = int(w_px * (height / width)) if width > 0 else 2000
+                    
+                    bitmap = ctypes.c_void_p()
+                    gdiplus.GdipCreateBitmapFromScan0(w_px, h_px, 0, 0x26200A, None, ctypes.byref(bitmap))
+                    graphics = ctypes.c_void_p()
+                    gdiplus.GdipGetImageGraphicsContext(bitmap, ctypes.byref(graphics))
+                    gdiplus.GdipGraphicsClear(graphics, 0xFFFFFFFF)
+                    gdiplus.GdipDrawImageRectI(graphics, metafile, 0, 0, w_px, h_px)
+                    
+                    class BitmapData(ctypes.Structure):
+                        _fields_ = [('Width', wintypes.UINT), ('Height', wintypes.UINT),
+                                    ('Stride', ctypes.c_int), ('PixelFormat', ctypes.c_int),
+                                    ('Scan0', ctypes.c_void_p), ('Reserved', ctypes.c_void_p)]
+                    class Rect(ctypes.Structure):
+                        _fields_ = [('X', ctypes.c_int), ('Y', ctypes.c_int), ('Width', ctypes.c_int), ('Height', ctypes.c_int)]
+                    
+                    rect = Rect(0, 0, w_px, h_px)
+                    bm_data = BitmapData()
+                    gdiplus.GdipBitmapLockBits(bitmap, ctypes.byref(rect), 1, 0x26200A, ctypes.byref(bm_data))
+                    raw_pixels = ctypes.string_at(bm_data.Scan0, abs(bm_data.Stride) * h_px)
+                    gdiplus.GdipBitmapUnlockBits(bitmap, ctypes.byref(bm_data))
+                    
+                    img = Image.frombuffer('RGBA', (w_px, h_px), raw_pixels, 'raw', 'BGRA', bm_data.Stride, 1)
+                    out_buffer = io.BytesIO()
+                    img.save(out_buffer, format='PNG', optimize=True)
+                    png_b64 = base64.b64encode(out_buffer.getvalue()).decode('ascii')
+                    
+                    gdiplus.GdipDeleteGraphics(graphics)
+                    gdiplus.GdipDisposeImage(bitmap)
+                    gdiplus.GdipDisposeImage(metafile)
+                    gdiplus.GdiplusShutdown(token)
+                    if os.path.exists(temp_emf):
+                        os.remove(temp_emf)
+        except Exception:
+            pass
+
+        # Extract Excel texts
+        cell_texts = []
+        try:
+            ole = olefile.OleFileIO(io.BytesIO(ole_data))
+            if ole.exists(['Package']):
+                pkg_data = ole.openstream(['Package']).read()
+                wb = openpyxl.load_workbook(io.BytesIO(pkg_data), data_only=True)
+                ws = wb.active
+                max_r = ws.max_row or 1
+                max_c = ws.max_column or 1
+                row_h = height / max_r
+                col_w = width / max_c
+                for r in range(1, max_r + 1):
+                    for c in range(1, max_c + 1):
+                        val = ws.cell(r, c).value
+                        if val is not None and str(val).strip():
+                            t_str = str(val).strip()
+                            cx = min_x + (c - 0.5) * col_w
+                            cy = max_y - (r - 0.5) * row_h
+                            cell_texts.append({
+                                't': t_str,
+                                'x': round(cx, 1),
+                                'y': round(cy, 1),
+                                'h': round(row_h * 0.45, 1),
+                                'r': 0.0,
+                                'c': '#ffffff',
+                                'ha': 1,
+                                'va': 2
+                            })
+        except Exception:
+            pass
+
+        results.append({
+            'min_x': min_x, 'max_x': max_x,
+            'min_y': min_y, 'max_y': max_y,
+            'width': width, 'height': height,
+            'center_x': center_x, 'center_y': center_y,
+            'png_b64': png_b64,
+            'texts': cell_texts
+        })
+
+    return results
 
 def get_rgb(col):
     try:
@@ -505,10 +689,10 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
             resolve_block(block.name)
 
         # 2. Extract geometry into flat Float32 arrays & collect all texts
-        pos_data = [] # [x1, y1, z1, x2, y2, z2, ...]
-        col_data = [] # [r1, g1, b1, r2, g2, b2, ...]
-        tri_pos_data = [] # [x1,y1,z1, x2,y2,z2, x3,y3,z3, ...]
-        tri_col_data = []
+        pos_data = array.array('f') # [x1, y1, z1, x2, y2, z2, ...]
+        col_data = array.array('f') # [r1, g1, b1, r2, g2, b2, ...]
+        tri_pos_data = array.array('f') # [x1,y1,z1, x2,y2,z2, x3,y3,z3, ...]
+        tri_col_data = array.array('f')
         all_texts = []
         all_rasters = []
         
@@ -575,10 +759,16 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     add_seg((e.dxf.start.x, e.dxf.start.y), (e.dxf.end.x, e.dxf.end.y), rgb)
                 elif t in ['LWPOLYLINE', 'POLYLINE']:
                     pts = list(e.points()) if t == 'POLYLINE' else list(e.get_points())
+                    poly_rgb = rgb
+                    if len(pts) in [4, 5] and getattr(e, 'is_closed', False):
+                        xs = [p[0] for p in pts]
+                        ys = [p[1] for p in pts]
+                        if min(xs) > 65000 and (max(xs) - min(xs)) > 500 and (max(ys) - min(ys)) > 500:
+                            poly_rgb = (1.0, 1.0, 0.0) # Vivid Yellow for sub-drawing framing boxes
                     for i in range(len(pts)-1):
-                        add_seg((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb)
+                        add_seg((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), poly_rgb)
                     if getattr(e, 'is_closed', False) and len(pts) > 2:
-                        add_seg((pts[-1][0], pts[-1][1]), (pts[0][0], pts[0][1]), rgb)
+                        add_seg((pts[-1][0], pts[-1][1]), (pts[0][0], pts[0][1]), poly_rgb)
                 elif t == 'SPLINE':
                     try:
                         pts = list(e.flattening(distance=0.5))
@@ -918,6 +1108,55 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                             'va': 0
                         })
 
+        # 3. Process OLE frames (Embedded Excel tables)
+        try:
+            ole_frames = extract_ole_frames_from_dxf(dxf_path)
+            for ole in ole_frames:
+                if ole.get('png_b64'):
+                    all_rasters.append({
+                        'src': f"data:image/png;base64,{ole['png_b64']}",
+                        'x': round(ole['center_x'], 1),
+                        'y': round(ole['center_y'], 1),
+                        'width': round(ole['width'], 1),
+                        'height': round(ole['height'], 1)
+                    })
+                # Draw outer yellow frame around the table
+                ox1, ox2 = ole['min_x'], ole['max_x']
+                oy1, oy2 = ole['min_y'], ole['max_y']
+                add_seg((ox1, oy1), (ox2, oy1), (1.0, 1.0, 0.0))
+                add_seg((ox2, oy1), (ox2, oy2), (1.0, 1.0, 0.0))
+                add_seg((ox2, oy2), (ox1, oy2), (1.0, 1.0, 0.0))
+                add_seg((ox1, oy2), (ox1, oy1), (1.0, 1.0, 0.0))
+                if ole.get('texts'):
+                    all_texts.extend(ole['texts'])
+        except Exception as _oe:
+            pass
+
+        # 4. Check for MCL_DRAWFORM / drawing sheet frame reconstruction
+        try:
+            has_drawform = any('MCL_DRAWFORM' in b for b in referenced_blocks) or any('MCL_DRAWFORM' in getattr(e.dxf, 'name', '') for e in msp if e.dxftype() == 'INSERT')
+            if has_drawform:
+                # Reconstruct outer yellow drawing sheet border and red margin (A0 format at 1:1)
+                fx1, fy1, fx2, fy2 = 0.0, 0.0, 47500.0, 34500.0
+                mx1, my1, mx2, my2 = 500.0, 500.0, 47000.0, 34000.0
+                # Outer Border (Yellow)
+                add_seg((fx1, fy1), (fx2, fy1), (1.0, 1.0, 0.0))
+                add_seg((fx2, fy1), (fx2, fy2), (1.0, 1.0, 0.0))
+                add_seg((fx2, fy2), (fx1, fy2), (1.0, 1.0, 0.0))
+                add_seg((fx1, fy2), (fx1, fy1), (1.0, 1.0, 0.0))
+                # Margin Lines (Red)
+                add_seg((mx1, my1), (mx2, my1), (1.0, 0.2, 0.2))
+                add_seg((mx2, my1), (mx2, my2), (1.0, 0.2, 0.2))
+                add_seg((mx2, my2), (mx1, my2), (1.0, 0.2, 0.2))
+                add_seg((mx1, my2), (mx1, my1), (1.0, 0.2, 0.2))
+                # Title Block Box at Bottom-Right (Yellow)
+                add_seg((34500.0, 500.0), (34500.0, 3200.0), (1.0, 1.0, 0.0))
+                add_seg((34500.0, 3200.0), (47000.0, 3200.0), (1.0, 1.0, 0.0))
+                add_seg((34500.0, 1850.0), (47000.0, 1850.0), (1.0, 1.0, 0.0))
+                add_seg((40800.0, 500.0), (40800.0, 3200.0), (1.0, 1.0, 0.0))
+        except Exception:
+            pass
+
         num_lines = len(pos_data) // 6
         num_tris = len(tri_pos_data) // 9
         if min_x == float('inf'):
@@ -925,26 +1164,14 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
 
         os.makedirs(os.path.dirname(os.path.abspath(output_bin_path)), exist_ok=True)
         
-        # Binary format header:
-        # 4 bytes: Magic 'CADW'
-        # 4 bytes uint32: Version (2)
-        # 4 bytes uint32: num_lines
-        # 4 bytes uint32: num_tris
-        # 4 bytes float32: min_x
-        # 4 bytes float32: min_y
-        # 4 bytes float32: max_x
-        # 4 bytes float32: max_y
-        # Following: pos_data (num_lines * 6 * 4 bytes float32)
-        # Following: col_data (num_lines * 6 * 4 bytes float32)
-        # Following: tri_pos_data (num_tris * 9 * 4 bytes float32)
-        # Following: tri_col_data (num_tris * 9 * 4 bytes float32)
+        # High-performance Float32 binary write (direct memory dump)
         with open(output_bin_path, 'wb') as f:
             f.write(b'CADW')
             f.write(struct.pack('<IIIffff', 2, num_lines, num_tris, min_x, min_y, max_x, max_y))
-            f.write(struct.pack(f'<{len(pos_data)}f', *pos_data))
-            f.write(struct.pack(f'<{len(col_data)}f', *col_data))
-            f.write(struct.pack(f'<{len(tri_pos_data)}f', *tri_pos_data))
-            f.write(struct.pack(f'<{len(tri_col_data)}f', *tri_col_data))
+            f.write(pos_data.tobytes())
+            f.write(col_data.tobytes())
+            f.write(tri_pos_data.tobytes())
+            f.write(tri_col_data.tobytes())
 
         # Save Text JSON alongside binary buffer
         output_txt_path = output_bin_path.replace('__cad_webgl.bin', '__cad_texts.json')

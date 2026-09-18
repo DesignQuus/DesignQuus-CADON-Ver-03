@@ -213,8 +213,9 @@ export default function CaseWorkflowSidebar({
                   ? 'bg-blue-600 text-white shadow-2xs ring-2 ring-blue-300'
                   : 'bg-slate-200/90 text-slate-700 hover:bg-slate-300'
               }`}
+              title={`현재 진행중인 견적 (${counts.total}건)`}
             >
-              전체 ({counts.total})
+              진행중 ({counts.total})
             </button>
             {onToggleCollapse && (
               <button
