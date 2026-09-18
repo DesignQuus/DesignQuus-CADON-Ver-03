@@ -59,6 +59,57 @@ export default function WebGlCadViewer({
   const cadTextsRef = useRef<Array<{ t: string; x: number; y: number; h: number; r: number; c?: string }>>([]);
   cadTextsRef.current = cadTexts;
 
+  // Spatial Grid for O(1) text culling across 14,000+ entities
+  const textGridRef = useRef<{
+    minX: number;
+    minY: number;
+    cellSizeX: number;
+    cellSizeY: number;
+    cols: number;
+    rows: number;
+    cells: Array<Array<{ t: string; x: number; y: number; h: number; r: number; c?: string }>>;
+  } | null>(null);
+
+  // Active interaction (wheel zoom / pan drag) state for 60 FPS responsive LOD
+  const isInteractingRef = useRef(false);
+  const interactionTimerRef = useRef<any>(null);
+
+  // 💡 Pre-compute 16x16 Spatial Grid for O(1) text culling across 14,000+ entities
+  useEffect(() => {
+    if (!cadTexts || cadTexts.length === 0) {
+      textGridRef.current = null;
+      return;
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < cadTexts.length; i++) {
+      const t = cadTexts[i];
+      if (t.x < minX) minX = t.x;
+      if (t.x > maxX) maxX = t.x;
+      if (t.y < minY) minY = t.y;
+      if (t.y > maxY) maxY = t.y;
+    }
+    const cols = 16;
+    const rows = 16;
+    const spanX = Math.max(maxX - minX, 100);
+    const spanY = Math.max(maxY - minY, 100);
+    const cellSizeX = spanX / cols;
+    const cellSizeY = spanY / rows;
+    const cells: Array<Array<{ t: string; x: number; y: number; h: number; r: number; c?: string }>> = Array.from(
+      { length: cols * rows },
+      () => []
+    );
+
+    for (let i = 0; i < cadTexts.length; i++) {
+      const t = cadTexts[i];
+      const c = Math.min(Math.max(0, Math.floor((t.x - minX) / cellSizeX)), cols - 1);
+      const r = Math.min(Math.max(0, Math.floor((t.y - minY) / cellSizeY)), rows - 1);
+      cells[c * rows + r].push(t);
+    }
+
+    textGridRef.current = { minX, minY, cellSizeX, cellSizeY, cols, rows, cells };
+    needsRenderRef.current = true;
+  }, [cadTexts]);
+
   const showTextsRef = useRef(showTexts);
   showTextsRef.current = showTexts;
 
@@ -274,8 +325,33 @@ export default function WebGlCadViewer({
             const maxY = cam.position.y + frustumH / 2;
 
             const texts = cadTextsRef.current;
-            for (let i = 0; i < texts.length; i++) {
-              const item = texts[i];
+            const grid = textGridRef.current;
+            let candidateTexts: typeof texts = texts;
+            if (grid && texts.length > 300) {
+              const c0 = Math.max(0, Math.floor((minX - grid.minX - 100) / grid.cellSizeX));
+              const c1 = Math.min(grid.cols - 1, Math.floor((maxX - grid.minX + 100) / grid.cellSizeX));
+              const r0 = Math.max(0, Math.floor((minY - grid.minY - 100) / grid.cellSizeY));
+              const r1 = Math.min(grid.rows - 1, Math.floor((maxY - grid.minY + 100) / grid.cellSizeY));
+
+              const collected: typeof texts = [];
+              for (let c = c0; c <= c1; c++) {
+                for (let r = r0; r <= r1; r++) {
+                  const cell = grid.cells[c * grid.rows + r];
+                  for (let k = 0; k < cell.length; k++) {
+                    collected.push(cell[k]);
+                  }
+                }
+              }
+              candidateTexts = collected;
+            }
+
+            const isInteracting = isInteractingRef.current;
+            const minPxH = isInteracting ? 3.5 : 2.0;
+            const maxAllowedTexts = isInteracting ? 1200 : 5000;
+            let textDrawCount = 0;
+
+            for (let i = 0; i < candidateTexts.length; i++) {
+              const item = candidateTexts[i];
               // Viewport Culling
               if (
                 item.x < minX - 100 ||
@@ -288,7 +364,10 @@ export default function WebGlCadViewer({
 
               // Level of Detail (LOD): screen pixel height
               const pxH = item.h * scale;
-              if (pxH < 2.0) continue; // Skip sub-pixel text at far overview
+              if (pxH < minPxH) continue; // Skip sub-pixel text at far overview or during rapid zoom
+
+              if (textDrawCount >= maxAllowedTexts) break;
+              textDrawCount++;
 
               // Project CAD world coordinates to screen pixel coordinates
               const sx = (item.x - cam.position.x) * scale + w / 2;
@@ -1098,6 +1177,15 @@ export default function WebGlCadViewer({
       camera.zoom = newZoom;
       camera.updateProjectionMatrix();
       targetCamRef.current = null; // Cancel any ongoing fly-to
+
+      // 60 FPS Responsive LOD trigger: prioritize responsiveness while wheeling
+      isInteractingRef.current = true;
+      if (interactionTimerRef.current) clearTimeout(interactionTimerRef.current);
+      interactionTimerRef.current = setTimeout(() => {
+        isInteractingRef.current = false;
+        needsRenderRef.current = true;
+      }, 80);
+
       needsRenderRef.current = true;
     };
 
@@ -1134,11 +1222,20 @@ export default function WebGlCadViewer({
     camera.position.x -= dx * worldPerPixelX;
     camera.position.y += dy * worldPerPixelY;
     camera.updateProjectionMatrix();
+
+    isInteractingRef.current = true;
+    if (interactionTimerRef.current) clearTimeout(interactionTimerRef.current);
+    interactionTimerRef.current = setTimeout(() => {
+      isInteractingRef.current = false;
+      needsRenderRef.current = true;
+    }, 80);
+
     needsRenderRef.current = true;
   };
 
   const handleMouseUp = () => {
     isDraggingRef.current = false;
+    isInteractingRef.current = false;
     needsRenderRef.current = true;
   };
 

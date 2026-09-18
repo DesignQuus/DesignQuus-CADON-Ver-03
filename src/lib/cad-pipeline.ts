@@ -135,6 +135,11 @@ export async function processCadFilePipeline(
           if (fs.existsSync(srcTxt)) {
             fs.copyFileSync(srcTxt, path.join(localDerived, txtName));
           }
+          const rasterName = webglBinName.replace('__cad_webgl.bin', '__cad_rasters.json');
+          const srcRaster = path.join(derivedStorageDir, rasterName);
+          if (fs.existsSync(srcRaster)) {
+            fs.copyFileSync(srcRaster, path.join(localDerived, rasterName));
+          }
         } catch (copyErr) {
           console.warn('WebGL storage sync warning:', copyErr);
         }

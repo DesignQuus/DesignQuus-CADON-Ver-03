@@ -92,72 +92,11 @@ def extract_ole_frames_from_dxf(dxf_path):
         center_y = (min_y + max_y) / 2.0
 
         ole_data = bytes.fromhex(frame_hex[idx:])
-        png_b64 = None
-
-        # Render EMF to PNG via GDI+
-        try:
-            ole = olefile.OleFileIO(io.BytesIO(ole_data))
-            if ole.exists(['\x02OlePres000']):
-                stream_data = ole.openstream(['\x02OlePres000']).read()
-                emf_idx = stream_data.find(b' EMF')
-                if emf_idx != -1:
-                    emf_bytes = stream_data[emf_idx - 40:]
-                    gdiplus = ctypes.windll.gdiplus
-                    class GdiplusStartupInput(ctypes.Structure):
-                        _fields_ = [('GdiplusVersion', wintypes.UINT),
-                                    ('DebugEventCallback', ctypes.c_void_p),
-                                    ('SuppressBackgroundThread', wintypes.BOOL),
-                                    ('SuppressExternalCodecs', wintypes.BOOL)]
-                    token = ctypes.c_ulong()
-                    s_input = GdiplusStartupInput(1, None, False, False)
-                    gdiplus.GdiplusStartup(ctypes.byref(token), ctypes.byref(s_input), None)
-                    
-                    metafile = ctypes.c_void_p()
-                    temp_emf = os.path.abspath(os.path.join('storage', 'temp', f'_tmp_emf_{os.getpid()}_{int(time.time()*1000)}.emf'))
-                    os.makedirs(os.path.dirname(temp_emf), exist_ok=True)
-                    with open(temp_emf, 'wb') as ef:
-                        ef.write(emf_bytes)
-                    gdiplus.GdipCreateMetafileFromFile(ctypes.c_wchar_p(temp_emf), ctypes.byref(metafile))
-                    
-                    w_px = 1600
-                    h_px = int(w_px * (height / width)) if width > 0 else 2000
-                    
-                    bitmap = ctypes.c_void_p()
-                    gdiplus.GdipCreateBitmapFromScan0(w_px, h_px, 0, 0x26200A, None, ctypes.byref(bitmap))
-                    graphics = ctypes.c_void_p()
-                    gdiplus.GdipGetImageGraphicsContext(bitmap, ctypes.byref(graphics))
-                    gdiplus.GdipGraphicsClear(graphics, 0xFFFFFFFF)
-                    gdiplus.GdipDrawImageRectI(graphics, metafile, 0, 0, w_px, h_px)
-                    
-                    class BitmapData(ctypes.Structure):
-                        _fields_ = [('Width', wintypes.UINT), ('Height', wintypes.UINT),
-                                    ('Stride', ctypes.c_int), ('PixelFormat', ctypes.c_int),
-                                    ('Scan0', ctypes.c_void_p), ('Reserved', ctypes.c_void_p)]
-                    class Rect(ctypes.Structure):
-                        _fields_ = [('X', ctypes.c_int), ('Y', ctypes.c_int), ('Width', ctypes.c_int), ('Height', ctypes.c_int)]
-                    
-                    rect = Rect(0, 0, w_px, h_px)
-                    bm_data = BitmapData()
-                    gdiplus.GdipBitmapLockBits(bitmap, ctypes.byref(rect), 1, 0x26200A, ctypes.byref(bm_data))
-                    raw_pixels = ctypes.string_at(bm_data.Scan0, abs(bm_data.Stride) * h_px)
-                    gdiplus.GdipBitmapUnlockBits(bitmap, ctypes.byref(bm_data))
-                    
-                    img = Image.frombuffer('RGBA', (w_px, h_px), raw_pixels, 'raw', 'BGRA', bm_data.Stride, 1)
-                    out_buffer = io.BytesIO()
-                    img.save(out_buffer, format='PNG', optimize=True)
-                    png_b64 = base64.b64encode(out_buffer.getvalue()).decode('ascii')
-                    
-                    gdiplus.GdipDeleteGraphics(graphics)
-                    gdiplus.GdipDisposeImage(bitmap)
-                    gdiplus.GdipDisposeImage(metafile)
-                    gdiplus.GdiplusShutdown(token)
-                    if os.path.exists(temp_emf):
-                        os.remove(temp_emf)
-        except Exception:
-            pass
-
-        # Extract Excel texts
+        table_lines = []
         cell_texts = []
+        has_excel_vector = False
+
+        # Extract Excel vectors (lines) and formatted texts from embedded workbook
         try:
             ole = olefile.OleFileIO(io.BytesIO(ole_data))
             if ole.exists(['Package']):
@@ -165,28 +104,183 @@ def extract_ole_frames_from_dxf(dxf_path):
                 wb = openpyxl.load_workbook(io.BytesIO(pkg_data), data_only=True)
                 ws = wb.active
                 max_r = ws.max_row or 1
-                max_c = ws.max_column or 1
-                row_h = height / max_r
-                col_w = width / max_c
+                max_c = min(ws.max_column or 7, 7)
+
+                col_keys = ['A', 'B', 'C', 'D', 'E', 'F', 'G'][:max_c]
+                col_widths = [ws.column_dimensions[k].width or 10.0 for k in col_keys]
+                sum_w = sum(col_widths) or 1.0
+                col_rel_w = [w / sum_w for w in col_widths]
+                col_xs = [min_x]
+                for w in col_rel_w:
+                    col_xs.append(col_xs[-1] + w * width)
+
+                row_heights = [ws.row_dimensions[r].height or 15.95 for r in range(1, max_r + 1)]
+                sum_h = sum(row_heights) or 1.0
+                row_rel_h = [h / sum_h for h in row_heights]
+                row_ys = [max_y]
+                for h in row_rel_h:
+                    row_ys.append(row_ys[-1] - h * height)
+
+                # Parse merged ranges
+                merged_lookup = {}
+                for rng in ws.merged_cells.ranges:
+                    merged_lookup[(rng.min_row, rng.min_col)] = (rng.max_row, min(rng.max_col, max_c))
+
+                # Identify table blocks separated by empty rows
+                table_ranges = []
+                t_start = 1
+                for r in range(1, max_r + 1):
+                    row_has_val = any(ws.cell(r, c).value is not None and str(ws.cell(r, c).value).strip() for c in range(1, max_c + 1))
+                    if not row_has_val:
+                        if r > t_start:
+                            table_ranges.append((t_start, r - 1))
+                        t_start = r + 1
+                if t_start <= max_r:
+                    table_ranges.append((t_start, max_r))
+
+                YELLOW = (1.0, 1.0, 0.0)
+                GREY = (0.55, 0.55, 0.55)
+
+                for (tr_start, tr_end) in table_ranges:
+                    top_y = row_ys[tr_start - 1]
+                    bot_y = row_ys[tr_end]
+                    # Table outer yellow border
+                    table_lines.append(((min_x, top_y), (max_x, top_y), YELLOW))
+                    table_lines.append(((max_x, top_y), (max_x, bot_y), YELLOW))
+                    table_lines.append(((max_x, bot_y), (min_x, bot_y), YELLOW))
+                    table_lines.append(((min_x, bot_y), (min_x, top_y), YELLOW))
+
+                    # Header lines (under title row and under column header row)
+                    if tr_start <= max_r:
+                        table_lines.append(((min_x, row_ys[tr_start]), (max_x, row_ys[tr_start]), YELLOW))
+                    if tr_start + 1 <= max_r and tr_start + 1 <= tr_end:
+                        table_lines.append(((min_x, row_ys[tr_start + 1]), (max_x, row_ys[tr_start + 1]), YELLOW))
+
+                    # Inner horizontal row dividers
+                    for r in range(tr_start + 2, tr_end):
+                        table_lines.append(((min_x, row_ys[r]), (max_x, row_ys[r]), GREY))
+
+                    # Vertical column dividers
+                    for c_idx in range(1, max_c):
+                        table_lines.append(((col_xs[c_idx], row_ys[tr_start + 1]), (col_xs[c_idx], bot_y), GREY))
+
+                # Extract cell texts with CAD precision
                 for r in range(1, max_r + 1):
                     for c in range(1, max_c + 1):
+                        is_sub_merged = False
+                        for rng in ws.merged_cells.ranges:
+                            if rng.min_row <= r <= rng.max_row and rng.min_col <= c <= rng.max_col:
+                                if (r, c) != (rng.min_row, rng.min_col):
+                                    is_sub_merged = True
+                                    break
+                        if is_sub_merged:
+                            continue
                         val = ws.cell(r, c).value
                         if val is not None and str(val).strip():
                             t_str = str(val).strip()
-                            cx = min_x + (c - 0.5) * col_w
-                            cy = max_y - (r - 0.5) * row_h
+                            max_r_idx, max_c_idx = merged_lookup.get((r, c), (r, c))
+                            c_left = col_xs[c - 1]
+                            c_right = col_xs[max_c_idx]
+                            r_top = row_ys[r - 1]
+                            r_bottom = row_ys[max_r_idx]
+
+                            cx = (c_left + c_right) / 2.0
+                            cy = (r_top + r_bottom) / 2.0
+                            cell_h = r_top - r_bottom
+
+                            ha = 1 # Center by default
+                            if r in [1, 29, 43]: # Title
+                                txt_col = '#ffff00'
+                                font_h = cell_h * 0.45
+                            elif r in [2, 30, 44]: # Table column headers
+                                txt_col = '#00e676'
+                                font_h = cell_h * 0.42
+                            elif c == 5: # Motor model description
+                                ha = 0 # Left align
+                                cx = c_left + 150.0
+                                txt_col = '#ffffff'
+                                font_h = min(cell_h * 0.42, 230.0)
+                            elif 'CONVEYOR' in t_str or 'DIVERTER' in t_str or 'ROLLER' in t_str:
+                                txt_col = '#38bdf8'
+                                font_h = cell_h * 0.42
+                            else:
+                                txt_col = '#ffffff'
+                                font_h = cell_h * 0.42
+
                             cell_texts.append({
                                 't': t_str,
                                 'x': round(cx, 1),
                                 'y': round(cy, 1),
-                                'h': round(row_h * 0.45, 1),
+                                'h': round(font_h, 1),
                                 'r': 0.0,
-                                'c': '#ffffff',
-                                'ha': 1,
+                                'c': txt_col,
+                                'ha': ha,
                                 'va': 2
                             })
+                has_excel_vector = True
         except Exception:
             pass
+
+        # If Excel vectorization succeeded, we DO NOT generate heavy/blurry raster PNGs!
+        png_b64 = None
+        if not has_excel_vector:
+            # Fallback to EMF render if Excel is missing
+            try:
+                ole = olefile.OleFileIO(io.BytesIO(ole_data))
+                if ole.exists(['\x02OlePres000']):
+                    stream_data = ole.openstream(['\x02OlePres000']).read()
+                    emf_idx = stream_data.find(b' EMF')
+                    if emf_idx != -1:
+                        emf_bytes = stream_data[emf_idx - 40:]
+                        gdiplus = ctypes.windll.gdiplus
+                        class GdiplusStartupInput(ctypes.Structure):
+                            _fields_ = [('GdiplusVersion', wintypes.UINT),
+                                        ('DebugEventCallback', ctypes.c_void_p),
+                                        ('SuppressBackgroundThread', wintypes.BOOL),
+                                        ('SuppressExternalCodecs', wintypes.BOOL)]
+                        token = ctypes.c_ulong()
+                        s_input = GdiplusStartupInput(1, None, False, False)
+                        gdiplus.GplusStartup(ctypes.byref(token), ctypes.byref(s_input), None)
+                        
+                        metafile = ctypes.c_void_p()
+                        temp_emf = os.path.abspath(os.path.join('storage', 'temp', f'_tmp_emf_{os.getpid()}_{int(time.time()*1000)}.emf'))
+                        os.makedirs(os.path.dirname(temp_emf), exist_ok=True)
+                        with open(temp_emf, 'wb') as ef:
+                            ef.write(emf_bytes)
+                        gdiplus.GdipCreateMetafileFromFile(ctypes.c_wchar_p(temp_emf), ctypes.byref(metafile))
+                        
+                        w_px = 1600
+                        h_px = int(w_px * (height / width)) if width > 0 else 2000
+                        bitmap = ctypes.c_void_p()
+                        gdiplus.GdipCreateBitmapFromScan0(w_px, h_px, 0, 0x26200A, None, ctypes.byref(bitmap))
+                        graphics = ctypes.c_void_p()
+                        gdiplus.GdipGetImageGraphicsContext(bitmap, ctypes.byref(graphics))
+                        gdiplus.GdipGraphicsClear(graphics, 0xFFFFFFFF)
+                        gdiplus.GdipDrawImageRectI(graphics, metafile, 0, 0, w_px, h_px)
+                        
+                        class BitmapData(ctypes.Structure):
+                            _fields_ = [('Width', wintypes.UINT), ('Height', wintypes.UINT),
+                                        ('Stride', ctypes.c_int), ('PixelFormat', ctypes.c_int),
+                                        ('Scan0', ctypes.c_void_p), ('Reserved', ctypes.c_void_p)]
+                        class Rect(ctypes.Structure):
+                            _fields_ = [('X', ctypes.c_int), ('Y', ctypes.c_int), ('Width', ctypes.c_int), ('Height', ctypes.c_int)]
+                        rect = Rect(0, 0, w_px, h_px)
+                        bm_data = BitmapData()
+                        gdiplus.GdipBitmapLockBits(bitmap, ctypes.byref(rect), 1, 0x26200A, ctypes.byref(bm_data))
+                        raw_pixels = ctypes.string_at(bm_data.Scan0, abs(bm_data.Stride) * h_px)
+                        gdiplus.GdipBitmapUnlockBits(bitmap, ctypes.byref(bm_data))
+                        img = Image.frombuffer('RGBA', (w_px, h_px), raw_pixels, 'raw', 'BGRA', bm_data.Stride, 1)
+                        out_buffer = io.BytesIO()
+                        img.save(out_buffer, format='PNG', optimize=True)
+                        png_b64 = base64.b64encode(out_buffer.getvalue()).decode('ascii')
+                        gdiplus.GdipDeleteGraphics(graphics)
+                        gdiplus.GdipDisposeImage(bitmap)
+                        gdiplus.GdipDisposeImage(metafile)
+                        gdiplus.GdiplusShutdown(token)
+                        if os.path.exists(temp_emf):
+                            os.remove(temp_emf)
+            except Exception:
+                pass
 
         results.append({
             'min_x': min_x, 'max_x': max_x,
@@ -194,6 +288,7 @@ def extract_ole_frames_from_dxf(dxf_path):
             'width': width, 'height': height,
             'center_x': center_x, 'center_y': center_y,
             'png_b64': png_b64,
+            'lines': table_lines,
             'texts': cell_texts
         })
 
@@ -1120,13 +1215,17 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         'width': round(ole['width'], 1),
                         'height': round(ole['height'], 1)
                     })
-                # Draw outer yellow frame around the table
-                ox1, ox2 = ole['min_x'], ole['max_x']
-                oy1, oy2 = ole['min_y'], ole['max_y']
-                add_seg((ox1, oy1), (ox2, oy1), (1.0, 1.0, 0.0))
-                add_seg((ox2, oy1), (ox2, oy2), (1.0, 1.0, 0.0))
-                add_seg((ox2, oy2), (ox1, oy2), (1.0, 1.0, 0.0))
-                add_seg((ox1, oy2), (ox1, oy1), (1.0, 1.0, 0.0))
+                # Add vector table lines
+                for (p1, p2, rgb) in ole.get('lines', []):
+                    add_seg(p1, p2, rgb)
+                if not ole.get('lines'):
+                    # Fallback outer yellow frame if no detailed vector lines
+                    ox1, ox2 = ole['min_x'], ole['max_x']
+                    oy1, oy2 = ole['min_y'], ole['max_y']
+                    add_seg((ox1, oy1), (ox2, oy1), (1.0, 1.0, 0.0))
+                    add_seg((ox2, oy1), (ox2, oy2), (1.0, 1.0, 0.0))
+                    add_seg((ox2, oy2), (ox1, oy2), (1.0, 1.0, 0.0))
+                    add_seg((ox1, oy2), (ox1, oy1), (1.0, 1.0, 0.0))
                 if ole.get('texts'):
                     all_texts.extend(ole['texts'])
         except Exception as _oe:
@@ -1149,11 +1248,74 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                 add_seg((mx2, my1), (mx2, my2), (1.0, 0.2, 0.2))
                 add_seg((mx2, my2), (mx1, my2), (1.0, 0.2, 0.2))
                 add_seg((mx1, my2), (mx1, my1), (1.0, 0.2, 0.2))
-                # Title Block Box at Bottom-Right (Yellow)
-                add_seg((34500.0, 500.0), (34500.0, 3200.0), (1.0, 1.0, 0.0))
-                add_seg((34500.0, 3200.0), (47000.0, 3200.0), (1.0, 1.0, 0.0))
-                add_seg((34500.0, 1850.0), (47000.0, 1850.0), (1.0, 1.0, 0.0))
-                add_seg((40800.0, 500.0), (40800.0, 3200.0), (1.0, 1.0, 0.0))
+
+                # Title Block Box at Bottom-Right (Yellow & White lines)
+                tb_x1, tb_y1, tb_x2, tb_y2 = 34500.0, 500.0, 47000.0, 4200.0
+                add_seg((tb_x1, tb_y1), (tb_x2, tb_y1), (1.0, 1.0, 0.0))
+                add_seg((tb_x2, tb_y1), (tb_x2, tb_y2), (1.0, 1.0, 0.0))
+                add_seg((tb_x2, tb_y2), (tb_x1, tb_y2), (1.0, 1.0, 0.0))
+                add_seg((tb_x1, tb_y2), (tb_x1, tb_y1), (1.0, 1.0, 0.0))
+
+                # Horizontal dividers in Title Block
+                h_divs = [1200.0, 1950.0, 2700.0, 3450.0]
+                for hy in h_divs:
+                    add_seg((tb_x1, hy), (tb_x2, hy), (1.0, 1.0, 0.0))
+
+                # Vertical dividers in Title Block
+                add_seg((40800.0, tb_y1), (40800.0, tb_y2), (1.0, 1.0, 0.0)) # Main split
+                add_seg((36600.0, tb_y1), (36600.0, 1950.0), (1.0, 1.0, 0.0))
+                add_seg((38700.0, tb_y1), (38700.0, 1950.0), (1.0, 1.0, 0.0))
+                add_seg((43200.0, tb_y1), (43200.0, 1200.0), (1.0, 1.0, 0.0))
+                add_seg((45500.0, tb_y1), (45500.0, 1200.0), (1.0, 1.0, 0.0))
+
+                # Sechang Logo Emblem (Solid blue/cyan vector triangle)
+                add_tri((34750.0, 3600.0), (35000.0, 4000.0), (35250.0, 3600.0), (0.2, 0.65, 1.0))
+                add_seg((34750.0, 3600.0), (35000.0, 4000.0), (1.0, 1.0, 0.0))
+                add_seg((35000.0, 4000.0), (35250.0, 3600.0), (1.0, 1.0, 0.0))
+                add_seg((35250.0, 3600.0), (34750.0, 3600.0), (1.0, 1.0, 0.0))
+
+                # Standard Title Block Labels & Texts
+                tb_fixed_texts = [
+                    {'t': '세창인터내쇼날(주)', 'x': 35450.0, 'y': 3820.0, 'h': 240.0, 'r': 0.0, 'c': '#38bdf8', 'ha': 0, 'va': 2},
+                    {'t': 'SECHANG INTERNATIONAL CO., LTD.', 'x': 35450.0, 'y': 3580.0, 'h': 130.0, 'r': 0.0, 'c': '#ffffff', 'ha': 0, 'va': 2},
+                    {'t': 'CUSTOMER', 'x': 34700.0, 'y': 3150.0, 'h': 110.0, 'r': 0.0, 'c': '#ffff00', 'ha': 0, 'va': 2},
+                    {'t': 'PROJECT', 'x': 34700.0, 'y': 2400.0, 'h': 110.0, 'r': 0.0, 'c': '#ffff00', 'ha': 0, 'va': 2},
+                    {'t': 'DRAWN', 'x': 35550.0, 'y': 1750.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
+                    {'t': 'CHECKED', 'x': 37650.0, 'y': 1750.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
+                    {'t': 'APPROVED', 'x': 39750.0, 'y': 1750.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
+                    {'t': 'SCALE', 'x': 35550.0, 'y': 1000.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
+                    {'t': '1/1', 'x': 35550.0, 'y': 750.0, 'h': 140.0, 'r': 0.0, 'c': '#ffffff', 'ha': 1, 'va': 2},
+                    {'t': 'DATE', 'x': 37650.0, 'y': 1000.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
+                    {'t': 'UNIT', 'x': 39750.0, 'y': 1000.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
+                    {'t': 'MM', 'x': 39750.0, 'y': 750.0, 'h': 140.0, 'r': 0.0, 'c': '#ffffff', 'ha': 1, 'va': 2},
+                    {'t': 'DWG TITLE', 'x': 41000.0, 'y': 4000.0, 'h': 110.0, 'r': 0.0, 'c': '#ffff00', 'ha': 0, 'va': 2},
+                    {'t': 'DWG NO.', 'x': 41000.0, 'y': 2550.0, 'h': 110.0, 'r': 0.0, 'c': '#ffff00', 'ha': 0, 'va': 2},
+                    {'t': 'REV', 'x': 44350.0, 'y': 1000.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
+                    {'t': 'SHEET', 'x': 46250.0, 'y': 1000.0, 'h': 100.0, 'r': 0.0, 'c': '#ffff00', 'ha': 1, 'va': 2},
+                    {'t': '1 OF 1', 'x': 46250.0, 'y': 750.0, 'h': 140.0, 'r': 0.0, 'c': '#ffffff', 'ha': 1, 'va': 2},
+                ]
+                all_texts.extend(tb_fixed_texts)
+
+                # Bottom Green Confidentiality / Security Notice Banner
+                sb_x1, sb_y1, sb_x2, sb_y2 = 500.0, 120.0, 34500.0, 480.0
+                GREEN_RGB = (0.0, 0.9, 0.46)
+                add_seg((sb_x1, sb_y1), (sb_x2, sb_y1), GREEN_RGB)
+                add_seg((sb_x2, sb_y1), (sb_x2, sb_y2), GREEN_RGB)
+                add_seg((sb_x2, sb_y2), (sb_x1, sb_y2), GREEN_RGB)
+                add_seg((sb_x1, sb_y2), (sb_x1, sb_y1), GREEN_RGB)
+                add_seg((sb_x1, (sb_y1 + sb_y2)/2.0), (sb_x2, (sb_y1 + sb_y2)/2.0), GREEN_RGB)
+
+                sec_text = "THIS DRAWING AND SPECIFICATION IS PROPERTY OF SECHANG INTERNATIONAL CO., LTD. AND SHOULD NOT BE REPRODUCED, COPIED OR USED IN WHOLE OR IN PART AS THE BASIS FOR MANUFACTURE OR SALE OF APPARATUS WITHOUT WRITTEN PERMISSION."
+                all_texts.append({
+                    't': sec_text,
+                    'x': round((sb_x1 + sb_x2) / 2.0, 1),
+                    'y': round((sb_y1 + sb_y2) / 2.0, 1),
+                    'h': 150.0,
+                    'r': 0.0,
+                    'c': '#00e676',
+                    'ha': 1, # Center
+                    'va': 2  # Middle
+                })
         except Exception:
             pass
 
