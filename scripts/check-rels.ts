@@ -1,23 +1,17 @@
-import { executeSQL } from '../egdesk-helpers';
+import { db } from '../src/lib/db';
 
-async function checkRel() {
+async function checkRelationships() {
   const caseId = 'case_1789766302590';
-  const rels = await executeSQL(`
-    SELECT relationship_type, COUNT(*) as cnt
-    FROM drawing_relationships
-    WHERE quotation_case_id = '${caseId}'
-    GROUP BY relationship_type
-  `);
-  console.log('=== Target Case Drawing Relationships ===');
-  console.table(rels.rows);
+  const rels = await db.prepare(`
+    SELECT * FROM drawing_relationships WHERE quotation_case_id = ? LIMIT 20
+  `).all(caseId);
+  console.log('Relationships count:', rels.length);
+  console.log('Sample rels:', rels.slice(0, 5));
 
-  const allRels = await executeSQL(`
-    SELECT quotation_case_id, COUNT(*) as cnt
-    FROM drawing_relationships
-    GROUP BY quotation_case_id
-  `);
-  console.log('=== All Drawing Relationships in DB ===');
-  console.table(allRels.rows);
+  const totalRels = await db.prepare(`
+    SELECT COUNT(*) as c FROM drawing_relationships WHERE quotation_case_id = ?
+  `).all(caseId);
+  console.log('Total relationships:', totalRels);
 }
 
-checkRel().catch(console.error);
+checkRelationships().catch(console.error);

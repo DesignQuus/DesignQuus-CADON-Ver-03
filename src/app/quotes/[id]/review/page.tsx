@@ -11,6 +11,7 @@ import {
 import QuoteLineGrid, { QuoteReviewLine } from '@/components/review/QuoteLineGrid';
 import CostBreakdownPanel from '@/components/review/CostBreakdownPanel';
 import MasterRecommendationCard, { RecommendationItem } from '@/components/review/MasterRecommendationCard';
+import MasterPriceReferenceDrawer from '@/components/review/MasterPriceReferenceDrawer';
 import ReviewCadViewer from '@/components/review/ReviewCadViewer';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
 import { parseRemark, stringifyRemark } from '@/lib/remark-cost-helper';
@@ -34,6 +35,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [filterType, setFilterType] = useState<string>('ALL');
   const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
+  const [isMasterDrawerOpen, setIsMasterDrawerOpen] = useState<boolean>(false);
 
   // 실제 CAD 도면 및 2D 벡터 오브젝트 상태
   const [files, setFiles] = useState<any[]>([]);
@@ -248,6 +250,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   quantity: 1,
                   unitCost,
                   supplyPrice,
+                  engineSuggestedPrice: supplyPrice > 0 ? supplyPrice : undefined,
                   status: isAssembly ? 'CONFIRMED' : 'NEEDS_REVIEW',
                   balloonNo: String(idx + 1),
                   specification: d.scale || '',
@@ -367,6 +370,15 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
     // API 호출 (백그라운드 동기화 및 DB 축적)
     try {
+      const engPrice = target.engineSuggestedPrice;
+      const costDiff = engPrice && engPrice > 0 && target.supplyPrice > 0 ? {
+        engineSuggestedPrice: engPrice,
+        confirmedPrice: target.supplyPrice,
+        delta: target.supplyPrice - engPrice,
+        deltaPercent: Number((((target.supplyPrice - engPrice) / engPrice) * 100).toFixed(1)),
+        recordedAt: new Date().toISOString()
+      } : undefined;
+
       await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -377,7 +389,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           unitPrice: target.supplyPrice,
           unitCost: target.unitCost,
           qtyTier: target.quantity <= 9 ? '1~9' : target.quantity <= 99 ? '10~99' : '100~',
-          lotQuantity: target.quantity
+          lotQuantity: target.quantity,
+          engineSuggestedPrice: engPrice,
+          costDiff
         })
       });
     } catch (e) {
@@ -399,7 +413,19 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     if (nextTarget.extraCost1Amount) extraCosts.push({ name: nextTarget.extraCost1Name || '추가비1', amount: nextTarget.extraCost1Amount });
     if (nextTarget.extraCost2Amount) extraCosts.push({ name: nextTarget.extraCost2Name || '추가비2', amount: nextTarget.extraCost2Amount });
     if (nextTarget.extraCost3Amount) extraCosts.push({ name: nextTarget.extraCost3Name || '추가비3', amount: nextTarget.extraCost3Amount });
-    const serializedRemark = stringifyRemark(nextTarget.memo, extraCosts);
+
+    const engPrice = nextTarget.engineSuggestedPrice || target.engineSuggestedPrice;
+    let costDiff;
+    if (engPrice && engPrice > 0 && nextTarget.supplyPrice > 0) {
+      costDiff = {
+        engineSuggestedPrice: engPrice,
+        confirmedPrice: nextTarget.supplyPrice,
+        delta: nextTarget.supplyPrice - engPrice,
+        deltaPercent: Number((((nextTarget.supplyPrice - engPrice) / engPrice) * 100).toFixed(1)),
+        recordedAt: new Date().toISOString()
+      };
+    }
+    const serializedRemark = stringifyRemark(nextTarget.memo, extraCosts, costDiff);
 
     try {
       await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
@@ -413,7 +439,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           unitCost: nextTarget.unitCost,
           qtyTier: nextTarget.quantity <= 9 ? '1~9' : nextTarget.quantity <= 99 ? '10~99' : '100~',
           lotQuantity: nextTarget.quantity,
-          remark: serializedRemark
+          remark: serializedRemark,
+          engineSuggestedPrice: engPrice,
+          costDiff
         })
       });
     } catch (e) {
@@ -613,6 +641,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             ...line,
             unitCost: calculated.subtotalCost,
             supplyPrice: calculated.unitPrice,
+            engineSuggestedPrice: calculated.unitPrice,
             status: hasValidPrice ? ('CONFIRMED' as const) : ('NEEDS_REVIEW' as const),
             memo: hasValidPrice
               ? `AI공학표준원가 (${rawWeightKg}kg)`
@@ -693,6 +722,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         if (recommendations.length > 0 && selectedLine) {
           handleUpdateSelected({ supplyPrice: recommendations[0].unitPrice });
         }
+      } else if (e.key === 'F7') {
+        e.preventDefault();
+        setIsMasterDrawerOpen((prev) => !prev);
       } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         handleSubmitQuote();
@@ -766,6 +798,16 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             <span>{calculatingEngineering ? '공학 표준원가 산출 중...' : '⚡ AI 공학 표준원가 일괄 산출'}</span>
           </button>
 
+          {/* 📋 사내 마스터 단가표 참고 드로어 토글 버튼 */}
+          <button
+            onClick={() => setIsMasterDrawerOpen(true)}
+            className="px-3 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs border transition-all cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 hover:border-blue-300 text-xs"
+            title="사내 표준 마스터 단가, 원자재 kg 시세 및 공정 임률표를 실시간으로 확인합니다 (단축키 F7)"
+          >
+            <Database className="w-3.5 h-3.5 text-blue-600" />
+            <span>📋 마스터 단가표 (F7)</span>
+          </button>
+
           {/* 마스터 기준정보 관리 이동 버튼 */}
           <Link
             href="/admin/masters"
@@ -773,8 +815,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             className="hidden lg:flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs transition-colors shadow-2xs"
             title="표준 품목, 기준단가 및 소재/가공 임률 설정 관리"
           >
-            <Database className="w-3.5 h-3.5 text-blue-600" />
-            <span>마스터 기준정보</span>
+            <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+            <span>기준정보 관리</span>
           </Link>
 
           <button
@@ -893,6 +935,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             <MasterRecommendationCard
               recommendations={recommendations}
               onApplyPrice={(prc) => handleUpdateSelected({ supplyPrice: prc })}
+              onOpenMasterDrawer={() => setIsMasterDrawerOpen(true)}
             />
           </div>
         </div>
@@ -914,6 +957,10 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             <span className="text-slate-200">추천단가 즉시채택</span>
           </span>
           <span className="flex items-center gap-1.5">
+            <kbd className="px-2 py-0.5 bg-slate-700 border border-slate-600 rounded text-amber-300 font-mono font-bold shadow-xs">F7</kbd>
+            <span className="text-slate-200">마스터 단가표</span>
+          </span>
+          <span className="flex items-center gap-1.5">
             <kbd className="px-2 py-0.5 bg-slate-700 border border-slate-600 rounded text-amber-300 font-mono font-bold shadow-xs">↑ / ↓</kbd>
             <span className="text-slate-200">행 간 이동</span>
           </span>
@@ -927,6 +974,16 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           <span className="text-slate-400 font-semibold text-[11px]">CADON v2.0 Workspace Ready</span>
         </div>
       </footer>
+
+      {/* 💎 5. 사내 마스터 기준 단가표 실시간 슬라이드오버 드로어 */}
+      <MasterPriceReferenceDrawer
+        isOpen={isMasterDrawerOpen}
+        onClose={() => setIsMasterDrawerOpen(false)}
+        selectedLine={selectedLine}
+        onApplyPrice={(prc, src) => {
+          handleUpdateSelected({ supplyPrice: prc });
+        }}
+      />
     </div>
   );
 }

@@ -44,6 +44,7 @@ export default function ReviewCadViewer({
       try {
         localStorage.setItem('cadon_balloon_notice_enabled', String(next));
       } catch {}
+      return next;
     });
   };
 

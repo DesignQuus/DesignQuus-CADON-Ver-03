@@ -6,6 +6,7 @@ Drawing Structure Map & Drawing Type Classification Engine
 import sys
 import json
 import time
+import re
 
 def classify_drawing_structure(drawings_data: dict) -> dict:
     start_time = time.time()

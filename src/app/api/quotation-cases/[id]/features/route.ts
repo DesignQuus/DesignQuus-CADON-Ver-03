@@ -169,6 +169,15 @@ export async function GET(
 
           const finalUnitPrice = Math.ceil((subtotalCost * 1.05 * 1.18) / 100) * 100;
 
+          const isBent = processType === 'SHEET_METAL' && (
+            item.name.includes('BRACKET') || item.name.includes('COVER') || 
+            item.name.includes('CHASSIS') || item.name.includes('STAY') || 
+            item.name.includes('GUIDE') || item.name.includes('FRAME') || 
+            item.name.includes('SUPPORT')
+          );
+          const bendCount = isBent ? (item.name.includes('COVER') ? 4 : 2) : 0;
+          const pierceCount = processType === 'SHEET_METAL' ? (isBent ? 4 : 2) : 0;
+
           const featRow = {
             id: featId,
             quotation_case_id: quotationCaseId,
@@ -181,10 +190,10 @@ export async function GET(
             bbox_length: l,
             bbox_thickness: t,
             cutting_length_total: cutLength,
-            pierce_count: 1,
-            bending_count: 0,
-            through_hole_count: 0,
-            tap_hole_count: 0,
+            pierce_count: pierceCount,
+            bending_count: bendCount,
+            through_hole_count: processType === 'MACHINING' ? 1 : (isBent ? 4 : 2),
+            tap_hole_count: processType === 'MACHINING' ? 2 : (isBent ? 2 : 0),
             part_weight_kg: partWeightKg,
             surface_area_cm2: Number(((2 * (w * l + w * t + l * t)) / 100).toFixed(1)),
             heat_treatment: null,
@@ -339,8 +348,20 @@ export async function POST(
       return NextResponse.json({ error: 'featureId가 필요합니다.' }, { status: 400 });
     }
 
-    // 1. 원가 재계산
+    // 1. 원가 재계산 (process_rates 연동)
     const mat = resolveMaterial(materialCode);
+    let bendRatePerStroke: number | undefined = body.bendRatePerStroke ? Number(body.bendRatePerStroke) : undefined;
+    if (!bendRatePerStroke) {
+      try {
+        const rateRow = (await db.prepare("SELECT unit_rate FROM process_rates WHERE rate_code = 'SHEET_BEND_PER_STROKE'").get()) as any;
+        if (rateRow?.unit_rate) {
+          bendRatePerStroke = Number(rateRow.unit_rate);
+        }
+      } catch (e) {
+        // fallback to default 800
+      }
+    }
+
     const costRes = calculateFabricationCost({
       processType: processType || 'SHEET_METAL',
       materialCode: mat.code,
@@ -349,6 +370,7 @@ export async function POST(
       bboxThickness: Number(bboxThickness),
       cuttingLengthTotal: Number(cuttingLengthTotal),
       bendingCount: Number(bendingCount),
+      bendRatePerStroke: bendRatePerStroke ?? 800,
       tapHoleCount: Number(tapHoleCount),
       throughHoleCount: Number(throughHoleCount),
       surfaceTreatment,

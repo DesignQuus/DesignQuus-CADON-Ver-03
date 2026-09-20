@@ -6,7 +6,8 @@ import { apiFetch } from '@/lib/api';
 import {
   Database, Plus, Upload, Search, Download, Trash2, CheckCircle2,
   RefreshCw, FileSpreadsheet, ArrowLeft, Sliders, DollarSign,
-  AlertCircle, Layers, X, Scissors, Flame, Sparkles, Wrench, Percent, Factory, ShieldCheck
+  AlertCircle, Layers, X, Scissors, Flame, Sparkles, Wrench, Percent, Factory, ShieldCheck,
+  Target, Calculator, TrendingUp, ArrowRight
 } from 'lucide-react';
 
 const MATERIAL_NAMES: Record<string, string> = {
@@ -24,6 +25,75 @@ const MATERIAL_NAMES: Record<string, string> = {
   'MC-NYLON': 'MC 나일론 (엔지니어링 플라스틱)',
   'POM': '아세탈 (POM 폴리아세탈)'
 };
+
+// 💡 3단계 담당자 눈높이: 실시간 단가 영향도 시뮬레이션용 대표 5대 부품
+const BENCHMARK_PARTS = [
+  {
+    id: 0,
+    name: 'MOTOR BRACKET',
+    type: 'SHEET_METAL' as const,
+    material: 'AL6061',
+    spec: '660x400x10T',
+    weightKg: 7.13,
+    cuttingLengthM: 2.12,
+    bendingCount: 2,
+    pierceCount: 4,
+    matKgRate: 5500,
+    categoryLabel: '판금 절곡'
+  },
+  {
+    id: 1,
+    name: 'MOTOR SHAFT',
+    type: 'MACHINING' as const,
+    material: 'S45C',
+    spec: 'Ø17 x L295',
+    weightKg: 0.53,
+    cuttingLengthM: 0.30,
+    bendingCount: 0,
+    pierceCount: 0,
+    matKgRate: 1650,
+    categoryLabel: '절삭 환봉'
+  },
+  {
+    id: 2,
+    name: 'BASE PLATE',
+    type: 'SHEET_METAL' as const,
+    material: 'SS400',
+    spec: '620x375x3T',
+    weightKg: 5.48,
+    cuttingLengthM: 1.99,
+    bendingCount: 0,
+    pierceCount: 2,
+    matKgRate: 1450,
+    categoryLabel: '평판 레이저'
+  },
+  {
+    id: 3,
+    name: 'SENSOR BRACKET',
+    type: 'SHEET_METAL' as const,
+    material: 'AL6061',
+    spec: '220x140x2T',
+    weightKg: 0.17,
+    cuttingLengthM: 0.72,
+    bendingCount: 2,
+    pierceCount: 4,
+    matKgRate: 5500,
+    categoryLabel: '판금 소형'
+  },
+  {
+    id: 4,
+    name: 'MOTOR END CAP',
+    type: 'MACHINING' as const,
+    material: 'S45C',
+    spec: 'Ø25 x L35',
+    weightKg: 0.14,
+    cuttingLengthM: 0.05,
+    bendingCount: 0,
+    pierceCount: 0,
+    matKgRate: 1650,
+    categoryLabel: '절삭 소형'
+  }
+];
 
 interface MasterProduct {
   id: string;
@@ -74,6 +144,86 @@ export default function MasterDataManagerPage() {
   const [materialRates, setMaterialRates] = useState<Record<string, number>>({});
   const [processRates, setProcessRates] = useState<Record<string, number>>({});
   const [savingSettings, setSavingSettings] = useState(false);
+
+  // 💡 3단계 담당자 눈높이 UX 상태
+  const [selectedEstimatorIndex, setSelectedEstimatorIndex] = useState<number>(0);
+  const [targetPriceInput, setTargetPriceInput] = useState<number>(30000);
+  const [reverseEstimating, setReverseEstimating] = useState<boolean>(false);
+  const [reverseResult, setReverseResult] = useState<any>(null);
+  const [appliedNotice, setAppliedNotice] = useState<string>('');
+
+  // 기준 표준 단가 vs 현재 임률 시뮬레이션 계산
+  const calculateBenchmarkPrice = (part: typeof BENCHMARK_PARTS[0], rates: Record<string, number>) => {
+    const matRate = materialRates[part.material] || part.matKgRate;
+    const matCost = Math.round(part.weightKg * matRate * 1.08);
+    let procCost = 0;
+    if (part.type === 'SHEET_METAL') {
+      const cutRate = rates['SHEET_LASER_PER_METER'] || 1800;
+      const bendRate = rates['SHEET_BEND_PER_STROKE'] || 800;
+      const pierceRate = rates['SHEET_PIERCING_RATE'] || 80;
+      procCost = Math.round(part.cuttingLengthM * cutRate) + (part.bendingCount * bendRate) + (part.pierceCount * pierceRate);
+    } else {
+      const machRate = rates['HOURLY_MACHINE_RATE'] || 45000;
+      const setup = rates['SETUP_BASE_COST'] || 30000;
+      const hours = part.weightKg > 1.0 ? 0.46 : (part.weightKg > 0.5 ? 0.43 : 0.40);
+      procCost = Math.round(setup * 0.3 + hours * machRate * 0.6);
+    }
+    const margin = rates['DEFAULT_MARGIN_RATE'] || 0.18;
+    const subtotal = matCost + procCost;
+    return Math.ceil((subtotal * (1 + margin)) / 100) * 100;
+  };
+
+  // 목표 단가 역산 실행
+  const handleRunReverseEstimate = async () => {
+    const part = BENCHMARK_PARTS[selectedEstimatorIndex];
+    if (!part) return;
+    setReverseEstimating(true);
+    setAppliedNotice('');
+    try {
+      const matRate = materialRates[part.material] || part.matKgRate;
+      const matCost = Math.round(part.weightKg * matRate * 1.08);
+      const res = await apiFetch('/api/admin/masters/reverse-estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          processType: part.type,
+          targetPrice: Number(targetPriceInput) || 30000,
+          materialCost: matCost,
+          cuttingLengthMeter: part.cuttingLengthM,
+          bendingCount: part.bendingCount,
+          weightKg: part.weightKg,
+          currentRates: {
+            laserRatePerMeter: processRates['SHEET_LASER_PER_METER'] || 1800,
+            bendRatePerStroke: processRates['SHEET_BEND_PER_STROKE'] || 800,
+            machineRatePerHour: processRates['HOURLY_MACHINE_RATE'] || 45000
+          }
+        })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setReverseResult(json.result);
+      }
+    } catch (e: any) {
+      alert('역산 실패: ' + e.message);
+    } finally {
+      setReverseEstimating(false);
+    }
+  };
+
+  // 역산된 추천 임률 폼에 반영
+  const handleApplyRecommendedRates = (rateType: 'bend' | 'cut' | 'mach') => {
+    if (!reverseResult) return;
+    if (rateType === 'bend' && reverseResult.recommendedBendRate) {
+      setProcessRates({ ...processRates, SHEET_BEND_PER_STROKE: reverseResult.recommendedBendRate });
+      setAppliedNotice(`절곡 단가가 ${reverseResult.recommendedBendRate.toLocaleString()}원/회(으)로 임률표에 반영되었습니다.`);
+    } else if (rateType === 'cut' && reverseResult.recommendedCutRate) {
+      setProcessRates({ ...processRates, SHEET_LASER_PER_METER: reverseResult.recommendedCutRate });
+      setAppliedNotice(`절단 단가가 ${reverseResult.recommendedCutRate.toLocaleString()}원/m(으)로 임률표에 반영되었습니다.`);
+    } else if (rateType === 'mach' && reverseResult.recommendedMachineRate) {
+      setProcessRates({ ...processRates, HOURLY_MACHINE_RATE: reverseResult.recommendedMachineRate });
+      setAppliedNotice(`기계가공 임률이 ${reverseResult.recommendedMachineRate.toLocaleString()}원/h(으)로 임률표에 반영되었습니다.`);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -646,6 +796,200 @@ export default function MasterDataManagerPage() {
               </button>
             </div>
 
+            {/* 💡 출발점(기본 추정치) 안내 배너 */}
+            <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 flex items-start gap-3">
+              <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+              <div className="text-xs text-amber-900 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <span>안내: 가공 임률은 업계 표준 추정값(출발점)입니다</span>
+                  <span className="px-1.5 py-0.5 bg-amber-200 text-amber-900 text-[10px] rounded font-mono font-medium">출발점 (Base Heuristic)</span>
+                </p>
+                <p className="text-amber-800 leading-relaxed text-[11px]">
+                  본 임률은 공인 절대값이 아닌 초기 계산을 위한 출발 기준선입니다. 
+                  담당자가 견적 검토 화면에서 실제 거래 단가를 확정함에 따라, 시스템이 누적된 오차(Delta)와 도면 형상 피처를 분석하여 실제 공장 맞춤형 임률을 역산하고 자동 보정해 나갑니다.
+                </p>
+              </div>
+            </div>
+
+            {/* 🔒 회귀 엔진 상태 배너: 데이터 축적 중 명시 */}
+            <div className="bg-slate-100/90 border border-slate-300 rounded-xl p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                <span className="text-xs font-bold text-slate-800">
+                  실거래 단가 기반 회귀 임률 역산 엔진
+                </span>
+                <span className="text-[10px] bg-amber-100 border border-amber-300 text-amber-800 px-2 py-0.5 rounded font-mono font-bold">
+                  데이터 축적 모드 (가동 보류)
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-600">
+                실무자 확정 표본: <strong className="text-slate-900 font-mono">0건</strong> (공정별 최소 10건 축적 시 자동 활성화)
+              </div>
+            </div>
+
+            {/* 💡 3단계 담당자 눈높이 도구: 1) 실시간 견적 영향도 미리보기 */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-xs font-bold text-slate-800">
+                    실시간 견적 영향도 미리보기 (대표 5대 부품 시뮬레이션)
+                  </h3>
+                  <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-mono">
+                    임률 수정 즉시 연동
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  ※ 아래 임률표의 수치를 변경하면 대표 부품들의 견적 변동액이 실시간으로 계산됩니다.
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                {BENCHMARK_PARTS.map((p) => {
+                  const basePrice = calculateBenchmarkPrice(p, {
+                    SHEET_LASER_PER_METER: 1800,
+                    SHEET_BEND_PER_STROKE: 800,
+                    SHEET_PIERCING_RATE: 80,
+                    HOURLY_MACHINE_RATE: 45000,
+                    SETUP_BASE_COST: 30000,
+                    DEFAULT_MARGIN_RATE: 0.18
+                  });
+                  const currentPrice = calculateBenchmarkPrice(p, processRates);
+                  const diff = currentPrice - basePrice;
+                  const diffPct = basePrice > 0 ? Number(((diff / basePrice) * 100).toFixed(1)) : 0;
+
+                  return (
+                    <div key={p.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                          {p.categoryLabel}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">{p.material}</span>
+                      </div>
+                      <div className="font-bold text-xs text-slate-800 truncate" title={p.name}>
+                        {p.name}
+                      </div>
+                      <div className="text-[10px] text-slate-400 truncate">{p.spec}</div>
+                      <div className="pt-1.5 border-t border-slate-100 flex items-baseline justify-between">
+                        <span className="text-[10px] text-slate-400">예상 견적</span>
+                        <span className="font-mono font-bold text-sm text-slate-900">
+                          ₩{currentPrice.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-slate-400">기준 대비</span>
+                        <span className={`font-mono font-bold ${
+                          diff > 0 ? 'text-rose-600' : diff < 0 ? 'text-blue-600' : 'text-slate-400'
+                        }`}>
+                          {diff > 0 ? `+${diff.toLocaleString()}` : diff < 0 ? diff.toLocaleString() : '0'} ({diffPct > 0 ? `+${diffPct}` : diffPct}%)
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 💡 3단계 담당자 눈높이 도구: 2) 목표 단가 기반 임률 역산기 */}
+            <div className="bg-indigo-50/50 border border-indigo-200/80 rounded-2xl p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Target className="w-4 h-4 text-indigo-600" />
+                  <h3 className="text-xs font-bold text-indigo-950">
+                    목표 단가 기반 임률 역산기 (Reverse Rate Estimator)
+                  </h3>
+                  <span className="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-mono">
+                    "이 부품 3만원 맞추기"
+                  </span>
+                </div>
+                {appliedNotice && (
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg animate-pulse">
+                    ✓ {appliedNotice}
+                  </span>
+                )}
+              </div>
+
+              <div className="bg-white p-3 rounded-xl border border-indigo-100 grid grid-cols-1 md:grid-cols-12 gap-3 items-center text-xs">
+                <div className="md:col-span-4 space-y-1">
+                  <label className="text-[11px] text-slate-500 font-medium block">대상 부품 선택</label>
+                  <select
+                    value={selectedEstimatorIndex}
+                    onChange={(e) => setSelectedEstimatorIndex(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-indigo-500"
+                  >
+                    {BENCHMARK_PARTS.map((p, idx) => (
+                      <option key={p.id} value={idx}>
+                        [{p.categoryLabel}] {p.name} ({p.spec})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="md:col-span-3 space-y-1">
+                  <label className="text-[11px] text-slate-500 font-medium block">목표 희망 단가 (원)</label>
+                  <div className="flex items-center space-x-1">
+                    <span className="text-slate-400 font-mono">₩</span>
+                    <input
+                      type="number"
+                      value={targetPriceInput}
+                      onChange={(e) => setTargetPriceInput(Number(e.target.value))}
+                      placeholder="30000"
+                      className="w-full text-right font-mono font-bold border border-slate-200 rounded-lg px-2 py-1.5 text-slate-900 bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="md:col-span-2 pt-4 md:pt-0">
+                  <button
+                    onClick={handleRunReverseEstimate}
+                    disabled={reverseEstimating || targetPriceInput <= 0}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    {reverseEstimating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Calculator className="w-3.5 h-3.5" />}
+                    <span>임률 역산</span>
+                  </button>
+                </div>
+
+                <div className="md:col-span-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-[11px]">
+                  {reverseResult ? (
+                    <div className="space-y-1.5">
+                      <p className="text-slate-700 leading-snug">{reverseResult.guidance}</p>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {reverseResult.recommendedBendRate && (
+                          <button
+                            onClick={() => handleApplyRecommendedRates('bend')}
+                            className="px-2 py-0.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded font-bold text-[10px] cursor-pointer"
+                          >
+                            절곡 {reverseResult.recommendedBendRate.toLocaleString()}원 적용
+                          </button>
+                        )}
+                        {reverseResult.recommendedCutRate && (
+                          <button
+                            onClick={() => handleApplyRecommendedRates('cut')}
+                            className="px-2 py-0.5 bg-cyan-100 hover:bg-cyan-200 text-cyan-800 rounded font-bold text-[10px] cursor-pointer"
+                          >
+                            절단 {reverseResult.recommendedCutRate.toLocaleString()}원 적용
+                          </button>
+                        )}
+                        {reverseResult.recommendedMachineRate && (
+                          <button
+                            onClick={() => handleApplyRecommendedRates('mach')}
+                            className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded font-bold text-[10px] cursor-pointer"
+                          >
+                            임률 {reverseResult.recommendedMachineRate.toLocaleString()}원 적용
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-slate-400">
+                      부품과 목표 단가를 입력하고 [임률 역산] 버튼을 누르면 추천 임률이 가이드됩니다.
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* 좌측: 소재별 시세 (5 cols) */}
               <div className="lg:col-span-5 space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -688,9 +1032,12 @@ export default function MasterDataManagerPage() {
                 <div className="space-y-3.5 max-h-[640px] overflow-y-auto pr-1">
                   {/* 1. 기계 가공 (절삭) */}
                   <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-blue-800 pb-1 border-b border-blue-50">
-                      <Factory className="w-3.5 h-3.5 text-blue-600" />
-                      <span>1. 기계 가공 (절삭 / 선반 / 밀링)</span>
+                    <div className="flex items-center justify-between pb-1 border-b border-blue-50">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-blue-800">
+                        <Factory className="w-3.5 h-3.5 text-blue-600" />
+                        <span>1. 기계 가공 (절삭 / 선반 / 밀링)</span>
+                      </div>
+                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">기본 추정치</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                       <div>
@@ -737,9 +1084,12 @@ export default function MasterDataManagerPage() {
 
                   {/* 2. 판금 / 제관 (Sheet Metal) */}
                   <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-800 pb-1 border-b border-cyan-50">
-                      <Scissors className="w-3.5 h-3.5 text-cyan-600" />
-                      <span>2. 판금 / 제관 (레이저 절단 / 피어싱 / 절곡 / 용접)</span>
+                    <div className="flex items-center justify-between pb-1 border-b border-cyan-50">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-800">
+                        <Scissors className="w-3.5 h-3.5 text-cyan-600" />
+                        <span>2. 판금 / 제관 (레이저 절단 / 피어싱 / 절곡 / 용접)</span>
+                      </div>
+                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">기본 추정치</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
                       <div>
@@ -799,9 +1149,12 @@ export default function MasterDataManagerPage() {
 
                   {/* 3. 주조 / 주물 (Casting) */}
                   <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 pb-1 border-b border-amber-50">
-                      <Layers className="w-3.5 h-3.5 text-amber-600" />
-                      <span>3. 주조 / 주물 (형상 성형 및 주물 가공)</span>
+                    <div className="flex items-center justify-between pb-1 border-b border-amber-50">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                        <Layers className="w-3.5 h-3.5 text-amber-600" />
+                        <span>3. 주조 / 주물 (형상 성형 및 주물 가공)</span>
+                      </div>
+                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">기본 추정치</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       <div>
@@ -822,9 +1175,12 @@ export default function MasterDataManagerPage() {
 
                   {/* 4. 후처리 / 열처리 */}
                   <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-purple-800 pb-1 border-b border-purple-50">
-                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                      <span>4. 표면처리 & 열처리 (도장 / 아노다이징 / 열처리)</span>
+                    <div className="flex items-center justify-between pb-1 border-b border-purple-50">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-purple-800">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                        <span>4. 표면처리 & 열처리 (도장 / 아노다이징 / 열처리)</span>
+                      </div>
+                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">기본 추정치</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
                       <div>

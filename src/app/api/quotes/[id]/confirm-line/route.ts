@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { queryTable, updateRows, insertRows } from '@/../egdesk-helpers';
+import { parseRemark, stringifyRemark } from '@/lib/remark-cost-helper';
 
 export async function POST(
   request: NextRequest,
@@ -17,9 +18,11 @@ export async function POST(
       unitCost, 
       qtyTier, 
       lotQuantity, 
-      basis,
+      basis, 
       selectedMasterId,
-      remark
+      remark,
+      engineSuggestedPrice,
+      costDiff
     } = body;
 
     const now = new Date().toISOString();
@@ -40,19 +43,35 @@ export async function POST(
     if (lineId) {
       // quote_items 테이블 조회 및 업데이트
       try {
-        const qi = (await db.prepare('SELECT id, quantity, price_status FROM quote_items WHERE id = ?').get(lineId)) as any;
+        const qi = (await db.prepare('SELECT id, quantity, price_status, remark FROM quote_items WHERE id = ?').get(lineId)) as any;
         if (qi) {
           if (qi.price_status === 'CONFIRMED') {
             wasAlreadyConfirmed = true;
           }
           const qty = Number(qi.quantity) || 1;
           const amt = (Number(unitPrice) || 0) * qty;
+
+          // costDiff 또는 engineSuggestedPrice 병합
+          let finalRemark = remark !== undefined ? remark : qi.remark;
+          const parsedCurrent = parseRemark(finalRemark);
+          const resolvedCostDiff = costDiff || (engineSuggestedPrice && Number(unitPrice) > 0 ? {
+            engineSuggestedPrice: Math.round(Number(engineSuggestedPrice)),
+            confirmedPrice: Math.round(Number(unitPrice)),
+            delta: Math.round(Number(unitPrice) - Number(engineSuggestedPrice)),
+            deltaPercent: Number((((Number(unitPrice) - Number(engineSuggestedPrice)) / Number(engineSuggestedPrice)) * 100).toFixed(1)),
+            recordedAt: now
+          } : parsedCurrent.costDiff);
+
+          if (resolvedCostDiff || parsedCurrent.extraCosts.length > 0) {
+            finalRemark = stringifyRemark(parsedCurrent.text, parsedCurrent.extraCosts, resolvedCostDiff);
+          }
+
           await db.prepare(`
             UPDATE quote_items
             SET unit_price = ?, amount = ?, price_status = ?, is_included = ?, price_source = 'MANUAL_REVIEW',
                 remark = COALESCE(?, remark)
             WHERE id = ?
-          `).run(unitPrice || 0, amt, isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW', isConfirmed ? 1 : 0, remark || null, lineId);
+          `).run(unitPrice || 0, amt, isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW', isConfirmed ? 1 : 0, finalRemark || null, lineId);
         }
       } catch (e) {
         console.warn('quote_items update note:', e);

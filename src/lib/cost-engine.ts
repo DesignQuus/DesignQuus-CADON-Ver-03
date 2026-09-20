@@ -33,6 +33,8 @@ export interface FabricationFeatureInput {
   tapHoleCount?: number;
   heatTreatment?: string;
   surfaceTreatment?: string;
+  bendRatePerStroke?: number; // 회당 절곡 단가 (기본값: 800원, process_rates 연동)
+  laserRatePerMeter?: number; // m당 레이저 절단 단가
   markupRate?: number; // 0.15 for 15%
 }
 
@@ -112,10 +114,9 @@ export function calculateFabricationCost(input: FabricationFeatureInput): Fabric
   const pierceCost = pierceCount * 50; // 피어싱당 50원
   const laserCuttingCost = Math.max(cutCost + pierceCost, 1000); // 기본 셋업비 1,000원
 
-  // 4. 절곡비 (회당 1,200원, 대형물 가산)
+  // 4. 절곡비 (process_rates 기본 800원/회 기준)
   const bendCount = input.bendingCount || 0;
-  let bendUnitRate = 1200;
-  if (Math.max(w, l) > 1000) bendUnitRate = 2000; // 1m 초과 대형물 2,000원
+  const bendUnitRate = input.bendRatePerStroke ?? 800;
   const bendingCost = bendCount * bendUnitRate;
 
   // 5. 탭/홀 가공비 (탭 개당 1,500원, 홀 개당 300원)
@@ -172,6 +173,8 @@ export function calculateFabricationCost(input: FabricationFeatureInput): Fabric
       cuttingLengthMm: cuttingLength,
       pierceCount,
       bendingCount: bendCount,
+      bendingUnitRate: bendUnitRate,
+      bendingRateSource: input.bendRatePerStroke ? 'PROCESS_RATES_CUSTOM' : 'PROCESS_RATES_DEFAULT (800)',
       tapCount,
       holeCount,
       surfaceTreatment: input.surfaceTreatment || 'None'

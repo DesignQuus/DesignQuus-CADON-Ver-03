@@ -71,8 +71,8 @@ export async function POST(
             ni.*, 
             COALESCE(fb.part_no, '') as drawing_no,
             COALESCE(d.drawing_name_raw, ni.normalized_name) as drawing_name,
-            COALESCE(d.scale, fb.specification, ni.spec_candidate, '-') as drawing_spec,
-            COALESCE(d.material, fb.material, ni.material_candidate, 'SS400') as drawing_mat,
+            COALESCE(NULLIF(fb.specification, '-'), NULLIF(ni.spec_candidate, '-'), d.scale, '-') as drawing_spec,
+            COALESCE(NULLIF(d.material, 'UNKNOWN'), NULLIF(fb.material, 'UNKNOWN'), ni.material_candidate, 'UNKNOWN') as drawing_mat,
             mc.master_id, 
             mc.master_code, 
             mc.standard_name, 
@@ -115,11 +115,14 @@ export async function POST(
       const isMatched = !!item.master_id;
 
       const decisionType = isMatched ? 'EXISTING_MASTER' : 'CUSTOM_PART';
-      const decisionReason = isMatched ? '1순위 마스터 추천 일괄 승인' : '도면 가공품 자동 승인 (신규/주문제작)';
-      const finalCode = isMatched ? item.master_code : (item.drawing_no || 'CUSTOM');
-      const finalName = isMatched ? item.standard_name : (item.drawing_name || item.normalized_name);
-      const finalSpec = isMatched ? (item.master_spec || item.spec_candidate) : (item.drawing_spec || item.spec_candidate || '-');
-      const finalMat = isMatched ? (item.master_mat || item.material_candidate) : (item.drawing_mat || item.material_candidate || 'SS400');
+      const finalCode = item.drawing_no || (isMatched ? item.master_code : 'CUSTOM');
+      const finalName = (item.drawing_name && item.drawing_name !== item.drawing_no) ? item.drawing_name : (isMatched ? item.standard_name : item.normalized_name);
+      const finalSpec = (item.drawing_spec && item.drawing_spec !== '-') 
+        ? item.drawing_spec 
+        : (item.spec_candidate && item.spec_candidate !== '-' ? item.spec_candidate : (item.master_spec || '-'));
+      const finalMat = (item.drawing_mat && item.drawing_mat !== 'UNKNOWN') 
+        ? item.drawing_mat 
+        : (item.material_candidate && item.material_candidate !== 'UNKNOWN' ? item.material_candidate : (item.master_mat || 'UNKNOWN'));
 
       // 1. Audit
       await db.prepare(`

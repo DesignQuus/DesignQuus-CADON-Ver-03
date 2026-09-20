@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-19T23:14:46.911Z
+ * Generated at: 2026-09-20T06:45:06.236Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -25,14 +25,14 @@ export const TABLES = {
   table1: {
     name: 'process_rates',
     displayName: '가공/공정 단가표',
-    rowCount: 0,
+    rowCount: 16,
     columnCount: 16,
     columns: ['id', '_version', 'process_code', 'process_name', 'unit_type', 'rate_amount', 'effective_date', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table2: {
     name: 'material_rates',
     displayName: '원자재 기준 시세표',
-    rowCount: 0,
+    rowCount: 13,
     columnCount: 17,
     columns: ['id', '_version', 'material_code', 'material_name', 'category', 'unit_price_per_kg', 'density', 'effective_date', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -60,14 +60,14 @@ export const TABLES = {
   table6: {
     name: 'part_cost_breakdowns',
     displayName: '부품별 제조원가 세부내역',
-    rowCount: 0,
+    rowCount: 125,
     columnCount: 23,
     columns: ['id', '_version', 'feature_id', 'quotation_case_id', 'material_cost', 'laser_cutting_cost', 'bending_cost', 'tapping_cost', 'machining_cost', 'surface_finish_cost', 'subtotal_cost', 'markup_rate', 'final_unit_price', 'calc_formula_json', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table7: {
     name: 'part_fabrication_features',
     displayName: '부품별 가공 피처 대장',
-    rowCount: 0,
+    rowCount: 123,
     columnCount: 30,
     columns: ['id', '_version', 'quotation_case_id', 'drawing_id', 'bom_item_id', 'process_type', 'material_code', 'material_density', 'bbox_width', 'bbox_length', 'bbox_thickness', 'cutting_length_total', 'pierce_count', 'bending_count', 'through_hole_count', 'tap_hole_count', 'part_weight_kg', 'surface_area_cm2', 'heat_treatment', 'surface_treatment', 'raw_features_json', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -207,21 +207,21 @@ export const TABLES = {
   table27: {
     name: 'product_masters',
     displayName: '표준 마스터 품목 대장',
-    rowCount: 1,
+    rowCount: 57,
     columnCount: 19,
     columns: ['id', '_version', 'company_id', 'master_code', 'standard_name', 'category', 'specification', 'material', 'unit', 'status', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table28: {
     name: 'master_aliases',
     displayName: '마스터 품목 별칭 대장',
-    rowCount: 0,
+    rowCount: 59,
     columnCount: 18,
     columns: ['id', '_version', 'company_id', 'master_id', 'alias_name', 'alias_normalized', 'approval_count', 'rejection_count', 'scope', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table29: {
     name: 'master_candidates',
     displayName: '마스터 추천 매칭 후보',
-    rowCount: 0,
+    rowCount: 132,
     columnCount: 22,
     columns: ['id', '_version', 'normalized_item_id', 'master_id', 'master_code', 'standard_name', 'specification', 'material', 'rank', 'total_score', 'positive_evidence_json', 'negative_evidence_json', 'candidate_status', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

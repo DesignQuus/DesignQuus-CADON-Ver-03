@@ -81,7 +81,10 @@ def build_multilevel_bom(raw_bom_data: dict, structure_data: dict, root_order_qt
         dno = d.get("drawing_no_raw", "").strip()
         dname = d.get("drawing_name_raw", "").strip()
         dtype = d.get("drawing_type", "SUB_PART")
-        dmat = d.get("material") or "SS400"
+        dmat = d.get("material") or "UNKNOWN"
+        dqty = float(d.get("quantity") or 1.0)
+        dspec = d.get("specification") if (d.get("specification") and d.get("specification") != "-") else (d.get("scale") or "-")
+        dsurf = d.get("surface_treatment") or "-"
         dscale = d.get("scale") or "-"
         drev = d.get("revision") or "R00"
         
@@ -96,12 +99,13 @@ def build_multilevel_bom(raw_bom_data: dict, structure_data: dict, root_order_qt
             "drawing_no": dno,
             "part_no_raw": dno,
             "name_raw": dname,
-            "specification_raw": dscale if dscale != "-" else "-",
+            "specification_raw": dspec,
             "material_raw": dmat,
-            "quantity_raw": "1",
-            "quantity_numeric": 1.0,
+            "surface_treatment_raw": dsurf,
+            "quantity_raw": str(int(dqty) if dqty.is_integer() else dqty),
+            "quantity_numeric": dqty,
             "multiplier": mult,
-            "effective_quantity": 1.0 * mult,
+            "effective_quantity": dqty * mult,
             "unit_raw": "EA",
             "status": "APPROVED",
             "source": "TITLE_BLOCK"
@@ -112,10 +116,11 @@ def build_multilevel_bom(raw_bom_data: dict, structure_data: dict, root_order_qt
             "key": key,
             "part_no": dno,
             "name": dname,
-            "specification": dscale if dscale != "-" else "-",
+            "specification": dspec,
             "material": dmat,
+            "surface_treatment": dsurf,
             "unit": "EA",
-            "total_quantity": 1.0 * mult,
+            "total_quantity": dqty * mult,
             "drawing_type": dtype,
             "source_drawings": [dno],
             "source_item_ids": [f"DWG_TB_{d.get('drawing_index', 1)}"]
@@ -194,6 +199,10 @@ def sanitize_unicode(obj):
     return obj
 
 if __name__ == "__main__":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
     if len(sys.argv) < 3:
         print(json.dumps({"error": "Usage: multilevel_bom_builder.py <raw_bom_json> <structure_json> [root_qty]"}))
         sys.exit(1)

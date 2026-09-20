@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import { db, insertRows } from './db';
+import { db, insertRows, queryTable } from './db';
 import { getStorageSubdir, resolveStoragePath } from './storage';
 
 const SCRIPTS_DIR = path.join(process.cwd(), 'scripts');
@@ -179,6 +179,22 @@ export async function processCadFilePipeline(
     return { success: false, error: parseResult.error_code || 'DXF_PARSE_FAILED' };
   }
 
+  // 💎 Idempotent cleanup: 동일 파일의 이전 parse_run에 적재된 중복 cad_objects 제거 및 상태 SUPERSEDED 전환
+  try {
+    const prevRuns = await db.prepare(`
+      SELECT id FROM cad_parse_runs WHERE source_file_id = ? AND status = 'SUCCESS'
+    `).all(file.id) as any[];
+
+    if (prevRuns && prevRuns.length > 0) {
+      for (const pr of prevRuns) {
+        await db.prepare('DELETE FROM cad_objects WHERE parse_run_id = ?').run(pr.id);
+        await db.prepare("UPDATE cad_parse_runs SET status = 'SUPERSEDED', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(pr.id);
+      }
+    }
+  } catch (cleanErr) {
+    console.warn('[cad-pipeline] Previous parse_runs idempotent cleanup warning:', cleanErr);
+  }
+
   const parseRunId = `parse_${Date.now()}`;
   await db.prepare(`
     INSERT INTO cad_parse_runs (
@@ -235,25 +251,32 @@ export async function processCadFilePipeline(
   await db.prepare('DELETE FROM drawing_relationships WHERE quotation_case_id = ?').run(quotationCaseId);
 
   if (structureResult.drawings && structureResult.drawings.length > 0) {
-    const dwgRows = structureResult.drawings.map((d: any) => ({
-      id: `dwg_${sourceFileId}_${d.drawing_index}`,
-      quotation_case_id: quotationCaseId,
-      source_file_id: sourceFileId,
-      drawing_index: d.drawing_index,
-      drawing_no_raw: d.drawing_no_raw,
-      drawing_no_normalized: d.drawing_no_normalized,
-      drawing_name_raw: d.drawing_name_raw,
-      drawing_name_normalized: d.drawing_name_normalized,
-      revision: d.revision,
-      material: d.material,
-      scale: d.scale,
-      drawing_type: d.drawing_type,
-      frame_bbox_json: JSON.stringify(d.frame_bbox),
-      title_block_bbox_json: JSON.stringify(d.title_block_bbox),
-      confidence_score: d.confidence_score,
-      status: d.status,
-      created_at: now
-    }));
+    const dwgRows = structureResult.drawings.map((d: any) => {
+      const isAssy = d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY' ||
+                     (d.drawing_no_raw && d.drawing_no_raw.endsWith('-000')) ||
+                     (d.drawing_name_raw && d.drawing_name_raw.includes('조립도'));
+      return {
+        id: `dwg_${sourceFileId}_${d.drawing_index}`,
+        quotation_case_id: quotationCaseId,
+        source_file_id: sourceFileId,
+        drawing_index: d.drawing_index,
+        drawing_no_raw: d.drawing_no_raw,
+        drawing_no_normalized: d.drawing_no_normalized,
+        drawing_name_raw: d.drawing_name_raw,
+        drawing_name_normalized: d.drawing_name_normalized,
+        revision: d.revision,
+        material: d.material,
+        scale: d.scale,
+        drawing_type: d.drawing_type,
+        is_quote_included: isAssy ? 0 : 1,
+        exclude_reason: isAssy ? '조립도 (가공품 제외)' : null,
+        frame_bbox_json: JSON.stringify(d.frame_bbox),
+        title_block_bbox_json: JSON.stringify(d.title_block_bbox),
+        confidence_score: d.confidence_score,
+        status: d.status,
+        created_at: now
+      };
+    });
     await insertRows('drawings', dwgRows);
 
     // Auto-link Customer from Title Block to quotation_cases if unassigned
@@ -381,6 +404,7 @@ export async function processCadFilePipeline(
       return {
         id: nId,
         quotation_case_id: quotationCaseId,
+        raw_item_id: ni.id || nId,
         raw_name: ni.raw_name,
         normalized_name: ni.normalized_name,
         search_name: ni.search_name,
@@ -389,6 +413,7 @@ export async function processCadFilePipeline(
         material_candidate: ni.material_candidate,
         quantity: ni.quantity,
         unit: ni.unit,
+        is_quote_included: 1,
         status: ni.status,
         created_at: now
       };

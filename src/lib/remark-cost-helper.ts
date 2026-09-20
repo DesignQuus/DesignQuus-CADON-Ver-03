@@ -9,9 +9,18 @@ export interface ExtraCostItem {
   amount: number;
 }
 
+export interface CostDiffInfo {
+  engineSuggestedPrice: number; // 엔진 최초 제안 공급단가
+  confirmedPrice: number;        // 실무자 확정 공급단가
+  delta: number;                 // confirmedPrice - engineSuggestedPrice
+  deltaPercent: number;          // 오차율 (%)
+  recordedAt?: string;
+}
+
 export interface StructuredRemark {
   text: string;
   extraCosts: ExtraCostItem[];
+  costDiff?: CostDiffInfo;
 }
 
 /**
@@ -41,9 +50,25 @@ export function parseRemark(rawRemark: string | null | undefined): StructuredRem
         }
       }
 
+      let costDiff: CostDiffInfo | undefined;
+      if (parsed.costDiff && typeof parsed.costDiff === 'object') {
+        const engPrice = Number(parsed.costDiff.engineSuggestedPrice) || 0;
+        const confPrice = Number(parsed.costDiff.confirmedPrice) || 0;
+        const delta = Number(parsed.costDiff.delta) || (confPrice - engPrice);
+        const deltaPercent = Number(parsed.costDiff.deltaPercent) || (engPrice > 0 ? Number(((delta / engPrice) * 100).toFixed(1)) : 0);
+        costDiff = {
+          engineSuggestedPrice: engPrice,
+          confirmedPrice: confPrice,
+          delta,
+          deltaPercent,
+          recordedAt: parsed.costDiff.recordedAt || undefined
+        };
+      }
+
       return {
         text: String(parsed.text || parsed.memo || '').trim(),
-        extraCosts
+        extraCosts,
+        costDiff
       };
     } catch {
       // JSON 파싱 실패 시 아래 텍스트 파서로 fallback
@@ -89,14 +114,26 @@ export function parseRemark(rawRemark: string | null | undefined): StructuredRem
  */
 export function stringifyRemark(
   text: string | null | undefined,
-  extraCosts?: ExtraCostItem[] | null
+  extraCosts?: ExtraCostItem[] | null,
+  costDiff?: CostDiffInfo | null
 ): string {
   const cleanText = String(text || '').trim();
   const validExtras = (extraCosts || []).filter(
     (e) => e && typeof e.name === 'string' && e.name.trim() !== '' && Number(e.amount) > 0
   );
 
-  if (validExtras.length === 0) {
+  let validCostDiff: CostDiffInfo | undefined;
+  if (costDiff && (costDiff.engineSuggestedPrice > 0 || costDiff.confirmedPrice > 0)) {
+    validCostDiff = {
+      engineSuggestedPrice: Math.round(Number(costDiff.engineSuggestedPrice) || 0),
+      confirmedPrice: Math.round(Number(costDiff.confirmedPrice) || 0),
+      delta: Math.round(Number(costDiff.delta) || (Number(costDiff.confirmedPrice) - Number(costDiff.engineSuggestedPrice))),
+      deltaPercent: Number((costDiff.deltaPercent || 0).toFixed(1)),
+      recordedAt: costDiff.recordedAt || new Date().toISOString()
+    };
+  }
+
+  if (validExtras.length === 0 && !validCostDiff) {
     return cleanText;
   }
 
@@ -105,6 +142,7 @@ export function stringifyRemark(
     extraCosts: validExtras.map((e) => ({
       name: e.name.trim(),
       amount: Math.round(Number(e.amount))
-    }))
+    })),
+    ...(validCostDiff ? { costDiff: validCostDiff } : {})
   });
 }

@@ -58,14 +58,14 @@ def normalize_bom_item(item: dict) -> dict:
         
     # 5. Extract material if in name
     mat_candidate = raw_mat
-    mat_match = re.search(r'\b(SS400|SUS304|AL6061|AL6063|S45C|POM|MC[\s_-]?NYLON|AL)\b', normalized_name)
+    mat_match = re.search(r'\b(SUJ2|SK3|SM45C|S45C|S20C|SS400|SS275|SUS304|SUS316|AL6061|A6061|AL5052|A5052|AL6063|POM|MC[\s_-]?NYLON|SCM440|SCM415|SKD11|SKD61|SUM24L|AL)\b', normalized_name)
     if mat_match:
         mat_candidate = mat_match.group(1)
         if mat_candidate == "AL":
             mat_candidate = "AL6063"
             
     search_name = normalized_name
-    for m in ["SS400", "SUS304", "AL6063", "AL6061", "S45C", "AL"]:
+    for m in ["SUJ2", "SK3", "SM45C", "S45C", "S20C", "SS400", "SS275", "SUS304", "SUS316", "AL6063", "AL6061", "AL"]:
         search_name = search_name.replace(m, "").strip()
     search_name = re.sub(r'\s+', ' ', search_name).strip()
     
@@ -77,9 +77,10 @@ def normalize_bom_item(item: dict) -> dict:
         "search_name": search_name,
         "direction": direction,
         "spec_candidate": spec_candidate or "-",
-        "material_candidate": mat_candidate or "SS400",
+        "material_candidate": mat_candidate if (mat_candidate and mat_candidate != "UNKNOWN") else (raw_mat or "UNKNOWN"),
         "quantity": item.get("total_quantity", item.get("quantity_numeric", 1.0)),
         "unit": item.get("unit", "EA"),
+        "surface_treatment": item.get("surface_treatment") or "-",
         "confidence_score": 0.95,
         "status": "NORMALIZED"
     }
@@ -104,6 +105,10 @@ def normalize_bom_list(items_list: list) -> dict:
     }
 
 if __name__ == "__main__":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
     if len(sys.argv) < 2:
         print(json.dumps({"error": "Usage: bom_normalizer.py <items_json>"}))
         sys.exit(1)

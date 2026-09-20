@@ -29,6 +29,7 @@ export interface QuoteReviewLine {
   extraCost2Amount?: number;
   extraCost3Name?: string;
   extraCost3Amount?: number;
+  engineSuggestedPrice?: number;
 }
 
 interface QuoteLineGridProps {

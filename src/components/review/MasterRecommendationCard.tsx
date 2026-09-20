@@ -18,20 +18,45 @@ export interface RecommendationItem {
 interface MasterRecommendationCardProps {
   recommendations: RecommendationItem[];
   onApplyPrice: (price: number) => void;
+  onOpenMasterDrawer?: () => void;
 }
 
 export default function MasterRecommendationCard({
   recommendations,
-  onApplyPrice
+  onApplyPrice,
+  onOpenMasterDrawer
 }: MasterRecommendationCardProps) {
   if (recommendations.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm h-full flex flex-col justify-center text-xs text-slate-400">
-        <div className="flex items-center gap-1.5 font-bold text-slate-700 mb-1">
-          <Sparkles className="w-4 h-4 text-amber-500" />
-          <span>MASTER DB 추천 단가</span>
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm h-full flex flex-col justify-between text-xs text-slate-400">
+        <div>
+          <div className="flex items-center justify-between font-bold text-slate-700 mb-1">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <span>MASTER DB 추천 단가</span>
+            </div>
+            {onOpenMasterDrawer && (
+              <button
+                onClick={onOpenMasterDrawer}
+                className="px-2 py-0.5 text-[11px] bg-blue-50 hover:bg-blue-100 text-blue-700 rounded font-semibold border border-blue-200 flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                <span>단가표 전체보기</span>
+                <ExternalLink className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          <p className="mt-2 text-slate-500">
+            직접 일치하는 과거 이력이 없습니다. 사내 마스터 단가표를 열어 표준 품목, 원자재 시세 및 공정 임률을 직접 확인하실 수 있습니다.
+          </p>
         </div>
-        유사 부품 이력이 없습니다. 신규 단가로 산출 및 등록됩니다.
+        {onOpenMasterDrawer && (
+          <button
+            onClick={onOpenMasterDrawer}
+            className="w-full py-2 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 border border-slate-300 rounded-lg text-slate-700 font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <span>📋 사내 마스터 단가표 열기 (F7)</span>
+          </button>
+        )}
       </div>
     );
   }
@@ -43,7 +68,19 @@ export default function MasterRecommendationCard({
           <Sparkles className="w-4 h-4 text-amber-500" />
           <span className="font-bold text-slate-800">MASTER 추천 단가 Top-{recommendations.length}</span>
         </div>
-        <span className="text-[10px] text-slate-400 font-medium">[F4 키: 1순위 즉시적용]</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">[F4: 1순위 적용]</span>
+          {onOpenMasterDrawer && (
+            <button
+              onClick={onOpenMasterDrawer}
+              className="px-2 py-0.5 text-[11px] bg-blue-50 hover:bg-blue-100 text-blue-700 rounded font-semibold border border-blue-200 flex items-center gap-1 transition-colors cursor-pointer"
+              title="사내 표준 마스터 단가표 드로어 열기 (단축키 F7)"
+            >
+              <span>단가표 전체보기</span>
+              <ExternalLink className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-1.5 py-1 pr-1">

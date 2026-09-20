@@ -87,7 +87,7 @@ export async function POST(
     for (const item of finalItems) {
       const dwgNo = (item.drawing_no || item.final_master_code || '').trim();
       const itemName = (item.final_name || '').trim();
-      const material = (item.final_material || 'SS400').trim();
+      const material = (item.final_material || 'UNKNOWN').trim();
 
       // 조립도(메인/서브 조립도, -000 도번, 조립도 키워드) 자동 견적 제외 판정
       const isAssembly = 
