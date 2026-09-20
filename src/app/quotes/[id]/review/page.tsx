@@ -124,7 +124,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   quantity: Number(qi.quantity) || 1,
                   unitCost: isAssembly ? 0 : unitCost,
                   supplyPrice: isAssembly ? 0 : supplyPrice,
-                  status: isAssembly ? 'CONFIRMED' : (hasPrice && isIncluded ? 'CONFIRMED' : 'NEEDS_REVIEW'),
+                  status: isAssembly ? 'CONFIRMED' : (qi.price_status === 'NEEDS_REVIEW' || qi.price_source === 'ENGINEERING_COST' ? 'NEEDS_REVIEW' : (hasPrice && isIncluded ? 'CONFIRMED' : 'NEEDS_REVIEW')),
                   balloonNo: String(qi.item_no || idx + 1),
                   memo: structured.text,
                   specification: qi.specification || '',
@@ -136,7 +136,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   extraCost2Name: structured.extraCosts[1]?.name,
                   extraCost2Amount: structured.extraCosts[1]?.amount,
                   extraCost3Name: structured.extraCosts[2]?.name,
-                  extraCost3Amount: structured.extraCosts[2]?.amount
+                  extraCost3Amount: structured.extraCosts[2]?.amount,
+                  priceSource: qi.price_source,
+                  priceStatus: qi.price_status
                 };
               })
             );

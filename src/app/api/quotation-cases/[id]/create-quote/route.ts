@@ -209,7 +209,7 @@ export async function POST(
               AND (d.drawing_no_normalized = ? OR d.drawing_no_raw = ? OR d.drawing_name_raw = ? OR d.drawing_name_normalized = ?)
               AND c.final_unit_price > 0
             LIMIT 1
-          `).get(quotationCaseId, dwgNo, dwgNo, itemName, itemName)) as any;
+          `).get(id, dwgNo, dwgNo, itemName, itemName)) as any;
 
           if (costRow && costRow.final_unit_price > 0) {
             unitPrice = costRow.final_unit_price;

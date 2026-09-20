@@ -30,6 +30,8 @@ export interface QuoteReviewLine {
   extraCost3Name?: string;
   extraCost3Amount?: number;
   engineSuggestedPrice?: number;
+  priceSource?: string;
+  priceStatus?: string;
 }
 
 interface QuoteLineGridProps {
@@ -173,7 +175,26 @@ export default function QuoteLineGrid({
                     {row.isAssembly ? (
                       <span className="text-slate-400">-</span>
                     ) : row.supplyPrice > 0 ? (
-                      <span className="text-blue-700">₩{row.supplyPrice.toLocaleString()}</span>
+                      row.priceSource === 'ENGINEERING_COST' ? (
+                        <div className="inline-flex items-center justify-end gap-1.5" title="원가 엔진 추정치 (담당자 검토 필요)">
+                          <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-slate-100 text-slate-600 border border-slate-300 font-medium">
+                            참고
+                          </span>
+                          <span className="text-slate-600 font-mono">₩{row.supplyPrice.toLocaleString()}</span>
+                          <span className="text-slate-400 hover:text-slate-600 cursor-help text-[11px]" title="원가 엔진 자동산출값 (작업자 검토 및 확정 필요)">
+                            ⓘ
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          {['CUSTOMER_PRICE', 'STANDARD_PRICE', 'VERIFIED_HISTORY'].includes(row.priceSource || '') && (
+                            <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
+                              마스터
+                            </span>
+                          )}
+                          <span className="text-blue-700 font-mono">₩{row.supplyPrice.toLocaleString()}</span>
+                        </div>
+                      )
                     ) : (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 border border-rose-200 font-bold">
                         <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />

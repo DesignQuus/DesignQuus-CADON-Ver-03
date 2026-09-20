@@ -115,6 +115,7 @@ export async function POST(
       const isMatched = !!item.master_id;
 
       const decisionType = isMatched ? 'EXISTING_MASTER' : 'CUSTOM_PART';
+      const decisionReason = isMatched ? '1순위 마스터 추천 자동 일괄 승인' : '단품 도면 기반 사용자 가공품 승인';
       const finalCode = item.drawing_no || (isMatched ? item.master_code : 'CUSTOM');
       const finalName = (item.drawing_name && item.drawing_name !== item.drawing_no) ? item.drawing_name : (isMatched ? item.standard_name : item.normalized_name);
       const finalSpec = (item.drawing_spec && item.drawing_spec !== '-') 
