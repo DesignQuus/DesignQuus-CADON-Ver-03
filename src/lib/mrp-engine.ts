@@ -195,7 +195,7 @@ export async function runMrpExplosion(
     const isAssembly = meta.isAssembly || feat?.process_type === 'ASSEMBLY' || 
                        dwgNo.endsWith('-000') || dwgNo.endsWith('-00-000');
 
-    const shape = (meta.materialShape || (isAssembly ? 'ASSEMBLY' : 'SHEET')) as any;
+    const shape = (meta.materialShape || meta.shape || (isAssembly ? 'ASSEMBLY' : (feat?.process_type === 'MACHINING' ? 'ROUND_BAR' : 'SHEET'))) as any;
     const procType = (feat?.process_type || (isAssembly ? 'ASSEMBLY' : (shape === 'ROUND_BAR' ? 'MACHINING' : 'SHEET_METAL'))) as any;
 
     const diameterVal = meta.diameter ? Number(meta.diameter) : (shape === 'ROUND_BAR' && feat?.bbox_thickness > 0 ? Number(feat.bbox_thickness) : null);
@@ -261,7 +261,7 @@ export async function runMrpExplosion(
     const totalQty = 1;
     const totalWeight = unitWeight;
 
-    const shape = (meta.materialShape || (f.bbox_thickness === 0 ? 'ROUND_BAR' : 'SHEET')) as any;
+    const shape = (meta.materialShape || meta.shape || (f.process_type === 'MACHINING' ? 'ROUND_BAR' : (f.bbox_thickness === 0 ? 'ROUND_BAR' : 'SHEET'))) as any;
     const procType = (f.process_type || (shape === 'ROUND_BAR' ? 'MACHINING' : 'SHEET_METAL')) as any;
     const diameterVal = meta.diameter ? Number(meta.diameter) : (shape === 'ROUND_BAR' && f.bbox_thickness > 0 ? Number(f.bbox_thickness) : null);
     const thicknessVal = shape === 'ROUND_BAR' ? null : (meta.realThickness !== undefined ? meta.realThickness : (f.bbox_thickness > 0 ? Number(f.bbox_thickness) : null));
