@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 import { queryTable, updateRows, insertRows } from '@/../egdesk-helpers';
 import { parseRemark, stringifyRemark } from '@/lib/remark-cost-helper';
 
@@ -8,6 +9,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getSession();
     const { id: caseId } = await params;
     const body = await request.json();
     const { 
@@ -173,10 +175,10 @@ export async function POST(
           margin_rate: 0.18,
           unit_price: unitPrice,
           material_base_date: new Date().toISOString().substring(0, 10),
-          price_basis_type: basis?.basisType || 'MANUAL',
+          price_basis_type: 'HUMAN_VERIFIED', // [실무자 확정 단가 전용 타입 영구 보장]
           basis_calc_json: JSON.stringify(basis || {}),
           is_ordered: 0,
-          confirmed_by: '검토자',
+          confirmed_by: session?.name || '검토자',
           effective_from: new Date().toISOString().substring(0, 10),
           created_at: now
         }

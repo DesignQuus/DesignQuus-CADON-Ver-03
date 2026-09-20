@@ -7,8 +7,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    // 조건 B: quotation_case_id 하드 바인딩 (전달된 id 또는 타깃 케이스)
-    const caseId = id || 'case_1789766302590';
+    if (!id || id.trim() === '') {
+      return NextResponse.json(
+        { error: 'quotation_case_id가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+    const caseId = id.trim();
     
     const result = await runMrpExplosion(caseId);
     return NextResponse.json(result);
@@ -27,7 +32,13 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const caseId = id || 'case_1789766302590';
+    if (!id || id.trim() === '') {
+      return NextResponse.json(
+        { error: 'quotation_case_id가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+    const caseId = id.trim();
     const body = await request.json();
     const { drawingId, drawingNo, shape = 'SHEET', thickness, diameter, length: customLength, width: customWidth } = body;
 

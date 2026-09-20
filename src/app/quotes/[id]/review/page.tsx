@@ -13,6 +13,7 @@ import CostBreakdownPanel from '@/components/review/CostBreakdownPanel';
 import MasterRecommendationCard, { RecommendationItem } from '@/components/review/MasterRecommendationCard';
 import MasterPriceReferenceDrawer from '@/components/review/MasterPriceReferenceDrawer';
 import ReviewCadViewer from '@/components/review/ReviewCadViewer';
+import PilotWelcomeModal from '@/components/review/PilotWelcomeModal';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
 import { parseRemark, stringifyRemark } from '@/lib/remark-cost-helper';
 import {
@@ -986,6 +987,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           handleUpdateSelected({ supplyPrice: prc });
         }}
       />
+
+      {/* 💎 6. 파일럿 최초 진입 안내 모달 (P-4) */}
+      <PilotWelcomeModal />
     </div>
   );
 }

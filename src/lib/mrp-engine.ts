@@ -103,8 +103,11 @@ export interface MrpExecutionResult {
  * 조건 C & 조치 1~4: 도번 1:1 복구, 판재/환봉 3대 분류, 데이터 품질 지표 3종
  */
 export async function runMrpExplosion(
-  caseId: string = 'case_1789766302590'
+  caseId: string
 ): Promise<MrpExecutionResult> {
+  if (!caseId) {
+    throw new Error('quotation_case_id is required for runMrpExplosion');
+  }
   // 1. 도면 계층 관계 로드 (조건 B: 케이스 바인딩)
   const relsRes = await executeSQL(`
     SELECT parent_drawing_no, child_drawing_no, relationship_type

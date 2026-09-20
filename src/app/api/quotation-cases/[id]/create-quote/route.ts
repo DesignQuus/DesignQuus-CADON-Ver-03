@@ -87,16 +87,20 @@ export async function POST(
     for (const item of finalItems) {
       const dwgNo = (item.drawing_no || item.final_master_code || '').trim();
       const itemName = (item.final_name || '').trim();
+      const upperName = itemName.toUpperCase();
+      const upperDwgNo = dwgNo.toUpperCase();
       const material = (item.final_material || 'UNKNOWN').trim();
 
-      // 조립도(메인/서브 조립도, -000 도번, 조립도 키워드) 자동 견적 제외 판정
+      // 조립도(메인/서브 조립도, -000/-00-000 도번, 표준 조립체 키워드: UNIT, ASSY, ASSEMBLY, 조립) 자동 견적 제외 판정
       const isAssembly = 
         item.drawing_type === 'MAIN_ASSEMBLY' || 
         item.drawing_type === 'SUB_ASSEMBLY' || 
-        dwgNo.endsWith('-000') ||
-        itemName.includes('조립도') || 
-        itemName.includes('CHAIN DRIVE') || 
-        itemName.includes('LINE');
+        upperDwgNo.endsWith('-000') ||
+        upperDwgNo.endsWith('-00-000') ||
+        upperName.includes('조립') || 
+        upperName.includes('ASSEMBLY') || 
+        upperName.includes('ASSY') || 
+        upperName.includes('UNIT');
 
       const isIncluded = isAssembly ? 0 : (item.is_quote_included !== 0 ? 1 : 0);
       const remark = isAssembly ? '조립도 (가공품 제외)' : (isIncluded ? '' : '견적 제외 품목');
@@ -155,10 +159,11 @@ export async function POST(
           }
         }
 
-        // 2. Search Verified Price History (price_history_v2 with HUMAN_VERIFIED)
+        // 2. Search Verified Price History (price_history_v2 - 오염 데이터 차단 하드 가드)
         if (unitPrice === 0) {
           const verifiedPrice = (await db.prepare(`
-            SELECT * FROM price_history_v2
+            SELECT id, unit_price, price_basis_type, confirmed_by
+            FROM price_history_v2
             WHERE (part_master_id = ? OR part_key = ? OR part_key = ?)
               AND price_basis_type = 'HUMAN_VERIFIED'
               AND unit_price > 0
@@ -167,8 +172,12 @@ export async function POST(
           `).get(item.final_master_id || '', dwgNo, itemName)) as any;
 
           if (verifiedPrice) {
+            // 🛡️ 런타임 보안 어설션: HUMAN_VERIFIED가 아닌 행은 즉시 치명적 예외 발생 및 차단
+            if (verifiedPrice.price_basis_type !== 'HUMAN_VERIFIED') {
+              throw new Error(`CRITICAL_DATA_CONTAMINATION: Polluted price_history_v2 row ${verifiedPrice.id} detected! Access denied.`);
+            }
             unitPrice = verifiedPrice.unit_price;
-            priceSource = 'VERIFIED_HISTORY';
+            priceSource = 'VERIFIED_HISTORY'; // 화면에 [실무 확정] 배지로 마스터와 분리 표기
             priceStatus = 'READY';
           }
         }

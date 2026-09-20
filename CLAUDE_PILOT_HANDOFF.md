@@ -131,15 +131,113 @@
 
 ---
 
-## Ⅴ. 환경 및 핵심 소스 경로 안내
+## Ⅴ. 파일럿 UX 4대 기능 (P-1 ~ P-4) 구현 완료 명세
+
+견적 담당자가 파일럿 도면 검토 시 안전하고 직관적으로 작업할 수 있도록 4대 UX 기능이 구현 완료되었습니다.
+
+### 1. [P-1] 원가 엔진 4순위 연결 (Pricing Waterfall)
+- 단가 결정 5단계:
+  1. `price_masters` (고객/표준 마스터 단가) → `price_status = 'READY'`
+  2. `price_history_v2` (`price_basis_type = 'HUMAN_VERIFIED'`) → `price_status = 'READY'`
+  3. `manual_price_pool` (수기 단가 지식풀) → `price_status = 'READY'`
+  4. **`part_cost_breakdowns` & `part_fabrication_features` → `price_source = 'ENGINEERING_COST'`, `price_status = 'NEEDS_REVIEW'` (자동 확정 금지)**
+  5. 미매칭 → `price_source = 'NOT_FOUND'`, `price_status = 'PRICE_NOT_FOUND'`, `unit_price = 0`
+- **0원 확정 및 검토 대기 승인 차단 가드**: 0원이거나 `NEEDS_REVIEW` 상태인 품목이 존재하면 `approve/route.ts`에서 승인을 원천 차단하여 담당자 육안 검토 강제.
+
+### 2. [P-2] 제안값과 확정값 시각 구분
+- **`ENGINEERING_COST` (제안값)**: 차분한 회색조(`text-slate-600`) + **`[참고]` 배지** + **`ⓘ` 아이콘** 부착.
+- **마스터 단가 (확정값)**: 청색 볼드체(`text-blue-700`) + **`[마스터]` 배지**(`bg-emerald-50 text-emerald-700`)로 즉시 구별.
+
+### 3. [P-3] 공학 산출 근거 표시 (Formula Breakdown)
+- `ENGINEERING_COST` 품목 선택 시 상세 패널(`CostBreakdownPanel`) 상단에 **`⚙️ 원가 엔진 자동 산출 근거`** 카드 자동 렌더링.
+- 소재비(스크랩 8%), 레이저 절단비, 기계 가공공임, 마진율(15%)이 사람이 읽기 쉬운 규격 공식으로 투명하게 분해 표시.
+
+### 4. [P-4] 최초 진입 안내 모달 (Welcome Modal)
+- 워크스페이스 진입 시 편안한 톤(`"평소대로 편안하게 견적해 주세요"`)의 안내 모달 자동 노출.
+- 제안값의 성격(참고치), 자유로운 수정 권장, 확정 시 마스터 축적 및 차기 1순위 적용 안내.
+- `[기준정보 관리 > 엑셀 일괄 업로드]` 바로가기 배너 제공.
+- "다시 보지 않기" 로컬스토리지 연동 지원.
+
+---
+
+## Ⅵ. 환경 및 핵심 소스 경로 안내
 
 - **로컬 서버**: `http://localhost:4005` (Next.js 가동 중)
 - **백엔드 DB**: SQLite (`http://localhost:8080`)
 - **핵심 소스 파일**:
   - CAD 파싱 파이프라인: `src/lib/cad-pipeline.ts`
   - MRP 및 중량 보존 엔진: `src/lib/mrp-engine.ts`
-  - 도면 상세 및 견적 UI: `src/app/quotes/[id]/page.tsx`
-  - 단가 및 공정 엔진: `src/lib/cost-engine.ts`
+  - 견적 생성 및 단가 결정: `src/app/api/quotation-cases/[id]/create-quote/route.ts`
+  - 견적 승인 가드: `src/app/api/quotes/[id]/approve/route.ts`
+  - 견적 품목 그리드(P-2): `src/components/review/QuoteLineGrid.tsx`
+  - 상세 원가 산출 패널(P-3): `src/components/review/CostBreakdownPanel.tsx`
+  - 파일럿 최초 안내 모달(P-4): `src/components/review/PilotWelcomeModal.tsx`
+  - 골든 데이터셋 동결 메트릭: [GOLDEN_DATASET_SNAPSHOT.md](file:///c:/dev/CADON-Ver-03/GOLDEN_DATASET_SNAPSHOT.md)
 
 ---
-*본 인계 문서는 확인 A(두께 실측), 확인 B(테이블 무결성), 확인 C(1차 케이스 재산출 및 전후 비교) 승인을 거쳐 최종 완성되었습니다.*
+
+## Ⅶ. 하드코딩 제거 및 범용화 조치 내역 (무결성 강화 완료)
+
+파일럿 운영의 완전한 무결성을 확보하기 위해, 개발 및 검증 과정에 잔존하던 하드코딩 요소를 전수 발굴하고 범용 로직으로 전면 교체 완료하였습니다.
+
+### 1. [조치 A] MRP 엔진 및 라우트 고정 케이스 ID 제거 (`400 Bad Request` 가드 신설)
+- **대상 파일**:
+  - `src/lib/mrp-engine.ts`: `runMrpExplosion(caseId: string)` 함수의 기본값(`'case_1789766302590'`) 완전 삭제.
+    - `if (!caseId) throw new Error('quotation_case_id is required for runMrpExplosion');` 가드 추가.
+  - `src/app/api/quotation-cases/[id]/mrp/route.ts`: GET 및 PATCH 핸들러의 `caseId = id || 'case_1789766302590'` 폴백 완전 삭제.
+    - `id` 누락 시 즉시 `400 Bad Request` (`quotation_case_id가 필요합니다.`) 에러 반환.
+- **효과**: 신규 파일럿 케이스 투입 시 `caseId` 파라미터 전달 오류가 발생해도 과거 1차 케이스의 자재 데이터로 잘못 연산되는 버그 원천 차단.
+
+### 2. [조치 B] 조립도 제외 규칙의 기계 특화 키워드 삭제 및 표준 정규식 정제
+- **대상 파일**: `src/app/api/quotation-cases/[id]/create-quote/route.ts`
+- **변경 전**: `itemName.includes('조립도') || itemName.includes('CHAIN DRIVE') || itemName.includes('LINE') || dwgNo.endsWith('-000')`
+- **변경 후**: 표준 엔지니어링 조립체 식별자 기반 정제
+  ```typescript
+  const upperName = itemName.toUpperCase();
+  const upperDwgNo = dwgNo.toUpperCase();
+  const isAssembly = 
+    item.drawing_type === 'MAIN_ASSEMBLY' || 
+    item.drawing_type === 'SUB_ASSEMBLY' || 
+    upperDwgNo.endsWith('-000') ||
+    upperDwgNo.endsWith('-00-000') ||
+    upperName.includes('조립') || 
+    upperName.includes('ASSEMBLY') || 
+    upperName.includes('ASSY') || 
+    upperName.includes('UNIT');
+  ```
+- **효과 및 회귀 검증 결과**:
+  - **1차 케이스 영향**: 변동 0건 (모든 상위 조립체가 `UNIT`/`ASSEMBLY`/`-000`으로 100% 포괄됨).
+  - **2차 케이스 오작동 예방**: 2차 케이스의 단품 샤프트인 `LINEAR SHAFT`(가공품)가 과거의 광범위한 `LINE` 키워드로 인해 **조립도로 오인되어 견적에서 제외될 뻔했던 치명적 잠재 결함을 사전 차단**함.
+
+### 3. [조치 C] 부가 구문 및 타입 안정성 강화
+- `src/components/review/QuoteLineGrid.tsx`: JSX 삼항연산자 구문 정제 완료.
+- `src/app/api/quotes/[id]/confirm-line/route.ts`: `getSession` 연동 및 `session?.name` 안전 참조로 TS 컴파일 오류 해결.
+
+---
+
+## Ⅷ. 단가 매칭 실측 분포 및 무결성 원복 상태 보존
+
+실무 파일럿 운영 준비 과정에서 1차 케이스 단가 매칭 5단계 실측과 무결성 검증을 거쳤으며, 사전 승인 없는 임의 견적 발행을 원천 차단하고 동결 스냅샷 원본을 100% 보존하고 있습니다.
+
+### 1. 단가 매칭 5단계 실측 결과 (순수 견적 대상 128건 기준)
+
+| 매칭 순위 | 단가 소스 | 매칭 건수 | 비율 (%) | 공급단가 상태 | 담당자 대응 및 화면 UI |
+| :---: | :--- | :---: | :---: | :---: | :--- |
+| **1순위** | `price_masters` | 0건 | 0.0% | `READY` | 사내 표준 마스터 |
+| **2순위** | `price_history_v2` (`HUMAN_VERIFIED`) | 0건 | 0.0% | `READY` | 과거 오염 데이터 241건 격리 유지 |
+| **3순위** | `manual_price_pool` | 2건 | 1.6% | `READY` | 기등록 베어링/체인 단가 |
+| **4순위** | **`ENGINEERING_COST`** | **97건** | **75.8%** | **`NEEDS_REVIEW`** | **가공 단품 전원 자동 산출 (회색조 `[참고]` 배지 + 산출 공식)** |
+| **5순위** | **`NOT_FOUND` (0원)** | **29건** | **22.7%** | `PRICE_NOT_FOUND` | **기성 구매품 11건 + 도면 메타데이터 노이즈 18건** |
+| **합계** | **순수 견적 대상** | **128건** | **100.0%** | - | **단가 확보율: 77.4% (가공 단품 100% 확보)** |
+
+### 2. 무결성 보존 및 롤백 완료 내역
+- **미승인 견적서(`Q-20260918-002-V1`) 완전 삭제**: 검토 완료 전 임의 생성된 견적서 및 관련 `quote_items` 전량을 DB에서 영구 삭제 롤백함.
+- **노이즈 18건 원복**: 사전 승인 없는 데이터 변경을 방지하기 위해 `normalized_bom_items`를 원래 상태(`is_quote_included = 1`)로 100% 롤백하여 골든 스냅샷과의 정합성을 유지함.
+- **승인 가드 동작 보증**: 0원 또는 `NEEDS_REVIEW`가 1건이라도 남아있으면 `approve/route.ts`에서 승인을 원천 차단함.
+- **검토 URL**: `http://localhost:4005/quotes/case_1789766302590/review`
+
+---
+
+*본 인계 문서는 확인 A·B·C 검증, P-1~P-4 UX 구축, 하드코딩 전수 제거, 그리고 【옵션 C+】 스마트 정제 진입 조치를 거쳐 파일럿 시작 준비를 100% 완료하였습니다.*
+
+

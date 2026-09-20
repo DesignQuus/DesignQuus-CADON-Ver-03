@@ -187,9 +187,19 @@ export default function QuoteLineGrid({
                         </div>
                       ) : (
                         <div className="inline-flex items-center justify-end gap-1.5">
-                          {['CUSTOMER_PRICE', 'STANDARD_PRICE', 'VERIFIED_HISTORY'].includes(row.priceSource || '') && (
-                            <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
+                          {['CUSTOMER_PRICE', 'STANDARD_PRICE'].includes(row.priceSource || '') && (
+                            <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium" title="사내 표준 마스터 단가">
                               마스터
+                            </span>
+                          )}
+                          {row.priceSource === 'VERIFIED_HISTORY' && (
+                            <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-medium" title="과거 견적 시 실무자 직접 검토/확정 이력 단가">
+                              실무 확정
+                            </span>
+                          )}
+                          {row.priceSource === 'MANUAL_PRICE' && (
+                            <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-purple-50 text-purple-700 border border-purple-200 font-medium" title="수기 단가 지식 풀">
+                              수기 풀
                             </span>
                           )}
                           <span className="text-blue-700 font-mono">₩{row.supplyPrice.toLocaleString()}</span>
