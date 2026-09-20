@@ -128,6 +128,85 @@ export default function CostBreakdownPanel({
         </div>
       </div>
 
+      {/* 🚀 [P-3] 원가 엔진 산출 근거 (Engineering Formula Breakdown) */}
+      {(() => {
+        let formulaData: any = null;
+        if (line.memo && line.memo.includes('[ENGINEERING_COST]')) {
+          try {
+            const rawJson = line.memo.replace(/.*\[ENGINEERING_COST\]\s*/, '').trim();
+            formulaData = JSON.parse(rawJson);
+          } catch {}
+        }
+
+        if (!formulaData && line.priceSource === 'ENGINEERING_COST') {
+          formulaData = {
+            materialCode: line.material,
+            weightKg: line.unitCost > 0 ? (line.unitCost / 5000).toFixed(2) : '1.00',
+            materialCost: line.materialCost || Math.round(line.unitCost * 0.45),
+            laserCuttingCost: line.processCost || Math.round(line.unitCost * 0.45),
+            subtotalCost: line.unitCost,
+            finalUnitPrice: line.supplyPrice,
+            markupRate: 0.15
+          };
+        }
+
+        if (!formulaData) return null;
+
+        return (
+          <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300">
+                  참고 제안값
+                </span>
+                <span className="font-bold text-slate-800 text-xs flex items-center gap-1">
+                  ⚙️ 원가 엔진 자동 산출 근거 (ENGINEERING_COST)
+                </span>
+              </div>
+              <span className="text-[10px] text-blue-700 font-medium">
+                * 검증 전 참고치이므로 자유롭게 수정 가능합니다
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono bg-white p-2 rounded-lg border border-blue-100 shadow-2xs">
+              <div className="space-y-1">
+                <div className="text-slate-600 flex justify-between">
+                  <span>• 소재비 (스크랩 8%):</span>
+                  <span className="font-bold text-slate-800">
+                    {formulaData.materialCode || line.material} {formulaData.weightKg ? `${formulaData.weightKg}kg` : ''} = ₩{(formulaData.materialCost || 0).toLocaleString()}
+                  </span>
+                </div>
+                {formulaData.laserCuttingCost > 0 && (
+                  <div className="text-slate-600 flex justify-between">
+                    <span>• 레이저 절단비:</span>
+                    <span className="font-bold text-slate-800">
+                      ₩{(formulaData.laserCuttingCost).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                {formulaData.machiningCost > 0 && (
+                  <div className="text-slate-600 flex justify-between">
+                    <span>• 기계 가공비:</span>
+                    <span className="font-bold text-slate-800">
+                      ₩{(formulaData.machiningCost).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                <div className="text-slate-600 flex justify-between pt-0.5 border-t border-slate-100">
+                  <span>• 소계 + 마진({Math.round((formulaData.markupRate || 0.15) * 100)}%):</span>
+                  <span className="font-bold text-blue-700">
+                    ₩{(formulaData.subtotalCost || line.unitCost || 0).toLocaleString()} → 제안단가: ₩{(formulaData.finalUnitPrice || line.supplyPrice || 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 2. 항목별 내역 (소재비, 가공/공정비, 열처리/후처리비 직접 수정 + 별도 추가비용 1, 2, 3) */}
       {(() => {
         let label1 = '소재비';
