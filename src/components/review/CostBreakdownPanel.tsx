@@ -48,6 +48,16 @@ export default function CostBreakdownPanel({
 
     setSavingMaster(true);
     try {
+      const extraNotes: string[] = [];
+      if (line.extraCost1Amount) extraNotes.push(`${line.extraCost1Name || '추가비1'}: ₩${line.extraCost1Amount.toLocaleString()}`);
+      if (line.extraCost2Amount) extraNotes.push(`${line.extraCost2Name || '추가비2'}: ₩${line.extraCost2Amount.toLocaleString()}`);
+      if (line.extraCost3Amount) extraNotes.push(`${line.extraCost3Name || '추가비3'}: ₩${line.extraCost3Amount.toLocaleString()}`);
+
+      const combinedRemark = [
+        line.memo,
+        extraNotes.length > 0 ? `[별도추가비] ${extraNotes.join(', ')}` : ''
+      ].filter(Boolean).join(' | ') || '2단계 단가 검토 중 마스터 적재';
+
       const res = await apiFetch(`/api/quotes/${caseId}/save-to-master`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,7 +69,7 @@ export default function CostBreakdownPanel({
           specification: line.specification || '',
           unitPrice: line.supplyPrice,
           unitCost: line.unitCost,
-          remark: line.memo || '2단계 단가 검토 중 마스터 적재'
+          remark: combinedRemark
         })
       });
 
@@ -120,7 +130,7 @@ export default function CostBreakdownPanel({
         </div>
       </div>
 
-      {/* 2. 항목별 내역 (부품 유형별 맞춤 분해) */}
+      {/* 2. 항목별 내역 (소재비, 가공/공정비, 열처리/후처리비 직접 수정 + 별도 추가비용 1, 2, 3) */}
       {(() => {
         let label1 = '소재비';
         let label2 = '가공/공정비';
@@ -166,36 +176,219 @@ export default function CostBreakdownPanel({
           ratio3 = 0.05;
         }
 
+        // 현재 각 세부 원가 항목 (저장된 값 우선, 없으면 단위원가 기준 비율 자동 계산)
+        const matCost = line.materialCost !== undefined ? line.materialCost : Math.round(line.unitCost * ratio1);
+        const procCost = line.processCost !== undefined ? line.processCost : Math.round(line.unitCost * ratio2);
+        const treatCost = line.treatmentCost !== undefined ? line.treatmentCost : Math.round(line.unitCost * ratio3);
+
+        const extra1Name = line.extraCost1Name ?? '치공구/지그비';
+        const extra1Amount = line.extraCost1Amount ?? 0;
+
+        const extra2Name = line.extraCost2Name ?? '검사/성적서비';
+        const extra2Amount = line.extraCost2Amount ?? 0;
+
+        const extra3Name = line.extraCost3Name ?? '특수포장/운송비';
+        const extra3Amount = line.extraCost3Amount ?? 0;
+
+        // 세부 항목 변경 시 단위원가 자동 합산 갱신
+        const updateDetailCost = (field: string, val: number | string) => {
+          const updatedMat = field === 'materialCost' ? Number(val) || 0 : matCost;
+          const updatedProc = field === 'processCost' ? Number(val) || 0 : procCost;
+          const updatedTreat = field === 'treatmentCost' ? Number(val) || 0 : treatCost;
+
+          const updatedExtra1 = field === 'extraCost1Amount' ? Number(val) || 0 : extra1Amount;
+          const updatedExtra2 = field === 'extraCost2Amount' ? Number(val) || 0 : extra2Amount;
+          const updatedExtra3 = field === 'extraCost3Amount' ? Number(val) || 0 : extra3Amount;
+
+          const newTotalUnitCost = updatedMat + updatedProc + updatedTreat + updatedExtra1 + updatedExtra2 + updatedExtra3;
+
+          onUpdateLine({
+            [field]: val,
+            materialCost: updatedMat,
+            processCost: updatedProc,
+            treatmentCost: updatedTreat,
+            extraCost1Amount: updatedExtra1,
+            extraCost2Amount: updatedExtra2,
+            extraCost3Amount: updatedExtra3,
+            unitCost: newTotalUnitCost
+          });
+        };
+
+        // 단위원가 직접 수정 시: 추가비용을 제외한 잔여액을 기본 3개 항목에 비율 배분
+        const handleDirectUnitCostChange = (newTotal: number) => {
+          const totalExtras = extra1Amount + extra2Amount + extra3Amount;
+          const remaining = Math.max(newTotal - totalExtras, 0);
+
+          const newMat = Math.round(remaining * ratio1);
+          const newProc = Math.round(remaining * ratio2);
+          const newTreat = Math.max(remaining - newMat - newProc, 0);
+
+          onUpdateLine({
+            unitCost: newTotal,
+            materialCost: newMat,
+            processCost: newProc,
+            treatmentCost: newTreat
+          });
+        };
+
+        const totalExtraSum = extra1Amount + extra2Amount + extra3Amount;
+
         return (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-            <div>
-              <span className="block text-[11px] text-slate-400">{label1}</span>
-              <span className="font-mono font-bold text-slate-800">
-                ₩{Math.round(line.unitCost * ratio1).toLocaleString()}
-              </span>
+          <div className="space-y-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+            {/* 2-1. 기본 3대 제조원가 (직접 수정 가능) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {/* 소재비 */}
+              <div className="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
+                <span className="block text-[11px] font-bold text-slate-600 mb-1">{label1} (직접수정)</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-400 font-mono text-xs">₩</span>
+                  <input
+                    type="number"
+                    value={matCost}
+                    onChange={(e) => updateDetailCost('materialCost', e.target.value)}
+                    className="w-full text-right font-mono font-bold text-slate-800 text-xs border border-slate-200 rounded px-1.5 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-hidden bg-slate-50/50"
+                  />
+                </div>
+              </div>
+
+              {/* 가공/공정비 */}
+              <div className="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
+                <span className="block text-[11px] font-bold text-slate-600 mb-1">{label2} (직접수정)</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-400 font-mono text-xs">₩</span>
+                  <input
+                    type="number"
+                    value={procCost}
+                    onChange={(e) => updateDetailCost('processCost', e.target.value)}
+                    className="w-full text-right font-mono font-bold text-slate-800 text-xs border border-slate-200 rounded px-1.5 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-hidden bg-slate-50/50"
+                  />
+                </div>
+              </div>
+
+              {/* 열처리/후처리비 */}
+              <div className="bg-white p-2 rounded-lg border border-slate-200 shadow-2xs">
+                <span className="block text-[11px] font-bold text-slate-600 mb-1">{label3} (직접수정)</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-400 font-mono text-xs">₩</span>
+                  <input
+                    type="number"
+                    value={treatCost}
+                    onChange={(e) => updateDetailCost('treatmentCost', e.target.value)}
+                    className="w-full text-right font-mono font-bold text-slate-800 text-xs border border-slate-200 rounded px-1.5 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-hidden bg-slate-50/50"
+                  />
+                </div>
+              </div>
+
+              {/* 최종 단위원가 (자동 합산 ⟷ 직접 수정) */}
+              <div className="bg-blue-50/80 p-2 rounded-lg border border-blue-200 shadow-2xs">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold text-blue-900">단위원가 (합산)</span>
+                  {totalExtraSum > 0 && (
+                    <span className="text-[10px] text-amber-700 bg-amber-100 px-1 py-0.2 rounded font-bold">
+                      +추가비 ₩{totalExtraSum.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-blue-500 font-mono text-xs font-bold">₩</span>
+                  <input
+                    type="number"
+                    value={line.unitCost}
+                    onChange={(e) => handleDirectUnitCostChange(Number(e.target.value) || 0)}
+                    className="w-full text-right font-mono font-bold text-blue-950 text-xs border border-blue-300 rounded px-1.5 py-1 focus:ring-1 focus:ring-blue-600 focus:outline-hidden bg-white shadow-2xs"
+                    title="기본 제조원가와 별도 추가비용이 자동 합산되며, 직접 수정도 가능합니다."
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <span className="block text-[11px] text-slate-400">{label2}</span>
-              <span className="font-mono font-bold text-slate-800">
-                ₩{Math.round(line.unitCost * ratio2).toLocaleString()}
-              </span>
-            </div>
-            <div>
-              <span className="block text-[11px] text-slate-400">{label3}</span>
-              <span className="font-mono font-bold text-slate-800">
-                ₩{Math.round(line.unitCost * ratio3).toLocaleString()}
-              </span>
-            </div>
-            <div>
-              <span className="block text-[11px] text-slate-400">단위원가 (직접수정 가능)</span>
-              <div className="flex items-center gap-1 mt-0.5">
-                <span className="text-slate-400 font-mono text-[11px]">₩</span>
-                <input
-                  type="number"
-                  value={line.unitCost}
-                  onChange={(e) => onUpdateLine({ unitCost: Number(e.target.value) || 0 })}
-                  className="w-24 px-1.5 py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-900 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white"
-                />
+
+            {/* 2-2. 별도 비용추가 1, 2, 3 직접 수정 창 */}
+            <div className="pt-1 border-t border-slate-200/80">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  <span>별도 비용추가 1·2·3 (특수 부대비용 직접 설정)</span>
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  지그·치공구비, 시험성적서, 특수포장, 긴급물류비 등을 단위원가에 자동 합산합니다.
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {/* 추가비용 1 */}
+                <div className={`p-1.5 rounded-lg border transition-all ${
+                  extra1Amount > 0 ? 'bg-amber-50/50 border-amber-300' : 'bg-white border-slate-200'
+                }`}>
+                  <div className="flex items-center gap-1 mb-1">
+                    <input
+                      type="text"
+                      value={extra1Name}
+                      placeholder="비용추가 1 명칭"
+                      onChange={(e) => onUpdateLine({ extraCost1Name: e.target.value })}
+                      className="w-full text-[11px] font-bold text-slate-700 bg-transparent border-b border-dashed border-slate-300 focus:outline-hidden focus:border-amber-500 px-0.5 py-0.5"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={extra1Amount || ''}
+                      onChange={(e) => updateDetailCost('extraCost1Amount', e.target.value)}
+                      className="w-full text-right font-mono font-bold text-slate-800 text-xs border border-slate-200 rounded px-1.5 py-0.5 focus:ring-1 focus:ring-amber-500 focus:outline-hidden bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* 추가비용 2 */}
+                <div className={`p-1.5 rounded-lg border transition-all ${
+                  extra2Amount > 0 ? 'bg-amber-50/50 border-amber-300' : 'bg-white border-slate-200'
+                }`}>
+                  <div className="flex items-center gap-1 mb-1">
+                    <input
+                      type="text"
+                      value={extra2Name}
+                      placeholder="비용추가 2 명칭"
+                      onChange={(e) => onUpdateLine({ extraCost2Name: e.target.value })}
+                      className="w-full text-[11px] font-bold text-slate-700 bg-transparent border-b border-dashed border-slate-300 focus:outline-hidden focus:border-amber-500 px-0.5 py-0.5"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={extra2Amount || ''}
+                      onChange={(e) => updateDetailCost('extraCost2Amount', e.target.value)}
+                      className="w-full text-right font-mono font-bold text-slate-800 text-xs border border-slate-200 rounded px-1.5 py-0.5 focus:ring-1 focus:ring-amber-500 focus:outline-hidden bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* 추가비용 3 */}
+                <div className={`p-1.5 rounded-lg border transition-all ${
+                  extra3Amount > 0 ? 'bg-amber-50/50 border-amber-300' : 'bg-white border-slate-200'
+                }`}>
+                  <div className="flex items-center gap-1 mb-1">
+                    <input
+                      type="text"
+                      value={extra3Name}
+                      placeholder="비용추가 3 명칭"
+                      onChange={(e) => onUpdateLine({ extraCost3Name: e.target.value })}
+                      className="w-full text-[11px] font-bold text-slate-700 bg-transparent border-b border-dashed border-slate-300 focus:outline-hidden focus:border-amber-500 px-0.5 py-0.5"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={extra3Amount || ''}
+                      onChange={(e) => updateDetailCost('extraCost3Amount', e.target.value)}
+                      className="w-full text-right font-mono font-bold text-slate-800 text-xs border border-slate-200 rounded px-1.5 py-0.5 focus:ring-1 focus:ring-amber-500 focus:outline-hidden bg-white"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

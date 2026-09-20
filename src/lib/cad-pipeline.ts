@@ -396,8 +396,36 @@ export async function processCadFilePipeline(
     await insertRows('normalized_bom_items', normRows);
   }
 
-  // 10. Master Candidate Matching (PROMPT 12)
-  const masterResult = await runPythonScript('master_matcher.py', [tempNormJson]);
+  // 10. Master Candidate Matching (PROMPT 12 & Phase 1-B DB 연동)
+  let tempMastersJson = '';
+  try {
+    const mastersRes = await queryTable('product_masters', { limit: 1000 });
+    const aliasesRes = await queryTable('master_aliases', { limit: 3000 });
+    const pMasters = (mastersRes.rows || []).filter((r: any) => !r.deleted_at);
+    const pAliases = (aliasesRes.rows || []).filter((r: any) => !r.deleted_at);
+
+    // 마스터별 별칭 매핑 묶기
+    const aliasMap = new Map<string, any[]>();
+    for (const a of pAliases) {
+      if (!aliasMap.has(a.master_id)) aliasMap.set(a.master_id, []);
+      aliasMap.get(a.master_id)!.push(a);
+    }
+
+    const fullMasters = pMasters.map((m: any) => ({
+      ...m,
+      aliases: aliasMap.get(m.id) || []
+    }));
+
+    tempMastersJson = path.join(tempDir, `masters_${quotationCaseId}.json`);
+    fs.writeFileSync(tempMastersJson, JSON.stringify(fullMasters, null, 2), 'utf-8');
+  } catch (mErr) {
+    console.warn('Failed to load masters from DB for matching:', mErr);
+  }
+
+  const matcherArgs = tempMastersJson && fs.existsSync(tempMastersJson) 
+    ? [tempNormJson, tempMastersJson] 
+    : [tempNormJson];
+  const masterResult = await runPythonScript('master_matcher.py', matcherArgs);
   
   await db.prepare('DELETE FROM master_candidates WHERE normalized_item_id IN (SELECT id FROM normalized_bom_items WHERE quotation_case_id = ?)').run(quotationCaseId);
   const candRows: any[] = [];
@@ -409,14 +437,15 @@ export async function processCadFilePipeline(
       candRows.push({
         id: `cand_${normId}_${r + 1}`,
         normalized_item_id: normId,
+        master_id: tc.master_id || null,
         master_code: tc.master_code,
         standard_name: tc.standard_name,
         specification: tc.specification,
         material: tc.material,
         rank: r + 1,
         total_score: tc.total_score,
-        positive_evidence_json: JSON.stringify(tc.positive_evidence),
-        negative_evidence_json: JSON.stringify(tc.negative_evidence),
+        positive_evidence_json: JSON.stringify(tc.positive_evidence || []),
+        negative_evidence_json: JSON.stringify(tc.negative_evidence || []),
         candidate_status: r === 0 ? 'TOP_CANDIDATE' : 'ALTERNATIVE',
         created_at: now
       });
@@ -427,8 +456,8 @@ export async function processCadFilePipeline(
   }
 
   // Cleanup temp files
-  [tempCadJson, tempFrameJson, tempTitleJson, tempStrucJson, tempBomAreaJson, tempRawBomJson, tempMultiJson, tempNormJson].forEach(f => {
-    if (fs.existsSync(f)) fs.unlinkSync(f);
+  [tempCadJson, tempFrameJson, tempTitleJson, tempStrucJson, tempBomAreaJson, tempRawBomJson, tempMultiJson, tempNormJson, tempMastersJson].forEach(f => {
+    if (f && fs.existsSync(f)) fs.unlinkSync(f);
   });
 
   // Update Quotation Case status

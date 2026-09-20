@@ -161,40 +161,182 @@ export default function MasterDataManagerPage() {
     }
   };
 
-  // CSV/Excel Parse Handler
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Excel Template Download Handler (.xlsx)
+  const handleDownloadExcelTemplate = async () => {
+    try {
+      const XLSX = await import('xlsx');
+
+      // 1. 등록 템플릿 양식 시트 (실무 6대 분류 대표 샘플 포함)
+      const templateData = [
+        {
+          '품목코드(필수)': 'SF-001',
+          '품명(필수)': 'MOTOR SHAFT',
+          '규격(Spec)': 'DIA 25x300L',
+          '재질': 'S45C',
+          '부품분류': '가공품',
+          '기준단가(원)': 45000,
+          '단위': 'EA',
+          '비고': '선반/밀링 가공'
+        },
+        {
+          '품목코드(필수)': 'MB-001',
+          '품명(필수)': 'MOTOR BASE BRACKET',
+          '규격(Spec)': '150x120x10T',
+          '재질': 'SS400',
+          '부품분류': '판금/제관',
+          '기준단가(원)': 28000,
+          '단위': 'EA',
+          '비고': '레이저 절단 및 절곡'
+        },
+        {
+          '품목코드(필수)': 'CS-001',
+          '품명(필수)': 'BEARING HOUSING',
+          '규격(Spec)': 'DIA 120x80H',
+          '재질': 'FC250',
+          '부품분류': '주조품',
+          '기준단가(원)': 55000,
+          '단위': 'EA',
+          '비고': '주물 성형 후 정밀가공'
+        },
+        {
+          '품목코드(필수)': 'ST-B01',
+          '품명(필수)': 'HEX SOCKET BOLT',
+          '규격(Spec)': 'M8x25L',
+          '재질': 'SCM435',
+          '부품분류': '규격철물',
+          '기준단가(원)': 350,
+          '단위': 'EA',
+          '비고': '기계 표준 규격볼트'
+        },
+        {
+          '품목코드(필수)': 'EL-001',
+          '품명(필수)': 'SERVO MOTOR 750W',
+          '규격(Spec)': 'HG-KR73',
+          '재질': 'STANDARD',
+          '부품분류': '전장/모터',
+          '기준단가(원)': 380000,
+          '단위': 'EA',
+          '비고': '미쓰비시 서보모터'
+        },
+        {
+          '품목코드(필수)': 'AS-001',
+          '품명(필수)': 'X-AXIS SLIDE MODULE',
+          '규격(Spec)': 'STROKE 500mm',
+          '재질': 'AL6061',
+          '부품분류': '조립품',
+          '기준단가(원)': 1250000,
+          '단위': 'SET',
+          '비고': '서브 조립체 모듈'
+        }
+      ];
+
+      const wsTemplate = XLSX.utils.json_to_sheet(templateData);
+
+      // 열 너비 자동 최적화
+      wsTemplate['!cols'] = [
+        { wch: 18 }, // 품목코드(필수)
+        { wch: 28 }, // 품명(필수)
+        { wch: 22 }, // 규격(Spec)
+        { wch: 14 }, // 재질
+        { wch: 14 }, // 부품분류
+        { wch: 16 }, // 기준단가(원)
+        { wch: 10 }, // 단위
+        { wch: 24 }  // 비고
+      ];
+
+      // 2. 작성 가이드 및 분류 안내 시트
+      const guideData = [
+        { '항목': '품목코드', '필수여부': '필수', '허용값 / 설명': '사내 고유 품번 또는 도면번호 (예: SF-001, 10U+00B0 등). 중복 시 기존 정보가 갱신됩니다.' },
+        { '항목': '품명', '필수여부': '필수', '허용값 / 설명': '표준 부품 명칭 (예: MOTOR SHAFT, BASE PLATE 등)' },
+        { '항목': '규격(Spec)', '필수여부': '선택', '허용값 / 설명': '치수 또는 사양 (예: 150x120x10T, DIA 25x300L, M8x25L 등)' },
+        { '항목': '재질', '필수여부': '선택', '허용값 / 설명': 'SS400, S45C, SUS304, SUS316, AL6061, FC250 등 (미입력 시 기본값 SS400)' },
+        { '항목': '부품분류', '필수여부': '선택', '허용값 / 설명': '가공품, 판금/제관, 주조품, 규격철물, 전장/모터, 조립품 중 하나 입력 (미입력 시 가공품)' },
+        { '항목': '기준단가', '필수여부': '선택', '허용값 / 설명': '숫자만 입력 (단위: 원, 쉼표 제외 권장, 예: 45000)' },
+        { '항목': '단위', '필수여부': '선택', '허용값 / 설명': 'EA, SET, M, KG 등 (미입력 시 기본값 EA)' },
+        { '항목': '비고', '필수여부': '선택', '허용값 / 설명': '용도, 가공 특이사항, 구매처 등 참고사항' }
+      ];
+
+      const wsGuide = XLSX.utils.json_to_sheet(guideData);
+      wsGuide['!cols'] = [
+        { wch: 16 },
+        { wch: 12 },
+        { wch: 80 }
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsTemplate, '마스터기준정보_등록양식');
+      XLSX.utils.book_append_sheet(wb, wsGuide, '작성가이드');
+
+      XLSX.writeFile(wb, 'CADON_마스터기준정보_등록템플릿.xlsx');
+    } catch (error) {
+      console.error('Failed to download template:', error);
+      alert('엑셀 템플릿 다운로드 중 오류가 발생했습니다.');
+    }
+  };
+
+  // CSV/Excel (.xlsx, .xls, .csv) 통합 파서
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      if (!text) return;
+    try {
+      const XLSX = await import('xlsx');
+      const reader = new FileReader();
 
-      const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-      if (lines.length <= 1) {
-        alert('헤더 외에 데이터 행이 존재하지 않습니다.');
-        return;
-      }
+      reader.onload = (event) => {
+        try {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const rows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-      // 첫 줄 헤더 분석
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
-      const parsedRows: any[] = [];
+          if (!rows || rows.length === 0) {
+            alert('시트에 유효한 데이터가 존재하지 않습니다.');
+            return;
+          }
 
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-        if (cols.length === 0 || !cols[0]) continue;
+          // 다양한 헤더 명칭 유연하게 정규화
+          const normalizedRows = rows.map((row: any) => {
+            // 부품분류 텍스트를 영문 카테고리 코드로 변환
+            const rawCategory = (row['부품분류'] || row['분류'] || row['카테고리'] || row['category'] || '').toString().trim();
+            let category = 'MACHINING';
+            if (rawCategory.includes('판금') || rawCategory.includes('제관') || rawCategory === 'SHEET_METAL') category = 'SHEET_METAL';
+            else if (rawCategory.includes('주조') || rawCategory.includes('주물') || rawCategory === 'CASTING') category = 'CASTING';
+            else if (rawCategory.includes('철물') || rawCategory.includes('규격') || rawCategory.includes('볼트') || rawCategory === 'COMMERCIAL') category = 'COMMERCIAL';
+            else if (rawCategory.includes('전장') || rawCategory.includes('모터') || rawCategory.includes('공압') || rawCategory === 'ELECTRICAL') category = 'ELECTRICAL';
+            else if (rawCategory.includes('조립') || rawCategory.includes('모듈') || rawCategory === 'ASSEMBLY') category = 'ASSEMBLY';
+            else if (rawCategory.includes('가공') || rawCategory === 'MACHINING') category = 'MACHINING';
 
-        const row: any = {};
-        headers.forEach((h, idx) => {
-          row[h] = cols[idx] || '';
-        });
-        parsedRows.push(row);
-      }
+            return {
+              master_code: (row['품목코드(필수)'] || row['품목코드'] || row['도면번호'] || row['코드'] || row['master_code'] || '').toString().trim(),
+              standard_name: (row['품명(필수)'] || row['품명'] || row['표준품명'] || row['부품명'] || row['standard_name'] || '').toString().trim(),
+              specification: (row['규격(Spec)'] || row['규격'] || row['specification'] || row['spec'] || '').toString().trim(),
+              material: (row['재질'] || row['소재'] || row['material'] || 'SS400').toString().trim(),
+              category,
+              unit: (row['단위'] || row['unit'] || 'EA').toString().trim(),
+              unit_price: Number(String(row['기준단가(원)'] || row['기준단가'] || row['단가'] || row['unit_price'] || '0').replace(/[^0-9.-]+/g, '')) || 0,
+              notes: (row['비고'] || row['notes'] || '').toString().trim()
+            };
+          }).filter(r => r.master_code || r.standard_name);
 
-      setImportedPreview(parsedRows);
-    };
-    reader.readAsText(file);
+          if (normalizedRows.length === 0) {
+            alert('유효한 품목코드 또는 품명이 포함된 데이터 행을 찾을 수 없습니다.');
+            return;
+          }
+
+          setImportedPreview(normalizedRows);
+        } catch (err: any) {
+          console.error('File parse error:', err);
+          alert('파일을 읽는 도중 오류가 발생했습니다. 올바른 엑셀/CSV 파일인지 확인해 주세요.');
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (err: any) {
+      console.error('XLSX module load error:', err);
+      alert('엑셀 파서 모듈 로드 실패');
+    }
   };
 
   const handleConfirmImport = async () => {
@@ -379,6 +521,16 @@ export default function MasterDataManagerPage() {
               {/* Action Buttons */}
               <div className="flex items-center space-x-2">
                 <button
+                  type="button"
+                  onClick={handleDownloadExcelTemplate}
+                  className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="사내 단가 대량 등록용 표준 엑셀 템플릿 서식 다운로드 (.xlsx)"
+                >
+                  <Download className="w-4 h-4 text-slate-500" />
+                  <span>엑셀 템플릿 다운로드</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setShowImportModal(true)}
                   className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
                 >
@@ -386,6 +538,7 @@ export default function MasterDataManagerPage() {
                   <span>엑셀 일괄 업로드</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => setShowAddModal(true)}
                   className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
                 >
@@ -923,16 +1076,34 @@ export default function MasterDataManagerPage() {
             </div>
 
             <div className="space-y-3 text-xs">
-              <p className="text-slate-500">
-                사내에서 관리 중인 표준 단가표 파일(.csv)을 선택하세요. 첫 번째 행에 <strong>품목코드, 품명, 규격, 재질, 기준단가</strong> 열이 포함되어야 합니다.
-              </p>
+              {/* 템플릿 다운로드 안내 박스 */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-2xs">
+                <div>
+                  <div className="flex items-center space-x-1.5 text-emerald-900 font-bold">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    <span>표준 엑셀 템플릿 양식에 맞춰 작성 후 업로드하세요</span>
+                  </div>
+                  <p className="text-emerald-700 text-[11px] mt-1">
+                    <strong>품목코드, 품명, 규격, 재질, 부품분류, 기준단가</strong> 열이 포함된 엑셀(.xlsx) 및 CSV 파일을 완벽 지원합니다.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadExcelTemplate}
+                  className="px-3 py-1.5 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg font-bold text-xs flex items-center space-x-1.5 shrink-0 cursor-pointer shadow-2xs transition-colors"
+                  title="CADON 마스터 기준정보 표준 엑셀 서식 다운로드"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>양식 다운로드 (.xlsx)</span>
+                </button>
+              </div>
 
               <input
                 type="file"
                 ref={fileInputRef}
-                accept=".csv"
+                accept=".xlsx, .xls, .csv"
                 onChange={handleFileChange}
-                className="w-full p-3 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer"
+                className="w-full p-3 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer text-slate-600"
               />
 
               {importedPreview.length > 0 && (

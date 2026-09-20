@@ -20,6 +20,15 @@ export interface QuoteReviewLine {
   isAssembly?: boolean;
   isIncluded?: boolean;
   excludeReason?: string;
+  materialCost?: number;
+  processCost?: number;
+  treatmentCost?: number;
+  extraCost1Name?: string;
+  extraCost1Amount?: number;
+  extraCost2Name?: string;
+  extraCost2Amount?: number;
+  extraCost3Name?: string;
+  extraCost3Amount?: number;
 }
 
 interface QuoteLineGridProps {
