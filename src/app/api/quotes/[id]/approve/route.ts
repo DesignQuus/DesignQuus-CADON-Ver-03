@@ -28,14 +28,21 @@ export async function POST(
     }, { status: 403 });
   }
 
-  // Check if all items have valid prices
-  const unpriced = (await db.prepare(`
-    SELECT COUNT(*) as cnt FROM quote_items
-    WHERE quote_id = ? AND price_status = 'PRICE_NOT_FOUND'
+  // 0원 및 미검토(NEEDS_REVIEW/PRICE_NOT_FOUND) 품목 승인 차단 (0원 확정 원천 차단)
+  const priceCheck = (await db.prepare(`
+    SELECT 
+      COUNT(CASE WHEN is_included = 1 AND (unit_price <= 0 OR price_status = 'PRICE_NOT_FOUND') THEN 1 END) as unpriced_cnt,
+      COUNT(CASE WHEN is_included = 1 AND price_status = 'NEEDS_REVIEW' THEN 1 END) as review_cnt
+    FROM quote_items
+    WHERE quote_id = ?
   `).get(id)) as any;
 
-  if (unpriced?.cnt > 0) {
-    return NextResponse.json({ error: `단가가 입력되지 않은 품목이 ${unpriced.cnt}개 존재합니다. 모든 품목의 단가를 확정해주세요.` }, { status: 400 });
+  if (priceCheck?.unpriced_cnt > 0) {
+    return NextResponse.json({ error: `단가가 입력되지 않은 품목(0원 또는 미매칭)이 ${priceCheck.unpriced_cnt}개 존재합니다. 모든 품목의 단가를 확정해주세요.` }, { status: 400 });
+  }
+
+  if (priceCheck?.review_cnt > 0) {
+    return NextResponse.json({ error: `원가 엔진 제안값 검토 대기(NEEDS_REVIEW) 품목이 ${priceCheck.review_cnt}개 있습니다. 품목별 단가를 확인하고 확정해주세요.` }, { status: 400 });
   }
 
   const now = new Date().toISOString();

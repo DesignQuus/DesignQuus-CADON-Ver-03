@@ -155,7 +155,25 @@ export async function POST(
           }
         }
 
-        // 2. Search Self-Learning Knowledge Pool (manual_price_pool)
+        // 2. Search Verified Price History (price_history_v2 with HUMAN_VERIFIED)
+        if (unitPrice === 0) {
+          const verifiedPrice = (await db.prepare(`
+            SELECT * FROM price_history_v2
+            WHERE (part_master_id = ? OR part_key = ? OR part_key = ?)
+              AND price_basis_type = 'HUMAN_VERIFIED'
+              AND unit_price > 0
+            ORDER BY created_at DESC
+            LIMIT 1
+          `).get(item.final_master_id || '', dwgNo, itemName)) as any;
+
+          if (verifiedPrice) {
+            unitPrice = verifiedPrice.unit_price;
+            priceSource = 'VERIFIED_HISTORY';
+            priceStatus = 'READY';
+          }
+        }
+
+        // 3. Search Self-Learning Knowledge Pool (manual_price_pool)
         if (unitPrice === 0 && item.final_name) {
           const normFinalName = item.final_name.toUpperCase().trim();
           const learnedPrice = (await db.prepare(`
@@ -179,6 +197,28 @@ export async function POST(
           }
         }
 
+        // 4. [P-1] Engineering Cost Engine (part_cost_breakdowns)
+        let formulaRemark = '';
+        if (unitPrice === 0 && isIncluded === 1) {
+          const costRow = (await db.prepare(`
+            SELECT c.*, f.bbox_width, f.bbox_length, f.bbox_thickness, f.material_code, f.part_weight_kg
+            FROM part_cost_breakdowns c
+            JOIN part_fabrication_features f ON c.feature_id = f.id
+            JOIN drawings d ON f.drawing_id = d.id
+            WHERE d.quotation_case_id = ?
+              AND (d.drawing_no_normalized = ? OR d.drawing_no_raw = ? OR d.drawing_name_raw = ? OR d.drawing_name_normalized = ?)
+              AND c.final_unit_price > 0
+            LIMIT 1
+          `).get(quotationCaseId, dwgNo, dwgNo, itemName, itemName)) as any;
+
+          if (costRow && costRow.final_unit_price > 0) {
+            unitPrice = costRow.final_unit_price;
+            priceSource = 'ENGINEERING_COST';
+            priceStatus = 'NEEDS_REVIEW'; // [P-1 규칙: 자동 확정 금지, 검토 필요 유지]
+            formulaRemark = costRow.calc_formula_json ? `[ENGINEERING_COST] ${costRow.calc_formula_json}` : '[ENGINEERING_COST]';
+          }
+        }
+
         aggregatedMap.set(groupKey, {
           id: item.id,
           final_bom_item_id: item.id,
@@ -195,7 +235,7 @@ export async function POST(
           priceSource,
           priceStatus,
           is_included: isIncluded,
-          remark
+          remark: formulaRemark || remark
         });
       }
     }
