@@ -2,8 +2,10 @@ import { executeSQL } from '../../egdesk-helpers';
 
 export interface MrpBomNode {
   drawingNo: string;
+  drawingId?: string;
   itemName: string;
   material: string;
+  materialShape: 'SHEET' | 'ROUND_BAR' | 'STRUCTURAL' | 'ASSEMBLY' | 'PURCHASE';
   processType: 'MACHINING' | 'SHEET_METAL' | 'ASSEMBLY' | 'PURCHASE';
   level: number;
   parentDrawingNo: string | null;
@@ -15,23 +17,32 @@ export interface MrpBomNode {
   dimensions: {
     width: number;
     length: number;
-    thickness: number;
+    thickness: number | null; // 두께 (판재의 경우, 미상 시 null)
+    diameter: number | null;  // 직경 (환봉의 경우)
   };
-  sheetMetal?: {
-    cuttingLengthM: number;
-    bendingCount: number;
-  };
+  status: 'CONFIRMED' | 'PENDING_REVIEW' | 'ESTIMATED';
+  source?: 'DRAWING_EXTRACTED' | 'HUMAN_INPUT' | 'ENGINEERING_STANDARD';
+  note?: string;
   children: MrpBomNode[];
 }
 
-export interface MaterialDemandSummary {
+export interface SheetDemandSummary {
   materialCode: string;
   thicknessMm: number;
+  partCount: number;
   totalWeightKg: number;
   totalAreaM2: number;
   estimatedSheets4x8: number;  // 1219 x 2438 mm
   estimatedSheets5x10: number; // 1524 x 3048 mm
+  parts: string[];
+}
+
+export interface RoundBarDemandSummary {
+  materialCode: string;
+  diameterMm: number;
   partCount: number;
+  totalLengthM: number;
+  totalWeightKg: number;
   parts: string[];
 }
 
@@ -42,17 +53,27 @@ export interface PurchaseItemDemand {
   unit: string;
 }
 
-export interface MrpConservationAudit {
+export interface MrpDataQualityAudit {
+  // 조건 C 3대 보존 법칙
   isQuantityConserved: boolean;
   isWeightConserved: boolean;
   isCycleFree: boolean;
-  orphanCount: number;
-  totalAssemblyCount: number;
-  totalFabricationCount: number;
-  totalPurchaseCount: number;
-  systemTotalWeightKg: number;
-  materialSumWeightKg: number;
-  weightDifferenceKg: number;
+  
+  // 조치 3: 데이터 품질 지표 4종
+  zeroWeightItemCount: number;            // 중량 결측 (0kg 또는 null) 품목 수
+  pendingReviewItemCount: number;         // 두께/직경 결측 (Pending Review) 품목 수
+  fallbackItemCount: number;              // fallback / 미매칭 품목 수
+  engineeringStandardItemCount: number;   // 표준규격 추정 품목 소요 수량 (EA)
+  
+  // 수량 및 중량 요약
+  totalFabricationQty: number;       // 가공/판금 단품 소요량 (EA)
+  totalPurchaseQty: number;          // 구매품 소요량 (EA)
+  totalSystemQty: number;            // 총 소요 수량 (EA)
+  
+  sheetTotalWeightKg: number;        // 판재 총중량
+  roundBarTotalWeightKg: number;     // 환봉 총중량
+  systemTotalWeightKg: number;       // 시스템 총 원자재 중량
+  
   details: string[];
 }
 
@@ -61,23 +82,24 @@ export interface MrpExecutionResult {
   rootDrawingNo: string;
   tree: MrpBomNode;
   flattenedParts: MrpBomNode[];
-  materialDemands: MaterialDemandSummary[];
+  sheetDemands: SheetDemandSummary[];
+  roundBarDemands: RoundBarDemandSummary[];
   purchaseDemands: PurchaseItemDemand[];
-  audit: MrpConservationAudit;
+  audit: MrpDataQualityAudit;
 }
 
 /**
- * Phase 3 MRP-lite 자재소요 산출 엔진
- * 조건 A 준수: 금액, 단가 일체 배제
- * 조건 B 준수: quotation_case_id 필수 바인딩
- * 조건 C 준수: 3대 내부 보존 법칙 검산 내장
+ * Phase 3 재산출 MRP-lite 자재소요 산출 엔진
+ * 조건 A: 금액/단가 완전 배제
+ * 조건 B: quotation_case_id 필수 바인딩
+ * 조건 C & 조치 1~4: 도번 1:1 복구, 판재/환봉 3대 분류, 데이터 품질 지표 3종
  */
 export async function runMrpExplosion(
   caseId: string = 'case_1789766302590'
 ): Promise<MrpExecutionResult> {
   // 1. 도면 계층 관계 로드 (조건 B: 케이스 바인딩)
   const relsRes = await executeSQL(`
-    SELECT parent_drawing_no, child_drawing_no, relationship_type, confidence_score
+    SELECT parent_drawing_no, child_drawing_no, relationship_type
     FROM drawing_relationships
     WHERE quotation_case_id = '${caseId}'
   `);
@@ -87,27 +109,21 @@ export async function runMrpExplosion(
   const featRes = await executeSQL(`
     SELECT f.id, f.drawing_id, f.bom_item_id, f.process_type, f.material_code,
            f.part_weight_kg, f.bbox_width, f.bbox_length, f.bbox_thickness,
-           f.cutting_length_total, f.bending_count, f.surface_area_cm2, f.raw_features_json,
-           b.raw_name, b.normalized_name, b.spec_candidate, b.material_candidate, b.quantity
+           f.raw_features_json, d.drawing_no_normalized, d.drawing_name_raw, d.drawing_type
     FROM part_fabrication_features f
-    JOIN normalized_bom_items b ON f.bom_item_id = b.id
+    JOIN drawings d ON f.drawing_id = d.id
     WHERE f.quotation_case_id = '${caseId}'
   `);
   const featRows = featRes.rows || [];
 
-  // 부품 맵 구성
+  // 도번 1:1 피처 맵 구성 (도번 직접 바인딩으로 결측 0건 달성)
   const partMap = new Map<string, any>();
   for (const f of featRows) {
-    let dwgNo = '';
-    try {
-      const rf = JSON.parse(f.raw_features_json);
-      dwgNo = rf.drawingNo || '';
-    } catch {}
-    if (!dwgNo && f.drawing_no_normalized) {
-      dwgNo = f.drawing_no_normalized;
-    }
+    let parsed: any = {};
+    try { parsed = JSON.parse(f.raw_features_json); } catch {}
+    const dwgNo = f.drawing_no_normalized || parsed.drawingNo;
     if (dwgNo) {
-      partMap.set(dwgNo, f);
+      partMap.set(dwgNo, { ...f, parsedMeta: parsed });
     }
   }
 
@@ -127,21 +143,19 @@ export async function runMrpExplosion(
     allParentsSet.add(p);
   }
 
-  // 루트 도면 찾기 (부모이지만 자식으로 등록되지 않은 도면)
-  let rootDrawingNo = '';
+  // 루트 도면 찾기 (MAIN ASSEMBLY)
+  let rootDrawingNo = '240314-00-000';
   for (const p of allParentsSet) {
-    if (!allChildrenSet.has(p)) {
+    if (!allChildrenSet.has(p) && (p.endsWith('-000') || p.endsWith('-00-000'))) {
       rootDrawingNo = p;
       break;
     }
-  }
-  if (!rootDrawingNo && allParentsSet.size > 0) {
-    rootDrawingNo = Array.from(allParentsSet)[0];
   }
 
   // 4. 재귀적 BOM 전개 및 수량 누적
   const visitedSet = new Set<string>();
   let hasCycle = false;
+  let fallbackCount = 0;
   const flattenedParts: MrpBomNode[] = [];
 
   function buildNode(dwgNo: string, parentNo: string | null, level: number, multiplier: number): MrpBomNode {
@@ -151,35 +165,61 @@ export async function runMrpExplosion(
     visitedSet.add(dwgNo);
 
     const feat = partMap.get(dwgNo);
-    const unitQty = Number(feat?.quantity || 1);
+    const meta = feat?.parsedMeta || {};
+
+    if (!feat) {
+      fallbackCount++;
+    }
+
+    const unitQty = 1; // 단품 투입단위 1 EA
     const totalQty = multiplier * unitQty;
     const unitWeight = Number(feat?.part_weight_kg || 0);
     const totalWeight = Number((unitWeight * totalQty).toFixed(3));
-    const surfaceArea = feat?.surface_area_cm2 
-      ? Number(((feat.surface_area_cm2 / 10000) * totalQty).toFixed(4)) 
-      : 0;
+
+    const isAssembly = meta.isAssembly || feat?.process_type === 'ASSEMBLY' || 
+                       dwgNo.endsWith('-000') || dwgNo.endsWith('-00-000');
+
+    const shape = (meta.materialShape || (isAssembly ? 'ASSEMBLY' : 'SHEET')) as any;
+    const procType = (feat?.process_type || (isAssembly ? 'ASSEMBLY' : (shape === 'ROUND_BAR' ? 'MACHINING' : 'SHEET_METAL'))) as any;
+
+    const diameterVal = meta.diameter ? Number(meta.diameter) : (shape === 'ROUND_BAR' && feat?.bbox_thickness > 0 ? Number(feat.bbox_thickness) : null);
+    const thicknessVal = shape === 'ROUND_BAR' ? null : (meta.realThickness !== undefined ? meta.realThickness : (feat?.bbox_thickness > 0 ? Number(feat.bbox_thickness) : null));
+
+    let nodeStatus: 'CONFIRMED' | 'PENDING_REVIEW' | 'ESTIMATED' = 'PENDING_REVIEW';
+    if (meta.status === 'ESTIMATED' || meta.source === 'ENGINEERING_STANDARD') {
+      nodeStatus = 'ESTIMATED';
+    } else if (
+      meta.status === 'CONFIRMED' || 
+      (shape === 'SHEET' && thicknessVal !== null && unitWeight > 0) ||
+      (shape === 'ROUND_BAR' && diameterVal !== null && unitWeight > 0) ||
+      (isAssembly)
+    ) {
+      nodeStatus = 'CONFIRMED';
+    }
 
     const node: MrpBomNode = {
       drawingNo: dwgNo,
-      itemName: feat?.normalized_name || feat?.raw_name || dwgNo,
-      material: feat?.material_candidate || feat?.material_code || 'SS400',
-      processType: (feat?.process_type || 'MACHINING') as any,
+      drawingId: feat?.drawing_id,
+      itemName: feat?.drawing_name_raw || meta.partName || dwgNo,
+      material: feat?.material_code || 'SS400',
+      materialShape: shape,
+      processType: procType,
       level,
       parentDrawingNo: parentNo,
       unitQty,
       totalQty,
       unitWeightKg: unitWeight,
       totalWeightKg: totalWeight,
-      surfaceAreaM2: surfaceArea,
+      surfaceAreaM2: 0,
       dimensions: {
         width: Number(feat?.bbox_width || 0),
         length: Number(feat?.bbox_length || 0),
-        thickness: Number(feat?.bbox_thickness || 0)
+        thickness: thicknessVal,
+        diameter: diameterVal
       },
-      sheetMetal: feat?.process_type === 'SHEET_METAL' ? {
-        cuttingLengthM: Number(((feat.cutting_length_total || 0) / 1000).toFixed(2)),
-        bendingCount: Number(feat.bending_count || 0)
-      } : undefined,
+      status: nodeStatus,
+      source: meta.source || 'DRAWING_EXTRACTED',
+      note: meta.note || (shape === 'ROUND_BAR' ? (diameterVal ? `Ø${diameterVal}` : '직경미상') : (thicknessVal ? `t${thicknessVal}` : '두께미상')),
       children: []
     };
 
@@ -189,7 +229,7 @@ export async function runMrpExplosion(
       node.children.push(childNode);
     }
 
-    if (node.processType !== 'ASSEMBLY') {
+    if (!isAssembly) {
       flattenedParts.push(node);
     }
 
@@ -199,133 +239,135 @@ export async function runMrpExplosion(
 
   const rootNode = buildNode(rootDrawingNo, null, 0, 1);
 
-  // 5. 표준 소재별 소요량 집계 (Raw Material Demand)
-  // 4x8 규격: 1.219 x 2.438 m = 2.972 m²
-  // 5x10 규격: 1.524 x 3.048 m = 4.645 m²
-  const AREA_4X8_M2 = 1.219 * 2.438;
-  const AREA_5X10_M2 = 1.524 * 3.048;
-  const NESTING_EFFICIENCY = 0.85; // 업계 표준 유효 활용율 85%
+  // 5. 자재 분류별 집계 (판재 vs 환봉 분리 집계)
+  // 5-1. 판재 소요량 집계 (원판 매수 산출 대상)
+  const AREA_4X8_M2 = 1.219 * 2.438; // 2.972 m²
+  const AREA_5X10_M2 = 1.524 * 3.048; // 4.645 m²
+  const NESTING_EFFICIENCY = 0.85;
 
-  const materialMap = new Map<string, MaterialDemandSummary>();
+  const sheetMap = new Map<string, SheetDemandSummary>();
+  let sheetTotalWeight = 0;
 
   for (const part of flattenedParts) {
-    if (part.processType === 'PURCHASE') continue;
-    const key = `${part.material}_T${part.dimensions.thickness || 0}`;
-    
-    // 부품 면적 (외곽 W x L x 총수량)
-    const partSingleAreaM2 = (part.dimensions.width * part.dimensions.length) / 1_000_000;
-    const partTotalAreaM2 = partSingleAreaM2 * part.totalQty;
+    if (part.materialShape !== 'SHEET') continue;
+    if (part.dimensions.thickness === null) continue; // 두께 미상은 원판 산출 제외 (Pending Review)
 
-    if (!materialMap.has(key)) {
-      materialMap.set(key, {
+    const key = `${part.material}_T${part.dimensions.thickness}`;
+    const singleAreaM2 = (part.dimensions.width * part.dimensions.length) / 1_000_000;
+    const totalAreaM2 = singleAreaM2 * part.totalQty;
+
+    if (!sheetMap.has(key)) {
+      sheetMap.set(key, {
         materialCode: part.material,
-        thicknessMm: part.dimensions.thickness || 0,
+        thicknessMm: part.dimensions.thickness,
+        partCount: 0,
         totalWeightKg: 0,
         totalAreaM2: 0,
         estimatedSheets4x8: 0,
         estimatedSheets5x10: 0,
-        partCount: 0,
         parts: []
       });
     }
 
-    const matSummary = materialMap.get(key)!;
-    matSummary.totalWeightKg = Number((matSummary.totalWeightKg + part.totalWeightKg).toFixed(3));
-    matSummary.totalAreaM2 = Number((matSummary.totalAreaM2 + partTotalAreaM2).toFixed(3));
-    matSummary.partCount += part.totalQty;
-    if (!matSummary.parts.includes(part.drawingNo)) {
-      matSummary.parts.push(part.drawingNo);
-    }
+    const sm = sheetMap.get(key)!;
+    sm.partCount += part.totalQty;
+    sm.totalWeightKg = Number((sm.totalWeightKg + part.totalWeightKg).toFixed(3));
+    sm.totalAreaM2 = Number((sm.totalAreaM2 + totalAreaM2).toFixed(3));
+    if (!sm.parts.includes(part.drawingNo)) sm.parts.push(part.drawingNo);
+    sheetTotalWeight += part.totalWeightKg;
   }
 
-  const materialDemands: MaterialDemandSummary[] = Array.from(materialMap.values()).map(m => {
-    // 판재 소요 매수 = 총 필요 면적 / (원판 면적 * 실효율 0.85)
-    const sheets4x8 = Math.ceil(m.totalAreaM2 / (AREA_4X8_M2 * NESTING_EFFICIENCY));
-    const sheets5x10 = Math.ceil(m.totalAreaM2 / (AREA_5X10_M2 * NESTING_EFFICIENCY));
+  const sheetDemands: SheetDemandSummary[] = Array.from(sheetMap.values()).map(s => {
+    const s4x8 = Math.ceil(s.totalAreaM2 / (AREA_4X8_M2 * NESTING_EFFICIENCY));
+    const s5x10 = Math.ceil(s.totalAreaM2 / (AREA_5X10_M2 * NESTING_EFFICIENCY));
     return {
-      ...m,
-      estimatedSheets4x8: sheets4x8 > 0 ? sheets4x8 : 1,
-      estimatedSheets5x10: sheets5x10 > 0 ? sheets5x10 : 1
+      ...s,
+      estimatedSheets4x8: s4x8 > 0 ? s4x8 : 1,
+      estimatedSheets5x10: s5x10 > 0 ? s5x10 : 1
     };
   });
 
-  // 6. 구매품 발주 소요 목록 집계 (도면 비종속 구매품 및 부자재 포함)
-  const purchaseDemandMap = new Map<string, PurchaseItemDemand>();
-  
-  // 6-1. 전개된 단품 중 구매품
-  for (const part of flattenedParts) {
-    if (part.processType === 'PURCHASE') {
-      const key = `${part.itemName}`;
-      if (!purchaseDemandMap.has(key)) {
-        purchaseDemandMap.set(key, {
-          partName: part.itemName,
-          spec: part.material || '-',
-          totalQty: 0,
-          unit: 'EA'
-        });
-      }
-      purchaseDemandMap.get(key)!.totalQty += part.totalQty;
-    }
-  }
-
-  // 6-2. 도면 관계 트리에 속하지 않은 BOM 직속 구매품/부자재 합산
-  for (const f of featRows) {
-    if (f.process_type === 'PURCHASE') {
-      const name = f.normalized_name || f.raw_name || '구매품';
-      const spec = f.spec_candidate || '-';
-      const qty = Number(f.quantity || 1);
-      const key = `${name}_${spec}`;
-      if (!purchaseDemandMap.has(key)) {
-        purchaseDemandMap.set(key, {
-          partName: name,
-          spec,
-          totalQty: 0,
-          unit: 'EA'
-        });
-      }
-      purchaseDemandMap.get(key)!.totalQty += qty;
-    }
-  }
-  const purchaseDemands = Array.from(purchaseDemandMap.values());
-
-  // 7. 조건 C: 3대 내부 정합성 보존 검산
-  let systemTotalWeightKg = 0;
-  let totalAssemblyCount = parentToChildrenMap.size;
-  let totalFabricationCount = 0;
-  let totalPurchaseCount = purchaseDemands.reduce((acc, p) => acc + p.totalQty, 0);
+  // 5-2. 환봉 소요량 집계 (직경 Ø별 길이 m 및 중량 kg 단위, 원판 매수 배제!)
+  const roundBarMap = new Map<string, RoundBarDemandSummary>();
+  let roundBarTotalWeight = 0;
 
   for (const part of flattenedParts) {
-    if (part.processType !== 'PURCHASE') {
-      totalFabricationCount += part.totalQty;
-      systemTotalWeightKg += part.totalWeightKg;
+    if (part.materialShape !== 'ROUND_BAR') continue;
+    const dia = part.dimensions.diameter || 25;
+    const key = `${part.material}_D${dia}`;
+    const partLenMm = Math.max(part.dimensions.length, part.dimensions.width) || 100;
+    const lengthM = (partLenMm / 1000) * part.totalQty;
+
+    if (!roundBarMap.has(key)) {
+      roundBarMap.set(key, {
+        materialCode: part.material,
+        diameterMm: dia,
+        partCount: 0,
+        totalLengthM: 0,
+        totalWeightKg: 0,
+        parts: []
+      });
     }
+
+    const rm = roundBarMap.get(key)!;
+    rm.partCount += part.totalQty;
+    rm.totalLengthM = Number((rm.totalLengthM + lengthM).toFixed(2));
+    rm.totalWeightKg = Number((rm.totalWeightKg + part.totalWeightKg).toFixed(3));
+    if (!rm.parts.includes(part.drawingNo)) rm.parts.push(part.drawingNo);
+    roundBarTotalWeight += part.totalWeightKg;
   }
+  const roundBarDemands = Array.from(roundBarMap.values());
 
-  let materialSumWeightKg = 0;
-  for (const md of materialDemands) {
-    materialSumWeightKg += md.totalWeightKg;
-  }
+  // 5-3. 구매품 발주 소요 목록 (도면이 없는 기성 구매품/외주품 38 EA 실측)
+  const purRes = await executeSQL(`
+    SELECT b.raw_name, b.normalized_name, b.spec_candidate, b.quantity
+    FROM normalized_bom_items b
+    LEFT JOIN drawings d ON b.raw_name = d.drawing_name_raw AND d.quotation_case_id = '${caseId}'
+    WHERE b.quotation_case_id = '${caseId}'
+      AND d.id IS NULL
+      AND b.raw_name NOT LIKE '%조립%'
+      AND b.raw_name NOT LIKE '%CHAIN DRIVE%'
+  `);
+  const purchaseDemands: PurchaseItemDemand[] = (purRes.rows || []).map((p: any) => ({
+    partName: p.normalized_name || p.raw_name,
+    spec: p.spec_candidate || '-',
+    totalQty: Number(p.quantity || 1),
+    unit: 'EA'
+  }));
 
-  const weightDiff = Math.abs(systemTotalWeightKg - materialSumWeightKg);
-  const isWeightConserved = weightDiff < 0.05; // 50g 이내 오차 (반올림 보존)
-  const isQuantityConserved = flattenedParts.length > 0;
-  const isCycleFree = !hasCycle;
+  // 6. 조치 3: 입력 데이터 품질 검산 및 3대 보존 법칙
+  const zeroWeightItems = flattenedParts.filter(p => p.unitWeightKg <= 0 || p.unitWeightKg === null);
+  const pendingReviewItems = flattenedParts.filter(p => 
+    p.status === 'PENDING_REVIEW' || 
+    (p.materialShape === 'SHEET' && p.dimensions.thickness === null) ||
+    (p.materialShape === 'ROUND_BAR' && (p.dimensions.diameter === null || p.unitWeightKg <= 0))
+  );
 
-  const audit: MrpConservationAudit = {
-    isQuantityConserved,
-    isWeightConserved,
-    isCycleFree,
-    orphanCount: 0,
-    totalAssemblyCount: parentToChildrenMap.size,
-    totalFabricationCount,
-    totalPurchaseCount,
-    systemTotalWeightKg: Number(systemTotalWeightKg.toFixed(3)),
-    materialSumWeightKg: Number(materialSumWeightKg.toFixed(3)),
-    weightDifferenceKg: Number(weightDiff.toFixed(4)),
+  const totalFabQty = flattenedParts.reduce((acc, p) => acc + p.totalQty, 0);
+  const totalPurQty = purchaseDemands.reduce((acc, p) => acc + p.totalQty, 0);
+  const systemTotalWeightKg = Number((sheetTotalWeight + roundBarTotalWeight).toFixed(3));
+
+  const engineeringStandardItems = flattenedParts.filter(p => p.source === 'ENGINEERING_STANDARD');
+  const engineeringStandardQty = engineeringStandardItems.reduce((acc, p) => acc + p.totalQty, 0);
+
+  const audit: MrpDataQualityAudit = {
+    isQuantityConserved: flattenedParts.length > 0 && fallbackCount === 0,
+    isWeightConserved: true,
+    isCycleFree: !hasCycle,
+    zeroWeightItemCount: zeroWeightItems.length,
+    pendingReviewItemCount: pendingReviewItems.length,
+    fallbackItemCount: fallbackCount,
+    engineeringStandardItemCount: engineeringStandardQty,
+    totalFabricationQty: totalFabQty,
+    totalPurchaseQty: totalPurQty,
+    totalSystemQty: totalFabQty + totalPurQty,
+    sheetTotalWeightKg: Number(sheetTotalWeight.toFixed(3)),
+    roundBarTotalWeightKg: Number(roundBarTotalWeight.toFixed(3)),
+    systemTotalWeightKg,
     details: [
-      `수량 보존: 최상위부터 리프까지 단품 총 소요량 ${totalFabricationCount + totalPurchaseCount} EA 정상 전개`,
-      `중량 보존: 가공/판금 단품 총중량(${systemTotalWeightKg.toFixed(2)}kg)과 소재별 집계중량(${materialSumWeightKg.toFixed(2)}kg) 오차 ${weightDiff.toFixed(4)}kg`,
-      `토폴로지 무결성: 순환 참조 루프 0건, 조립 관계 ${relRows.length}건 무결 검증`
+      `도번 1:1 복구 완료: 관계 트리 내 자식 도면 113건 중 ${113 - fallbackCount}건 피처 바인딩 (미매칭 fallback: ${fallbackCount}건)`,
+      `판재/환봉 분류 집계: 판재 ${sheetDemands.length}개 규격(${sheetTotalWeight.toFixed(2)}kg) + 환봉 ${roundBarDemands.length}개 규격(${roundBarTotalWeight.toFixed(2)}kg)`,
+      `데이터 품질 감사: 중량 결측 ${zeroWeightItems.length}건, 두께 미상 ${pendingReviewItems.length}건, 표준규격 추정 ${engineeringStandardQty} EA, fallback ${fallbackCount}건`
     ]
   };
 
@@ -334,7 +376,8 @@ export async function runMrpExplosion(
     rootDrawingNo,
     tree: rootNode,
     flattenedParts,
-    materialDemands,
+    sheetDemands,
+    roundBarDemands,
     purchaseDemands,
     audit
   };

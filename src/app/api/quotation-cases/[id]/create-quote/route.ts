@@ -123,17 +123,29 @@ export async function POST(
         let priceSource = 'NOT_FOUND';
         let priceStatus = 'PRICE_NOT_FOUND';
 
-        // 1. Search Price Master
+        // 1. Search Price Master (SCD Type 2: 견적일 기준 유효기간 및 활성 상태 검증)
         if (item.final_master_id) {
           const custPrice = (await db.prepare(`
             SELECT * FROM price_masters
-            WHERE master_id = ? AND company_id = ? AND is_active = 1
-          `).get(item.final_master_id, qc.company_id)) as any;
+            WHERE master_id = ? 
+              AND company_id = ? 
+              AND is_active = 1
+              AND effective_from <= ?
+              AND (effective_to IS NULL OR effective_to >= ?)
+            ORDER BY effective_from DESC
+            LIMIT 1
+          `).get(item.final_master_id, qc.company_id, dateStr, dateStr)) as any;
 
           const stdPrice = (await db.prepare(`
             SELECT * FROM price_masters
-            WHERE master_id = ? AND is_active = 1
-          `).get(item.final_master_id)) as any;
+            WHERE master_id = ? 
+              AND (company_id IS NULL OR company_id = '')
+              AND is_active = 1
+              AND effective_from <= ?
+              AND (effective_to IS NULL OR effective_to >= ?)
+            ORDER BY effective_from DESC
+            LIMIT 1
+          `).get(item.final_master_id, dateStr, dateStr)) as any;
 
           const priceRow = custPrice || stdPrice;
           if (priceRow) {

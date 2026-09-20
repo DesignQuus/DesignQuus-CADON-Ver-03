@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Coins, AlertTriangle, Layers, Calculator, Database, Save, CheckCircle2, RefreshCw } from 'lucide-react';
 import { QuoteReviewLine } from './QuoteLineGrid';
 import { apiFetch } from '@/lib/api';
+import { stringifyRemark } from '@/lib/remark-cost-helper';
 
 interface CostBreakdownPanelProps {
   line: QuoteReviewLine | null;
@@ -48,15 +49,12 @@ export default function CostBreakdownPanel({
 
     setSavingMaster(true);
     try {
-      const extraNotes: string[] = [];
-      if (line.extraCost1Amount) extraNotes.push(`${line.extraCost1Name || '추가비1'}: ₩${line.extraCost1Amount.toLocaleString()}`);
-      if (line.extraCost2Amount) extraNotes.push(`${line.extraCost2Name || '추가비2'}: ₩${line.extraCost2Amount.toLocaleString()}`);
-      if (line.extraCost3Amount) extraNotes.push(`${line.extraCost3Name || '추가비3'}: ₩${line.extraCost3Amount.toLocaleString()}`);
+      const extraCosts = [];
+      if (line.extraCost1Amount) extraCosts.push({ name: line.extraCost1Name || '추가비1', amount: line.extraCost1Amount });
+      if (line.extraCost2Amount) extraCosts.push({ name: line.extraCost2Name || '추가비2', amount: line.extraCost2Amount });
+      if (line.extraCost3Amount) extraCosts.push({ name: line.extraCost3Name || '추가비3', amount: line.extraCost3Amount });
 
-      const combinedRemark = [
-        line.memo,
-        extraNotes.length > 0 ? `[별도추가비] ${extraNotes.join(', ')}` : ''
-      ].filter(Boolean).join(' | ') || '2단계 단가 검토 중 마스터 적재';
+      const structuredRemark = stringifyRemark(line.memo || '2단계 단가 검토 중 마스터 적재', extraCosts);
 
       const res = await apiFetch(`/api/quotes/${caseId}/save-to-master`, {
         method: 'POST',
@@ -69,7 +67,7 @@ export default function CostBreakdownPanel({
           specification: line.specification || '',
           unitPrice: line.supplyPrice,
           unitCost: line.unitCost,
-          remark: combinedRemark
+          remark: structuredRemark
         })
       });
 

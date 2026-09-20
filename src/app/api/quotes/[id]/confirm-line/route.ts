@@ -18,10 +18,21 @@ export async function POST(
       qtyTier, 
       lotQuantity, 
       basis,
-      selectedMasterId 
+      selectedMasterId,
+      remark
     } = body;
 
     const now = new Date().toISOString();
+
+    // 조치 1: 조립도 배제(0원)는 정상 확정 가능, 일반 부품의 공급단가 0원은 CONFIRMED 전환 차단
+    if (isConfirmed && (Number(unitPrice) || 0) <= 0) {
+      const isAssembly = partKey?.includes('ASSEMBLY') || (body.drawingType && String(body.drawingType).includes('ASSEMBLY'));
+      if (!isAssembly) {
+        return NextResponse.json({
+          error: '공급단가가 0원인 품목은 확정할 수 없습니다. 단가를 입력하거나 견적에서 제외해 주세요.'
+        }, { status: 400 });
+      }
+    }
 
     let wasAlreadyConfirmed = false;
 
@@ -38,9 +49,10 @@ export async function POST(
           const amt = (Number(unitPrice) || 0) * qty;
           await db.prepare(`
             UPDATE quote_items
-            SET unit_price = ?, amount = ?, price_status = ?, is_included = ?, price_source = 'MANUAL_REVIEW'
+            SET unit_price = ?, amount = ?, price_status = ?, is_included = ?, price_source = 'MANUAL_REVIEW',
+                remark = COALESCE(?, remark)
             WHERE id = ?
-          `).run(unitPrice || 0, amt, isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW', isConfirmed ? 1 : 0, lineId);
+          `).run(unitPrice || 0, amt, isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW', isConfirmed ? 1 : 0, remark || null, lineId);
         }
       } catch (e) {
         console.warn('quote_items update note:', e);

@@ -5,7 +5,7 @@ import React, { useEffect, useState, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Send, CheckCircle2, RefreshCw, FileText, AlertTriangle,
+  ArrowLeft, Send, CheckCircle2, RefreshCw, FileText, AlertTriangle, AlertCircle,
   ExternalLink, ChevronDown, ChevronUp, Sparkles, Layers, Zap, Database
 } from 'lucide-react';
 import QuoteLineGrid, { QuoteReviewLine } from '@/components/review/QuoteLineGrid';
@@ -13,6 +13,7 @@ import CostBreakdownPanel from '@/components/review/CostBreakdownPanel';
 import MasterRecommendationCard, { RecommendationItem } from '@/components/review/MasterRecommendationCard';
 import ReviewCadViewer from '@/components/review/ReviewCadViewer';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
+import { parseRemark, stringifyRemark } from '@/lib/remark-cost-helper';
 import {
   calculateCastingCost,
   calculateMachiningCost,
@@ -109,6 +110,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                 const unitCost = Math.round(supplyPrice * 0.82);
 
                 const isIncluded = !isAssembly && qi.is_included !== 0;
+                const structured = parseRemark(qi.remark);
 
                 return {
                   id: qi.id,
@@ -122,11 +124,17 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   supplyPrice: isAssembly ? 0 : supplyPrice,
                   status: isAssembly ? 'CONFIRMED' : (hasPrice && isIncluded ? 'CONFIRMED' : 'NEEDS_REVIEW'),
                   balloonNo: String(qi.item_no || idx + 1),
-                  memo: qi.remark || '',
+                  memo: structured.text,
                   specification: qi.specification || '',
                   isAssembly,
                   isIncluded,
-                  excludeReason: isAssembly ? '조립도 (가공품 제외)' : (isIncluded ? undefined : '견적 제외')
+                  excludeReason: isAssembly ? '조립도 (가공품 제외)' : (isIncluded ? undefined : '견적 제외'),
+                  extraCost1Name: structured.extraCosts[0]?.name,
+                  extraCost1Amount: structured.extraCosts[0]?.amount,
+                  extraCost2Name: structured.extraCosts[1]?.name,
+                  extraCost2Amount: structured.extraCosts[1]?.amount,
+                  extraCost3Name: structured.extraCosts[2]?.name,
+                  extraCost3Amount: structured.extraCosts[2]?.amount
                 };
               })
             );
@@ -171,12 +179,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType = 'CASTING';
                 }
 
-                const unitCost = isAssembly ? 0 :
-                                 partType === 'CASTING' ? 345000 :
-                                 partType === 'SHEET_METAL' ? 28500 :
-                                 partType === 'MACHINING' ? 34500 :
-                                 partType === 'ELECTRICAL' ? 185000 : 420;
-                const supplyPrice = isAssembly ? 0 : Math.ceil(unitCost * 1.18 / 100) * 100;
+                // 하드코딩 Fallback 단가 전면 제거: 단가 미확보 품목은 0원 및 NEEDS_REVIEW 처리
+                const unitCost = 0;
+                const supplyPrice = 0;
                 const isIncluded = !isAssembly && it.is_quote_included !== 0;
 
                 return {
@@ -189,7 +194,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   quantity: Number(it.quantity) || 1,
                   unitCost,
                   supplyPrice,
-                  status: isAssembly ? 'CONFIRMED' : (isApproved && isIncluded ? 'CONFIRMED' : 'NEEDS_REVIEW'),
+                  status: isAssembly ? 'CONFIRMED' : 'NEEDS_REVIEW',
                   balloonNo: String(idx + 1),
                   specification: it.specification || it.spec_candidate || '',
                   isAssembly,
@@ -228,11 +233,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType = 'COMMERCIAL';
                 }
 
-                const unitCost = isAssembly ? 0 :
-                                 partType === 'SHEET_METAL' ? 28500 :
-                                 partType === 'MACHINING' ? 34500 :
-                                 partType === 'ELECTRICAL' ? 185000 : 420;
-                const supplyPrice = isAssembly ? 0 : Math.ceil(unitCost * 1.18 / 100) * 100;
+                // 하드코딩 Fallback 단가 전면 제거: 단가 미확보 품목은 0원 처리
+                const unitCost = 0;
+                const supplyPrice = 0;
                 const isIncluded = !isAssembly && d.is_quote_included !== 0;
 
                 return {
@@ -348,6 +351,12 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       return;
     }
 
+    // 조치 1: 조립도 배제(0원)는 의도된 정상이지만, 견적 대상 품목 중 공급단가 0원은 확정 차단
+    if (!target.isAssembly && target.isIncluded !== false && (target.supplyPrice <= 0 || target.unitCost <= 0)) {
+      alert('공급단가가 0원인 품목은 확정할 수 없습니다. 단가를 입력하거나 견적에서 제외해 주세요.');
+      return;
+    }
+
     const nextStatus = target.status === 'CONFIRMED' ? 'NEEDS_REVIEW' : 'CONFIRMED';
     const isNowConfirmed = nextStatus === 'CONFIRMED';
 
@@ -386,6 +395,12 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     if (!target) return;
     const nextTarget = { ...target, ...updates };
 
+    const extraCosts = [];
+    if (nextTarget.extraCost1Amount) extraCosts.push({ name: nextTarget.extraCost1Name || '추가비1', amount: nextTarget.extraCost1Amount });
+    if (nextTarget.extraCost2Amount) extraCosts.push({ name: nextTarget.extraCost2Name || '추가비2', amount: nextTarget.extraCost2Amount });
+    if (nextTarget.extraCost3Amount) extraCosts.push({ name: nextTarget.extraCost3Name || '추가비3', amount: nextTarget.extraCost3Amount });
+    const serializedRemark = stringifyRemark(nextTarget.memo, extraCosts);
+
     try {
       await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
         method: 'POST',
@@ -397,7 +412,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           unitPrice: nextTarget.supplyPrice,
           unitCost: nextTarget.unitCost,
           qtyTier: nextTarget.quantity <= 9 ? '1~9' : nextTarget.quantity <= 99 ? '10~99' : '100~',
-          lotQuantity: nextTarget.quantity
+          lotQuantity: nextTarget.quantity,
+          remark: serializedRemark
         })
       });
     } catch (e) {
@@ -535,17 +551,23 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
               quantity: line.quantity
             });
           } else if (line.partType === 'ELECTRICAL') {
-            calculated = calculateElectricalCost({
-              catalogUnitPrice: 185000,
-              overheadRate: electricalOverhead,
-              marginRate: 0.15,
-              quantity: line.quantity
-            });
+            // 조치 2: 카탈로그 단가 마스터 미연동 상태에서 임의 하드코딩(185,000)을 배제하고 0원(미확보) 처리
+            calculated = {
+              subtotalCost: 0,
+              unitPrice: 0,
+              marginRate: 0,
+              qtyTier: '1~9',
+              basis: { basisType: 'ELECTRICAL_UNPRICED' }
+            } as any;
           } else if (line.partType === 'COMMERCIAL') {
-            calculated = calculateCommercialCost({
-              catalogUnitPrice: 1200,
-              quantity: line.quantity
-            });
+            // 조치 2: 기성 철물도 카탈로그 마스터 미연동 상태에서 임의 하드코딩(1,200)을 배제하고 0원(미확보) 처리
+            calculated = {
+              subtotalCost: 0,
+              unitPrice: 0,
+              marginRate: 0,
+              qtyTier: '1~9',
+              basis: { basisType: 'COMMERCIAL_UNPRICED' }
+            } as any;
           } else {
             // MACHINING 기본
             const machiningHours = Math.max(0.4, Number((rawWeightKg * 0.12 + 0.35).toFixed(2)));
@@ -562,9 +584,12 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             });
           }
 
-          updatedCount++;
+          const hasValidPrice = calculated.unitPrice > 0;
+          if (hasValidPrice) {
+            updatedCount++;
+          }
 
-          // 5. 백그라운드 DB 영구 동기화
+          // 5. 백그라운드 DB 동기화 (단가 확보 시에만 CONFIRMED 반영)
           try {
             await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
               method: 'POST',
@@ -572,7 +597,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
               body: JSON.stringify({
                 lineId: line.id,
                 partKey: `ENGINEERING:${line.partNo}:STD`,
-                isConfirmed: true,
+                isConfirmed: hasValidPrice,
                 unitPrice: calculated.unitPrice,
                 unitCost: calculated.subtotalCost,
                 qtyTier: calculated.qtyTier,
@@ -588,8 +613,10 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             ...line,
             unitCost: calculated.subtotalCost,
             supplyPrice: calculated.unitPrice,
-            status: 'CONFIRMED' as const,
-            memo: `AI공학표준원가 (${rawWeightKg}kg)`
+            status: hasValidPrice ? ('CONFIRMED' as const) : ('NEEDS_REVIEW' as const),
+            memo: hasValidPrice
+              ? `AI공학표준원가 (${rawWeightKg}kg)`
+              : '공학원가 미확보 (카탈로그 미연동)'
           };
         })
       );
@@ -605,6 +632,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
   const quoteActiveLines = lines.filter((l) => !l.isAssembly && l.isIncluded !== false);
   const unconfirmedCount = quoteActiveLines.filter((l) => l.status !== 'CONFIRMED').length;
+  const zeroPriceCount = quoteActiveLines.filter((l) => l.supplyPrice <= 0).length;
   const totalCost = quoteActiveLines.reduce((acc, l) => acc + (l.unitCost * l.quantity), 0);
   const totalSupply = quoteActiveLines.reduce((acc, l) => acc + (l.supplyPrice * l.quantity), 0);
   const avgMargin = totalSupply > 0 ? Math.round(((totalSupply - totalCost) / totalSupply) * 1000) / 10 : 0;
@@ -612,6 +640,13 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const handleSubmitQuote = async () => {
     if (unconfirmedCount > 0) {
       alert(`미확정 항목이 ${unconfirmedCount}건 남아있습니다. 전 항목 단가를 확정한 후 결재 상신해주세요.`);
+      return;
+    }
+
+    // 0원 미확보 품목 최종 점검: 조립도를 제외한 견적 대상 중 공급단가가 0원인 품목이 있으면 차단
+    const activeZeroPrice = lines.filter((l) => !l.isAssembly && l.isIncluded !== false && l.supplyPrice <= 0);
+    if (activeZeroPrice.length > 0) {
+      alert(`공급단가가 0원인 단가 미확보 품목이 ${activeZeroPrice.length}건 존재합니다.\n단가를 입력하거나 [견적제외] 처리한 후 결재 상신해 주세요.`);
       return;
     }
     setSubmittingQuote(true);
@@ -744,9 +779,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
           <button
             onClick={handleSubmitQuote}
-            disabled={unconfirmedCount > 0 || submittingQuote}
+            disabled={unconfirmedCount > 0 || zeroPriceCount > 0 || submittingQuote}
             className={`px-4 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow-sm transition-colors ${
-              unconfirmedCount > 0
+              unconfirmedCount > 0 || zeroPriceCount > 0
                 ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                 : submittingQuote
                 ? 'bg-emerald-700 text-white cursor-wait opacity-80'
@@ -760,12 +795,33 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             )}
             {submittingQuote
               ? '견적서 생성 및 이동 중...'
+              : zeroPriceCount > 0
+              ? `결재 상신 불가 (단가 미확보 ${zeroPriceCount}건)`
               : unconfirmedCount > 0
               ? `결재 상신 (${unconfirmedCount}행 미확정)`
               : '결재 상신'}
           </button>
         </div>
       </header>
+
+      {/* ⚠️ 단가 미확보 요약 경고 배너 */}
+      {zeroPriceCount > 0 && (
+        <div className="bg-rose-50 border-b border-rose-200 px-5 py-2 flex items-center justify-between text-xs text-rose-800 shrink-0">
+          <div className="flex items-center gap-2 font-medium">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 animate-pulse" />
+            <span>
+              단가 미확보 <strong className="underline underline-offset-2">{zeroPriceCount}건</strong> — 단가가 0원이므로 <strong>결재 상신 불가</strong>
+            </span>
+            <span className="text-rose-300">|</span>
+            <span className="text-slate-600">
+              검토자는 해당 품목의 <strong>수기 단가 입력</strong>, <strong>추천 단가 적용</strong> 또는 <strong>[견적제외]</strong> 처리를 완료해야 합니다.
+            </span>
+          </div>
+          <span className="px-2 py-0.5 rounded bg-rose-100 border border-rose-300 text-rose-800 font-bold text-[11px]">
+            우선 조치 필요
+          </span>
+        </div>
+      )}
 
       {/* 2. 상단 2열 (좌: 도면 뷰어 45%, 우: BOM 그리드 55%) */}
       <div className="flex-1 flex overflow-hidden p-3 gap-3">

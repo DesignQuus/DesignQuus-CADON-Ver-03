@@ -89,10 +89,9 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
             });
           } else if (Array.isArray(json.normalizedItems) && json.normalizedItems.length > 0) {
             parsedItems = json.normalizedItems.map((ni: any, idx: number) => {
-              const specLower = (ni.spec_candidate || '').toLowerCase();
-              const isCommercial = specLower.includes('bolt') || specLower.includes('nut');
-              const cost = isCommercial ? 420 : 34500;
-              const price = Math.ceil(cost * 1.18 / 100) * 100;
+              // 하드코딩 Fallback 단가 전면 제거: 단가 미확보 품목은 0원 처리
+              const cost = 0;
+              const price = 0;
               return {
                 no: idx + 1,
                 name: `${ni.normalized_name || ni.raw_name || 'BOM 부품'}${ni.spec_candidate ? ` (${ni.spec_candidate})` : ''}`,

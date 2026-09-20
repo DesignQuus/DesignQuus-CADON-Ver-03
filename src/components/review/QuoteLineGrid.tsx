@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { CheckCircle2, Clock, HelpCircle, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, Clock, HelpCircle, ShieldAlert, AlertCircle } from 'lucide-react';
 
 export interface QuoteReviewLine {
   id: string;
@@ -166,10 +166,19 @@ export default function QuoteLineGrid({
                   <td className="p-2 truncate">{row.material}</td>
                   <td className="p-2 text-center font-mono">{row.quantity}</td>
                   <td className="p-2 text-right font-mono text-slate-500">
-                    {row.isAssembly ? '-' : (row.unitCost > 0 ? `₩${row.unitCost.toLocaleString()}` : '-')}
+                    {row.isAssembly ? '-' : (row.unitCost > 0 ? `₩${row.unitCost.toLocaleString()}` : <span className="text-slate-400">₩0</span>)}
                   </td>
-                  <td className="p-2 text-right font-mono text-blue-700 font-bold">
-                    {row.isAssembly ? '-' : (row.supplyPrice > 0 ? `₩${row.supplyPrice.toLocaleString()}` : '-')}
+                  <td className="p-2 text-right font-mono font-bold">
+                    {row.isAssembly ? (
+                      <span className="text-slate-400">-</span>
+                    ) : row.supplyPrice > 0 ? (
+                      <span className="text-blue-700">₩{row.supplyPrice.toLocaleString()}</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 border border-rose-200 font-bold">
+                        <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                        단가미확보(0원)
+                      </span>
+                    )}
                   </td>
                   <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
                     {row.isAssembly ? (
@@ -182,11 +191,12 @@ export default function QuoteLineGrid({
                         disabled={row.partType === 'UNCLASSIFIED'}
                         className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
                           isConfirmed ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800' :
+                          row.supplyPrice <= 0 ? 'bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 animate-pulse' :
                           isNeedsReview ? 'bg-amber-100 hover:bg-amber-200 text-amber-800' :
                           'bg-slate-100 hover:bg-slate-200 text-slate-600'
                         }`}
                       >
-                        {isConfirmed ? '확정' : isNeedsReview ? '검토' : '미확정'}
+                        {isConfirmed ? '확정' : row.supplyPrice <= 0 ? '단가미확보' : isNeedsReview ? '검토' : '미확정'}
                       </button>
                     )}
                   </td>

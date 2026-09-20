@@ -113,6 +113,8 @@ export async function GET(req: NextRequest) {
         FROM price_masters pm
         JOIN product_masters p ON pm.master_id = p.id
         WHERE pm.is_active = 1
+          AND pm.effective_from <= date('now')
+          AND (pm.effective_to IS NULL OR pm.effective_to >= date('now'))
         ORDER BY match_score DESC, p.standard_name ASC
       `;
       priceMasters = (await db.prepare(pmQuery).all(name, name, `%${name}%`, `%${name}%`, `%${name}%`)) as any[];

@@ -83,35 +83,39 @@ export async function POST(
       );
     }
 
-    // 2. price_masters 조회 및 등록/갱신 (기준 단가)
+    // 2. price_masters 이력 관리 등록/갱신 (SCD Type 2: 기존 활성 행 마감 + 신규 행 INSERT)
     const existingPrice = (await db.prepare(`
-      SELECT id FROM price_masters WHERE master_id = ? AND is_active = 1
-    `).get(productId)) as any;
+      SELECT id FROM price_masters 
+      WHERE master_id = ? 
+        AND (company_id = ? OR (company_id IS NULL AND ? IS NULL)) 
+        AND is_active = 1
+    `).get(productId, companyId, companyId)) as any;
 
     if (existingPrice) {
+      // 기존 단가 행의 effective_to를 오늘로 마감하고 is_active = 0 처리
       await db.prepare(`
         UPDATE price_masters
-        SET unit_price = ?, effective_from = ?, company_id = ?
+        SET effective_to = ?, is_active = 0
         WHERE id = ?
-      `).run(unitPrice, todayStr, companyId, existingPrice.id);
-    } else {
-      const priceId = `prc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      await db.prepare(`
-        INSERT INTO price_masters (
-          id, master_id, company_id, price_type, unit_price, currency, effective_from, is_active, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        priceId,
-        productId,
-        companyId,
-        'STANDARD',
-        unitPrice,
-        'KRW',
-        todayStr,
-        1,
-        now
-      );
+      `).run(todayStr, existingPrice.id);
     }
+
+    // 항상 신규 단가 행을 INSERT (SCD Type 2 이력 보존)
+    const priceId = `prc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    await db.prepare(`
+      INSERT INTO price_masters (
+        id, master_id, company_id, price_type, unit_price, currency, effective_from, effective_to, is_active, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 1, ?)
+    `).run(
+      priceId,
+      productId,
+      companyId,
+      'STANDARD',
+      unitPrice,
+      'KRW',
+      todayStr,
+      now
+    );
 
     // 3. manual_price_pool 축적 (지식 풀 실시간 추천 연동)
     const mppId = `mpp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
