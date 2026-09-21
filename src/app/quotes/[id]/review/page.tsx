@@ -777,7 +777,28 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
   // 🏷️ 단일 행 inclusionType 업데이트
   const handleUpdateLineInclusion = async (lineId: string, inclusionType: InclusionType) => {
-    const isExcluded = inclusionType === 'EXCLUDED' || inclusionType === 'FASTENER_EXCLUDED';
+    const target = lines.find((l) => l.id === lineId);
+    if (!target) return;
+
+    // 🛡️ 조립도는 노이즈가 아니므로 조립제외로 보호
+    if (inclusionType === 'ANNOTATION_NOISE') {
+      if (target.isAssembly) {
+        alert('조립도(Assembly)는 도면 노이즈가 아니므로 [조립제외]로 관리됩니다.');
+        return;
+      }
+      const check = isCadNoiseItem({
+        partNo: target.partNo,
+        partName: target.partName,
+        material: target.material,
+        specification: target.specification
+      });
+      if (!check.isNoise) {
+        const ok = confirm(`'${target.partName}'은(는) 정상 가공 부품으로 분석됩니다.\n정말 도면 노이즈로 격리실에 보내시겠습니까?`);
+        if (!ok) return;
+      }
+    }
+
+    const isExcluded = inclusionType === 'EXCLUDED' || inclusionType === 'FASTENER_EXCLUDED' || inclusionType === 'ANNOTATION_NOISE';
     const isSupplied = inclusionType === 'CUSTOMER_SUPPLIED';
     const isNowConfirmed = inclusionType !== 'INCLUDED';
 
@@ -791,7 +812,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           status: isNowConfirmed ? 'CONFIRMED' : (l.supplyPrice > 0 ? 'CONFIRMED' : 'NEEDS_REVIEW'),
           unitCost: isExcluded || isSupplied ? 0 : l.unitCost,
           supplyPrice: isExcluded || isSupplied ? 0 : l.supplyPrice,
-          excludeReason: inclusionType === 'FASTENER_EXCLUDED'
+          excludeReason: inclusionType === 'ANNOTATION_NOISE'
+            ? '도면 주석/표제란 노이즈 격리'
+            : inclusionType === 'FASTENER_EXCLUDED'
             ? '표준 체결구 제외'
             : isSupplied
             ? '고객 사급품'
@@ -803,7 +826,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     );
 
     try {
-      const tag = inclusionType === 'FASTENER_EXCLUDED' ? '[FASTENER_EXCLUDED]' :
+      const tag = inclusionType === 'ANNOTATION_NOISE' ? '[ANNOTATION_NOISE]' :
+                  inclusionType === 'FASTENER_EXCLUDED' ? '[FASTENER_EXCLUDED]' :
                   inclusionType === 'CUSTOMER_SUPPLIED' ? '[CUSTOMER_SUPPLIED]' :
                   inclusionType === 'EXCLUDED' ? '[EXCLUDED]' : '[INCLUDED]';
       await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
@@ -824,12 +848,50 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
   // 🚀 다중 행 inclusionType 일괄 업데이트
   const handleBatchUpdateInclusion = async (lineIds: string[], inclusionType: InclusionType) => {
-    const isExcluded = inclusionType === 'EXCLUDED' || inclusionType === 'FASTENER_EXCLUDED';
+    // 🛡️ [세이프가드] 노이즈 격리 선택 시, 실제 도면 노이즈만 선별하고 정상 가공품 및 조립도는 안전하게 보호
+    let effectiveLineIds = lineIds;
+    if (inclusionType === 'ANNOTATION_NOISE') {
+      const genuineNoiseIds: string[] = [];
+      let protectedCount = 0;
+
+      lineIds.forEach((id) => {
+        const line = lines.find((l) => l.id === id);
+        if (!line) return;
+        if (line.isAssembly) {
+          protectedCount++;
+          return;
+        }
+        const check = isCadNoiseItem({
+          partNo: line.partNo,
+          partName: line.partName,
+          material: line.material,
+          specification: line.specification
+        });
+        if (check.isNoise) {
+          genuineNoiseIds.push(id);
+        } else {
+          protectedCount++;
+        }
+      });
+
+      if (genuineNoiseIds.length === 0) {
+        alert(`선택된 ${lineIds.length}개 항목 중 도면 주석/텍스트 노이즈로 판정된 항목이 없습니다.\n정상 가공 부품 및 조립도는 안전하게 보호되었습니다.\n(가공에서 배제하려면 [견적 제외] 또는 [사급품 지정]을 이용해 주세요.)`);
+        setSelectedIds([]);
+        return;
+      }
+
+      if (protectedCount > 0) {
+        alert(`선택된 ${lineIds.length}개 중 실제 도면 노이즈 ${genuineNoiseIds.length}건만 격리실로 이동되었습니다.\n(정상 가공 부품 및 조립도 ${protectedCount}건은 안전하게 보호되었습니다.)`);
+      }
+      effectiveLineIds = genuineNoiseIds;
+    }
+
+    const isExcluded = inclusionType === 'EXCLUDED' || inclusionType === 'FASTENER_EXCLUDED' || inclusionType === 'ANNOTATION_NOISE';
     const isSupplied = inclusionType === 'CUSTOMER_SUPPLIED';
 
     setLines((prev) =>
       prev.map((l) => {
-        if (!lineIds.includes(l.id)) return l;
+        if (!effectiveLineIds.includes(l.id)) return l;
         return {
           ...l,
           inclusionType,
@@ -837,7 +899,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           status: 'CONFIRMED' as const,
           unitCost: isExcluded || isSupplied ? 0 : l.unitCost,
           supplyPrice: isExcluded || isSupplied ? 0 : l.supplyPrice,
-          excludeReason: inclusionType === 'FASTENER_EXCLUDED'
+          excludeReason: inclusionType === 'ANNOTATION_NOISE'
+            ? '도면 주석/표제란 노이즈 격리'
+            : inclusionType === 'FASTENER_EXCLUDED'
             ? '표준 체결구 제외'
             : isSupplied
             ? '고객 사급품'
@@ -850,12 +914,13 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
     setSelectedIds([]);
 
-    const tag = inclusionType === 'FASTENER_EXCLUDED' ? '[FASTENER_EXCLUDED]' :
+    const tag = inclusionType === 'ANNOTATION_NOISE' ? '[ANNOTATION_NOISE]' :
+                inclusionType === 'FASTENER_EXCLUDED' ? '[FASTENER_EXCLUDED]' :
                 inclusionType === 'CUSTOMER_SUPPLIED' ? '[CUSTOMER_SUPPLIED]' :
                 inclusionType === 'EXCLUDED' ? '[EXCLUDED]' : '[INCLUDED]';
 
     Promise.all(
-      lineIds.map((id) =>
+      effectiveLineIds.map((id) =>
         apiFetch(`/api/quotes/${caseId}/confirm-line`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

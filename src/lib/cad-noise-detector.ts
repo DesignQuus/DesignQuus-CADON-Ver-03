@@ -37,29 +37,54 @@ export const DEFAULT_NOISE_PATTERNS: Array<{ pattern: RegExp; reason: string }> 
 // 2. 사내 노이즈 블랙리스트 영구 저장소 (로컬 스토리지 + 메모리 캐시)
 const STORAGE_KEY = 'cadon_cad_noise_blacklist_keywords';
 
+// 사내 노이즈 블랙리스트 등록 금지 단어 (실가공품 부품명, 재질명, 기본 단위 보호)
+const FORBIDDEN_KEYWORDS = new Set([
+  'SS400', 'S45C', 'SS41', 'AL6061', 'AL5052', 'SUS304', 'SUS316', 'FC250', 'FCD450', 'SKD11',
+  'UNKNOWN', 'EA', 'SET', 'PCS', '-', '--', '---', '.', '/',
+  'SHAFT', 'COVER', 'BRACKET', 'PLATE', 'BLOCK', 'FLANGE', 'ROLLER', 'PIN', 'BOLT', 'NUT', 'WASHER',
+  '샤프트', '커버', '브라켓', '플레이트', '블록', '플랜지', '롤러', '볼트', '너트', '와셔'
+]);
+
 export function getCustomNoiseKeywords(): string[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const list: string[] = JSON.parse(raw);
+    // 금지 단어(재질, 가공품명)가 혹시 저장되어 있다면 필터링하여 안전하게 반환
+    return list.filter((k) => k && k.length >= 2 && !FORBIDDEN_KEYWORDS.has(k.toUpperCase()));
   } catch {
     return [];
   }
 }
 
-export function addCustomNoiseKeyword(keyword: string): void {
-  if (typeof window === 'undefined') return;
+export function addCustomNoiseKeyword(keyword: string): boolean {
+  if (typeof window === 'undefined') return false;
   const clean = keyword.trim().toUpperCase();
-  if (!clean) return;
+  if (!clean || clean.length < 2) return false;
+  if (FORBIDDEN_KEYWORDS.has(clean)) {
+    console.warn(`[보호 가드] '${clean}'은(는) 표준 재질/가공 부품명이므로 노이즈 블랙리스트에 등록할 수 없습니다.`);
+    return false;
+  }
   try {
     const current = getCustomNoiseKeywords();
     if (!current.includes(clean)) {
       const updated = [...current, clean];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     }
+    return true;
   } catch (e) {
     console.warn('Failed to add custom noise keyword:', e);
+    return false;
+  }
+}
+
+export function clearCustomNoiseKeywords(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (e) {
+    console.warn('Failed to clear custom noise keywords:', e);
   }
 }
 
@@ -95,11 +120,12 @@ export function isCadNoiseItem(line: {
 
   const combinedTargets = [pNo, pName, mat, spec].filter(Boolean);
 
-  // A. 사내 학습된 블랙리스트 대조
+  // A. 사내 학습된 블랙리스트 대조 (단, 표준 가공 부품명/재질이 포함된 진짜 부품은 블랙리스트 매칭 차단)
   const customKeywords = getCustomNoiseKeywords();
   for (const text of combinedTargets) {
     const upper = text.toUpperCase();
-    if (customKeywords.includes(upper)) {
+    const isProtectedFabrication = Array.from(FORBIDDEN_KEYWORDS).some(f => upper.includes(f) && f.length >= 3);
+    if (!isProtectedFabrication && customKeywords.includes(upper)) {
       return {
         isNoise: true,
         reason: `사내 학습 블랙리스트 등록 키워드 [${upper}]`,
