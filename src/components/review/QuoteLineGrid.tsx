@@ -212,7 +212,7 @@ export default function QuoteLineGrid({
                 )}
               </th>
               <th className="p-2 w-8 text-center">No</th>
-              <th className="p-2 w-20">풍선/도번</th>
+              <th className="p-2 w-32">풍선/도번</th>
               <th className="p-2">품명</th>
               <th className="p-2 w-20 text-center">유형</th>
               <th className="p-2 w-16">재질</th>
@@ -259,10 +259,20 @@ export default function QuoteLineGrid({
 
                   <td className="p-2 text-center text-slate-400 font-mono">{row.itemNo}</td>
                   <td className="p-2">
-                    <span className="inline-block px-1.5 py-0.2 text-[10px] rounded bg-slate-200 text-slate-700 mr-1 font-bold">
-                      {row.balloonNo || row.itemNo}
-                    </span>
-                    <span className="font-mono text-slate-900">{row.partNo}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="inline-flex items-center justify-center min-w-[20px] px-1 py-0.2 text-[10px] rounded bg-slate-100 text-slate-700 border border-slate-300 font-bold font-mono">
+                        #{row.balloonNo || row.itemNo}
+                      </span>
+                      <span className="font-mono text-slate-900 font-semibold text-[11px] tracking-tight">
+                        {row.partNo || '-'}
+                      </span>
+                    </div>
+                    {row.specification && row.specification !== row.partNo && row.specification !== '-' && (
+                      <div className="mt-0.5 flex items-center gap-1 text-[10px] text-blue-600 font-mono" title={`규격/치수: ${row.specification}`}>
+                        <span className="px-1 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[9px] font-sans font-medium">규격</span>
+                        <span className="truncate max-w-[130px] font-medium">{row.specification}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="p-2 truncate max-w-[140px]" title={row.partName}>
                     {row.partName}

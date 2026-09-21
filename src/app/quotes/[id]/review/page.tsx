@@ -209,22 +209,48 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                 const isAssembly = qi.drawing_type === 'MAIN_ASSEMBLY' || qi.drawing_type === 'SUB_ASSEMBLY' ||
                                    nameLower.includes('조립') || nameLower.includes('assembly') || nameLower.includes('line');
 
+                const rawDwgNo = (qi.drawing_no || qi.master_code || '').trim();
+                const isDwgNoReal = rawDwgNo && !rawDwgNo.startsWith('BOM-') && rawDwgNo !== '-';
+                const resolvedPartNo = isDwgNoReal
+                  ? rawDwgNo
+                  : (qi.specification && !qi.specification.endsWith('T') && !qi.specification.startsWith('Ø') && qi.specification !== '-')
+                  ? qi.specification
+                  : rawDwgNo || `PART-${idx + 1}`;
+
+                const resolvedSpec = (qi.specification && qi.specification !== resolvedPartNo && qi.specification !== '-')
+                  ? qi.specification
+                  : '';
+
+                const pNoLower = resolvedPartNo.toLowerCase();
+                const isCommercialPurchased =
+                  nameLower.includes('misumi') || nameLower.includes('미스미') ||
+                  nameLower.includes('itoh') || nameLower.includes('이토') ||
+                  nameLower.includes('smc') || nameLower.includes('cdq2') || nameLower.includes('cq2') ||
+                  nameLower.includes('festo') || nameLower.includes('ckd') || nameLower.includes('thk') ||
+                  nameLower.includes('nsk') || nameLower.includes('iko') || nameLower.includes('bearing') ||
+                  nameLower.includes('베어링') || nameLower.includes('스프링') || nameLower.includes('spring') ||
+                  specLower.includes('cdq2') || specLower.includes('misumi') || pNoLower.includes('cdq2');
+
+                const isElectricalPurchased =
+                  nameLower.includes('모터') || nameLower.includes('센서') || nameLower.includes('실린더') ||
+                  nameLower.includes('motor') || nameLower.includes('sensor') || nameLower.includes('cylinder') ||
+                  nameLower.includes('valve') || nameLower.includes('plc') || nameLower.includes('servo') ||
+                  nameLower.includes('f3s') || nameLower.includes('sol');
+
                 // 6대 실무 부품 유형 자동 분류
                 let partType: PartType = 'MACHINING';
                 if (isAssembly) {
                   partType = 'ASSEMBLY';
+                } else if (isElectricalPurchased) {
+                  partType = 'ELECTRICAL';
+                } else if (isCommercialPurchased) {
+                  partType = 'COMMERCIAL';
                 } else if (
                   nameLower.includes('판금') || nameLower.includes('커버') || nameLower.includes('브라켓') ||
                   nameLower.includes('cover') || nameLower.includes('bracket') || nameLower.includes('duct') ||
                   specLower.includes('sheet') || (specLower.includes('t') && (nameLower.includes('plate') || nameLower.includes('frame')))
                 ) {
                   partType = 'SHEET_METAL';
-                } else if (
-                  nameLower.includes('모터') || nameLower.includes('센서') || nameLower.includes('실린더') ||
-                  nameLower.includes('motor') || nameLower.includes('sensor') || nameLower.includes('cylinder') ||
-                  nameLower.includes('valve') || nameLower.includes('plc') || nameLower.includes('servo')
-                ) {
-                  partType = 'ELECTRICAL';
                 } else if (
                   specLower.includes('bolt') || specLower.includes('nut') || specLower.includes('washer') ||
                   specLower.includes('screw') || specLower.includes('pin') || specLower.includes('o-ring') ||
@@ -236,6 +262,11 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   nameLower.includes('주물') || nameLower.includes('주조')
                 ) {
                   partType = 'CASTING';
+                }
+
+                let cleanMaterial = qi.material || 'SS400';
+                if (/tap|thru|hole|공차|±|c0\.|r[0-9]/i.test(cleanMaterial)) {
+                  cleanMaterial = (partType === 'COMMERCIAL' || partType === 'ELECTRICAL') ? '-' : 'SS400';
                 }
 
                 let supplyPrice = Number(qi.unit_price) || 0;
@@ -308,17 +339,17 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                 return {
                   id: qi.id,
                   itemNo: qi.item_no || idx + 1,
-                  partNo: qi.drawing_no || qi.master_code || `PART-${idx + 1}`,
+                  partNo: resolvedPartNo,
                   partName: qi.item_name || 'BOM 부품',
                   partType: partType,
-                  material: qi.material || 'SS400',
+                  material: cleanMaterial,
                   quantity: Number(qi.quantity) || 1,
                   unitCost: isAssembly || inclusionType !== 'INCLUDED' ? 0 : unitCost,
                   supplyPrice: isAssembly || inclusionType !== 'INCLUDED' ? 0 : supplyPrice,
                   status: isAssembly || inclusionType !== 'INCLUDED' ? 'CONFIRMED' : (isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW'),
                   balloonNo: String(qi.item_no || idx + 1),
                   memo: structured.text,
-                  specification: qi.specification || '',
+                  specification: resolvedSpec,
                   isAssembly,
                   isIncluded,
                   inclusionType,
@@ -375,22 +406,50 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                                    nameLower.includes('조립') || nameLower.includes('assembly') || nameLower.includes('line');
                 const isApproved = isAssembly || isCaseReady || it.approval_status === 'APPROVED' || it.is_quote_included !== 0;
 
+                const rawDwgNo = (it.drawing_no || '').trim();
+                const isDwgNoReal = rawDwgNo && !rawDwgNo.startsWith('BOM-') && rawDwgNo !== '-';
+                const resolvedPartNo = isDwgNoReal
+                  ? rawDwgNo
+                  : (it.spec_candidate && !it.spec_candidate.endsWith('T') && !it.spec_candidate.startsWith('Ø') && it.spec_candidate !== '-')
+                  ? it.spec_candidate
+                  : rawDwgNo || `DWG-${idx + 1}`;
+
+                const resolvedSpec = (it.specification && it.specification !== resolvedPartNo && it.specification !== '-')
+                  ? it.specification
+                  : (it.spec_candidate && it.spec_candidate !== resolvedPartNo && it.spec_candidate !== '-')
+                  ? it.spec_candidate
+                  : '';
+
+                const pNoLower = (it.drawing_no || '').toLowerCase();
+                const isCommercialPurchased =
+                  nameLower.includes('misumi') || nameLower.includes('미스미') ||
+                  nameLower.includes('itoh') || nameLower.includes('이토') ||
+                  nameLower.includes('smc') || nameLower.includes('cdq2') || nameLower.includes('cq2') ||
+                  nameLower.includes('festo') || nameLower.includes('ckd') || nameLower.includes('thk') ||
+                  nameLower.includes('nsk') || nameLower.includes('iko') || nameLower.includes('bearing') ||
+                  nameLower.includes('베어링') || nameLower.includes('스프링') || nameLower.includes('spring') ||
+                  specLower.includes('cdq2') || specLower.includes('misumi') || pNoLower.includes('cdq2');
+
+                const isElectricalPurchased =
+                  nameLower.includes('모터') || nameLower.includes('센서') || nameLower.includes('실린더') ||
+                  nameLower.includes('motor') || nameLower.includes('sensor') || nameLower.includes('cylinder') ||
+                  nameLower.includes('valve') || nameLower.includes('plc') || nameLower.includes('servo') ||
+                  nameLower.includes('f3s') || nameLower.includes('sol');
+
                 // 6대 실무 부품 유형 자동 분류
                 let partType: PartType = 'MACHINING';
                 if (isAssembly) {
                   partType = 'ASSEMBLY';
+                } else if (isElectricalPurchased) {
+                  partType = 'ELECTRICAL';
+                } else if (isCommercialPurchased) {
+                  partType = 'COMMERCIAL';
                 } else if (
                   nameLower.includes('판금') || nameLower.includes('커버') || nameLower.includes('브라켓') ||
                   nameLower.includes('cover') || nameLower.includes('bracket') || nameLower.includes('duct') ||
                   specLower.includes('sheet') || (specLower.includes('t') && (nameLower.includes('plate') || nameLower.includes('frame')))
                 ) {
                   partType = 'SHEET_METAL';
-                } else if (
-                  nameLower.includes('모터') || nameLower.includes('센서') || nameLower.includes('실린더') ||
-                  nameLower.includes('motor') || nameLower.includes('sensor') || nameLower.includes('cylinder') ||
-                  nameLower.includes('valve') || nameLower.includes('plc') || nameLower.includes('servo')
-                ) {
-                  partType = 'ELECTRICAL';
                 } else if (
                   specLower.includes('bolt') || specLower.includes('nut') || specLower.includes('washer') ||
                   specLower.includes('screw') || specLower.includes('pin') || specLower.includes('o-ring') ||
@@ -404,6 +463,11 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType = 'CASTING';
                 }
 
+                let cleanMaterial = it.material_candidate || it.drawing_material || 'SS400';
+                if (/tap|thru|hole|공차|±|c0\.|r[0-9]/i.test(cleanMaterial)) {
+                  cleanMaterial = (partType === 'COMMERCIAL' || partType === 'ELECTRICAL') ? '-' : 'SS400';
+                }
+
                 let unitCost = 0;
                 let supplyPrice = 0;
                 let priceSource: string | undefined = undefined;
@@ -411,7 +475,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
                 // 💡 마스터 단가 자동 매칭 시도
                 if (!isAssembly) {
-                  const matched = matchMasterPrice(it.spec_candidate || it.drawing_no, it.normalized_name || it.raw_name);
+                  const matched = matchMasterPrice(resolvedPartNo || it.spec_candidate, it.normalized_name || it.raw_name);
                   if (matched && Number(matched.unit_price) > 0) {
                     supplyPrice = Number(matched.unit_price);
                     unitCost = Math.round(supplyPrice * 0.82);
@@ -421,10 +485,10 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                 }
 
                 const noiseCheck = isCadNoiseItem({
-                  partNo: it.spec_candidate || it.drawing_no,
+                  partNo: resolvedPartNo,
                   partName: it.normalized_name || it.raw_name,
-                  material: it.material_candidate || it.drawing_material,
-                  specification: it.specification || it.spec_candidate
+                  material: cleanMaterial,
+                  specification: resolvedSpec
                 });
 
                 let inclusionType: InclusionType = 'INCLUDED';
@@ -443,16 +507,16 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                 return {
                   id: it.id,
                   itemNo: idx + 1,
-                  partNo: it.spec_candidate || it.drawing_no || `BOM-${idx + 1}`,
+                  partNo: resolvedPartNo,
                   partName: it.normalized_name || it.raw_name || 'BOM 부품',
                   partType: partType,
-                  material: it.material_candidate || it.drawing_material || 'SS400',
+                  material: cleanMaterial,
                   quantity: Number(it.quantity) || 1,
                   unitCost: isAssembly || inclusionType !== 'INCLUDED' ? 0 : unitCost,
                   supplyPrice: isAssembly || inclusionType !== 'INCLUDED' ? 0 : supplyPrice,
                   status: isAssembly || inclusionType !== 'INCLUDED' || supplyPrice > 0 ? 'CONFIRMED' : 'NEEDS_REVIEW',
                   balloonNo: String(idx + 1),
-                  specification: it.specification || it.spec_candidate || '',
+                  specification: resolvedSpec,
                   isAssembly,
                   isIncluded,
                   inclusionType,
