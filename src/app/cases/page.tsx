@@ -4,6 +4,7 @@ import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import CaseWorkflowSidebar, { WorkflowTab } from '@/components/cases/CaseWorkflowSidebar';
+import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import { useRouter } from 'next/navigation';
 import {
   FileText,
@@ -1676,11 +1677,14 @@ export default function CasesPage() {
                           </td>
 
                           {/* Case Name */}
-                          <td className="py-3 px-3.5 min-w-[220px]">
+                          <td className="py-3 px-3.5 min-w-[240px]">
                             <div className="flex items-center space-x-2">
-                              <span className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1 text-[13.5px]">
-                                {c.case_name}
-                              </span>
+                              <SmartTruncateTooltip
+                                text={c.case_name || ''}
+                                className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-[13.5px]"
+                                maxWidthClass="max-w-[260px]"
+                                subtext={`건번호: ${c.case_no}`}
+                              />
                               {c.lifecycle_status === 'ARCHIVED' && (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200 shrink-0">
                                   📦 보관 ({c.archive_reason || '보류'})
@@ -1707,14 +1711,26 @@ export default function CasesPage() {
                                     ⚠️ 고객사 미지정
                                   </span>
                                 ) : (
-                                  <span className="truncate max-w-[170px]">{c.company_name}</span>
+                                  <SmartTruncateTooltip
+                                    text={c.company_name || ''}
+                                    className="text-slate-900 font-bold"
+                                    maxWidthClass="max-w-[170px]"
+                                    subtext="고객사명"
+                                  />
                                 )}
                               </div>
                               <div className="text-xs text-slate-700 font-medium flex items-center space-x-1.5">
                                 <Folder className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                                <span className="truncate max-w-[170px]">
-                                  {c.company_id === 'comp_unassigned' ? '도면 분석 대기 (프로젝트 미정)' : c.project_name}
-                                </span>
+                                {c.company_id === 'comp_unassigned' ? (
+                                  <span className="text-slate-500 text-xs">도면 분석 대기 (프로젝트 미정)</span>
+                                ) : (
+                                  <SmartTruncateTooltip
+                                    text={c.project_name || '-'}
+                                    className="text-slate-700 font-medium text-xs"
+                                    maxWidthClass="max-w-[170px]"
+                                    subtext="프로젝트"
+                                  />
+                                )}
                               </div>
                             </div>
                           </td>
