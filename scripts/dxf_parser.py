@@ -22,9 +22,12 @@ def clean_cad_text(text: str) -> str:
     t = re.sub(r'%%[dD]', '°', t)        # Degree
     t = re.sub(r'%%[pP]', '±', t)        # Plus/Minus
     t = re.sub(r'%%[cC]', 'Ø', t)        # Diameter
-    t = re.sub(r'\\[AaCcHhWwFfPp][^;]*;', '', t)  # MText formatting codes
+    # MText formatting codes: \A, \C, \H, \W, \F, \P, \T, \Q, \S, \K, \L, \O etc.
+    t = re.sub(r'\\[AaCcHhWwFfPpTtQqSsKkLlOo][^;]*;', '', t)
     t = re.sub(r'\\[Pp]', ' ', t)        # Newline
     t = re.sub(r'[{}\\]', '', t)
+    # Strip any orphaned format tokens before semicolon like "T1.45;" or "H2.5;"
+    t = re.sub(r'^[A-Za-z][0-9.]*;', '', t)
     return t.strip()
 
 def transform_point(p, ins, rotation_deg, scale_x, scale_y):

@@ -254,7 +254,23 @@ export async function processCadFilePipeline(
     const dwgRows = structureResult.drawings.map((d: any) => {
       const isAssy = d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY' ||
                      (d.drawing_no_raw && d.drawing_no_raw.endsWith('-000')) ||
-                     (d.drawing_name_raw && d.drawing_name_raw.includes('조립도'));
+                     (d.drawing_no_raw && d.drawing_no_raw.endsWith('-A001')) ||
+                     (d.drawing_name_raw && d.drawing_name_raw.includes('조립도')) ||
+                     (d.drawing_name_raw && d.drawing_name_raw.includes('조립 라인'));
+      
+      const hasExcludeNote = d.special_notes && d.special_notes.some((n: string) => n.includes('가공 제외') || n.includes('가공제외'));
+      const hasStdNote = d.special_notes && d.special_notes.some((n: string) => n.includes('표준품'));
+      const isExcluded = isAssy || hasExcludeNote || hasStdNote;
+
+      let excludeReason: string | null = null;
+      if (isAssy) {
+        excludeReason = '조립도 (가공품 제외)';
+      } else if (hasExcludeNote) {
+        excludeReason = '설계 지시: 가공 제외';
+      } else if (hasStdNote) {
+        excludeReason = '설계 지시: 표준품';
+      }
+
       return {
         id: `dwg_${sourceFileId}_${d.drawing_index}`,
         quotation_case_id: quotationCaseId,
@@ -268,8 +284,8 @@ export async function processCadFilePipeline(
         material: d.material,
         scale: d.scale,
         drawing_type: d.drawing_type,
-        is_quote_included: isAssy ? 0 : 1,
-        exclude_reason: isAssy ? '조립도 (가공품 제외)' : null,
+        is_quote_included: isExcluded ? 0 : 1,
+        exclude_reason: excludeReason,
         frame_bbox_json: JSON.stringify(d.frame_bbox),
         title_block_bbox_json: JSON.stringify(d.title_block_bbox),
         confidence_score: d.confidence_score,
@@ -279,12 +295,23 @@ export async function processCadFilePipeline(
     });
     await insertRows('drawings', dwgRows);
 
-    // Auto-link Customer from Title Block to quotation_cases if unassigned
+    // Auto-link Customer from Title Block to quotation_cases
     const detectedCustomer = structureResult.drawings.find((d: any) => d.customer && d.customer !== '-' && d.customer !== '')?.customer;
     if (detectedCustomer) {
       try {
         const caseRow = await db.prepare('SELECT company_id FROM quotation_cases WHERE id = ?').get(quotationCaseId);
-        if (caseRow && (!caseRow.company_id || caseRow.company_id === 'comp_unassigned')) {
+        let shouldLink = false;
+        if (!caseRow || !caseRow.company_id || caseRow.company_id === 'comp_unassigned') {
+          shouldLink = true;
+        } else {
+          const currentComp = await db.prepare('SELECT company_name FROM companies WHERE id = ?').get(caseRow.company_id);
+          const cName = currentComp?.company_name || '';
+          if (cName.startsWith('T1.') || cName === '1' || cName.includes('세창') || (detectedCustomer === '엠브이텍' && cName !== '엠브이텍')) {
+            shouldLink = true;
+          }
+        }
+
+        if (shouldLink) {
           let comp = await db.prepare('SELECT id FROM companies WHERE company_name = ?').get(detectedCustomer);
           if (!comp) {
             const newCompId = `comp_${Date.now()}`;
