@@ -23,3 +23,7 @@ See `.agents/rules/egdesk-dev-context.md` for full details.
     4. **위치(인라인 오버레이)**: 돌출 삼각형 꼬리표 없이, 텍스트 위치를 바로 덮는 인라인 오버레이 방식(`top-1/2 -translate-y-1/2 -left-2`)으로 띄워 상하 행 및 헤더 선택을 방해하지 않음.
     5. **1-클릭 복사**: 설명 텍스트 없이 우측에 미니멀한 복사 아이콘(`Copy` / `Check`)만 배치.
 
+## 도면 렌더링 기술 보존 원칙 (Drawing Rendering Freeze Rule)
+- **절대 원칙**: 사용자의 명시적이고 구체적인 변경 지시가 없는 한, 현재 확립된 **도면 렌더링 기술 및 파이프라인(WebGL 60FPS 벡터/텍스트/래스터 뷰어, HD 벡터 SVG 렌더러, DXF 파서 및 프레임 기하 렌더링 체계)은 절대 임의로 변경하거나 수정/교체하지 않습니다.**
+- 현재 렌더링 품질이 검증 완료되었으므로, 관련 렌더러 및 파이프라인 파일(`scripts/webgl_binary_exporter.py`, `scripts/vector_svg_renderer.py`, `src/components/cad/CadViewerWebGL.tsx` 등)의 핵심 구현을 온전히 보존(Immutable)합니다.
+
