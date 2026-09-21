@@ -3,10 +3,11 @@
 import React, { useState } from 'react';
 import {
   CheckCircle2, Clock, HelpCircle, ShieldAlert, AlertCircle,
-  Package, Wrench, Ban, Check, ChevronDown, CheckSquare, Square
+  Package, Wrench, Ban, Check, ChevronDown, CheckSquare, Square,
+  Sparkles, ShieldCheck
 } from 'lucide-react';
 
-export type InclusionType = 'INCLUDED' | 'CUSTOMER_SUPPLIED' | 'FASTENER_EXCLUDED' | 'EXCLUDED';
+export type InclusionType = 'INCLUDED' | 'CUSTOMER_SUPPLIED' | 'FASTENER_EXCLUDED' | 'EXCLUDED' | 'ANNOTATION_NOISE';
 
 export interface SimilarityBreakdown {
   totalScore: number; // 0 ~ 100 (가중 평균)
@@ -65,6 +66,7 @@ interface QuoteLineGridProps {
   onSelectAll?: (selectAll: boolean) => void;
   onUpdateLineInclusion?: (lineId: string, inclusionType: InclusionType) => void;
   onBatchUpdateInclusion?: (lineIds: string[], inclusionType: InclusionType) => void;
+  onAddNoiseBlacklist?: (keyword: string) => void;
 }
 
 export default function QuoteLineGrid({
@@ -78,17 +80,23 @@ export default function QuoteLineGrid({
   onToggleSelectId,
   onSelectAll,
   onUpdateLineInclusion,
-  onBatchUpdateInclusion
+  onBatchUpdateInclusion,
+  onAddNoiseBlacklist
 }: QuoteLineGridProps) {
   // 열려있는 인라인 드롭다운 상태 관리
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
 
-  // 견적 대상 부품: 조립도가 아니고, inclusionType이 EXCLUDED 또는 FASTENER_EXCLUDED가 아닌 품목
+  // 견적 대상 부품: 조립도, 제외품, 체결구제외, 도면노이즈를 제외한 실 가공/구매 대상
   const quoteTargetLines = lines.filter((l) => {
     if (l.isAssembly) return false;
     const incType = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
     return incType === 'INCLUDED' || incType === 'CUSTOMER_SUPPLIED';
   });
+
+  const noiseCount = lines.filter((l) => {
+    const incType = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+    return incType === 'ANNOTATION_NOISE';
+  }).length;
 
   const excludedCount = lines.filter((l) => {
     if (l.isAssembly) return true;
@@ -102,7 +110,12 @@ export default function QuoteLineGrid({
   const filtered = lines.filter((l) => {
     const incType = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
     if (filterType === 'ALL') {
-      return !l.isAssembly && incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED';
+      // 기본 ALL 뷰: 조립도, 견적제외, 체결구제외, 도면노이즈는 숨김 처리되어 진짜 부품만 깨끗하게 노출!
+      return !l.isAssembly && incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED' && incType !== 'ANNOTATION_NOISE';
+    }
+    if (filterType === 'NOISE') {
+      // 🧹 도면 주석/노이즈 격리실 전용 뷰
+      return incType === 'ANNOTATION_NOISE';
     }
     if (filterType === 'WITH_ASSEMBLY') return true;
     if (filterType === 'NEEDS_REVIEW') {
@@ -118,7 +131,7 @@ export default function QuoteLineGrid({
       return l.isAssembly || incType === 'EXCLUDED' || incType === 'FASTENER_EXCLUDED';
     }
     if (['MACHINING', 'SHEET_METAL', 'CASTING', 'COMMERCIAL', 'ELECTRICAL'].includes(filterType)) {
-      return l.partType === filterType && !l.isAssembly && incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED';
+      return l.partType === filterType && !l.isAssembly && incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED' && incType !== 'ANNOTATION_NOISE';
     }
     return true;
   });
@@ -141,6 +154,19 @@ export default function QuoteLineGrid({
               <Package className="w-3 h-3" /> 사급 {suppliedCount}건
             </span>
           )}
+          {noiseCount > 0 && (
+            <button
+              onClick={() => onFilterChange('NOISE')}
+              className={`text-[10.5px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                filterType === 'NOISE'
+                  ? 'bg-amber-500 text-white shadow-xs ring-2 ring-amber-300'
+                  : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
+              }`}
+              title="도면 표제란(이경중, A3 등) 및 유니코드 깨짐 텍스트 격리실 열기"
+            >
+              🧹 노이즈 격리 {noiseCount}건
+            </button>
+          )}
           {excludedCount > 0 && (
             <span className="text-[10.5px] px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-600 border border-slate-300">
               제외 {excludedCount}건
@@ -157,6 +183,7 @@ export default function QuoteLineGrid({
           <option value="NEEDS_REVIEW">검토필요 항목</option>
           <option value="UNCONFIRMED">미확정 항목</option>
           <option value="SUPPLIED">고객 사급품 ({suppliedCount}건)</option>
+          <option value="NOISE">🧹 도면 주석/노이즈 격리실 ({noiseCount}건)</option>
           <option value="MACHINING">가공품만</option>
           <option value="SHEET_METAL">판금/제관만</option>
           <option value="CASTING">주조품만</option>
@@ -192,7 +219,7 @@ export default function QuoteLineGrid({
               <th className="p-2 w-12 text-center">수량</th>
               <th className="p-2 w-20 text-right">단위원가</th>
               <th className="p-2 w-24 text-right">공급단가</th>
-              <th className="p-2 w-24 text-center">견적상태</th>
+              <th className="p-2 w-28 text-center">견적상태</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
@@ -200,9 +227,10 @@ export default function QuoteLineGrid({
               const isSelected = lines.indexOf(row) === selectedIndex;
               const isChecked = selectedIds.includes(row.id);
               const incType: InclusionType = row.inclusionType || (row.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+              const isNoise = incType === 'ANNOTATION_NOISE';
               const isSupplied = incType === 'CUSTOMER_SUPPLIED';
               const isFastenerExcluded = incType === 'FASTENER_EXCLUDED';
-              const isExcluded = incType === 'EXCLUDED' || row.isAssembly || isFastenerExcluded;
+              const isExcluded = incType === 'EXCLUDED' || row.isAssembly || isFastenerExcluded || isNoise;
 
               const isConfirmed = row.status === 'CONFIRMED';
               const isNeedsReview = row.status === 'NEEDS_REVIEW';
@@ -213,7 +241,9 @@ export default function QuoteLineGrid({
                   onClick={() => onSelectIndex(lines.indexOf(row))}
                   className={`cursor-pointer transition-colors ${
                     isSelected ? 'bg-blue-50/90 ring-1 ring-blue-500 font-semibold' : 'hover:bg-slate-50'
-                  } ${isExcluded ? 'bg-slate-50/60 opacity-65' : ''} ${isChecked ? 'bg-indigo-50/60' : ''}`}
+                  } ${isNoise ? 'bg-amber-50/40 text-slate-500 line-through-none' : isExcluded ? 'bg-slate-50/60 opacity-65' : ''} ${
+                    isChecked ? 'bg-indigo-50/60' : ''
+                  }`}
                 >
                   {/* 행별 체크박스 */}
                   <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
@@ -239,9 +269,15 @@ export default function QuoteLineGrid({
                     {row.isAssembly && (
                       <span className="ml-1 px-1 py-0.2 text-[9px] rounded bg-purple-100 text-purple-700 font-bold">조립제외</span>
                     )}
+                    {isNoise && (
+                      <span className="ml-1 px-1 py-0.2 text-[9px] rounded bg-amber-100 text-amber-800 font-bold border border-amber-300">
+                        🧹 도면주석
+                      </span>
+                    )}
                   </td>
                   <td className="p-2 text-center">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                      isNoise ? 'bg-slate-100 text-slate-500' :
                       row.partType === 'MACHINING' ? 'bg-blue-100 text-blue-800' :
                       row.partType === 'SHEET_METAL' ? 'bg-cyan-100 text-cyan-800' :
                       row.partType === 'CASTING' ? 'bg-orange-100 text-orange-800' :
@@ -250,7 +286,8 @@ export default function QuoteLineGrid({
                       row.partType === 'ASSEMBLY' ? 'bg-indigo-100 text-indigo-800' :
                       'bg-rose-100 text-rose-800'
                     }`}>
-                      {row.partType === 'MACHINING' ? '가공' :
+                      {isNoise ? '노이즈' :
+                       row.partType === 'MACHINING' ? '가공' :
                        row.partType === 'SHEET_METAL' ? '판금' :
                        row.partType === 'CASTING' ? '주조' :
                        row.partType === 'COMMERCIAL' ? '철물' :
@@ -261,12 +298,18 @@ export default function QuoteLineGrid({
                   <td className="p-2 truncate">{row.material}</td>
                   <td className="p-2 text-center font-mono">{row.quantity}</td>
                   <td className="p-2 text-right font-mono text-slate-500">
-                    {isExcluded ? '-' : isSupplied ? (
+                    {isNoise ? (
+                      <span className="text-amber-700 font-medium text-[10px]">노이즈제외</span>
+                    ) : isExcluded ? '-' : isSupplied ? (
                       <span className="text-cyan-700 font-medium text-[10px]">사급제공</span>
                     ) : (row.unitCost > 0 ? `₩${row.unitCost.toLocaleString()}` : <span className="text-slate-400">₩0</span>)}
                   </td>
                   <td className="p-2 text-right font-mono font-bold whitespace-nowrap">
-                    {isExcluded ? (
+                    {isNoise ? (
+                      <span className="text-amber-700 font-bold text-[10px] bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                        🧹 노이즈격리
+                      </span>
+                    ) : isExcluded ? (
                       <span className="text-slate-400">-</span>
                     ) : isSupplied ? (
                       <span className="text-cyan-700 font-bold text-[11px]">₩0 (사급품)</span>
@@ -387,12 +430,32 @@ export default function QuoteLineGrid({
                     )}
                   </td>
 
-                  {/* 견적 상태 및 간편 변경 인라인 토글 열 */}
+                  {/* 견적 상태 열 */}
                   <td className="p-2 text-center relative" onClick={(e) => e.stopPropagation()}>
                     {row.isAssembly ? (
                       <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
                         조립제외
                       </span>
+                    ) : isNoise ? (
+                      /* 🧹 격리실 품목: 복원 버튼 및 블랙리스트 등록 버튼 */
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => onUpdateLineInclusion && onUpdateLineInclusion(row.id, 'INCLUDED')}
+                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 transition-colors"
+                          title="진짜 부품인 경우 정상 견적 목록으로 복원"
+                        >
+                          ✓ 부품 복원
+                        </button>
+                        {onAddNoiseBlacklist && (
+                          <button
+                            onClick={() => onAddNoiseBlacklist(row.partName || row.partNo)}
+                            className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-300 transition-colors"
+                            title="사내 노이즈 블랙리스트에 영구 등록하여 다음 도면 파싱부터 자동 제외"
+                          >
+                            학습
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <div className="flex items-center justify-center gap-1">
                         {/* 견적 포함 유형 뱃지 & 간편 드롭다운 */}
@@ -408,7 +471,7 @@ export default function QuoteLineGrid({
                                 ? 'bg-rose-50 text-rose-700 border-rose-200'
                                 : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                             }`}
-                            title="견적 포함/사급품/체결구/제외 상태 변경"
+                            title="견적 포함/사급품/체결구/제외/노이즈 상태 변경"
                           >
                             <span>
                               {incType === 'CUSTOMER_SUPPLIED' ? '📦 사급' :
@@ -420,7 +483,7 @@ export default function QuoteLineGrid({
 
                           {/* 인라인 변경 드롭다운 팝오버 */}
                           {openDropdownId === row.id && onUpdateLineInclusion && (
-                            <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-30 w-28 text-left text-xs font-semibold animate-in fade-in zoom-in-95">
+                            <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-30 w-32 text-left text-xs font-semibold animate-in fade-in zoom-in-95">
                               <button
                                 onClick={() => {
                                   onUpdateLineInclusion(row.id, 'INCLUDED');
@@ -447,6 +510,15 @@ export default function QuoteLineGrid({
                                 className="w-full px-2.5 py-1 text-left hover:bg-slate-100 flex items-center gap-1.5 text-slate-700"
                               >
                                 <Wrench className="w-3 h-3 text-slate-500" /> 체결구 제외
+                              </button>
+                              <button
+                                onClick={() => {
+                                  onUpdateLineInclusion(row.id, 'ANNOTATION_NOISE');
+                                  setOpenDropdownId(null);
+                                }}
+                                className="w-full px-2.5 py-1 text-left hover:bg-amber-50 flex items-center gap-1.5 text-amber-800"
+                              >
+                                <Sparkles className="w-3 h-3 text-amber-600" /> 🧹 노이즈 격리
                               </button>
                               <button
                                 onClick={() => {
@@ -499,6 +571,13 @@ export default function QuoteLineGrid({
           </div>
 
           <div className="flex items-center gap-1.5 text-xs">
+            <button
+              onClick={() => onBatchUpdateInclusion(selectedIds, 'ANNOTATION_NOISE')}
+              className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-bold flex items-center gap-1 transition-all cursor-pointer"
+              title="선택된 모든 품목을 도면 주석 노이즈로 격리합니다."
+            >
+              🧹 노이즈 격리
+            </button>
             <button
               onClick={() => onBatchUpdateInclusion(selectedIds, 'CUSTOMER_SUPPLIED')}
               className="px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold flex items-center gap-1 transition-all cursor-pointer"

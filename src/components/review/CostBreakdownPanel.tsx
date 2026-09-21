@@ -12,6 +12,7 @@ interface CostBreakdownPanelProps {
   topMasterPrice?: number;
   onUpdateLine: (updated: Partial<QuoteReviewLine>) => void;
   onConfirmLine?: (lineId: string) => Promise<void>;
+  onAddNoiseBlacklist?: (keyword: string) => void;
 }
 
 export default function CostBreakdownPanel({
@@ -19,7 +20,8 @@ export default function CostBreakdownPanel({
   caseId,
   topMasterPrice,
   onUpdateLine,
-  onConfirmLine
+  onConfirmLine,
+  onAddNoiseBlacklist
 }: CostBreakdownPanelProps) {
   const [savingMaster, setSavingMaster] = useState(false);
   const [masterSaved, setMasterSaved] = useState(false);
@@ -38,6 +40,7 @@ export default function CostBreakdownPanel({
   if (line.isAssembly || incType !== 'INCLUDED') {
     const isSupplied = incType === 'CUSTOMER_SUPPLIED';
     const isFastener = incType === 'FASTENER_EXCLUDED';
+    const isNoise = incType === 'ANNOTATION_NOISE';
 
     return (
       <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm h-full flex flex-col justify-between text-xs">
@@ -45,11 +48,13 @@ export default function CostBreakdownPanel({
           <div className="flex items-center gap-2">
             <span className={`px-2 py-0.5 rounded font-bold text-[11px] border ${
               line.isAssembly ? 'bg-purple-100 text-purple-700 border-purple-200' :
+              isNoise ? 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse' :
               isSupplied ? 'bg-cyan-100 text-cyan-800 border-cyan-300' :
               isFastener ? 'bg-indigo-100 text-indigo-800 border-indigo-200' :
               'bg-slate-100 text-slate-700 border-slate-200'
             }`}>
               {line.isAssembly ? '조립도 자동 제외' :
+               isNoise ? '🧹 도면 주석/표제란 노이즈 격리' :
                isSupplied ? '📦 고객 사급품 (단가 0원 정상)' :
                isFastener ? '🔩 표준 체결구 제외' : '🚫 견적 제외'}
             </span>
@@ -61,6 +66,15 @@ export default function CostBreakdownPanel({
             <span className="text-[11px] px-2 py-0.5 rounded bg-slate-100 font-mono text-slate-600">
               수량 {line.quantity} EA
             </span>
+            {isNoise && onAddNoiseBlacklist && (
+              <button
+                onClick={() => onAddNoiseBlacklist(line.partName || line.partNo)}
+                className="px-2 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[10.5px] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                title="이 키워드를 사내 노이즈 사전 DB에 영구 등록하여 다음 파싱부터 자동 제외합니다"
+              >
+                <span>⭐ 사내 노이즈 학습</span>
+              </button>
+            )}
             {!line.isAssembly && (
               <button
                 onClick={() => onUpdateLine({ inclusionType: 'INCLUDED', isIncluded: true })}
@@ -72,18 +86,20 @@ export default function CostBreakdownPanel({
           </div>
         </div>
 
-        <div className="my-auto text-center py-6 px-4 bg-slate-50 rounded-lg border border-dashed border-slate-300 space-y-2">
+        <div className="my-auto text-center py-5 px-4 bg-slate-50 rounded-lg border border-dashed border-slate-300 space-y-2">
           <div className="text-2xl">
-            {line.isAssembly ? '📦' : isSupplied ? '🤝' : isFastener ? '🔩' : '🚫'}
+            {line.isAssembly ? '📦' : isNoise ? '🧹' : isSupplied ? '🤝' : isFastener ? '🔩' : '🚫'}
           </div>
           <p className="font-bold text-slate-800 text-xs">
             {line.isAssembly ? '해당 도면은 완제품/모듈 단위 조립도(Assembly)입니다.' :
+             isNoise ? '도면 표제란, 도면 주기(Note), 또는 깨진 텍스트로 판정된 [노이즈 격리] 항목입니다.' :
              isSupplied ? '본 품목은 고객사에서 무상 지급하는 [사급품]입니다.' :
              isFastener ? '본 품목은 볼트/너트/와셔 등 [표준 체결구]로 견적 대상에서 제외되었습니다.' :
              '본 품목은 담당자에 의해 [견적 제외] 처리되었습니다.'}
           </p>
-          <p className="text-[11px] text-slate-500 leading-relaxed max-w-sm mx-auto">
+          <p className="text-[11px] text-slate-500 leading-relaxed max-w-md mx-auto">
             {line.isAssembly ? '조립도는 하위 단품 가공품들이 조립된 최종 도면이므로 중복 견적 방지를 위해 가공비가 자동 0원(배제) 처리됩니다.' :
+             isNoise ? (line.excludeReason ? `격리 사유: ${line.excludeReason}. 실제 가공 부품이 아니므로 견적 대상에서 안전하게 격리되어 결재 상신을 방해하지 않습니다.` : '도면 텍스트 노이즈로 분류되어 견적 대상에서 안전하게 격리되었습니다.') :
              isSupplied ? '사급품은 고객사가 직접 제공하므로 자사 가공비 및 공급단가가 0원으로 정상 처리되며, 결재 상신이 허용됩니다.' :
              isFastener ? '기성 규격 체결구는 별도 견적 항목에서 제외 처리되어 공급단가 0원으로 정상 반영됩니다.' :
              '견적 대상에서 제외된 품목은 결재 상신 및 총액 계산에서 제외됩니다. 필요시 우측 상단 복원 버튼을 클릭하세요.'}
@@ -91,7 +107,7 @@ export default function CostBreakdownPanel({
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-slate-400 text-[11px]">
-          <span>상태: {isSupplied ? '사급품 등록 완료 (0원 정상)' : '견적 제외 완료'}</span>
+          <span>상태: {isNoise ? '🧹 도면 노이즈 격리 완료 (0원 정상 허용)' : isSupplied ? '사급품 등록 완료 (0원 정상)' : '견적 제외 완료'}</span>
           <span>부품유형: {line.partType}</span>
         </div>
       </div>

@@ -11,6 +11,7 @@ import {
 import QuoteLineGrid, { QuoteReviewLine, InclusionType } from '@/components/review/QuoteLineGrid';
 import SmartBatchActionBar from '@/components/review/SmartBatchActionBar';
 import CostBreakdownPanel from '@/components/review/CostBreakdownPanel';
+import { isCadNoiseItem, addCustomNoiseKeyword } from '@/lib/cad-noise-detector';
 import MasterRecommendationCard, { RecommendationItem } from '@/components/review/MasterRecommendationCard';
 import MasterPriceReferenceDrawer from '@/components/review/MasterPriceReferenceDrawer';
 import ReviewCadViewer from '@/components/review/ReviewCadViewer';
@@ -29,7 +30,7 @@ import {
 
 // 📊 4대 항목 가중 평균(Weighted Average) 유사도 산출 헬퍼
 // 품명/도번 40% + 재질 30% + 치수 20% + 공정 10%
-export function computeMasterSimilarity(
+function computeMasterSimilarity(
   partNoStr: string,
   partNameStr: string,
   materialStr: string,
@@ -275,10 +276,20 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   }
                 }
 
+                const noiseCheck = isCadNoiseItem({
+                  partNo: qi.drawing_no || qi.master_code,
+                  partName: qi.item_name,
+                  material: qi.material,
+                  specification: qi.specification
+                });
+
                 const hasPrice = supplyPrice > 0;
                 let inclusionType: InclusionType = 'INCLUDED';
                 if (isAssembly) {
                   inclusionType = 'EXCLUDED';
+                } else if (qi.remark?.includes('[ANNOTATION_NOISE]') || noiseCheck.isNoise) {
+                  // 🧹 도면 표제란/주석 노이즈(이경중, A3, 10U+00B0, 2 SET 등) 사전 자동 격리!
+                  inclusionType = 'ANNOTATION_NOISE';
                 } else if (qi.remark?.includes('[CUSTOMER_SUPPLIED]')) {
                   inclusionType = 'CUSTOMER_SUPPLIED';
                 } else if (qi.remark?.includes('[FASTENER_EXCLUDED]')) {
@@ -313,9 +324,11 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   inclusionType,
                   excludeReason: isAssembly
                     ? '조립도 (가공품 제외)'
+                    : inclusionType === 'ANNOTATION_NOISE'
+                    ? (noiseCheck.reason || '도면 주석/표제란 노이즈 격리')
                     : inclusionType === 'FASTENER_EXCLUDED'
                     ? '표준 체결구 제외'
-                    : inclusionType === 'CUSTOMER_SUPPLIED'
+                    : (inclusionType as string) === 'CUSTOMER_SUPPLIED'
                     ? '고객 사급품'
                     : (isIncluded ? undefined : '견적 제외'),
                   extraCost1Name: structured.extraCosts[0]?.name,
@@ -407,9 +420,18 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   }
                 }
 
+                const noiseCheck = isCadNoiseItem({
+                  partNo: it.spec_candidate || it.drawing_no,
+                  partName: it.normalized_name || it.raw_name,
+                  material: it.material_candidate || it.drawing_material,
+                  specification: it.specification || it.spec_candidate
+                });
+
                 let inclusionType: InclusionType = 'INCLUDED';
                 if (isAssembly) {
                   inclusionType = 'EXCLUDED';
+                } else if (noiseCheck.isNoise) {
+                  inclusionType = 'ANNOTATION_NOISE';
                 } else if (it.is_quote_included === 0) {
                   inclusionType = 'EXCLUDED';
                 } else if (partType === 'COMMERCIAL' && supplyPrice === 0) {
@@ -436,6 +458,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   inclusionType,
                   excludeReason: isAssembly
                     ? '조립도 (가공품 제외)'
+                    : inclusionType === 'ANNOTATION_NOISE'
+                    ? (noiseCheck.reason || '도면 주석/표제란 노이즈 격리')
                     : inclusionType === 'FASTENER_EXCLUDED'
                     ? '표준 체결구 제외'
                     : (inclusionType as string) === 'CUSTOMER_SUPPLIED'
@@ -479,9 +503,19 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                 // 하드코딩 Fallback 단가 전면 제거: 단가 미확보 품목은 0원 처리
                 const unitCost = 0;
                 const supplyPrice = 0;
+
+                const noiseCheck = isCadNoiseItem({
+                  partNo: d.drawing_no_raw || d.drawing_no_normalized,
+                  partName: d.drawing_name_raw || d.drawing_name_normalized,
+                  material: d.material,
+                  specification: d.scale
+                });
+
                 let inclusionType: InclusionType = 'INCLUDED';
                 if (isAssembly) {
                   inclusionType = 'EXCLUDED';
+                } else if (noiseCheck.isNoise) {
+                  inclusionType = 'ANNOTATION_NOISE';
                 } else if (d.is_quote_included === 0) {
                   inclusionType = 'EXCLUDED';
                 } else if (partType === 'COMMERCIAL') {
@@ -509,6 +543,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   inclusionType,
                   excludeReason: isAssembly
                     ? '조립도 (가공품 제외)'
+                    : inclusionType === 'ANNOTATION_NOISE'
+                    ? (noiseCheck.reason || '도면 주석/표제란 노이즈 격리')
                     : inclusionType === 'FASTENER_EXCLUDED'
                     ? '표준 체결구 제외'
                     : (inclusionType as string) === 'CUSTOMER_SUPPLIED'
@@ -833,6 +869,59 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         }).catch((err) => console.warn('Batch sync err:', err))
       )
     );
+  };
+
+  // 🧹 도면 노이즈 일괄 격리 및 사내 블랙리스트 영구 학습 핸들러
+  const handleBatchNoiseQuarantine = async (items: Array<{ id: string; keyword: string }>) => {
+    const itemIds = items.map((it) => it.id);
+
+    // 사내 블랙리스트에 영구 등록 (영구 학습)
+    items.forEach((it) => {
+      if (it.keyword) addCustomNoiseKeyword(it.keyword);
+    });
+
+    setLines((prev) =>
+      prev.map((l) => {
+        if (!itemIds.includes(l.id)) return l;
+        return {
+          ...l,
+          inclusionType: 'ANNOTATION_NOISE' as const,
+          isIncluded: false,
+          status: 'CONFIRMED' as const,
+          unitCost: 0,
+          supplyPrice: 0,
+          excludeReason: '도면 주석/표제란 노이즈 격리 (사내 블랙리스트 학습됨)'
+        };
+      })
+    );
+
+    setSelectedIds([]);
+
+    // 백엔드 비동기 동기화
+    Promise.all(
+      itemIds.map((id) =>
+        apiFetch(`/api/quotes/${caseId}/confirm-line`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lineId: id,
+            isConfirmed: true,
+            unitPrice: 0,
+            unitCost: 0,
+            remark: '[ANNOTATION_NOISE] 사내 노이즈 블랙리스트 격리 및 학습'
+          })
+        }).catch((err) => console.warn('Batch noise sync err:', err))
+      )
+    );
+
+    alert(`총 ${items.length}건의 도면 표제란/주석 노이즈가 격리실로 이동되었으며, 사내 노이즈 블랙리스트에 영구 학습되었습니다.`);
+  };
+
+  // 📝 사내 노이즈 블랙리스트 단건 추가 핸들러
+  const handleAddNoiseBlacklist = (keyword: string) => {
+    if (!keyword) return;
+    addCustomNoiseKeyword(keyword);
+    alert(`[사내 노이즈 블랙리스트 등록 완료]\n'${keyword}'(이)가 사내 노이즈 사전 DB에 등록되었습니다.\n다음 도면 파싱부터 자동으로 사전 제외됩니다.`);
   };
 
   // 🔩 표준 체결구 일괄 제외 핸들러
@@ -1416,9 +1505,10 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         </div>
       </header>
 
-      {/* 🤖 상단 지능형 일괄 액션 배너 (Macro: 표준 체결구 일괄 제외, 90% 이상 마스터 확정, 0원 사급품 지정) */}
+      {/* 🤖 상단 지능형 일괄 액션 배너 (Macro: 도면 노이즈 격리, 표준 체결구 일괄 제외, 90% 이상 마스터 확정, 0원 사급품 지정) */}
       <SmartBatchActionBar
         lines={lines}
+        onBatchNoiseQuarantine={handleBatchNoiseQuarantine}
         onBatchFastenerExclude={handleBatchFastenerExclude}
         onBatchMasterConfirm={handleBatchMasterConfirm}
         onBatchSupplyConvert={handleBatchSupplyConvert}
@@ -1489,6 +1579,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             onSelectAll={handleSelectAll}
             onUpdateLineInclusion={handleUpdateLineInclusion}
             onBatchUpdateInclusion={handleBatchUpdateInclusion}
+            onAddNoiseBlacklist={handleAddNoiseBlacklist}
           />
         </div>
       </div>
@@ -1532,6 +1623,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   topMasterPrice={topMasterPrice}
                   onUpdateLine={handleUpdateSelected}
                   onConfirmLine={handleToggleConfirm}
+                  onAddNoiseBlacklist={handleAddNoiseBlacklist}
                 />
               );
             })()}

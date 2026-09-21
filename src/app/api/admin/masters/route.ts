@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
 
 // 기본 소재 단가 및 공정 임률 설정 (제조업 표준 기준)
-export const DEFAULT_MATERIAL_RATES: Record<string, number> = {
+const DEFAULT_MATERIAL_RATES: Record<string, number> = {
   'SS400': 1800,       // 일반 구조용 탄소강
   'S45C': 2200,        // 기계구조용 탄소강
   'SCM440': 3200,      // 크롬몰리브덴 합금강
@@ -20,7 +20,7 @@ export const DEFAULT_MATERIAL_RATES: Record<string, number> = {
   'POM': 7500          // 폴리아세탈 (아세탈)
 };
 
-export const DEFAULT_PROCESS_RATES: Record<string, number> = {
+const DEFAULT_PROCESS_RATES: Record<string, number> = {
   // 1. 기계 가공 (절삭)
   'HOURLY_MACHINE_RATE': 45000,       // CNC 머시닝센터 시간당 임률
   'HOURLY_LATHE_RATE': 40000,         // 범용 선반/밀링 시간당 임률
