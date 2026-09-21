@@ -1,27 +1,21 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Copy, Check, ExternalLink } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
 
 interface SmartTruncateTooltipProps {
   text: string;
   className?: string;
   maxWidthClass?: string;
   showCopy?: boolean;
-  subtext?: string;
-  asLink?: boolean;
-  href?: string;
   children?: React.ReactNode;
 }
 
 export default function SmartTruncateTooltip({
   text,
   className = 'font-bold text-slate-900 text-[13.5px]',
-  maxWidthClass = 'max-w-[230px]',
+  maxWidthClass = 'max-w-[240px]',
   showCopy = true,
-  subtext,
-  asLink = false,
-  href,
   children
 }: SmartTruncateTooltipProps) {
   const [isHovered, setIsHovered] = useState(false);
@@ -48,7 +42,7 @@ export default function SmartTruncateTooltip({
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      setTimeout(() => setCopied(false), 1600);
     } catch (err) {
       console.error('Failed to copy text: ', err);
     }
@@ -68,53 +62,39 @@ export default function SmartTruncateTooltip({
         {children || text}
       </span>
 
-      {/* 2. 스마트 툴팁 팝오버 (호버 시 표시) */}
+      {/* 2. 스마트 툴팁 팝오버: 백색 바탕, 먹 70% 가는 라인(#4A4A4A), 5px 라운드, 텍스트 없이 아이콘만 배치 */}
       {isHovered && text && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="absolute left-0 bottom-full mb-2 z-50 min-w-[220px] max-w-[420px] p-2.5 rounded-lg bg-slate-900 text-white shadow-2xl border border-slate-700/80 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-150"
-          style={{ filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.3))' }}
+          className="absolute left-0 bottom-full mb-2 z-50 min-w-[180px] max-w-[380px] px-2.5 py-2 rounded-[5px] bg-white text-neutral-900 shadow-lg border border-neutral-700 animate-in fade-in zoom-in-95 duration-100 flex items-center justify-between gap-2.5"
         >
-          {/* 헤더 & 복사 버튼 */}
-          <div className="flex items-start justify-between gap-2 pb-1.5 border-b border-slate-700/60 mb-1.5">
-            <div className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <span>전체 명칭</span>
-              {subtext && <span className="text-slate-500 font-normal">· {subtext}</span>}
-            </div>
-
-            {showCopy && (
-              <button
-                type="button"
-                onClick={handleCopy}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
-                  copied
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600/60'
-                }`}
-                title="클립보드로 복사"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    <span className="text-[10px] font-bold text-emerald-400">복사 완료!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3" />
-                    <span className="text-[10px]">1-클릭 복사</span>
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-
-          {/* 전체 텍스트 본문 (줄바꿈 허용, 선택 가능) */}
-          <div className="text-xs font-mono font-medium text-slate-100 select-all break-all leading-relaxed whitespace-normal bg-slate-950/60 p-1.5 rounded border border-slate-800">
+          {/* 전체 텍스트 본문 (중복 라벨 완전 제거, 가독성 높은 텍스트) */}
+          <span className="text-[12px] font-medium text-neutral-900 select-all break-all leading-snug whitespace-normal">
             {text}
-          </div>
+          </span>
 
-          {/* 말풍선 아래쪽 화살표 */}
-          <div className="absolute left-4 top-full w-0 h-0 border-x-[5px] border-x-transparent border-t-[6px] border-t-slate-900" />
+          {/* 복사 아이콘만 배치 (텍스트 설명 제외, 클릭 시 체크 아이콘 전환) */}
+          {showCopy && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={`shrink-0 p-1 rounded-[3px] transition-colors border ${
+                copied
+                  ? 'bg-emerald-50 text-emerald-600 border-emerald-300'
+                  : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 border-transparent hover:border-neutral-300'
+              }`}
+              title={copied ? '복사 완료' : '텍스트 복사'}
+            >
+              {copied ? (
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
+
+          {/* 말풍선 아래쪽 화살표 꼬리표 (먹 70% 라인 및 백색 바탕과 일치) */}
+          <div className="absolute left-4 top-full -mt-[4px] w-2 h-2 bg-white border-r border-b border-neutral-700 rotate-45" />
         </div>
       )}
     </div>

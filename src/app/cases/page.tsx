@@ -1683,7 +1683,6 @@ export default function CasesPage() {
                                 text={c.case_name || ''}
                                 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-[13.5px]"
                                 maxWidthClass="max-w-[260px]"
-                                subtext={`건번호: ${c.case_no}`}
                               />
                               {c.lifecycle_status === 'ARCHIVED' && (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200 shrink-0">
@@ -1715,7 +1714,6 @@ export default function CasesPage() {
                                     text={c.company_name || ''}
                                     className="text-slate-900 font-bold"
                                     maxWidthClass="max-w-[170px]"
-                                    subtext="고객사명"
                                   />
                                 )}
                               </div>
@@ -1728,7 +1726,6 @@ export default function CasesPage() {
                                     text={c.project_name || '-'}
                                     className="text-slate-700 font-medium text-xs"
                                     maxWidthClass="max-w-[170px]"
-                                    subtext="프로젝트"
                                   />
                                 )}
                               </div>
