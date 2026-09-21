@@ -34,7 +34,13 @@ export async function POST(
         fbi.*,
         COALESCE(d.drawing_no_raw, fb.part_no, fbi.final_master_code, '') as drawing_no,
         COALESCE(d.drawing_type, 'PART') as drawing_type,
-        COALESCE(d.is_quote_included, ni.is_quote_included, 1) as is_quote_included
+        COALESCE(d.is_quote_included, ni.is_quote_included, 1) as is_quote_included,
+        CASE 
+          WHEN (fb.part_no IS NOT NULL AND (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no))
+            OR (fbi.final_master_code IS NOT NULL AND (d.drawing_no_raw = fbi.final_master_code OR d.drawing_no_normalized = fbi.final_master_code)) THEN 'EXACT'
+          WHEN d.drawing_no_raw IS NOT NULL THEN 'PREFIX_STRIPPED'
+          ELSE 'NONE'
+        END as match_method
       FROM final_bom_items fbi
       LEFT JOIN normalized_bom_items ni ON ni.id = fbi.normalized_item_id
       LEFT JOIN flattened_bom_items fb ON fb.id = REPLACE(fbi.normalized_item_id, 'norm_', 'fb_')
@@ -44,8 +50,17 @@ export async function POST(
         WHERE quotation_case_id = ?
         GROUP BY drawing_no_raw
       ) d ON (
+        -- 1순위: EXACT 매칭 (완전 일치 우선)
         (fb.part_no IS NOT NULL AND fb.part_no != '' AND (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no))
         OR (fbi.final_master_code IS NOT NULL AND fbi.final_master_code != '' AND (d.drawing_no_raw = fbi.final_master_code OR d.drawing_no_normalized = fbi.final_master_code))
+        -- 2순위: 접두사 유연 매칭 (EXACT 실패 시 fallback, 반드시 '-' 구분자 경계 및 3자 이상 도번 엄격 검증)
+        OR (
+          fb.part_no IS NOT NULL AND LENGTH(fb.part_no) >= 3 AND (
+            (d.drawing_no_raw LIKE '%-' || fb.part_no AND SUBSTR(d.drawing_no_raw, -LENGTH(fb.part_no)-1, 1) = '-')
+            OR
+            (fb.part_no LIKE '%-' || d.drawing_no_raw AND SUBSTR(fb.part_no, -LENGTH(d.drawing_no_raw)-1, 1) = '-')
+          )
+        )
       )
       WHERE fbi.quotation_case_id = ? AND fbi.approval_status = 'APPROVED'
       ORDER BY fbi.rowid ASC
@@ -159,6 +174,41 @@ export async function POST(
           }
         }
 
+        // 1-1. Search Product Masters directly by master_code or standard_name (사내 마스터 단가표 직결 매칭)
+        if (unitPrice === 0) {
+          const matchedPm = (await db.prepare(`
+            SELECT pm.unit_price, pm.company_id
+            FROM product_masters p
+            JOIN price_masters pm ON p.id = pm.master_id
+            WHERE (
+              p.master_code = ? OR 
+              p.standard_name = ? OR 
+              p.master_code = ? OR 
+              p.standard_name = ? OR
+              REPLACE(p.standard_name, ' ', '') = REPLACE(?, ' ', '') OR
+              REPLACE(p.standard_name, ' ', '') = REPLACE(?, ' ', '')
+            )
+            AND pm.is_active = 1
+            AND pm.unit_price > 0
+            ORDER BY (CASE WHEN pm.company_id = ? THEN 1 ELSE 2 END), pm.effective_from DESC
+            LIMIT 1
+          `).get(
+            dwgNo,
+            dwgNo,
+            itemName,
+            itemName,
+            dwgNo,
+            itemName,
+            qc.company_id || ''
+          )) as any;
+
+          if (matchedPm && matchedPm.unit_price > 0) {
+            unitPrice = matchedPm.unit_price;
+            priceSource = 'MASTER_MATCH';
+            priceStatus = 'READY';
+          }
+        }
+
         // 2. Search Verified Price History (price_history_v2 - 오염 데이터 차단 하드 가드)
         if (unitPrice === 0) {
           const verifiedPrice = (await db.prepare(`
@@ -228,6 +278,11 @@ export async function POST(
           }
         }
 
+        let finalRemark = formulaRemark || remark;
+        if (item.match_method === 'PREFIX_STRIPPED') {
+          finalRemark = finalRemark ? `[PREFIX_STRIPPED] ${finalRemark}` : '[PREFIX_STRIPPED]';
+        }
+
         aggregatedMap.set(groupKey, {
           id: item.id,
           final_bom_item_id: item.id,
@@ -244,7 +299,7 @@ export async function POST(
           priceSource,
           priceStatus,
           is_included: isIncluded,
-          remark: formulaRemark || remark
+          remark: finalRemark
         });
       }
     }

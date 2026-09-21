@@ -78,7 +78,17 @@ export async function POST(
           WHERE quotation_case_id = ? AND id IN (
             SELECT ni.id FROM normalized_bom_items ni
             JOIN flattened_bom_items fb ON fb.id = REPLACE(ni.id, 'norm_', 'fb_')
-            JOIN drawings d ON d.quotation_case_id = ni.quotation_case_id AND (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no)
+            JOIN drawings d ON d.quotation_case_id = ni.quotation_case_id 
+              AND (
+                (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no)
+                OR (
+                  fb.part_no IS NOT NULL AND LENGTH(fb.part_no) >= 3 AND (
+                    (d.drawing_no_raw LIKE '%-' || fb.part_no AND SUBSTR(d.drawing_no_raw, -LENGTH(fb.part_no)-1, 1) = '-')
+                    OR
+                    (fb.part_no LIKE '%-' || d.drawing_no_raw AND SUBSTR(fb.part_no, -LENGTH(d.drawing_no_raw)-1, 1) = '-')
+                  )
+                )
+              )
             WHERE d.id IN (${excludePlaceholders})
           )
         `).run(id, ...idsToExclude);
@@ -98,7 +108,17 @@ export async function POST(
           WHERE quotation_case_id = ? AND id IN (
             SELECT ni.id FROM normalized_bom_items ni
             JOIN flattened_bom_items fb ON fb.id = REPLACE(ni.id, 'norm_', 'fb_')
-            JOIN drawings d ON d.quotation_case_id = ni.quotation_case_id AND (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no)
+            JOIN drawings d ON d.quotation_case_id = ni.quotation_case_id 
+              AND (
+                (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no)
+                OR (
+                  fb.part_no IS NOT NULL AND LENGTH(fb.part_no) >= 3 AND (
+                    (d.drawing_no_raw LIKE '%-' || fb.part_no AND SUBSTR(d.drawing_no_raw, -LENGTH(fb.part_no)-1, 1) = '-')
+                    OR
+                    (fb.part_no LIKE '%-' || d.drawing_no_raw AND SUBSTR(fb.part_no, -LENGTH(d.drawing_no_raw)-1, 1) = '-')
+                  )
+                )
+              )
             WHERE d.id IN (${includePlaceholders})
           )
         `).run(id, ...idsToInclude);

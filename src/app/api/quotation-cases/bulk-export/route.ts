@@ -38,55 +38,42 @@ export async function POST(req: NextRequest) {
 
       if (!qc) continue;
 
-      // 1. Check for official generated quote
+      // 1. Check for official generated quote & enforce approval guard
       const quote = (await db.prepare(`
         SELECT * FROM quotes 
         WHERE quotation_case_id = ? 
         ORDER BY quote_version DESC LIMIT 1
       `).get(caseId)) as any;
 
+      if (!quote || quote.status !== 'APPROVED' || quote.is_locked !== 1) {
+        return NextResponse.json(
+          {
+            error: `[승인 가드 차단] 견적건(${qc.case_no || caseId})이 최종 승인(APPROVED) 및 확정(LOCKED)되지 않았습니다. 미승인 상태의 일괄 엑셀 내보내기는 원천 차단됩니다.`
+          },
+          { status: 403 }
+        );
+      }
+
       let rows: any[] = [];
 
-      if (quote) {
-        const quoteItems = (await db.prepare(`
-          SELECT * FROM quote_items 
-          WHERE quote_id = ? AND (is_included IS NULL OR is_included != 0)
-          ORDER BY item_no ASC
-        `).all(quote.id)) as any[];
+      const quoteItems = (await db.prepare(`
+        SELECT * FROM quote_items 
+        WHERE quote_id = ? AND (is_included IS NULL OR is_included != 0)
+        ORDER BY item_no ASC
+      `).all(quote.id)) as any[];
 
-        rows = quoteItems.map((qi: any, i: number) => [
-          i + 1,
-          qi.drawing_no || qi.master_code || '-',
-          qi.item_name || '부품',
-          qi.specification || '-',
-          qi.material || 'SS400',
-          Number(qi.quantity || 1),
-          qi.unit || 'EA',
-          Number(qi.unit_price || 0),
-          Number(qi.amount || 0),
-          qi.remark || ''
-        ]);
-      } else {
-        // Fallback to normalized BOM items
-        const normItems = (await db.prepare(`
-          SELECT * FROM normalized_bom_items 
-          WHERE quotation_case_id = ? AND (is_quote_included IS NULL OR is_quote_included != 0)
-          ORDER BY rowid ASC
-        `).all(caseId)) as any[];
-
-        rows = normItems.map((ni: any, i: number) => [
-          i + 1,
-          ni.raw_name || ni.search_name || '-',
-          ni.normalized_name || ni.raw_name || 'BOM 부품',
-          ni.spec_candidate || '-',
-          ni.material_candidate || 'SS400',
-          Number(ni.quantity || 1),
-          ni.unit || 'EA',
-          0,
-          0,
-          ni.status || 'BOM 추출'
-        ]);
-      }
+      rows = quoteItems.map((qi: any, i: number) => [
+        i + 1,
+        qi.drawing_no || qi.master_code || '-',
+        qi.item_name || '부품',
+        qi.specification || '-',
+        qi.material || 'SS400',
+        Number(qi.quantity || 1),
+        qi.unit || 'EA',
+        Number(qi.unit_price || 0),
+        Number(qi.amount || 0),
+        qi.remark || ''
+      ]);
 
       // 2. Build workbook
       const wsData = [

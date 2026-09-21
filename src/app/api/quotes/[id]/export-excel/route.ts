@@ -58,6 +58,15 @@ export async function POST(
     return NextResponse.json({ error: '견적서를 찾을 수 없습니다.' }, { status: 404 });
   }
 
+  // 🛡️ [조치 A] 미승인 견적서 엑셀 내보내기 원천 차단 가드 (status === 'APPROVED' & is_locked === 1)
+  if (quote.status !== 'APPROVED' || quote.is_locked !== 1) {
+    return NextResponse.json({ 
+      error: `미승인 견적서(상태: ${quote.status || 'DRAFT'})는 엑셀로 내보낼 수 없습니다. [견적 검토] 화면에서 모든 단가를 확정하고 [견적 승인]을 완료해주세요.`,
+      status: quote.status,
+      is_locked: quote.is_locked
+    }, { status: 403 });
+  }
+
   try {
     let reqBody: any = {};
     try {

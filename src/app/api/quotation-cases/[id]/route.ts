@@ -251,6 +251,11 @@ export async function GET(
       COALESCE(d.is_quote_included, ni.is_quote_included, 1) as is_quote_included,
       COALESCE(d.exclude_reason, ni.exclude_reason) as exclude_reason,
       d.id as matched_drawing_id,
+      CASE 
+        WHEN (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no) THEN 'EXACT'
+        WHEN d.drawing_no_raw IS NOT NULL THEN 'PREFIX_STRIPPED'
+        ELSE 'NONE'
+      END as match_method,
       p.project_name,
       p.project_code,
       c.company_name
@@ -274,7 +279,18 @@ export async function GET(
       GROUP BY quotation_case_id, drawing_no_raw
     ) d 
       ON d.quotation_case_id = ni.quotation_case_id 
-      AND (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no)
+      AND (
+        -- 1순위: EXACT 매칭 (완전 일치 우선)
+        (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no)
+        -- 2순위: 접두사 유연 매칭 (EXACT 실패 시 fallback, 반드시 '-' 구분자 경계 및 3자 이상 도번 엄격 검증)
+        OR (
+          fb.part_no IS NOT NULL AND LENGTH(fb.part_no) >= 3 AND (
+            (d.drawing_no_raw LIKE '%-' || fb.part_no AND SUBSTR(d.drawing_no_raw, -LENGTH(fb.part_no)-1, 1) = '-')
+            OR
+            (fb.part_no LIKE '%-' || d.drawing_no_raw AND SUBSTR(fb.part_no, -LENGTH(d.drawing_no_raw)-1, 1) = '-')
+          )
+        )
+      )
     LEFT JOIN quotation_cases qc ON qc.id = ni.quotation_case_id
     LEFT JOIN projects p ON qc.project_id = p.id
     LEFT JOIN companies c ON qc.company_id = c.id

@@ -84,6 +84,8 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const onlyPriced = searchParams.get('onlyPriced') === 'true';
+
     // 마스터 품목 및 단가 목록 조회
     let sql = `
       SELECT 
@@ -104,6 +106,10 @@ export async function GET(req: NextRequest) {
     `;
     const params: any[] = [];
 
+    if (onlyPriced) {
+      sql += ` AND COALESCE(pm.unit_price, 0) > 0`;
+    }
+
     if (q) {
       sql += ` AND (p.master_code LIKE ? OR p.standard_name LIKE ? OR p.specification LIKE ? OR p.material LIKE ?)`;
       params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
@@ -114,7 +120,7 @@ export async function GET(req: NextRequest) {
       params.push(category);
     }
 
-    sql += ` ORDER BY p.created_at DESC, p.master_code ASC LIMIT 200`;
+    sql += ` ORDER BY (CASE WHEN COALESCE(pm.unit_price, 0) > 0 THEN 1 ELSE 0 END) DESC, p.id DESC, p.master_code ASC LIMIT 200`;
 
     const items = await db.prepare(sql).all(...params);
 
@@ -131,11 +137,18 @@ export async function GET(req: NextRequest) {
       FROM product_masters
     `).get()) as any;
 
+    const pricedStat = (await db.prepare(`
+      SELECT COUNT(DISTINCT master_id) as priced_count
+      FROM price_masters
+      WHERE is_active = 1 AND unit_price > 0
+    `).get()) as any;
+
     return NextResponse.json({
       success: true,
       items,
       stats: {
         total: stats?.total_count || 0,
+        priced: pricedStat?.priced_count || 0,
         machining: stats?.machining_count || 0,
         sheetMetal: stats?.sheet_metal_count || 0,
         casting: stats?.casting_count || 0,

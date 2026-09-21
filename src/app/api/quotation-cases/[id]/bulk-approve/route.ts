@@ -85,7 +85,16 @@ export async function POST(
             FROM drawings
             GROUP BY quotation_case_id, drawing_no_raw
           ) d ON d.quotation_case_id = ni.quotation_case_id 
-             AND (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no)
+             AND (
+               (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no)
+               OR (
+                 fb.part_no IS NOT NULL AND LENGTH(fb.part_no) >= 3 AND (
+                   (d.drawing_no_raw LIKE '%-' || fb.part_no AND SUBSTR(d.drawing_no_raw, -LENGTH(fb.part_no)-1, 1) = '-')
+                   OR
+                   (fb.part_no LIKE '%-' || d.drawing_no_raw AND SUBSTR(fb.part_no, -LENGTH(d.drawing_no_raw)-1, 1) = '-')
+                 )
+               )
+             )
           LEFT JOIN master_candidates mc ON mc.normalized_item_id = ni.id AND mc.rank = 1
           WHERE ni.quotation_case_id = ?
             AND ni.id NOT IN (SELECT normalized_item_id FROM final_bom_items WHERE quotation_case_id = ?)
@@ -96,10 +105,20 @@ export async function POST(
           FROM normalized_bom_items ni
           LEFT JOIN flattened_bom_items fb ON fb.id = REPLACE(ni.id, 'norm_', 'fb_')
           LEFT JOIN (
-            SELECT quotation_case_id, drawing_no_raw, is_quote_included
+            SELECT quotation_case_id, drawing_no_raw, drawing_no_normalized, is_quote_included
             FROM drawings
             GROUP BY quotation_case_id, drawing_no_raw
-          ) d ON d.quotation_case_id = ni.quotation_case_id AND d.drawing_no_raw = fb.part_no
+          ) d ON d.quotation_case_id = ni.quotation_case_id 
+             AND (
+               (d.drawing_no_raw = fb.part_no OR d.drawing_no_normalized = fb.part_no)
+               OR (
+                 fb.part_no IS NOT NULL AND LENGTH(fb.part_no) >= 3 AND (
+                   (d.drawing_no_raw LIKE '%-' || fb.part_no AND SUBSTR(d.drawing_no_raw, -LENGTH(fb.part_no)-1, 1) = '-')
+                   OR
+                   (fb.part_no LIKE '%-' || d.drawing_no_raw AND SUBSTR(fb.part_no, -LENGTH(d.drawing_no_raw)-1, 1) = '-')
+                 )
+               )
+             )
           JOIN master_candidates mc ON mc.normalized_item_id = ni.id AND mc.rank = 1
           WHERE ni.quotation_case_id = ?
             AND ni.id NOT IN (SELECT normalized_item_id FROM final_bom_items WHERE quotation_case_id = ?)

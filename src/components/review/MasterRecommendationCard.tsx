@@ -17,12 +17,16 @@ export interface RecommendationItem {
 
 interface MasterRecommendationCardProps {
   recommendations: RecommendationItem[];
+  selectedLineCost?: number;
+  currentSupplyPrice?: number;
   onApplyPrice: (price: number) => void;
   onOpenMasterDrawer?: () => void;
 }
 
 export default function MasterRecommendationCard({
   recommendations,
+  selectedLineCost,
+  currentSupplyPrice,
   onApplyPrice,
   onOpenMasterDrawer
 }: MasterRecommendationCardProps) {
@@ -86,6 +90,12 @@ export default function MasterRecommendationCard({
       <div className="flex-1 overflow-y-auto space-y-1.5 py-1 pr-1">
         {recommendations.map((rec, idx) => {
           const isRevMatch = rec.matchReason === 'REVISION_MATCH';
+          const marginPct = selectedLineCost && selectedLineCost > 0 && rec.unitPrice > 0
+            ? Math.round(((rec.unitPrice - selectedLineCost) / rec.unitPrice) * 1000) / 10
+            : null;
+          const isNegative = marginPct !== null && marginPct < 0;
+          const isLow = marginPct !== null && marginPct >= 0 && marginPct < 12;
+          const priceDiff = currentSupplyPrice && currentSupplyPrice > 0 ? rec.unitPrice - currentSupplyPrice : null;
 
           return (
             <div
@@ -120,7 +130,19 @@ export default function MasterRecommendationCard({
                 <div className="font-mono font-bold text-blue-700 text-sm leading-tight">
                   ₩{rec.unitPrice.toLocaleString()}
                 </div>
-                <span className="text-[10px] text-slate-400">클릭 시 적용</span>
+                {marginPct !== null && (
+                  <div className={`text-[9.5px] font-mono font-bold leading-tight ${
+                    isNegative ? 'text-rose-600' : isLow ? 'text-amber-700' : 'text-emerald-600'
+                  }`}>
+                    {isNegative ? '⚠️ 역마진 위험' : `예상 마진 ${marginPct > 0 ? `+${marginPct}%` : `${marginPct}%`}`}
+                  </div>
+                )}
+                {priceDiff !== null && priceDiff !== 0 && (
+                  <div className="text-[9px] text-slate-400 font-mono">
+                    {priceDiff > 0 ? `현재보다 +₩${priceDiff.toLocaleString()}` : `현재보다 -₩${Math.abs(priceDiff).toLocaleString()}`}
+                  </div>
+                )}
+                <span className="text-[9.5px] text-slate-400 block">클릭 시 적용</span>
               </div>
             </div>
           );

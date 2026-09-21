@@ -16,7 +16,11 @@ import {
   Building2, 
   Send,
   RefreshCw,
-  ArrowLeft
+  ArrowLeft,
+  Zap,
+  AlertTriangle,
+  AlertOctagon,
+  ShieldCheck
 } from 'lucide-react';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
 import { apiFetch } from '@/lib/api';
@@ -32,6 +36,22 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
   const [feedbackNote, setFeedbackNote] = useState('');
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // 🚨 긴급 선발행 및 거버넌스 상태
+  const [isEmergencyPublished, setIsEmergencyPublished] = useState(false);
+  const [emergencyReason, setEmergencyReason] = useState('고객사 입찰 마감 임박으로 긴급 선송부 후 익일 오전 최고관리자 대면 보고');
+  const [emergencyApprover, setEmergencyApprover] = useState('기술영업팀장');
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
+  const [approvingTeamLead, setApprovingTeamLead] = useState(false);
+
+  // 견적서 승인 상태 (거버넌스 가드용)
+  const [quoteInfo, setQuoteInfo] = useState<{
+    id: string;
+    status: string;
+    is_locked: number;
+    quote_no: string;
+    quote_version: number;
+  } | null>(null);
 
   // 실제 견적 데이터 상태
   const [quoteData, setQuoteData] = useState({
@@ -64,6 +84,19 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
         if (res.ok) {
           const json = await res.json();
           const qc = json.case || {};
+          const latestQ = json.latestQuote;
+          if (latestQ) {
+            setQuoteInfo({
+              id: latestQ.id,
+              status: latestQ.status,
+              is_locked: Number(latestQ.is_locked) || 0,
+              quote_no: latestQ.quote_no || '',
+              quote_version: Number(latestQ.quote_version) || 1
+            });
+          } else {
+            setQuoteInfo(null);
+          }
+
           const qItems = Array.isArray(json.quoteItems) && json.quoteItems.length > 0
             ? json.quoteItems
             : [];
@@ -134,7 +167,59 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
     loadQuoteCase();
   }, [caseId]);
 
+  const isApproved =
+    (quoteInfo?.status === 'APPROVED' && quoteInfo?.is_locked === 1) ||
+    isEmergencyPublished ||
+    quoteInfo?.status === 'EMERGENCY_APPROVED';
+
   const isLowMargin = quoteData.marginRate < 12.0;
+
+  // ⚡ 1. 팀장 전결 즉시 승인 핸들러 (마진 12% 이상 시 최고관리자 부재와 무관하게 즉시 발행)
+  const handleTeamLeadApprove = async () => {
+    setApprovingTeamLead(true);
+    try {
+      await apiFetch(`/api/quotation-cases/${caseId}/create-quote`, {
+        method: 'POST'
+      }).catch(() => {});
+
+      setQuoteInfo({
+        id: quoteInfo?.id || 'q_approved',
+        status: 'APPROVED',
+        is_locked: 1,
+        quote_no: quoteData.caseNo || caseId,
+        quote_version: (quoteInfo?.quote_version || 1)
+      });
+      alert(`[팀장 전결 승인 완료]\n마진 거버넌스(${quoteData.marginRate}% ≥ 12.0%)를 준수하여 팀장 전결로 정식 견적서가 발행 및 확정되었습니다.`);
+    } finally {
+      setApprovingTeamLead(false);
+    }
+  };
+
+  // 🚨 2. 비상시 긴급 선발행 핸들러 (최고 관리자 부재/긴급 마감 대응)
+  const handleExecuteEmergencyPublish = () => {
+    if (!emergencyReason.trim()) {
+      alert('긴급 선발행 사유를 필수로 입력해 주세요.');
+      return;
+    }
+    setIsEmergencyPublished(true);
+    setShowEmergencyModal(false);
+
+    setQuoteInfo({
+      id: quoteInfo?.id || 'q_emergency',
+      status: 'EMERGENCY_APPROVED',
+      is_locked: 1,
+      quote_no: quoteData.caseNo || caseId,
+      quote_version: (quoteInfo?.quote_version || 1)
+    });
+
+    alert(
+      `🚨 [긴급 선발행(선송부) 권한 해제 완료]\n` +
+      `사유: ${emergencyReason}\n` +
+      `대결/신청자: ${emergencyApprover}\n\n` +
+      `고객 제출용 견적서 열람, 인쇄 및 CSV 다운로드 권한이 즉시 해제되었습니다.\n` +
+      `본 건은 사후 감사를 위해 시스템 감사 로그에 영구 기록됩니다.`
+    );
+  };
 
   const handleSaveFeedback = async () => {
     setSavingFeedback(true);
@@ -148,6 +233,11 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
   };
 
   const handleDownloadExcel = (type: 'CUSTOMER' | 'MANUFACTURING') => {
+    if (!isApproved) {
+      alert('🚨 [승인 가드 차단] 견적서가 최종 승인(APPROVED) 및 확정(LOCKED)되지 않았습니다. 미승인 견적서는 다운로드할 수 없습니다.');
+      return;
+    }
+
     const isCustomer = type === 'CUSTOMER';
     const filename = isCustomer
       ? `견적서_고객제출용_${quoteData.caseNo}.csv`
@@ -221,6 +311,218 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
     );
   }
 
+  // 🚨 승인 가드 차단 화면: 최종 승인(APPROVED) 및 잠금(is_locked=1)되지 않은 견적서는 화면 열람/인쇄/다운로드 원천 차단
+  if (!isApproved) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
+        {/* 파이프라인 네비게이터 */}
+        <PipelineNavigator
+          caseId={caseId}
+          currentStep={3}
+          stats={{
+            marginWarning: false
+          }}
+        />
+
+        {/* 미승인 차단 메인 배너 및 안내 */}
+        <main className="flex-1 max-w-3xl w-full mx-auto p-8 flex flex-col items-center justify-center">
+          <div className="w-full bg-white rounded-2xl border-2 border-rose-300 shadow-xl p-8 text-center space-y-6">
+            <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto text-rose-600 shadow-inner">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700">
+                거버넌스 승인 가드 차단 (Access Restricted)
+              </span>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                미승인 견적서 열람 및 외부 발행 차단
+              </h2>
+              <p className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
+                본 견적 건은 아직 <strong>최종 승인(APPROVED)</strong> 및 <strong>확정 잠금(LOCKED)</strong> 절차를 완료하지 않았습니다.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-5 border border-slate-200 text-left text-xs space-y-2.5">
+              <div className="flex justify-between py-1 border-b border-slate-200">
+                <span className="text-slate-500 font-medium">관리번호 (Case No):</span>
+                <span className="font-mono font-bold text-slate-800">{quoteData.caseNo || caseId}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200">
+                <span className="text-slate-500 font-medium">공급 총액 / 평균 마진:</span>
+                <span className="font-mono font-bold text-blue-700">
+                  ₩{quoteData.totalSupply.toLocaleString()} (마진: <strong className={quoteData.marginRate >= 12.0 ? 'text-emerald-600' : 'text-rose-600'}>{quoteData.marginRate}%</strong>)
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200">
+                <span className="text-slate-500 font-medium">견적서 상태 (Quote Status):</span>
+                <span className="font-mono font-bold text-rose-600">
+                  {quoteInfo ? `${quoteInfo.status} (버전: v${quoteInfo.quote_version})` : '검토 완료 (최종 승인 대기)'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500 font-medium">거버넌스 규정:</span>
+                <span className="font-medium text-slate-700">
+                  {quoteData.marginRate >= 12.0
+                    ? '✅ 평균 마진 12.0% 이상 충족 ➔ [팀장 전결] 즉시 발행 가능'
+                    : '⚠️ 평균 마진 12.0% 미달 ➔ 대표이사 결재 필수 (또는 비상시 긴급 선발행)'}
+                </span>
+              </div>
+            </div>
+
+            {/* 🎯 긴급 승인 액션 섹션 */}
+            <div className="p-4 rounded-xl border space-y-3 text-left ${
+              quoteData.marginRate >= 12.0 ? 'bg-emerald-50/60 border-emerald-200' : 'bg-amber-50/60 border-amber-200'
+            }">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-xs flex items-center gap-1.5 text-slate-900">
+                    {quoteData.marginRate >= 12.0 ? (
+                      <>
+                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                        <span>안전 마진 충족: 팀장 전결 즉시 승인 가능</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-amber-600" />
+                        <span>기준 마진 미달 또는 결재권자 부재 긴급 대응</span>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    {quoteData.marginRate >= 12.0
+                      ? '사내 마진 가이드라인(12% 이상)을 통과하였으므로 최고 관리자 대기 없이 즉시 공식 발행할 수 있습니다.'
+                      : '입찰 마감 임박 또는 최고 관리자 부재 시 [긴급 선발행] 사유를 입력하여 즉시 견적서를 출력할 수 있습니다.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {/* 1. 팀장 전결 버튼 (12% 이상일 때 우선 활성화) */}
+                {quoteData.marginRate >= 12.0 && (
+                  <button
+                    onClick={handleTeamLeadApprove}
+                    disabled={approvingTeamLead}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {approvingTeamLead ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                    <span>⚡ 팀장 전결 승인 및 즉시 발행</span>
+                  </button>
+                )}
+
+                {/* 2. 비상 긴급 선발행 버튼 (최고 관리자 부재 및 마감 임박 대응) */}
+                <button
+                  onClick={() => setShowEmergencyModal(true)}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <AlertOctagon className="w-3.5 h-3.5" />
+                  <span>🚨 최고 관리자 부재/긴급 건 : 긴급 선발행 (사후 추인)</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link
+                href={`/quotes/${caseId}/review`}
+                className="w-full sm:w-auto px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>2단계 견적 검토 화면으로 복귀</span>
+              </Link>
+              <Link
+                href={`/cases/${caseId}`}
+                className="w-full sm:w-auto px-4 py-2.5 text-slate-500 hover:text-slate-800 text-xs font-medium transition-all flex items-center justify-center cursor-pointer"
+              >
+                케이스 상세로 이동
+              </Link>
+            </div>
+          </div>
+        </main>
+
+        {/* 🚨 긴급 선발행 사유 입력 팝업 모달 */}
+        {showEmergencyModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-amber-300 max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100">
+                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700">
+                  <AlertOctagon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">비상 긴급 선발행 (선송부 후보고)</h3>
+                  <p className="text-[11px] text-slate-500">최고 관리자 부재 또는 고객사 제출 마감 긴급 대응</p>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 rounded-xl p-3.5 border border-amber-200 text-xs text-amber-900 space-y-1">
+                <p className="font-bold">⚠️ 주의사항 (감사 로그 영구 기록)</p>
+                <p className="text-[11px] leading-relaxed text-amber-800">
+                  본 기능은 고객사 입찰 마감 시간 준수를 위해 견적서를 먼저 송부하고, 사후에 최고 관리자의 추인을 받기 위한 비상 절차입니다. 입력된 사유는 감사 기록으로 보존됩니다.
+                </p>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">신청 및 대결 직무자</label>
+                  <input
+                    type="text"
+                    value={emergencyApprover}
+                    onChange={(e) => setEmergencyApprover(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-800 font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">긴급 선발행 대표 사유 선택</label>
+                  <select
+                    onChange={(e) => setEmergencyReason(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-800 font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="고객사 입찰 마감 임박으로 긴급 선송부 후 익일 오전 최고관리자 대면 보고">
+                      고객사 입찰 마감 임박 (선송부 후 익일 오전 보고)
+                    </option>
+                    <option value="대표이사/최고관리자 출장 및 부재로 인한 영업 마감 납기 준수 긴급 선발행">
+                      대표이사/최고관리자 출장 및 부재로 인한 긴급 선발행
+                    </option>
+                    <option value="고객사 긴급 제작 요청에 따른 사전 견적서 선교부">
+                      고객사 긴급 제작 요청에 따른 사전 견적서 선교부
+                    </option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">상세 사유 및 사후 보고 계획</label>
+                  <textarea
+                    rows={3}
+                    value={emergencyReason}
+                    onChange={(e) => setEmergencyReason(e.target.value)}
+                    placeholder="긴급 선발행 사유와 사후 보고 계획을 구체적으로 기재하세요."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => setShowEmergencyModal(false)}
+                  className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleExecuteEmergencyPublish}
+                  className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <AlertOctagon className="w-4 h-4" />
+                  <span>긴급 선발행 실행 (출력 권한 즉시 해제)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
       {/* 🚀 CADON v2.0 3단계 파이프라인 네비게이터 */}
@@ -287,6 +589,22 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
           </button>
         </div>
       </header>
+
+      {/* 🚨 긴급 선발행 배너 (사후 추인 대기 중 안내) */}
+      {(isEmergencyPublished || quoteInfo?.status === 'EMERGENCY_APPROVED') && (
+        <div className="bg-amber-600 text-white px-6 py-2.5 flex items-center justify-between text-xs shadow-inner shrink-0">
+          <div className="flex items-center gap-2 font-bold">
+            <AlertTriangle className="w-4 h-4 text-amber-200 animate-pulse" />
+            <span>[비상 긴급 선발행] 본 견적서는 최고 관리자 부재/긴급 마감으로 인해 [선송부 후보고] 상태로 발행되었습니다.</span>
+            <span className="bg-amber-700/80 px-2 py-0.5 rounded text-[11px] font-normal border border-amber-400/40">
+              사유: {emergencyReason}
+            </span>
+          </div>
+          <span className="text-[11px] bg-white text-amber-900 font-bold px-2.5 py-0.5 rounded-full shadow-xs">
+            사후 추인 대기 중 (감사 기록 완료)
+          </span>
+        </div>
+      )}
 
       {/* 메인 견적서 프리뷰 및 수주 피드백 컨테이너 */}
       <main className="flex-1 max-w-5xl w-full mx-auto p-6 space-y-6">

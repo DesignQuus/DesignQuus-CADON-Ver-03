@@ -8,7 +8,8 @@ import {
   ArrowLeft, Send, CheckCircle2, RefreshCw, FileText, AlertTriangle, AlertCircle,
   ExternalLink, ChevronDown, ChevronUp, Sparkles, Layers, Zap, Database
 } from 'lucide-react';
-import QuoteLineGrid, { QuoteReviewLine } from '@/components/review/QuoteLineGrid';
+import QuoteLineGrid, { QuoteReviewLine, InclusionType } from '@/components/review/QuoteLineGrid';
+import SmartBatchActionBar from '@/components/review/SmartBatchActionBar';
 import CostBreakdownPanel from '@/components/review/CostBreakdownPanel';
 import MasterRecommendationCard, { RecommendationItem } from '@/components/review/MasterRecommendationCard';
 import MasterPriceReferenceDrawer from '@/components/review/MasterPriceReferenceDrawer';
@@ -26,6 +27,95 @@ import {
   PartType
 } from '@/lib/cost-engine-v2';
 
+// 📊 4대 항목 가중 평균(Weighted Average) 유사도 산출 헬퍼
+// 품명/도번 40% + 재질 30% + 치수 20% + 공정 10%
+export function computeMasterSimilarity(
+  partNoStr: string,
+  partNameStr: string,
+  materialStr: string,
+  specStr: string,
+  partTypeStr: string,
+  pm: any
+) {
+  const cleanLineName = (partNameStr || '').trim().toUpperCase();
+  const cleanLineNo = (partNoStr || '').trim().toUpperCase();
+  const cleanMasterName = (pm.standard_name || '').trim().toUpperCase();
+  const cleanMasterCode = (pm.master_code || '').trim().toUpperCase();
+
+  // 1. 품명/도번 일치율 (가중치 40%)
+  let nameScore = 50;
+  if (cleanMasterName === cleanLineName || cleanMasterCode === cleanLineNo) {
+    nameScore = 100;
+  } else if (cleanMasterName === cleanLineNo || cleanMasterCode === cleanLineName) {
+    nameScore = 95;
+  } else if (cleanMasterName.replace(/\s+/g, '') === cleanLineName.replace(/\s+/g, '')) {
+    nameScore = 98;
+  } else if (cleanLineName.includes(cleanMasterName) || cleanMasterName.includes(cleanLineName)) {
+    nameScore = 85;
+  }
+
+  // 2. 재질 일치율 (가중치 30%)
+  const lineMat = (materialStr || '').trim().toUpperCase().replace(/\s+/g, '');
+  const masterMat = (pm.material || '').trim().toUpperCase().replace(/\s+/g, '');
+  let matScore = 70;
+  if (!lineMat || !masterMat) {
+    matScore = 80;
+  } else if (lineMat === masterMat) {
+    matScore = 100;
+  } else if (
+    (lineMat.includes('SS41') && masterMat.includes('SS400')) ||
+    (lineMat.includes('SS400') && masterMat.includes('SS41')) ||
+    (lineMat.includes('S45C') && masterMat.includes('SM45C'))
+  ) {
+    matScore = 95;
+  } else if (lineMat.includes(masterMat) || masterMat.includes(lineMat)) {
+    matScore = 85;
+  } else {
+    matScore = 30;
+  }
+
+  // 3. 치수/규격 일치율 (가중치 20%)
+  const lineSpec = (specStr || '').trim().toUpperCase().replace(/\s+/g, '');
+  const masterSpec = (pm.specification || '').trim().toUpperCase().replace(/\s+/g, '');
+  let specScore = 75;
+  if (!lineSpec || lineSpec === '-' || !masterSpec || masterSpec === '-') {
+    specScore = 85;
+  } else if (lineSpec === masterSpec) {
+    specScore = 100;
+  } else {
+    const lineNums = lineSpec.match(/\d+(\.\d+)?/g) || [];
+    const masterNums = masterSpec.match(/\d+(\.\d+)?/g) || [];
+    if (lineNums.length > 0 && masterNums.length > 0) {
+      const matchCount = lineNums.filter(n => masterNums.includes(n)).length;
+      specScore = Math.max(40, Math.round((matchCount / Math.max(lineNums.length, masterNums.length)) * 100));
+    }
+  }
+
+  // 4. 공정 일치율 (가중치 10%)
+  const lineCat = partTypeStr || 'MACHINING';
+  const masterCat = pm.category || 'MACHINING';
+  let procScore = (lineCat === masterCat) ? 100 : 60;
+
+  // 가중 평균 최종 일치도 (40% + 30% + 20% + 10%)
+  const totalScore = Math.round(
+    nameScore * 0.40 +
+    matScore * 0.30 +
+    specScore * 0.20 +
+    procScore * 0.10
+  );
+
+  return {
+    totalScore,
+    nameMatchPct: nameScore,
+    materialMatchPct: matScore,
+    specMatchPct: specScore,
+    processMatchPct: procScore,
+    matchedMasterName: pm.standard_name,
+    matchedMasterCode: pm.master_code,
+    matchedUnitPrice: Number(pm.unit_price) || 0
+  };
+}
+
 export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: caseId } = use(params);
   const router = useRouter();
@@ -34,6 +124,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const [caseInfo, setCaseInfo] = useState<any>(null);
   const [lines, setLines] = useState<QuoteReviewLine[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterType, setFilterType] = useState<string>('ALL');
   const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
   const [isMasterDrawerOpen, setIsMasterDrawerOpen] = useState<boolean>(false);
@@ -57,7 +148,44 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     async function loadData() {
       setLoading(true);
       try {
-        const res = await apiFetch(`/api/quotation-cases/${caseId}`);
+        // 케이스 데이터와 사내 마스터 확정 단가표를 병렬 조회
+        const [res, mastersRes] = await Promise.all([
+          apiFetch(`/api/quotation-cases/${caseId}`),
+          apiFetch('/api/admin/masters?type=products&onlyPriced=true')
+        ]);
+
+        let pricedMasters: any[] = [];
+        if (mastersRes.ok) {
+          try {
+            const mastersJson = await mastersRes.json();
+            pricedMasters = mastersJson.items || [];
+          } catch (e) {}
+        }
+
+
+
+        // 🔍 마스터 단가 대조 헬퍼 (품명 또는 도번 일치 및 공백 제거 일치 지원)
+        const matchMasterPrice = (partNoStr: string, partNameStr: string) => {
+          const pNo = (partNoStr || '').trim().toUpperCase();
+          const pName = (partNameStr || '').trim().toUpperCase();
+          const pNoCompact = pNo.replace(/\s+/g, '');
+          const pNameCompact = pName.replace(/\s+/g, '');
+
+          return pricedMasters.find((pm: any) => {
+            const pmCode = (pm.master_code || '').trim().toUpperCase();
+            const pmName = (pm.standard_name || '').trim().toUpperCase();
+            const pmCodeCompact = pmCode.replace(/\s+/g, '');
+            const pmNameCompact = pmName.replace(/\s+/g, '');
+
+            if (!pm.unit_price || Number(pm.unit_price) <= 0) return false;
+
+            return (
+              (pmCode && (pmCode === pNo || pmCode === pName || pmCodeCompact === pNoCompact || pmCodeCompact === pNameCompact)) ||
+              (pmName && (pmName === pName || pmName === pNo || pmNameCompact === pNameCompact || pmNameCompact === pNoCompact))
+            );
+          });
+        };
+
         if (res.ok) {
           const json = await res.json();
           setCaseInfo(json.case);
@@ -70,15 +198,15 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
           // 1. 실제 견적서 품목(quoteItems)이 이미 생성되어 있는 경우
           if (Array.isArray(json.quoteItems) && json.quoteItems.length > 0) {
+            const autoSyncItems: Array<{ id: string; partNo: string; price: number; cost: number; qty: number }> = [];
+
             setLines(
               json.quoteItems.map((qi: any, idx: number) => {
-                const hasPrice = Number(qi.unit_price) > 0;
                 const specLower = (qi.specification || '').toLowerCase();
                 const matLower = (qi.material || '').toLowerCase();
                 const nameLower = (qi.item_name || '').toLowerCase();
                 const isAssembly = qi.drawing_type === 'MAIN_ASSEMBLY' || qi.drawing_type === 'SUB_ASSEMBLY' ||
                                    nameLower.includes('조립') || nameLower.includes('assembly') || nameLower.includes('line');
-                const isConfirmed = isAssembly || (hasPrice && qi.is_included !== 0);
 
                 // 6대 실무 부품 유형 자동 분류
                 let partType: PartType = 'MACHINING';
@@ -109,10 +237,61 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType = 'CASTING';
                 }
 
-                const supplyPrice = Number(qi.unit_price) || 0;
-                const unitCost = Math.round(supplyPrice * 0.82);
+                let supplyPrice = Number(qi.unit_price) || 0;
+                let unitCost = Math.round(supplyPrice * 0.82);
+                let priceSource = qi.price_source;
+                let priceStatus = qi.price_status;
+                let isMatchedFromMaster = false;
+                let similarityBreakdown = undefined;
 
-                const isIncluded = !isAssembly && qi.is_included !== 0;
+                // 💡 마스터 단가 대조 및 유사도 산출
+                if (!isAssembly) {
+                  const matched = matchMasterPrice(qi.drawing_no || qi.master_code, qi.item_name);
+                  if (matched && Number(matched.unit_price) > 0) {
+                    similarityBreakdown = computeMasterSimilarity(
+                      qi.drawing_no || qi.master_code,
+                      qi.item_name,
+                      qi.material,
+                      qi.specification,
+                      partType,
+                      matched
+                    );
+
+                    // 단가가 0원이면 마스터 단가로 자동 채우기 및 동기화
+                    if (supplyPrice === 0) {
+                      supplyPrice = Number(matched.unit_price);
+                      unitCost = Math.round(supplyPrice * 0.82);
+                      priceSource = 'MASTER_MATCH';
+                      priceStatus = 'READY';
+                      isMatchedFromMaster = true;
+                      autoSyncItems.push({
+                        id: qi.id,
+                        partNo: qi.drawing_no || qi.master_code || `PART-${idx + 1}`,
+                        price: supplyPrice,
+                        cost: unitCost,
+                        qty: Number(qi.quantity) || 1
+                      });
+                    }
+                  }
+                }
+
+                const hasPrice = supplyPrice > 0;
+                let inclusionType: InclusionType = 'INCLUDED';
+                if (isAssembly) {
+                  inclusionType = 'EXCLUDED';
+                } else if (qi.remark?.includes('[CUSTOMER_SUPPLIED]')) {
+                  inclusionType = 'CUSTOMER_SUPPLIED';
+                } else if (qi.remark?.includes('[FASTENER_EXCLUDED]')) {
+                  inclusionType = 'FASTENER_EXCLUDED';
+                } else if (qi.is_included === 0 || qi.remark?.includes('[EXCLUDED]')) {
+                  inclusionType = 'EXCLUDED';
+                } else if (partType === 'COMMERCIAL' && supplyPrice === 0) {
+                  // 표준 체결구(볼트/너트/와셔)이고 단가 미확보 품목은 지능형 체결구 제외 기본 부여
+                  inclusionType = 'FASTENER_EXCLUDED';
+                }
+
+                const isIncluded = !isAssembly && inclusionType === 'INCLUDED';
+                const isConfirmed = isAssembly || inclusionType !== 'INCLUDED' || (hasPrice && isIncluded);
                 const structured = parseRemark(qi.remark);
 
                 return {
@@ -123,26 +302,54 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType: partType,
                   material: qi.material || 'SS400',
                   quantity: Number(qi.quantity) || 1,
-                  unitCost: isAssembly ? 0 : unitCost,
-                  supplyPrice: isAssembly ? 0 : supplyPrice,
-                  status: isAssembly ? 'CONFIRMED' : (qi.price_status === 'NEEDS_REVIEW' || qi.price_source === 'ENGINEERING_COST' ? 'NEEDS_REVIEW' : (hasPrice && isIncluded ? 'CONFIRMED' : 'NEEDS_REVIEW')),
+                  unitCost: isAssembly || inclusionType !== 'INCLUDED' ? 0 : unitCost,
+                  supplyPrice: isAssembly || inclusionType !== 'INCLUDED' ? 0 : supplyPrice,
+                  status: isAssembly || inclusionType !== 'INCLUDED' ? 'CONFIRMED' : (isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW'),
                   balloonNo: String(qi.item_no || idx + 1),
                   memo: structured.text,
                   specification: qi.specification || '',
                   isAssembly,
                   isIncluded,
-                  excludeReason: isAssembly ? '조립도 (가공품 제외)' : (isIncluded ? undefined : '견적 제외'),
+                  inclusionType,
+                  excludeReason: isAssembly
+                    ? '조립도 (가공품 제외)'
+                    : inclusionType === 'FASTENER_EXCLUDED'
+                    ? '표준 체결구 제외'
+                    : inclusionType === 'CUSTOMER_SUPPLIED'
+                    ? '고객 사급품'
+                    : (isIncluded ? undefined : '견적 제외'),
                   extraCost1Name: structured.extraCosts[0]?.name,
                   extraCost1Amount: structured.extraCosts[0]?.amount,
                   extraCost2Name: structured.extraCosts[1]?.name,
                   extraCost2Amount: structured.extraCosts[1]?.amount,
                   extraCost3Name: structured.extraCosts[2]?.name,
                   extraCost3Amount: structured.extraCosts[2]?.amount,
-                  priceSource: qi.price_source,
-                  priceStatus: qi.price_status
+                  priceSource: priceSource,
+                  priceStatus: priceStatus,
+                  similarityBreakdown: similarityBreakdown
                 };
               })
             );
+
+            // 마스터 단가 자동 매칭된 품목들은 백엔드 DB에도 즉시 영구 저장(동기화)
+            if (autoSyncItems.length > 0) {
+              autoSyncItems.forEach((item) => {
+                apiFetch(`/api/quotes/${caseId}/confirm-line`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    lineId: item.id,
+                    partKey: `PARTNER_A:${item.partNo}:B`,
+                    isConfirmed: true,
+                    unitPrice: item.price,
+                    unitCost: item.cost,
+                    qtyTier: item.qty <= 9 ? '1~9' : item.qty <= 99 ? '10~99' : '100~',
+                    lotQuantity: item.qty,
+                    remark: '[MASTER_MATCH] 사내 마스터 단가 자동 매칭 및 확정'
+                  })
+                }).catch((err) => console.warn('Auto sync master line error:', err));
+              });
+            }
           } else if (Array.isArray(json.normalizedItems) && json.normalizedItems.length > 0) {
             // 2. 견적서 생성 전 정규화 BOM 항목(normalizedItems)이 있는 경우
             const isCaseReady = json.case?.quote_readiness === 'READY_FOR_QUOTE';
@@ -184,10 +391,32 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType = 'CASTING';
                 }
 
-                // 하드코딩 Fallback 단가 전면 제거: 단가 미확보 품목은 0원 및 NEEDS_REVIEW 처리
-                const unitCost = 0;
-                const supplyPrice = 0;
-                const isIncluded = !isAssembly && it.is_quote_included !== 0;
+                let unitCost = 0;
+                let supplyPrice = 0;
+                let priceSource: string | undefined = undefined;
+                let masterPrice: number | undefined = undefined;
+
+                // 💡 마스터 단가 자동 매칭 시도
+                if (!isAssembly) {
+                  const matched = matchMasterPrice(it.spec_candidate || it.drawing_no, it.normalized_name || it.raw_name);
+                  if (matched && Number(matched.unit_price) > 0) {
+                    supplyPrice = Number(matched.unit_price);
+                    unitCost = Math.round(supplyPrice * 0.82);
+                    priceSource = 'MASTER_MATCH';
+                    masterPrice = supplyPrice;
+                  }
+                }
+
+                let inclusionType: InclusionType = 'INCLUDED';
+                if (isAssembly) {
+                  inclusionType = 'EXCLUDED';
+                } else if (it.is_quote_included === 0) {
+                  inclusionType = 'EXCLUDED';
+                } else if (partType === 'COMMERCIAL' && supplyPrice === 0) {
+                  inclusionType = 'FASTENER_EXCLUDED';
+                }
+
+                const isIncluded = !isAssembly && inclusionType === 'INCLUDED';
 
                 return {
                   id: it.id,
@@ -197,14 +426,23 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType: partType,
                   material: it.material_candidate || it.drawing_material || 'SS400',
                   quantity: Number(it.quantity) || 1,
-                  unitCost,
-                  supplyPrice,
-                  status: isAssembly ? 'CONFIRMED' : 'NEEDS_REVIEW',
+                  unitCost: isAssembly || inclusionType !== 'INCLUDED' ? 0 : unitCost,
+                  supplyPrice: isAssembly || inclusionType !== 'INCLUDED' ? 0 : supplyPrice,
+                  status: isAssembly || inclusionType !== 'INCLUDED' || supplyPrice > 0 ? 'CONFIRMED' : 'NEEDS_REVIEW',
                   balloonNo: String(idx + 1),
                   specification: it.specification || it.spec_candidate || '',
                   isAssembly,
                   isIncluded,
-                  excludeReason: isAssembly ? '조립도 (가공품 제외)' : (isIncluded ? undefined : '견적 제외')
+                  inclusionType,
+                  excludeReason: isAssembly
+                    ? '조립도 (가공품 제외)'
+                    : inclusionType === 'FASTENER_EXCLUDED'
+                    ? '표준 체결구 제외'
+                    : (inclusionType as string) === 'CUSTOMER_SUPPLIED'
+                    ? '고객 사급품'
+                    : (isIncluded ? undefined : '견적 제외'),
+                  priceSource,
+                  masterPrice
                 };
               })
             );
@@ -241,7 +479,16 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                 // 하드코딩 Fallback 단가 전면 제거: 단가 미확보 품목은 0원 처리
                 const unitCost = 0;
                 const supplyPrice = 0;
-                const isIncluded = !isAssembly && d.is_quote_included !== 0;
+                let inclusionType: InclusionType = 'INCLUDED';
+                if (isAssembly) {
+                  inclusionType = 'EXCLUDED';
+                } else if (d.is_quote_included === 0) {
+                  inclusionType = 'EXCLUDED';
+                } else if (partType === 'COMMERCIAL') {
+                  inclusionType = 'FASTENER_EXCLUDED';
+                }
+
+                const isIncluded = !isAssembly && inclusionType === 'INCLUDED';
 
                 return {
                   id: d.id || `dwg_${idx + 1}`,
@@ -251,15 +498,22 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType: partType,
                   material: d.material || 'SS400',
                   quantity: 1,
-                  unitCost,
-                  supplyPrice,
-                  engineSuggestedPrice: supplyPrice > 0 ? supplyPrice : undefined,
-                  status: isAssembly ? 'CONFIRMED' : 'NEEDS_REVIEW',
+                  unitCost: isAssembly || inclusionType !== 'INCLUDED' ? 0 : unitCost,
+                  supplyPrice: isAssembly || inclusionType !== 'INCLUDED' ? 0 : supplyPrice,
+                  engineSuggestedPrice: undefined,
+                  status: isAssembly || inclusionType !== 'INCLUDED' ? ('CONFIRMED' as const) : ('NEEDS_REVIEW' as const),
                   balloonNo: String(idx + 1),
                   specification: d.scale || '',
                   isAssembly,
                   isIncluded,
-                  excludeReason: isAssembly ? '조립도 (가공품 제외)' : (isIncluded ? undefined : '견적 제외')
+                  inclusionType,
+                  excludeReason: isAssembly
+                    ? '조립도 (가공품 제외)'
+                    : inclusionType === 'FASTENER_EXCLUDED'
+                    ? '표준 체결구 제외'
+                    : (inclusionType as string) === 'CUSTOMER_SUPPLIED'
+                    ? '고객 사급품'
+                    : (isIncluded ? undefined : '견적 제외')
                 };
               })
             );
@@ -456,6 +710,278 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const handleUpdateSelected = (updated: Partial<QuoteReviewLine>) => {
     if (!selectedLine) return;
     handleUpdateLinePrice(selectedLine.id, updated);
+  };
+
+  // 🎯 다중 선택 체크 토글
+  const handleToggleSelectId = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  // 🎯 필터링된 전체 선택/해제
+  const handleSelectAll = (selectAll: boolean) => {
+    if (selectAll) {
+      const targetIds = lines
+        .filter((l) => {
+          const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+          if (filterType === 'ALL') return !l.isAssembly && inc !== 'EXCLUDED' && inc !== 'FASTENER_EXCLUDED';
+          if (filterType === 'NEEDS_REVIEW') return !l.isAssembly && inc === 'INCLUDED' && l.status === 'NEEDS_REVIEW';
+          if (filterType === 'UNCONFIRMED') return !l.isAssembly && inc === 'INCLUDED' && l.status !== 'CONFIRMED';
+          if (filterType === 'SUPPLIED') return inc === 'CUSTOMER_SUPPLIED';
+          if (filterType === 'EXCLUDED') return l.isAssembly || inc === 'EXCLUDED' || inc === 'FASTENER_EXCLUDED';
+          return true;
+        })
+        .map((l) => l.id);
+      setSelectedIds(targetIds);
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  // 🏷️ 단일 행 inclusionType 업데이트
+  const handleUpdateLineInclusion = async (lineId: string, inclusionType: InclusionType) => {
+    const isExcluded = inclusionType === 'EXCLUDED' || inclusionType === 'FASTENER_EXCLUDED';
+    const isSupplied = inclusionType === 'CUSTOMER_SUPPLIED';
+    const isNowConfirmed = inclusionType !== 'INCLUDED';
+
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.id !== lineId) return l;
+        return {
+          ...l,
+          inclusionType,
+          isIncluded: !isExcluded,
+          status: isNowConfirmed ? 'CONFIRMED' : (l.supplyPrice > 0 ? 'CONFIRMED' : 'NEEDS_REVIEW'),
+          unitCost: isExcluded || isSupplied ? 0 : l.unitCost,
+          supplyPrice: isExcluded || isSupplied ? 0 : l.supplyPrice,
+          excludeReason: inclusionType === 'FASTENER_EXCLUDED'
+            ? '표준 체결구 제외'
+            : isSupplied
+            ? '고객 사급품'
+            : isExcluded
+            ? '견적 제외'
+            : undefined
+        };
+      })
+    );
+
+    try {
+      const tag = inclusionType === 'FASTENER_EXCLUDED' ? '[FASTENER_EXCLUDED]' :
+                  inclusionType === 'CUSTOMER_SUPPLIED' ? '[CUSTOMER_SUPPLIED]' :
+                  inclusionType === 'EXCLUDED' ? '[EXCLUDED]' : '[INCLUDED]';
+      await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lineId,
+          isConfirmed: isNowConfirmed,
+          unitPrice: isExcluded || isSupplied ? 0 : undefined,
+          unitCost: isExcluded || isSupplied ? 0 : undefined,
+          remark: tag
+        })
+      });
+    } catch (e) {
+      console.warn('Sync inclusion update error:', e);
+    }
+  };
+
+  // 🚀 다중 행 inclusionType 일괄 업데이트
+  const handleBatchUpdateInclusion = async (lineIds: string[], inclusionType: InclusionType) => {
+    const isExcluded = inclusionType === 'EXCLUDED' || inclusionType === 'FASTENER_EXCLUDED';
+    const isSupplied = inclusionType === 'CUSTOMER_SUPPLIED';
+
+    setLines((prev) =>
+      prev.map((l) => {
+        if (!lineIds.includes(l.id)) return l;
+        return {
+          ...l,
+          inclusionType,
+          isIncluded: !isExcluded,
+          status: 'CONFIRMED' as const,
+          unitCost: isExcluded || isSupplied ? 0 : l.unitCost,
+          supplyPrice: isExcluded || isSupplied ? 0 : l.supplyPrice,
+          excludeReason: inclusionType === 'FASTENER_EXCLUDED'
+            ? '표준 체결구 제외'
+            : isSupplied
+            ? '고객 사급품'
+            : isExcluded
+            ? '견적 제외'
+            : undefined
+        };
+      })
+    );
+
+    setSelectedIds([]);
+
+    const tag = inclusionType === 'FASTENER_EXCLUDED' ? '[FASTENER_EXCLUDED]' :
+                inclusionType === 'CUSTOMER_SUPPLIED' ? '[CUSTOMER_SUPPLIED]' :
+                inclusionType === 'EXCLUDED' ? '[EXCLUDED]' : '[INCLUDED]';
+
+    Promise.all(
+      lineIds.map((id) =>
+        apiFetch(`/api/quotes/${caseId}/confirm-line`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lineId: id,
+            isConfirmed: true,
+            unitPrice: 0,
+            unitCost: 0,
+            remark: tag
+          })
+        }).catch((err) => console.warn('Batch sync err:', err))
+      )
+    );
+  };
+
+  // 🔩 표준 체결구 일괄 제외 핸들러
+  const handleBatchFastenerExclude = (lineIds: string[]) => {
+    handleBatchUpdateInclusion(lineIds, 'FASTENER_EXCLUDED');
+  };
+
+  // 📦 잔여 0원 품목 일괄 사급품 지정 핸들러
+  const handleBatchSupplyConvert = (lineIds: string[]) => {
+    handleBatchUpdateInclusion(lineIds, 'CUSTOMER_SUPPLIED');
+  };
+
+  // ⭐ 고신뢰(90%↑) 마스터 일괄 확정 핸들러
+  const handleBatchMasterConfirm = async (
+    items: Array<{ id: string; price: number; cost: number; similarity: any }>
+  ) => {
+    const idMap = new Map(items.map((it) => [it.id, it]));
+
+    setLines((prev) =>
+      prev.map((l) => {
+        const matched = idMap.get(l.id);
+        if (!matched) return l;
+        return {
+          ...l,
+          supplyPrice: matched.price,
+          unitCost: matched.cost,
+          status: 'CONFIRMED' as const,
+          priceSource: 'MASTER_MATCH',
+          similarityBreakdown: matched.similarity,
+          masterPrice: matched.price
+        };
+      })
+    );
+
+    Promise.all(
+      items.map((it) =>
+        apiFetch(`/api/quotes/${caseId}/confirm-line`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lineId: it.id,
+            isConfirmed: true,
+            unitPrice: it.price,
+            unitCost: it.cost,
+            remark: `[MASTER_MATCH] 90% 이상 고신뢰 마스터 일괄 확정`
+          })
+        }).catch((err) => console.warn('Sync master batch error:', err))
+      )
+    );
+  };
+
+  // 🌟 1순위: 사내 마스터 확정 단가 일괄 자동 매칭 및 영구 동기화
+  const [matchingMaster, setMatchingMaster] = useState(false);
+
+  const handleAutoMatchMasterPrices = async () => {
+    setMatchingMaster(true);
+    try {
+      const mastersRes = await apiFetch('/api/admin/masters?type=products&onlyPriced=true');
+      if (!mastersRes.ok) throw new Error('마스터 단가 조회 실패');
+      const mastersJson = await mastersRes.json();
+      const pricedMasters: any[] = mastersJson.items || [];
+
+      if (pricedMasters.length === 0) {
+        alert('사내 마스터에 등록된 유효 단가가 없습니다.');
+        return;
+      }
+
+      let matchedCount = 0;
+      const updatedLines = await Promise.all(
+        lines.map(async (line) => {
+          if (line.isAssembly) return line;
+          if (line.supplyPrice > 0 && line.status === 'CONFIRMED') return line;
+
+          const pNo = (line.partNo || '').trim().toUpperCase();
+          const pName = (line.partName || '').trim().toUpperCase();
+          const pNoCompact = pNo.replace(/\s+/g, '');
+          const pNameCompact = pName.replace(/\s+/g, '');
+
+          const matched = pricedMasters.find((pm: any) => {
+            const pmCode = (pm.master_code || '').trim().toUpperCase();
+            const pmName = (pm.standard_name || '').trim().toUpperCase();
+            const pmCodeCompact = pmCode.replace(/\s+/g, '');
+            const pmNameCompact = pmName.replace(/\s+/g, '');
+
+            if (!pm.unit_price || Number(pm.unit_price) <= 0) return false;
+
+            return (
+              (pmCode && (pmCode === pNo || pmCode === pName || pmCodeCompact === pNoCompact || pmCodeCompact === pNameCompact)) ||
+              (pmName && (pmName === pName || pmName === pNo || pmNameCompact === pNameCompact || pmNameCompact === pNoCompact))
+            );
+          });
+
+          if (matched && Number(matched.unit_price) > 0) {
+            matchedCount++;
+            const sPrice = Number(matched.unit_price);
+            const uCost = Math.round(sPrice * 0.82);
+            const similarityBreakdown = computeMasterSimilarity(
+              line.partNo,
+              line.partName,
+              line.material,
+              line.specification || '',
+              line.partType,
+              matched
+            );
+
+            try {
+              await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  lineId: line.id,
+                  partKey: `PARTNER_A:${line.partNo}:B`,
+                  isConfirmed: true,
+                  unitPrice: sPrice,
+                  unitCost: uCost,
+                  qtyTier: line.quantity <= 9 ? '1~9' : line.quantity <= 99 ? '10~99' : '100~',
+                  lotQuantity: line.quantity,
+                  remark: `[MASTER_MATCH] 사내 마스터 단가 자동 매칭 (일치도 ${similarityBreakdown.totalScore}%)`
+                })
+              });
+            } catch (e) {
+              console.error('Failed to sync master match line:', e);
+            }
+
+            return {
+              ...line,
+              supplyPrice: sPrice,
+              unitCost: uCost,
+              status: 'CONFIRMED' as const,
+              priceSource: 'MASTER_MATCH',
+              similarityBreakdown,
+              masterPrice: sPrice
+            };
+          }
+          return line;
+        })
+      );
+
+      setLines(updatedLines);
+      if (matchedCount > 0) {
+        alert(`사내 마스터 단가표와 일치하는 품목 총 ${matchedCount}건에 대해 확정 단가를 성공적으로 자동 매칭 및 영구 저장하였습니다!`);
+      } else {
+        alert('현재 목록에서 마스터 단가표와 일치하는 추가 0원 품목이 없습니다.');
+      }
+    } catch (e: any) {
+      alert('마스터 단가 매칭 중 오류가 발생했습니다: ' + e.message);
+    } finally {
+      setMatchingMaster(false);
+    }
   };
 
   // ⚡ 2순위: AI 공학 표준원가 일괄 산출 엔진 가동
@@ -662,9 +1188,27 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     }
   };
 
-  const quoteActiveLines = lines.filter((l) => !l.isAssembly && l.isIncluded !== false);
-  const unconfirmedCount = quoteActiveLines.filter((l) => l.status !== 'CONFIRMED').length;
-  const zeroPriceCount = quoteActiveLines.filter((l) => l.supplyPrice <= 0).length;
+  // 실제 공급가액에 합산되는 유효 견적 대상 (조립도 및 제외품목 제외, 사급품은 0원으로 포함)
+  const quoteActiveLines = lines.filter((l) => {
+    if (l.isAssembly) return false;
+    const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+    return inc === 'INCLUDED' || inc === 'CUSTOMER_SUPPLIED';
+  });
+
+  // 미확정 건수: 견적 대상(INCLUDED) 품목 중 미확정 상태인 건수
+  const unconfirmedCount = quoteActiveLines.filter((l) => {
+    const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+    return inc === 'INCLUDED' && l.status !== 'CONFIRMED';
+  }).length;
+
+  // 단가 미확보(0원): 견적 대상(INCLUDED)인데 공급단가가 0원 이하인 항목만 카운트!
+  // (사급품 CUSTOMER_SUPPLIED 및 체결구 제외 FASTENER_EXCLUDED는 0원이어도 정상 처리되므로 차단하지 않음)
+  const zeroPriceCount = lines.filter((l) => {
+    if (l.isAssembly) return false;
+    const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+    return inc === 'INCLUDED' && l.supplyPrice <= 0;
+  }).length;
+
   const totalCost = quoteActiveLines.reduce((acc, l) => acc + (l.unitCost * l.quantity), 0);
   const totalSupply = quoteActiveLines.reduce((acc, l) => acc + (l.supplyPrice * l.quantity), 0);
   const avgMargin = totalSupply > 0 ? Math.round(((totalSupply - totalCost) / totalSupply) * 1000) / 10 : 0;
@@ -675,10 +1219,14 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       return;
     }
 
-    // 0원 미확보 품목 최종 점검: 조립도를 제외한 견적 대상 중 공급단가가 0원인 품목이 있으면 차단
-    const activeZeroPrice = lines.filter((l) => !l.isAssembly && l.isIncluded !== false && l.supplyPrice <= 0);
+    // 0원 미확보 품목 최종 점검: 견적 포함 대상(INCLUDED) 중 공급단가가 0원인 품목이 있으면 차단 (사급품/제외품 제외)
+    const activeZeroPrice = lines.filter((l) => {
+      if (l.isAssembly) return false;
+      const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+      return inc === 'INCLUDED' && l.supplyPrice <= 0;
+    });
     if (activeZeroPrice.length > 0) {
-      alert(`공급단가가 0원인 단가 미확보 품목이 ${activeZeroPrice.length}건 존재합니다.\n단가를 입력하거나 [견적제외] 처리한 후 결재 상신해 주세요.`);
+      alert(`공급단가가 0원인 단가 미확보 품목이 ${activeZeroPrice.length}건 존재합니다.\n단가를 입력하거나 [사급품] 또는 [견적제외] 처리한 후 결재 상신해 주세요.`);
       return;
     }
     setSubmittingQuote(true);
@@ -723,7 +1271,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       } else if (e.key === 'F4') {
         e.preventDefault();
         if (recommendations.length > 0 && selectedLine) {
-          handleUpdateSelected({ supplyPrice: recommendations[0].unitPrice });
+          handleUpdateSelected({ supplyPrice: recommendations[0].unitPrice, priceSource: 'MASTER_MATCH' });
         }
       } else if (e.key === 'F7') {
         e.preventDefault();
@@ -781,6 +1329,25 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             <span className="text-slate-300">|</span>
             <span>평균 마진: <strong className="font-mono text-emerald-700 font-bold">{avgMargin}%</strong></span>
           </div>
+
+          {/* ⭐ 1순위: 사내 마스터 단가 자동 매칭 버튼 */}
+          <button
+            onClick={handleAutoMatchMasterPrices}
+            disabled={matchingMaster}
+            className={`px-3.5 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow-xs border transition-all cursor-pointer ${
+              matchingMaster
+                ? 'bg-amber-100 text-amber-800 border-amber-300 cursor-wait'
+                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 hover:border-emerald-400'
+            }`}
+            title="사내 마스터 단가표에 등록된 확정 단가를 품명/도번 일치 품목에 1초 만에 자동 매칭하고 견적 DB에 영구 저장합니다."
+          >
+            {matchingMaster ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+            )}
+            <span>{matchingMaster ? '단가 매칭 중...' : '⭐ 마스터 단가 자동 매칭'}</span>
+          </button>
 
           {/* ⚡ 2순위 AI 공학 표준원가 일괄 산출 버튼 */}
           <button
@@ -849,6 +1416,16 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         </div>
       </header>
 
+      {/* 🤖 상단 지능형 일괄 액션 배너 (Macro: 표준 체결구 일괄 제외, 90% 이상 마스터 확정, 0원 사급품 지정) */}
+      <SmartBatchActionBar
+        lines={lines}
+        onBatchFastenerExclude={handleBatchFastenerExclude}
+        onBatchMasterConfirm={handleBatchMasterConfirm}
+        onBatchSupplyConvert={handleBatchSupplyConvert}
+        onBatchZeroExclude={(ids) => handleBatchUpdateInclusion(ids, 'EXCLUDED')}
+        loadingMaster={matchingMaster}
+      />
+
       {/* ⚠️ 단가 미확보 요약 경고 배너 */}
       {zeroPriceCount > 0 && (
         <div className="bg-rose-50 border-b border-rose-200 px-5 py-2 flex items-center justify-between text-xs text-rose-800 shrink-0">
@@ -859,12 +1436,25 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             </span>
             <span className="text-rose-300">|</span>
             <span className="text-slate-600">
-              검토자는 해당 품목의 <strong>수기 단가 입력</strong>, <strong>추천 단가 적용</strong> 또는 <strong>[견적제외]</strong> 처리를 완료해야 합니다.
+              검토자는 상단 지능형 일괄 액션을 이용하거나, 해당 품목의 <strong>수기 단가 입력</strong>, <strong>[사급품]</strong> 또는 <strong>[체결구 제외]</strong> 처리를 완료해야 합니다.
             </span>
           </div>
-          <span className="px-2 py-0.5 rounded bg-rose-100 border border-rose-300 text-rose-800 font-bold text-[11px]">
-            우선 조치 필요
-          </span>
+          <button
+            onClick={() => {
+              const firstZeroIdx = lines.findIndex((l) => {
+                if (l.isAssembly) return false;
+                const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+                return inc === 'INCLUDED' && l.supplyPrice <= 0;
+              });
+              if (firstZeroIdx !== -1) {
+                setSelectedIndex(firstZeroIdx);
+              }
+            }}
+            className="px-2.5 py-1 rounded bg-rose-100 hover:bg-rose-200 border border-rose-300 text-rose-800 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
+            title="단가가 0원인 첫 번째 미확보 품목으로 즉시 포커스를 이동합니다"
+          >
+            <span>첫 번째 미확보 품목으로 이동 ➔</span>
+          </button>
         </div>
       )}
 
@@ -894,6 +1484,11 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             onToggleConfirm={handleToggleConfirm}
             filterType={filterType}
             onFilterChange={setFilterType}
+            selectedIds={selectedIds}
+            onToggleSelectId={handleToggleSelectId}
+            onSelectAll={handleSelectAll}
+            onUpdateLineInclusion={handleUpdateLineInclusion}
+            onBatchUpdateInclusion={handleBatchUpdateInclusion}
           />
         </div>
       </div>
@@ -925,19 +1520,28 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
       {/* 3. 하단 패널 (원가 상세 내역 50% + MASTER Top-3 추천 카드 50%) */}
       {!isBottomCollapsed && (
-        <div className="h-[264px] bg-slate-100 px-3 pb-3 pt-1.5 flex gap-3 shrink-0">
+        <div className="h-[295px] bg-slate-100 px-3 pb-3 pt-1.5 flex gap-3 shrink-0">
           <div className="w-1/2 h-full">
-            <CostBreakdownPanel
-              line={selectedLine}
-              caseId={caseId}
-              onUpdateLine={handleUpdateSelected}
-              onConfirmLine={handleToggleConfirm}
-            />
+            {(() => {
+              const topMasterItem = recommendations.find(r => r.sourceCompany?.includes('기준') || r.sourceCompany?.includes('마스터') || r.matchReason === 'REVISION_MATCH') || recommendations[0];
+              const topMasterPrice = topMasterItem?.unitPrice || 0;
+              return (
+                <CostBreakdownPanel
+                  line={selectedLine}
+                  caseId={caseId}
+                  topMasterPrice={topMasterPrice}
+                  onUpdateLine={handleUpdateSelected}
+                  onConfirmLine={handleToggleConfirm}
+                />
+              );
+            })()}
           </div>
           <div className="w-1/2 h-full">
             <MasterRecommendationCard
               recommendations={recommendations}
-              onApplyPrice={(prc) => handleUpdateSelected({ supplyPrice: prc })}
+              selectedLineCost={selectedLine?.unitCost}
+              currentSupplyPrice={selectedLine?.supplyPrice}
+              onApplyPrice={(prc) => handleUpdateSelected({ supplyPrice: prc, priceSource: 'MASTER_MATCH' })}
               onOpenMasterDrawer={() => setIsMasterDrawerOpen(true)}
             />
           </div>
@@ -984,7 +1588,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         onClose={() => setIsMasterDrawerOpen(false)}
         selectedLine={selectedLine}
         onApplyPrice={(prc, src) => {
-          handleUpdateSelected({ supplyPrice: prc });
+          handleUpdateSelected({ supplyPrice: prc, priceSource: 'MASTER_MATCH' });
         }}
       />
 
