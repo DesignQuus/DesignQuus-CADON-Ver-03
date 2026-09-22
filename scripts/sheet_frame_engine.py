@@ -21,15 +21,15 @@ from statistics import median
 # ---------------------------------------------------------------------------
 # 색상 / 선가중치 상수 (AutoCAD 표준 팔레트, 다크 캔버스 기준)
 # ---------------------------------------------------------------------------
-RGB_PAPER_EDGE = (0.0, 1.0, 1.0)     # 시안: 용지 가장자리
-RGB_BORDER = (1.0, 1.0, 0.0)         # 비비드 옐로우: 도곽 외곽선
-RGB_MARGIN = (1.0, 0.2, 0.2)         # 레드: 여백선(내측 프레임)
+RGB_PAPER_EDGE = (1.0, 0.2, 0.2)     # 레드: 최외곽 용지/재단선 (AutoCAD 원본: 최외곽 빨간 세선)
+RGB_BORDER = (1.0, 1.0, 0.0)         # 비비드 옐로우: 내측 본도곽선 (AutoCAD 원본: 굵은 노란선)
+RGB_MARGIN = (1.0, 1.0, 0.0)         # 비비드 옐로우: 중간 여백선 (AutoCAD 원본: 가는 노란선)
 RGB_GRID = (1.0, 1.0, 0.0)           # 표제란 격자선
 RGB_GROUP_BOX = (1.0, 1.0, 0.0)      # 단품 시트 그룹핑 박스
 
-LW_PAPER_EDGE = 0.5
-LW_BORDER = 0.7
-LW_MARGIN = 0.5
+LW_PAPER_EDGE = 0.0                  # 1px 세선
+LW_BORDER = 0.7                      # 굵은선 (0.7mm / 3px)
+LW_MARGIN = 0.0                      # 1px 세선
 LW_GRID = 0.35
 LW_GROUP_BOX = 0.7
 
@@ -223,9 +223,19 @@ def classify_block_sheet_frames(polyline_rects, line_segments, extent, tol=None)
     if not candidates:
         return None
     candidates.sort(key=lambda c: _rect_area(c[0]), reverse=True)
-    border, paper = candidates[0]
-    margin = _find_nested_margin(border, rects, tol)
-    return {'BORDER': border, 'MARGIN': margin, 'paper': paper}
+    r1, paper = candidates[0]
+    r2 = _find_nested_margin(r1, rects, tol)
+    r3 = _find_nested_margin(r2, rects, tol) if r2 else None
+
+    if r2 and r3:
+        # AutoCAD 원본 3중 프레임: r1=최외곽 빨간선(PAPER_EDGE), r2=중간 노란선(MARGIN), r3=내측 굵은 노란선(BORDER)
+        return {'PAPER_EDGE': r1, 'MARGIN': r2, 'BORDER': r3, 'paper': paper}
+    elif r2:
+        # 2중 프레임: r1=최외곽 빨간선(PAPER_EDGE), r2=내측 굵은 노란선(BORDER)
+        return {'PAPER_EDGE': r1, 'BORDER': r2, 'MARGIN': None, 'paper': paper}
+    else:
+        # 1중 프레임: r1=본도곽(BORDER)
+        return {'BORDER': r1, 'MARGIN': None, 'paper': paper}
 
 
 def detect_msp_frames(rects, text_points, sheet_insert_points, sheet_rects_hint=None, tol=None):
@@ -261,8 +271,10 @@ def detect_msp_frames(rects, text_points, sheet_insert_points, sheet_rects_hint=
             result['GROUP_BOX'].append(r)
             continue
         # 2) 규격 비율 + 텍스트 포함 → 모델 공간에 직접 그려진 시트 도곽
+        # 규격 도면 최소 물리 치수(단변 2000mm 이상)를 충족해야 실제 도곽으로 인정 (초소형 기계 부품 오탐 방지)
+        min_dim = min(_rect_w(r), _rect_h(r))
         m = _paper_ratio_match(_rect_w(r), _rect_h(r))
-        if m and count_inside(r, text_points, 0.0) >= 2 and n_ins == 0:
+        if m and min_dim >= 2000.0 and count_inside(r, text_points, 0.0) >= 2 and n_ins == 0:
             borders.append(r)
 
     # 중첩된 도곽 쌍: 바깥 = BORDER, 안쪽 = MARGIN

@@ -304,7 +304,7 @@ export default function HomePage() {
               안녕하세요, <span className="text-blue-400">{user?.name || '담당자'}</span>님! 👋
             </h1>
             <p className="text-sm sm:text-base text-slate-300 max-w-2xl leading-relaxed">
-              CADON AI 기반 3D/2D 도면 자동 파싱, 실시간 가상 BOM 추출 및 스마트 제조 원가 견적 관제 시스템입니다.
+              CADON AI 기반 DWG 도면 자동 파싱, 실시간 가상 BOM 추출 및 스마트 제조 원가 견적 관제 시스템입니다.
             </p>
           </div>
 

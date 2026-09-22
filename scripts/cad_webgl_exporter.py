@@ -118,6 +118,7 @@ def extract_ole_frames_from_dxf(dxf_path):
 
         ole_data = bytes.fromhex(frame_hex[idx:])
         table_lines = []
+        table_tris = []
         cell_texts = []
         has_excel_vector = False
 
@@ -167,23 +168,41 @@ def extract_ole_frames_from_dxf(dxf_path):
                     for rr in range(tr_s, tr_e + 1):
                         row_table_start[rr] = tr_s
 
-                YELLOW = (1.0, 1.0, 0.0)
+                def parse_hex_color(col_val):
+                    if not col_val or not isinstance(col_val, str):
+                        return None
+                    c = col_val.strip().lstrip('#')
+                    if len(c) == 8: # AARRGGBB
+                        c = c[2:]
+                    if len(c) == 6:
+                        try:
+                            return (int(c[0:2], 16) / 255.0, int(c[2:4], 16) / 255.0, int(c[4:6], 16) / 255.0)
+                        except Exception:
+                            return None
+                    return None
+
+                WHITE = (1.0, 1.0, 1.0)
+                BLACK = (0.0, 0.0, 0.0)
                 GREY = (0.55, 0.55, 0.55)
 
                 for (tr_start, tr_end) in table_ranges:
                     top_y = row_ys[tr_start - 1]
                     bot_y = row_ys[tr_end]
-                    # Table outer yellow border
-                    table_lines.append(((min_x, top_y), (max_x, top_y), YELLOW))
-                    table_lines.append(((max_x, top_y), (max_x, bot_y), YELLOW))
-                    table_lines.append(((max_x, bot_y), (min_x, bot_y), YELLOW))
-                    table_lines.append(((min_x, bot_y), (min_x, top_y), YELLOW))
+                    # Table base white background mesh (2 triangles)
+                    table_tris.append(((min_x, top_y), (max_x, top_y), (max_x, bot_y), WHITE))
+                    table_tris.append(((max_x, bot_y), (min_x, bot_y), (min_x, top_y), WHITE))
+
+                    # Table outer black border
+                    table_lines.append(((min_x, top_y), (max_x, top_y), BLACK))
+                    table_lines.append(((max_x, top_y), (max_x, bot_y), BLACK))
+                    table_lines.append(((max_x, bot_y), (min_x, bot_y), BLACK))
+                    table_lines.append(((min_x, bot_y), (min_x, top_y), BLACK))
 
                     # Header lines (under title row and under column header row)
                     if tr_start <= max_r:
-                        table_lines.append(((min_x, row_ys[tr_start]), (max_x, row_ys[tr_start]), YELLOW))
+                        table_lines.append(((min_x, row_ys[tr_start]), (max_x, row_ys[tr_start]), BLACK))
                     if tr_start + 1 <= max_r and tr_start + 1 <= tr_end:
-                        table_lines.append(((min_x, row_ys[tr_start + 1]), (max_x, row_ys[tr_start + 1]), YELLOW))
+                        table_lines.append(((min_x, row_ys[tr_start + 1]), (max_x, row_ys[tr_start + 1]), BLACK))
 
                     # Inner horizontal row dividers
                     for r in range(tr_start + 2, tr_end):
@@ -193,7 +212,27 @@ def extract_ole_frames_from_dxf(dxf_path):
                     for c_idx in range(1, max_c):
                         table_lines.append(((col_xs[c_idx], row_ys[tr_start + 1]), (col_xs[c_idx], bot_y), GREY))
 
-                # Extract cell texts with CAD precision
+                # Extract cell background fills (e.g. yellow/gold subtotal rows)
+                for r in range(1, max_r + 1):
+                    for c in range(1, max_c + 1):
+                        try:
+                            cell = ws.cell(r, c)
+                            fill = getattr(cell, 'fill', None)
+                            if fill and getattr(fill, 'fill_type', None) and getattr(fill, 'start_color', None):
+                                raw_rgb = getattr(fill.start_color, 'rgb', None)
+                                col_rgb = parse_hex_color(raw_rgb)
+                                if col_rgb and col_rgb != WHITE:
+                                    max_r_idx, max_c_idx = merged_lookup.get((r, c), (r, c))
+                                    c_left = col_xs[c - 1]
+                                    c_right = col_xs[max_c_idx]
+                                    r_top = row_ys[r - 1]
+                                    r_bottom = row_ys[max_r_idx]
+                                    table_tris.append(((c_left, r_top), (c_right, r_top), (c_right, r_bottom), col_rgb))
+                                    table_tris.append(((c_right, r_bottom), (c_left, r_bottom), (c_left, r_top), col_rgb))
+                        except Exception:
+                            pass
+
+                # Extract cell texts with CAD precision (AutoCAD original: black text on white/yellow paper)
                 for r in range(1, max_r + 1):
                     for c in range(1, max_c + 1):
                         is_sub_merged = False
@@ -221,21 +260,14 @@ def extract_ole_frames_from_dxf(dxf_path):
                             ha = 1 # Center by default
                             t_start = row_table_start.get(r, 1)
                             if r == t_start: # 각 테이블의 제목행
-                                txt_col = '#ffff00'
                                 font_h = min(cell_h * 0.45, 520.0)
                             elif r == t_start + 1: # 각 테이블의 컬럼 헤더행
-                                txt_col = '#00e676'
                                 font_h = min(single_row_h * 0.42, 240.0)
                             elif c == 5: # Motor model description
                                 ha = 0 # Left align
                                 cx = c_left + 150.0
-                                txt_col = '#ffffff'
                                 font_h = min(single_row_h * 0.42, 230.0)
-                            elif 'CONVEYOR' in t_str or 'DIVERTER' in t_str or 'ROLLER' in t_str:
-                                txt_col = '#38bdf8'
-                                font_h = min(single_row_h * 0.42, 240.0)
                             else:
-                                txt_col = '#ffffff'
                                 font_h = min(single_row_h * 0.42, 240.0)
 
                             cell_texts.append({
@@ -244,9 +276,10 @@ def extract_ole_frames_from_dxf(dxf_path):
                                 'y': round(cy, 1),
                                 'h': round(font_h, 1),
                                 'r': 0.0,
-                                'c': txt_col,
+                                'c': '#000000',
                                 'ha': ha,
-                                'va': 2
+                                'va': 2,
+                                'onWhiteBg': True
                             })
                 has_excel_vector = True
         except Exception:
@@ -320,6 +353,7 @@ def extract_ole_frames_from_dxf(dxf_path):
             'center_x': center_x, 'center_y': center_y,
             'png_b64': png_b64,
             'lines': table_lines,
+            'tris': table_tris,
             'texts': cell_texts
         })
 
@@ -694,10 +728,65 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
             except Exception:
                 return []
 
+        def decompose_polyline_entity(e):
+            """POLYLINE / LWPOLYLINE을 선분 리스트 [((x1, y1), (x2, y2)), ...] 로 분할 (LWPOLYLINE bulge 곡률 지원)."""
+            t = e.dxftype()
+            is_closed = (getattr(e, 'closed', False) or getattr(e, 'is_closed', False))
+            if t == 'LWPOLYLINE':
+                try:
+                    pts = list(e.get_points(format='xyb'))
+                    if not pts:
+                        return [], [], False
+                    has_bulge = any(abs(p[2]) > 1e-4 for p in pts)
+                    pts2 = [(p[0], p[1]) for p in pts]
+                    is_rect_cand = (not has_bulge) and (len(pts2) in (4, 5)) and (is_closed or (len(pts2) == 5))
+                    if not has_bulge:
+                        segs = [(pts2[i], pts2[i + 1]) for i in range(len(pts2) - 1)]
+                        if is_closed and len(pts2) > 2:
+                            segs.append((pts2[-1], pts2[0]))
+                        return segs, pts2, is_rect_cand
+                    # Bulge 곡선 전개 (AutoCAD 타원 캡슐 및 라운드 코너 복원)
+                    from ezdxf.math import bulge_to_arc
+                    segs = []
+                    n = len(pts)
+                    count = n if is_closed else n - 1
+                    for i in range(count):
+                        p1 = (pts[i][0], pts[i][1])
+                        p2 = (pts[(i + 1) % n][0], pts[(i + 1) % n][1])
+                        b = pts[i][2]
+                        if abs(b) > 1e-4:
+                            try:
+                                center, sa, ea, r = bulge_to_arc(p1, p2, b)
+                                if ea < sa:
+                                    ea += 2 * math.pi
+                                steps = max(6, int(abs(ea - sa) / (math.pi / 8)))
+                                a_pts = [(center.x + r * math.cos(sa + (ea - sa) * k / steps),
+                                          center.y + r * math.sin(sa + (ea - sa) * k / steps)) for k in range(steps + 1)]
+                                for k in range(steps):
+                                    segs.append((a_pts[k], a_pts[k + 1]))
+                                continue
+                            except Exception:
+                                pass
+                        segs.append((p1, p2))
+                    return segs, pts2, False
+                except Exception:
+                    pass
+            # 일반 POLYLINE
+            try:
+                pts = list(e.points())
+                pts2 = [(p[0], p[1]) for p in pts]
+                is_rect_cand = (len(pts2) in (4, 5)) and (is_closed or (len(pts2) == 5))
+                segs = [(pts2[i], pts2[i + 1]) for i in range(len(pts2) - 1)]
+                if is_closed and len(pts2) > 2:
+                    segs.append((pts2[-1], pts2[0]))
+                return segs, pts2, is_rect_cand
+            except Exception:
+                return [], [], False
+
         def promote_sheet_frames(lines, poly_pts_list, line_segs):
             """
             블록 로컬 세그먼트에서 규격 용지 비율의 사각형(닫힌 폴리라인 또는 LINE 4개 조합)을 찾아
-            BORDER(노랑 0.7mm) / MARGIN(빨강 0.5mm)로 승격합니다. (블록 이름·선 개수에 의존하지 않음)
+            AutoCAD 원본 3중 프레임(PAPER_EDGE 빨강 1px / MARGIN 노랑 1px / BORDER 노랑 0.7mm)으로 승격합니다.
             """
             if not lines:
                 return lines, None
@@ -719,10 +808,12 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
             promoted = []
             for (p1, p2, rgb_, col_, lay_, lw_) in lines:
                 role = None
-                if segment_on_rect(p1, p2, frames['BORDER'], tol):
+                if frames.get('BORDER') and segment_on_rect(p1, p2, frames['BORDER'], tol):
                     role = 'BORDER'
                 elif frames.get('MARGIN') and segment_on_rect(p1, p2, frames['MARGIN'], tol):
                     role = 'MARGIN'
+                elif frames.get('PAPER_EDGE') and segment_on_rect(p1, p2, frames['PAPER_EDGE'], tol):
+                    role = 'PAPER_EDGE'
                 if role:
                     r_rgb, r_lw = ROLE_STYLE[role]
                     # col=-1: 역할 색 고정 (BYBLOCK/BYLAYER 상속으로 덮어쓰이지 않도록)
@@ -770,14 +861,10 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         b_lines.append((p1, p2, rgb, col, lay_name, lw))
                         line_segs.append((p1, p2))
                     elif t in ['LWPOLYLINE', 'POLYLINE']:
-                        pts = list(e.points()) if t == 'POLYLINE' else list(e.get_points())
-                        pts2 = [(p[0], p[1]) for p in pts]
-                        is_closed = (getattr(e, 'closed', False) or getattr(e, 'is_closed', False))
-                        for i in range(len(pts2)-1):
-                            b_lines.append((pts2[i], pts2[i+1], rgb, col, lay_name, lw))
-                        if is_closed and len(pts2) > 2:
-                            b_lines.append((pts2[-1], pts2[0], rgb, col, lay_name, lw))
-                        if len(pts2) in (4, 5) and (is_closed or (len(pts2) == 5)):
+                        segs, pts2, is_rect_cand = decompose_polyline_entity(e)
+                        for p1, p2 in segs:
+                            b_lines.append((p1, p2, rgb, col, lay_name, lw))
+                        if is_rect_cand:
                             poly_pts_list.append(pts2)
                     elif t == 'SPLINE':
                         try:
@@ -861,9 +948,17 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         valign = getattr(e.dxf, 'valign', 0)
                         align_pt = getattr(e.dxf, 'align_point', None)
                         ins_pt = e.dxf.insert
-                        target_pt = align_pt if ((halign > 0 or valign > 0) and align_pt is not None and (abs(align_pt.x) > 0.001 or abs(align_pt.y) > 0.001)) else ins_pt
 
-                        ha = 1 if halign in [1, 4] else (2 if halign == 2 else 0)
+                        if halign in [3, 5] and align_pt is not None:
+                            # FIT (5) 또는 ALIGNED (3): 시작점(ins_pt)과 끝점(align_pt)의 중앙에 Center 정렬
+                            target_pt_x = (ins_pt.x + align_pt.x) / 2.0
+                            target_pt_y = (ins_pt.y + align_pt.y) / 2.0
+                            ha = 1 # Center align
+                        else:
+                            target_pt_x = align_pt.x if ((halign > 0 or valign > 0) and align_pt is not None and (abs(align_pt.x) > 0.001 or abs(align_pt.y) > 0.001)) else ins_pt.x
+                            target_pt_y = align_pt.y if ((halign > 0 or valign > 0) and align_pt is not None and (abs(align_pt.x) > 0.001 or abs(align_pt.y) > 0.001)) else ins_pt.y
+                            ha = 1 if halign in [1, 4] else (2 if halign == 2 else 0)
+
                         va = 1 if valign == 1 else (2 if valign == 2 else (3 if valign == 3 else 0))
                         if t == 'MTEXT':
                             attach = getattr(e.dxf, 'attachment_point', 1)
@@ -875,8 +970,8 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
 
                         b_txts.append({
                             't': cln,
-                            'x': target_pt.x,
-                            'y': target_pt.y,
+                            'x': target_pt_x,
+                            'y': target_pt_y,
                             'h': h,
                             'w': txt_w,
                             'r': rot,
@@ -1154,27 +1249,20 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     else:
                         add_seg(p1, p2, rgb)
                 elif t in ['LWPOLYLINE', 'POLYLINE']:
-                    pts = list(e.points()) if t == 'POLYLINE' else list(e.get_points())
-                    pts2 = [(p[0], p[1]) for p in pts]
-                    is_closed = (getattr(e, 'closed', False) or getattr(e, 'is_closed', False))
+                    segs, pts2, is_rect_cand = decompose_polyline_entity(e)
                     role = None
-                    if role_rects and len(pts2) in (4, 5) and (is_closed or len(pts2) == 5):
+                    if role_rects and is_rect_cand:
                         xs = [p[0] for p in pts2]
                         ys = [p[1] for p in pts2]
                         p_tol = max(max(xs) - min(xs), max(ys) - min(ys), 1e-6) * 0.005
                         rr = rect_from_points(pts2, p_tol)
                         if rr:
                             role = role_for_rect(rr)
-                    for i in range(len(pts2)-1):
+                    for p1, p2 in segs:
                         if role:
-                            add_role_seg(pts2[i], pts2[i+1], role)
+                            add_role_seg(p1, p2, role)
                         else:
-                            add_seg(pts2[i], pts2[i+1], rgb)
-                    if is_closed and len(pts2) > 2:
-                        if role:
-                            add_role_seg(pts2[-1], pts2[0], role)
-                        else:
-                            add_seg(pts2[-1], pts2[0], rgb)
+                            add_seg(p1, p2, rgb)
                 elif t == 'SPLINE':
                     try:
                         pts = list(e.flattening(distance=0.5))
@@ -1226,9 +1314,17 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     valign = getattr(e.dxf, 'valign', 0)
                     align_pt = getattr(e.dxf, 'align_point', None)
                     ins_pt = e.dxf.insert
-                    target_pt = align_pt if ((halign > 0 or valign > 0) and align_pt is not None and (abs(align_pt.x) > 0.001 or abs(align_pt.y) > 0.001)) else ins_pt
 
-                    ha = 1 if halign in [1, 4] else (2 if halign == 2 else 0)
+                    if halign in [3, 5] and align_pt is not None:
+                        # FIT (5) 또는 ALIGNED (3): 시작점(ins_pt)과 끝점(align_pt)의 중앙에 Center 정렬
+                        target_pt_x = (ins_pt.x + align_pt.x) / 2.0
+                        target_pt_y = (ins_pt.y + align_pt.y) / 2.0
+                        ha = 1 # Center align
+                    else:
+                        target_pt_x = align_pt.x if ((halign > 0 or valign > 0) and align_pt is not None and (abs(align_pt.x) > 0.001 or abs(align_pt.y) > 0.001)) else ins_pt.x
+                        target_pt_y = align_pt.y if ((halign > 0 or valign > 0) and align_pt is not None and (abs(align_pt.x) > 0.001 or abs(align_pt.y) > 0.001)) else ins_pt.y
+                        ha = 1 if halign in [1, 4] else (2 if halign == 2 else 0)
+
                     va = 1 if valign == 1 else (2 if valign == 2 else (3 if valign == 3 else 0))
                     width_factor = getattr(e.dxf, 'width', 1.0) if t == 'TEXT' else 1.0
                     w = getattr(e.dxf, 'width', 0.0) if t == 'MTEXT' else (len(cln) * h * 0.80 * width_factor)
@@ -1253,8 +1349,8 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
 
                     txt_item = {
                         't': cln,
-                        'x': round(target_pt.x, 1),
-                        'y': round(target_pt.y, 1),
+                        'x': round(target_pt_x, 1),
+                        'y': round(target_pt_y, 1),
                         'h': round(h, 1),
                         'r': round(rot % 360, 1),
                         'c': final_txt_col,
@@ -1537,6 +1633,9 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         'width': round(ole['width'], 1),
                         'height': round(ole['height'], 1)
                     })
+                # Add vector table background triangles (white base & colored subtotal fills)
+                for (p1, p2, p3, rgb) in ole.get('tris', []):
+                    add_tri(p1, p2, p3, rgb)
                 # Add vector table lines
                 for (p1, p2, rgb) in ole.get('lines', []):
                     add_seg(p1, p2, rgb)

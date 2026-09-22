@@ -462,7 +462,7 @@ export default function WebGlCadViewer({
                   const cg = parseInt(hex.substring(2, 4), 16);
                   const cb = parseInt(hex.substring(4, 6), 16);
                   const lum = 0.299 * cr + 0.587 * cg + 0.114 * cb;
-                  if (lum < 80) {
+                  if (lum < 80 && !(item as any).onWhiteBg) {
                     fillColor = '#f8fafc'; // Crisp bright white on dark canvas
                   }
                 }
