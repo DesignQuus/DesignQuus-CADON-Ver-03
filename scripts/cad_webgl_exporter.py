@@ -27,7 +27,7 @@ if _SCRIPT_DIR not in sys.path:
 from sheet_frame_engine import (
     ROLE_STYLE, rect_from_points, rects_from_line_segments, rect_segments,
     classify_block_sheet_frames, detect_msp_frames, reconstruct_proxy_sheet, is_empty_block,
-    segment_on_rect, rect_tol, transform_rect
+    segment_on_rect, rect_tol, transform_rect, cluster_boxes
 )
 
 try:
@@ -1410,6 +1410,14 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
         # ------------------------------------------------------------------
         reconstructed_sheets = []
         if proxy_sheet_inserts:
+            # 동일 좌표에 과거 리비전 DRAWFORM 블록들이 중첩된 경우 단일화
+            unique_proxies = []
+            for ps in proxy_sheet_inserts:
+                ins = ps['insert']
+                if not any(abs(p['insert'][0] - ins[0]) < 1.0 and abs(p['insert'][1] - ins[1]) < 1.0 for p in unique_proxies):
+                    unique_proxies.append(ps)
+            proxy_sheet_inserts = unique_proxies
+
             exclusion_rects = []
             for r in msp_frames['GROUP_BOX'] + known_sheet_rects:
                 pad = max(r[2] - r[0], r[3] - r[1]) * 0.01
@@ -1421,14 +1429,6 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         return True
                 return False
 
-            def nearest_proxy_idx(px, py):
-                best_i, best_d = -1, float('inf')
-                for i, ps in enumerate(proxy_sheet_inserts):
-                    d = (ps['insert'][0] - px) ** 2 + (ps['insert'][1] - py) ** 2
-                    if d < best_d:
-                        best_i, best_d = i, d
-                return best_i
-
             def contains_sheet(bx0, by0, bx1, by1):
                 # 단품 시트 하나 이상을 통째로 감싸는 엔티티(그룹핑 박스 등)는 메인 클러스터에서 제외
                 for r in known_sheet_rects:
@@ -1436,34 +1436,78 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         return True
                 return False
 
-            clusters = [None] * len(proxy_sheet_inserts)
-            cluster_texts = [[] for _ in proxy_sheet_inserts]
+            # 전체 도면 extent 계산
+            tot_w = max_x - min_x
+            tot_h = max_y - min_y
+            tot_area = max(tot_w * tot_h, 1.0)
+            gap = max(tot_w, tot_h) * 0.02
+
+            candidate_boxes = []
+            candidate_meta = []  # ('geom', None) or ('text', tx)
+
             for (bx0, by0, bx1, by1) in msp_entity_boxes:
                 cx, cy = (bx0 + bx1) / 2.0, (by0 + by1) / 2.0
                 if is_excluded(cx, cy) or (known_sheet_rects and contains_sheet(bx0, by0, bx1, by1)):
                     continue
-                i = nearest_proxy_idx(cx, cy)
-                if i < 0:
-                    continue
-                c = clusters[i]
-                clusters[i] = (bx0, by0, bx1, by1) if c is None else (min(c[0], bx0), min(c[1], by0), max(c[2], bx1), max(c[3], by1))
+                candidate_boxes.append((bx0, by0, bx1, by1))
+                candidate_meta.append(('geom', None))
+
             for tx in all_texts:
                 if is_excluded(tx['x'], tx['y']):
                     continue
-                i = nearest_proxy_idx(tx['x'], tx['y'])
-                if i >= 0:
-                    cluster_texts[i].append(tx)
+                h = tx.get('h') or 10.0
+                # 텍스트 삽입점을 "높이 h 정사각형 박스"로 변환
+                candidate_boxes.append((tx['x'], tx['y'], tx['x'] + h, tx['y'] + h))
+                candidate_meta.append(('text', tx))
 
-            for i, ps in enumerate(proxy_sheet_inserts):
-                cl = clusters[i]
-                txs = cluster_texts[i]
-                if cl is None and txs:
-                    xs = [t['x'] for t in txs]
-                    ys = [t['y'] for t in txs]
-                    cl = (min(xs), min(ys), max(xs), max(ys))
-                if cl is None:
+            # cluster_boxes 실행 (2단계: 간격 기반 연결 요소)
+            clusters = cluster_boxes(candidate_boxes, gap)
+
+            # 안전장치 필터링
+            valid_clusters = []
+            for cl in clusters:
+                cbx0, cby0, cbx1, cby1 = cl['bbox']
+                c_area = (cbx1 - cbx0) * (cby1 - cby0)
+                # 1) 전체 면적의 60%를 넘는 배경/기준선 요소 제외
+                if c_area > tot_area * 0.6:
                     continue
-                sheet = reconstruct_proxy_sheet(ps['insert'], cl, txs, ps['scale'])
+                # 2) 텍스트만으로 이루어진 요소(기하 요소 미포함) 제외
+                has_geom = any(candidate_meta[idx][0] == 'geom' for idx in cl['indices'])
+                if not has_geom:
+                    continue
+                cl_texts = [candidate_meta[idx][1] for idx in cl['indices'] if candidate_meta[idx][0] == 'text']
+                cl['texts'] = cl_texts
+                valid_clusters.append(cl)
+
+            for ps in proxy_sheet_inserts:
+                ins = ps['insert']
+                # 우선순위 1: 삽입점이 요소 bbox 내부이거나, 요소 bbox 좌하단 근방(폭/높이의 15% 이내)에 있는 요소
+                p1_candidates = []
+                for cl in valid_clusters:
+                    cbx0, cby0, cbx1, cby1 = cl['bbox']
+                    cw = cbx1 - cbx0
+                    ch = cby1 - cby0
+                    if (cbx0 - cw * 0.15 <= ins[0] <= cbx1 + cw * 0.15) and (cby0 - ch * 0.15 <= ins[1] <= cby1 + ch * 0.15):
+                        p1_candidates.append(cl)
+
+                best_cl = None
+                if p1_candidates:
+                    # 우선순위 1 후보 중 채택 (가장 넓은 영역 우선)
+                    best_cl = p1_candidates[0]
+                elif valid_clusters:
+                    # 우선순위 2: 삽입점에서 bbox 거리가 가장 가까운 요소
+                    def dist_to_bbox(cl):
+                        cbx0, cby0, cbx1, cby1 = cl['bbox']
+                        dx = max(0.0, cbx0 - ins[0], ins[0] - cbx1)
+                        dy = max(0.0, cby0 - ins[1], ins[1] - cby1)
+                        return dx * dx + dy * dy
+                    best_cl = min(valid_clusters, key=dist_to_bbox)
+
+                if not best_cl:
+                    print(f"[CAD Export] No valid cluster adopted for proxy sheet {ps['name']} at {ins}")
+                    continue
+
+                sheet = reconstruct_proxy_sheet(ps['insert'], best_cl['bbox'], best_cl['texts'], ps['scale'])
                 if not sheet:
                     continue
                 for (p1, p2, role) in sheet['segments']:

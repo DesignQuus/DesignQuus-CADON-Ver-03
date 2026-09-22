@@ -214,6 +214,9 @@ def classify_block_sheet_frames(polyline_rects, line_segments, extent, tol=None)
     for r in rects:
         if _rect_w(r) < ew * 0.6 or _rect_h(r) < eh * 0.6:
             continue
+        # 규격 도면 용지 최소 물리 치수 (단변 최소 100mm 이상: 초소형 기계 부품/심볼 블록 오탐 방지)
+        if min(_rect_w(r), _rect_h(r)) < 100.0:
+            continue
         m = _paper_ratio_match(_rect_w(r), _rect_h(r))
         if m:
             candidates.append((r, m[0]))
@@ -560,3 +563,107 @@ def transform_rect(rect, ins, sx, sy, rotation_deg=0.0):
     xs = [p[0] for p in pts]
     ys = [p[1] for p in pts]
     return (min(xs), min(ys), max(xs), max(ys))
+
+
+def cluster_boxes(boxes, gap):
+    """
+    바운딩 박스들을 '서로 gap 이하로 떨어진 것끼리' 연결 요소로 묶는다.
+    - boxes: [(x0, y0, x1, y1), ...]
+    - gap: 연결 허용 간격 (전체 extent 비율 기반)
+    반환: [{'bbox': (x0, y0, x1, y1), 'indices': [i, ...]}, ...] (면적 내림차순)
+
+    구현 요구:
+      - 셀 크기 = gap 인 균일 격자에 각 박스가 걸치는 셀을 등록
+      - 같은 셀 또는 인접 8셀에 걸친 박스끼리 union-find 로 병합
+      - 40,000 엔티티에서 1초 이내 (O(n) ~ O(n log n))
+    """
+    if not boxes:
+        return []
+    if gap <= 0:
+        gap = 1.0
+
+    n = len(boxes)
+    parent = list(range(n))
+    rank = [0] * n
+
+    def find(i):
+        p = parent[i]
+        while p != parent[p]:
+            parent[p] = parent[parent[p]]
+            p = parent[p]
+        return p
+
+    def union(i, j):
+        ri, rj = find(i), find(j)
+        if ri != rj:
+            if rank[ri] < rank[rj]:
+                parent[ri] = rj
+            elif rank[ri] > rank[rj]:
+                parent[rj] = ri
+            else:
+                parent[rj] = ri
+                rank[ri] += 1
+
+    inv_gap = 1.0 / gap
+    grid = {}  # key -> list of box indices
+
+    for i, (x0, y0, x1, y1) in enumerate(boxes):
+        gx0 = int(math.floor(x0 * inv_gap))
+        gy0 = int(math.floor(y0 * inv_gap))
+        gx1 = int(math.floor(x1 * inv_gap))
+        gy1 = int(math.floor(y1 * inv_gap))
+
+        # 큰 박스로 인한 과도한 셀 생성 방지
+        gx1 = min(gx1, gx0 + 50)
+        gy1 = min(gy1, gy0 + 50)
+
+        for gx in range(gx0, gx1 + 1):
+            for gy in range(gy0, gy1 + 1):
+                key = (gx, gy)
+                cell = grid.get(key)
+                if cell is None:
+                    grid[key] = [i]
+                else:
+                    union(i, cell[0])
+                    cell.append(i)
+
+    # 인접 셀 간 병합: 4개 전방 이웃 (1, 0), (0, 1), (1, 1), (1, -1)
+    nbr_offsets = ((1, 0), (0, 1), (1, 1), (1, -1))
+    for (gx, gy), cell_items in grid.items():
+        rep_a = cell_items[0]
+        root_a = find(rep_a)
+        for dx, dy in nbr_offsets:
+            nkey = (gx + dx, gy + dy)
+            n_items = grid.get(nkey)
+            if n_items is not None:
+                rep_b = n_items[0]
+                if root_a != find(rep_b):
+                    matched = False
+                    for idx_a in cell_items:
+                        ax0, ay0, ax1, ay1 = boxes[idx_a]
+                        for idx_b in n_items:
+                            bx0, by0, bx1, by1 = boxes[idx_b]
+                            if max(0.0, max(ax0, bx0) - min(ax1, bx1)) <= gap and max(0.0, max(ay0, by0) - min(ay1, by1)) <= gap:
+                                union(rep_a, rep_b)
+                                root_a = find(rep_a)
+                                matched = True
+                                break
+                        if matched:
+                            break
+
+    comp_map = {}
+    for i in range(n):
+        r = find(i)
+        comp_map.setdefault(r, []).append(i)
+
+    results = []
+    for root, indices in comp_map.items():
+        bx0 = min(boxes[i][0] for i in indices)
+        by0 = min(boxes[i][1] for i in indices)
+        bx1 = max(boxes[i][2] for i in indices)
+        by1 = max(boxes[i][3] for i in indices)
+        results.append({'bbox': (bx0, by0, bx1, by1), 'indices': indices})
+
+    results.sort(key=lambda c: (c['bbox'][2] - c['bbox'][0]) * (c['bbox'][3] - c['bbox'][1]), reverse=True)
+    return results
+

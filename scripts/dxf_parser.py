@@ -17,7 +17,7 @@ import ezdxf
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
-from sheet_frame_engine import rect_from_points, paper_ratio_match, reconstruct_proxy_sheet, is_empty_block
+from sheet_frame_engine import rect_from_points, paper_ratio_match, reconstruct_proxy_sheet, is_empty_block, cluster_boxes
 
 FORM_NAME_PAT = re.compile(r'(DRAWFORM|FORM|SHEET|FRAME|BORDER|TITLE|도곽|양식|^[AB][0-4]$)', re.I)
 
@@ -301,6 +301,7 @@ def parse_dxf_file(dxf_path: str) -> dict:
                                 ys = [p[1] for p in shifted_pts]
                                 b_bbox = {"min_x": min(xs), "min_y": min(ys), "max_x": max(xs), "max_y": max(ys)}
                                 update_bounds(b_bbox)
+                                msp_boxes.append((b_bbox["min_x"], b_bbox["min_y"], b_bbox["max_x"], b_bbox["max_y"]))
                                 if len(shifted_pts) in (4, 5):
                                     _r = rect_from_points([(pp[0], pp[1]) for pp in shifted_pts], max(max(xs) - min(xs), max(ys) - min(ys), 1e-6) * 0.005)
                                     if _r and paper_ratio_match(_r[2] - _r[0], _r[3] - _r[1]):
@@ -314,10 +315,49 @@ def parse_dxf_file(dxf_path: str) -> dict:
                                     "bounding_box": b_bbox,
                                     "geometry_data": {"points": shifted_pts, "is_closed": getattr(sub_e, 'is_closed', False)}
                                 })
+                        elif sub_t == 'LINE':
+                            p1 = transform_point((sub_e.dxf.start.x, sub_e.dxf.start.y), ins, rot, sx, sy)
+                            p2 = transform_point((sub_e.dxf.end.x, sub_e.dxf.end.y), ins, rot, sx, sy)
+                            l_box = (min(p1[0], p2[0]), min(p1[1], p2[1]), max(p1[0], p2[0]), max(p1[1], p2[1]))
+                            msp_boxes.append(l_box)
+
+                # INSERT 객체의 ATTRIB 속성 추출 (표제란 도번/프로젝트명 등)
+                for att in getattr(e, 'attribs', []):
+                    raw_att = att.dxf.text if hasattr(att.dxf, 'text') else ''
+                    cln_att = clean_cad_text(raw_att)
+                    if cln_att:
+                        att_h = getattr(att.dxf, 'height', 10.0) * abs(sy)
+                        att_pos = att.dxf.insert
+                        att_ins = [att_pos.x, att_pos.y]
+                        att_bbox = {
+                            "min_x": att_ins[0], "min_y": att_ins[1],
+                            "max_x": att_ins[0] + len(cln_att) * att_h, "max_y": att_ins[1] + att_h
+                        }
+                        update_bounds(att_bbox)
+                        objects.append({
+                            "handle": getattr(att.dxf, 'handle', f"att_{len(objects)+1}"),
+                            "entity_type": "TEXT",
+                            "layer": getattr(e.dxf, 'layer', '0'),
+                            "color": getattr(e.dxf, 'color', 256),
+                            "raw_text": cln_att,
+                            "bounding_box": att_bbox,
+                            "geometry_data": {
+                                "insert": att_ins,
+                                "height": att_h,
+                                "rotation": getattr(att.dxf, 'rotation', 0.0)
+                            }
+                        })
             
         # 1-3. 프록시(빈) 폼 블록 시트 재구성: 메인 조립도 도곽을 합성 폴리라인 객체로 주입 (frame_detector 연동)
         reconstructed_sheets = []
         if proxy_inserts:
+            unique_proxies = []
+            for ps in proxy_inserts:
+                ins = ps['insert']
+                if not any(abs(p['insert'][0] - ins[0]) < 1.0 and abs(p['insert'][1] - ins[1]) < 1.0 for p in unique_proxies):
+                    unique_proxies.append(ps)
+            proxy_inserts = unique_proxies
+
             exclusion = []
             for r in known_sheet_rects:
                 pad = max(r[2] - r[0], r[3] - r[1]) * 0.01
@@ -334,34 +374,70 @@ def parse_dxf_file(dxf_path: str) -> dict:
             def _contains_sheet(b):
                 return any(b[0] <= s[0] and b[1] <= s[1] and b[2] >= s[2] and b[3] >= s[3] for s in known_sheet_rects)
 
-            def _nearest(px, py):
-                return min(range(len(proxy_inserts)), key=lambda i: (proxy_inserts[i]['insert'][0]-px)**2 + (proxy_inserts[i]['insert'][1]-py)**2)
+            tot_w = global_max_x - global_min_x
+            tot_h = global_max_y - global_min_y
+            tot_area = max(tot_w * tot_h, 1.0)
+            gap = max(tot_w, tot_h) * 0.02
 
-            clusters = [None] * len(proxy_inserts)
-            cluster_texts = [[] for _ in proxy_inserts]
+            candidate_boxes = []
+            candidate_meta = []
+
             for b in msp_boxes:
                 cx, cy = (b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0
                 if _excluded(cx, cy) or _contains_sheet(b):
                     continue
-                i = _nearest(cx, cy)
-                c = clusters[i]
-                clusters[i] = b if c is None else (min(c[0], b[0]), min(c[1], b[1]), max(c[2], b[2]), max(c[3], b[3]))
+                candidate_boxes.append((b[0], b[1], b[2], b[3]))
+                candidate_meta.append(('geom', None))
+
             for o in objects:
                 if o.get("raw_text") and o.get("geometry_data", {}).get("insert"):
                     ix, iy = o["geometry_data"]["insert"]
                     if _excluded(ix, iy):
                         continue
-                    i = _nearest(ix, iy)
-                    cluster_texts[i].append({'t': o["raw_text"], 'x': ix, 'y': iy, 'h': o["geometry_data"].get("height") or 10.0})
+                    h = o["geometry_data"].get("height") or 10.0
+                    candidate_boxes.append((ix, iy, ix + h, iy + h))
+                    candidate_meta.append(('text', {'t': o["raw_text"], 'x': ix, 'y': iy, 'h': h}))
+
+            clusters = cluster_boxes(candidate_boxes, gap)
+
+            valid_clusters = []
+            for cl in clusters:
+                cbx0, cby0, cbx1, cby1 = cl['bbox']
+                c_area = (cbx1 - cbx0) * (cby1 - cby0)
+                if c_area > tot_area * 0.6:
+                    continue
+                has_geom = any(candidate_meta[idx][0] == 'geom' for idx in cl['indices'])
+                if not has_geom:
+                    continue
+                cl_texts = [candidate_meta[idx][1] for idx in cl['indices'] if candidate_meta[idx][0] == 'text']
+                cl['texts'] = cl_texts
+                valid_clusters.append(cl)
 
             for i, ps in enumerate(proxy_inserts):
-                cl = clusters[i]
-                if cl is None and cluster_texts[i]:
-                    xs = [tx['x'] for tx in cluster_texts[i]]; ys = [tx['y'] for tx in cluster_texts[i]]
-                    cl = (min(xs), min(ys), max(xs), max(ys))
-                if cl is None:
+                ins = ps['insert']
+                p1_candidates = []
+                for cl in valid_clusters:
+                    cbx0, cby0, cbx1, cby1 = cl['bbox']
+                    cw = cbx1 - cbx0
+                    ch = cby1 - cby0
+                    if (cbx0 - cw * 0.15 <= ins[0] <= cbx1 + cw * 0.15) and (cby0 - ch * 0.15 <= ins[1] <= cby1 + ch * 0.15):
+                        p1_candidates.append(cl)
+
+                best_cl = None
+                if p1_candidates:
+                    best_cl = p1_candidates[0]
+                elif valid_clusters:
+                    def dist_to_bbox(cl):
+                        cbx0, cby0, cbx1, cby1 = cl['bbox']
+                        dx = max(0.0, cbx0 - ins[0], ins[0] - cbx1)
+                        dy = max(0.0, cby0 - ins[1], ins[1] - cby1)
+                        return dx * dx + dy * dy
+                    best_cl = min(valid_clusters, key=dist_to_bbox)
+
+                if not best_cl:
                     continue
-                sheet = reconstruct_proxy_sheet(ps['insert'], cl, cluster_texts[i], ps['scale'])
+
+                sheet = reconstruct_proxy_sheet(ps['insert'], best_cl['bbox'], best_cl['texts'], ps['scale'])
                 if not sheet:
                     continue
                 bx0, by0, bx1, by1 = sheet['border']
