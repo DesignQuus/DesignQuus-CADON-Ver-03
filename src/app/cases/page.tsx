@@ -257,8 +257,14 @@ export default function CasesPage() {
         })
       });
 
+      if (createRes.status === 401) {
+        alert('로그인 세션이 만료되었습니다. 로그인 페이지로 이동합니다.');
+        window.location.href = '/login';
+        return;
+      }
       if (!createRes.ok) {
-        throw new Error('신규 견적 프로젝트 생성에 실패했습니다.');
+        const errJson = await createRes.json().catch(() => ({}));
+        throw new Error(errJson.error || '신규 견적 프로젝트 생성에 실패했습니다.');
       }
       const createData = await createRes.json();
       const newCaseId = createData.caseId;
@@ -273,8 +279,14 @@ export default function CasesPage() {
         body: formData
       });
 
+      if (uploadRes.status === 401) {
+        alert('로그인 세션이 만료되었습니다. 로그인 페이지로 이동합니다.');
+        window.location.href = '/login';
+        return;
+      }
       if (!uploadRes.ok) {
-        throw new Error('도면 파일 업로드에 실패했습니다.');
+        const uploadErr = await uploadRes.json().catch(() => ({}));
+        throw new Error(uploadErr.error || '도면 파일 업로드에 실패했습니다.');
       }
       const uploadJson = await uploadRes.json();
 
@@ -960,9 +972,14 @@ export default function CasesPage() {
         type="file"
         ref={fileInputRef}
         accept=".dwg,.dxf"
+        onClick={(e) => {
+          (e.target as HTMLInputElement).value = '';
+        }}
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) {
-            handleQuickUploadFile(e.target.files[0]);
+            const selectedFile = e.target.files[0];
+            e.target.value = '';
+            handleQuickUploadFile(selectedFile);
           }
         }}
         className="hidden"
@@ -974,9 +991,14 @@ export default function CasesPage() {
         ref={batchFileInputRef}
         accept=".dwg,.dxf"
         multiple
+        onClick={(e) => {
+          (e.target as HTMLInputElement).value = '';
+        }}
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) {
-            handleBatchUploadFiles(e.target.files);
+            const selectedFiles = e.target.files;
+            e.target.value = '';
+            handleBatchUploadFiles(selectedFiles);
           }
         }}
         className="hidden"

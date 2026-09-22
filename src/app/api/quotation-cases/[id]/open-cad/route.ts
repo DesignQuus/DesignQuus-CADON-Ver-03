@@ -99,34 +99,38 @@ export async function POST(
 
   // 4. Action: Open with configured CAD application
   try {
-    const fastviewRow = db.prepare(`SELECT value FROM cad_app_settings WHERE key = 'fastview_path'`).get() as any;
     const autocadRow = db.prepare(`SELECT value FROM cad_app_settings WHERE key = 'autocad_path'`).get() as any;
+    let configuredPath = autocadRow?.value?.trim() || '';
 
-    let appName = '무료 CAD 뷰어';
-    let configuredPath = '';
-
-    if (targetApp === 'fastview' || targetApp === 'free_viewer') {
-      configuredPath = fastviewRow?.value || '';
-      appName = '무료 CAD 뷰어';
-
-      if (!configuredPath) {
-        return NextResponse.json({
-          success: false,
-          notConfigured: true,
-          error: 'CAD 설정 창에서 무료 뷰어를 설정 후 사용 할 수 있습니다.'
-        }, { status: 400 });
+    // Auto-detect AutoCAD if not yet explicitly configured
+    if (!configuredPath) {
+      const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+      const autodeskDir = path.join(progFiles, 'Autodesk');
+      if (fs.existsSync(autodeskDir)) {
+        try {
+          const subdirs = fs.readdirSync(autodeskDir);
+          const acadDirs = subdirs
+            .filter(d => /^AutoCAD\s*\d{4}/i.test(d))
+            .sort((a, b) => b.localeCompare(a));
+          for (const ad of acadDirs) {
+            const exe = path.join(autodeskDir, ad, 'acad.exe');
+            if (fs.existsSync(exe)) {
+              configuredPath = exe;
+              break;
+            }
+          }
+        } catch {}
       }
-    } else if (targetApp === 'autocad') {
-      appName = 'AutoCAD';
-      configuredPath = autocadRow?.value?.trim() || '';
+    }
 
-      if (!configuredPath) {
-        return NextResponse.json({
-          success: false,
-          notConfigured: true,
-          error: 'PC에 AutoCAD가 설정되어 있지 않습니다. CAD 설정 창에서 AutoCAD 실행 파일 경로를 지정해 주세요.'
-        }, { status: 400 });
-      }
+    const appName = 'AutoCAD';
+
+    if (!configuredPath) {
+      return NextResponse.json({
+        success: false,
+        notConfigured: true,
+        error: 'PC에 AutoCAD가 설정되어 있지 않습니다. 상단 [CAD 설정]에서 AutoCAD 실행 파일 경로를 지정해 주세요.'
+      }, { status: 400 });
     }
 
     const resolved = configuredPath ? resolveExecutable(configuredPath) : null;

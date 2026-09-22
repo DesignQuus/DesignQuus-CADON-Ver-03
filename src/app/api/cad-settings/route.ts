@@ -3,101 +3,58 @@ import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import path from 'path';
 import fs from 'fs';
-import { spawn, execSync } from 'child_process';
+import { execSync } from 'child_process';
 import { resolveExecutable } from '@/lib/cad-resolver';
 import { resolveStoragePath, getStorageSubdir } from '@/lib/storage';
 
-
-// Auto-detect helper for candidate CAD executables on Windows
+// Auto-detect helper for AutoCAD / commercial CAD executables on Windows
 function detectCandidatePaths() {
   const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
   const progFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
 
-  // 1. Gstarsoft DWG FastView candidates
-  const fastviewCandidates = [
-    'C:\\Gstarsoft\\DWGFastView\\gcStart.exe',
-    'C:\\Gstarsoft\\DWGFastView\\GcLauncher.exe',
-    'C:\\Gstarsoft\\DWGFastView\\dwgfastview.exe',
-    'C:\\Users\\Public\\Desktop\\DWG FastView.lnk',
-    'C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\GstarSoft\\DWGFastView\\DWG FastView.lnk',
-    path.join(progFiles, 'Gstarsoft', 'DWG FastView', 'gcStart.exe'),
-    path.join(progFiles, 'Gstarsoft', 'DWG FastView', 'GcLauncher.exe'),
-    path.join(progFiles, 'Gstarsoft', 'DWG FastView', 'dwgfastview.exe'),
-    path.join(progFilesX86, 'Gstarsoft', 'DWG FastView', 'gcStart.exe'),
-    path.join(progFilesX86, 'Gstarsoft', 'DWG FastView', 'GcLauncher.exe'),
-    path.join(progFilesX86, 'Gstarsoft', 'DWG FastView', 'dwgfastview.exe')
-  ].filter(p => fs.existsSync(p));
+  const autocadCandidates: string[] = [];
+  const autodeskDir = path.join(progFiles, 'Autodesk');
 
-  // 2. Autodesk DWG TrueView candidates
-  const trueviewYears = ['2026', '2025', '2024', '2023', '2022', '2021', '2020'];
-  const trueviewCandidates: string[] = [];
-  for (const y of trueviewYears) {
-    trueviewCandidates.push(path.join(progFiles, 'Autodesk', `DWG TrueView ${y} - English`, 'dwgviewr.exe'));
-    trueviewCandidates.push(path.join(progFiles, 'Autodesk', `DWG TrueView ${y} - Korean`, 'dwgviewr.exe'));
-    trueviewCandidates.push(path.join(progFiles, 'Autodesk', `DWG TrueView ${y}`, 'dwgviewr.exe'));
+  // 1. Dynamic scan of Autodesk folder for AutoCAD versions (e.g., AutoCAD 2026, AutoCAD 2025, etc.)
+  if (fs.existsSync(autodeskDir)) {
+    try {
+      const subdirs = fs.readdirSync(autodeskDir);
+      const acadDirs = subdirs
+        .filter(d => /^AutoCAD\s*\d{4}/i.test(d))
+        .sort((a, b) => b.localeCompare(a)); // Newer versions first
+      for (const ad of acadDirs) {
+        const exe = path.join(autodeskDir, ad, 'acad.exe');
+        if (fs.existsSync(exe)) {
+          autocadCandidates.push(exe);
+        }
+      }
+    } catch {}
   }
-  const detectedTrueview = trueviewCandidates.filter(p => fs.existsSync(p));
 
-  // 3. ZWCAD Viewer candidates
-  const zwviewCandidates = [
-    path.join(progFiles, 'ZWSOFT', 'ZWCAD Viewer', 'zwview.exe'),
-    path.join(progFilesX86, 'ZWSOFT', 'ZWCAD Viewer', 'zwview.exe'),
-    path.join(progFiles, 'ZWSOFT', 'ZWCAD Viewer 2025', 'zwview.exe'),
-    path.join(progFiles, 'ZWSOFT', 'ZWCAD Viewer 2024', 'zwview.exe')
-  ].filter(p => fs.existsSync(p));
-
-  // 4. Dassault eDrawings Viewer candidates
-  const edrawingsCandidates = [
-    path.join(progFiles, 'Common Files', 'eDrawings2025', 'eDrawings.exe'),
-    path.join(progFiles, 'Common Files', 'eDrawings2024', 'eDrawings.exe'),
-    path.join(progFiles, 'SolidWorks Corp', 'eDrawings', 'eDrawings.exe')
-  ].filter(p => fs.existsSync(p));
-
-  // 5. AutoCAD commercial versions
-  const autocadCandidates = [
-    path.join(progFiles, 'Autodesk', 'AutoCAD 2025', 'acad.exe'),
-    path.join(progFiles, 'Autodesk', 'AutoCAD 2024', 'acad.exe'),
-    path.join(progFiles, 'Autodesk', 'AutoCAD 2023', 'acad.exe'),
-    path.join(progFiles, 'Autodesk', 'AutoCAD 2022', 'acad.exe'),
-    ...detectedTrueview
-  ].filter(p => fs.existsSync(p));
-
-  const freeViewerPresets = [
-    {
-      id: 'fastview',
-      name: 'Gstarsoft DWG FastView',
-      vendor: 'Gstarsoft',
-      defaultPath: 'C:\\Gstarsoft\\DWGFastView\\gcStart.exe',
-      detectedPath: fastviewCandidates[0] || null,
-      isInstalled: fastviewCandidates.length > 0
-    },
-    {
-      id: 'trueview',
-      name: 'Autodesk DWG TrueView',
-      vendor: 'Autodesk',
-      defaultPath: path.join(progFiles, 'Autodesk', 'DWG TrueView 2025 - English', 'dwgviewr.exe'),
-      detectedPath: detectedTrueview[0] || null,
-      isInstalled: detectedTrueview.length > 0
-    },
-    {
-      id: 'zwcad',
-      name: 'ZWCAD Viewer',
-      vendor: 'ZWSOFT',
-      defaultPath: path.join(progFiles, 'ZWSOFT', 'ZWCAD Viewer', 'zwview.exe'),
-      detectedPath: zwviewCandidates[0] || null,
-      isInstalled: zwviewCandidates.length > 0
-    },
-    {
-      id: 'edrawings',
-      name: 'Dassault eDrawings Viewer',
-      vendor: 'Dassault Systèmes',
-      defaultPath: path.join(progFiles, 'Common Files', 'eDrawings2025', 'eDrawings.exe'),
-      detectedPath: edrawingsCandidates[0] || null,
-      isInstalled: edrawingsCandidates.length > 0
+  // 2. Explicit year check for standard AutoCAD paths
+  const years = ['2027', '2026', '2025', '2024', '2023', '2022', '2021', '2020'];
+  for (const y of years) {
+    const p = path.join(progFiles, 'Autodesk', `AutoCAD ${y}`, 'acad.exe');
+    if (fs.existsSync(p) && !autocadCandidates.includes(p)) {
+      autocadCandidates.push(p);
     }
-  ];
+  }
 
-  return { fastviewCandidates, autocadCandidates, freeViewerPresets };
+  // 3. Fallback to DWG TrueView if installed
+  for (const y of years) {
+    const tvCandidates = [
+      path.join(progFiles, 'Autodesk', `DWG TrueView ${y} - English`, 'dwgviewr.exe'),
+      path.join(progFiles, 'Autodesk', `DWG TrueView ${y} - Korean`, 'dwgviewr.exe'),
+      path.join(progFiles, 'Autodesk', `DWG TrueView ${y}`, 'dwgviewr.exe')
+    ];
+    for (const tv of tvCandidates) {
+      if (fs.existsSync(tv) && !autocadCandidates.includes(tv)) {
+        autocadCandidates.push(tv);
+      }
+    }
+  }
+
+  return { autocadCandidates };
 }
 
 export async function GET() {
@@ -106,30 +63,23 @@ export async function GET() {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   }
 
-  const { fastviewCandidates, autocadCandidates, freeViewerPresets } = detectCandidatePaths();
+  const { autocadCandidates } = detectCandidatePaths();
 
-  const fastviewRow = db.prepare(`SELECT value FROM cad_app_settings WHERE key = 'fastview_path'`).get() as any;
   const autocadRow = db.prepare(`SELECT value FROM cad_app_settings WHERE key = 'autocad_path'`).get() as any;
-
-  // Only use explicitly configured paths from the database.
-  // Do NOT fall back to detected candidates as configured paths, so that first-time users are prompted to configure.
-  const rawFastview = fastviewRow?.value?.trim() || '';
   const rawAutocad = autocadRow?.value?.trim() || '';
 
-  const resolvedFastview = rawFastview ? resolveExecutable(rawFastview) : null;
-  const resolvedAutocad = rawAutocad ? resolveExecutable(rawAutocad) : null;
+  const effectivePath = rawAutocad || (autocadCandidates[0] || '');
+  const resolvedAutocad = effectivePath ? resolveExecutable(effectivePath) : null;
+  const autocadExists = Boolean(resolvedAutocad && fs.existsSync(resolvedAutocad.exePath));
+  const isAutocadInstalled = autocadCandidates.length > 0 || autocadExists;
 
   return NextResponse.json({
-    fastviewPath: rawFastview,
-    autocadPath: rawAutocad,
-    isFreeViewerConfigured: Boolean(rawFastview && resolvedFastview && fs.existsSync(resolvedFastview.exePath)),
-    resolvedFastviewExe: resolvedFastview?.exePath || null,
-    resolvedAutocadExe: resolvedAutocad?.exePath || null,
-    fastviewExists: !!(resolvedFastview && fs.existsSync(resolvedFastview.exePath)),
-    autocadExists: !!(resolvedAutocad && fs.existsSync(resolvedAutocad.exePath)),
-    fastviewCandidates,
+    autocadPath: rawAutocad || (autocadCandidates[0] || ''),
+    detectedAutocadPath: autocadCandidates[0] || null,
     autocadCandidates,
-    freeViewerPresets
+    autocadExists,
+    isAutocadInstalled,
+    isConfigured: Boolean(rawAutocad && autocadExists)
   });
 }
 
@@ -150,7 +100,7 @@ export async function POST(req: NextRequest) {
     if (!resolved || !fs.existsSync(resolved.exePath)) {
       return NextResponse.json({
         success: false,
-        error: `지정한 경로(${rawPath})에서 실행 파일(.exe)을 찾을 수 없습니다. 'C:\\Gstarsoft\\DWGFastView\\gcStart.exe'를 지정해 주세요.`
+        error: `지정한 경로(${rawPath})에서 실행 파일(.exe)을 찾을 수 없습니다.`
       }, { status: 400 });
     }
 
@@ -182,19 +132,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Save action
-  const { fastviewPath, autocadPath } = body;
-
-  if (fastviewPath !== undefined) {
-    if (fastviewPath && fastviewPath.trim()) {
-      db.prepare(`
-        INSERT INTO cad_app_settings (key, value, updated_at)
-        VALUES ('fastview_path', ?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-      `).run(fastviewPath.trim(), now);
-    } else {
-      db.prepare(`DELETE FROM cad_app_settings WHERE key = 'fastview_path'`).run();
-    }
-  }
+  const { autocadPath } = body;
 
   if (autocadPath !== undefined) {
     if (autocadPath && autocadPath.trim()) {
@@ -210,6 +148,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    message: 'CAD 실행 프로그램 설정이 성공적으로 저장되었습니다.'
+    message: 'AutoCAD 실행 프로그램 설정이 성공적으로 저장되었습니다.'
   });
 }

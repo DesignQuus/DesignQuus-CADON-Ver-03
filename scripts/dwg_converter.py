@@ -119,36 +119,70 @@ def convert_dwg_to_dxf(dwg_path: str, output_dxf_path: str, timeout_sec: int = 1
     
     source_sha_before = calculate_sha256(dwg_path)
     
-    # 2. Check Converter Executable (Priority: ENV > Project tools/libredwg > C:\tools\libredwg > PATH)
-    candidate_paths = [
-        os.environ.get("LIBREDWG_PATH", ""),
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "libredwg", "dwg2dxf.exe"),
-        r"C:\tools\libredwg\dwg2dxf.exe",
-        shutil.which("dwg2dxf") or ""
-    ]
-    converter_exe = None
-    for cp in candidate_paths:
-        if cp and os.path.exists(cp):
-            converter_exe = cp
-            break
-
-    if not converter_exe:
-        return {
-            "status": "CONVERTER_NOT_AVAILABLE",
-            "error_code": "CONVERTER_NOT_AVAILABLE",
-            "message": f"LibreDWG executable not found. Checked: {candidate_paths}",
-            "duration_ms": int((time.time() - start_time) * 1000)
-        }
-    
     # 3. Create temp workspace
     temp_dir = os.path.join(os.path.dirname(output_dxf_path), "temp_convert_" + str(int(time.time()*1000)))
     os.makedirs(temp_dir, exist_ok=True)
     raw_output_dxf = os.path.join(temp_dir, "raw_output.dxf")
-    
+
+    # 2. Check AutoCAD/TrueView accoreconsole Executable (Priority 1: Native Autodesk headless engine)
+    acad_console = os.environ.get("ACAD_CONSOLE_PATH", "")
+    if not acad_console or not os.path.exists(acad_console):
+        import glob
+        cands = glob.glob(r"C:\Program Files\Autodesk\*\accoreconsole.exe")
+        if cands:
+            acad_console = cands[0]
+
+    converted_ok = False
+    if acad_console and os.path.exists(acad_console):
+        scr_path = os.path.join(temp_dir, f"dxfout_{int(time.time()*1000)}.scr")
+        try:
+            with open(scr_path, "w", encoding="ascii") as f:
+                f.write(f'_DXFOUT\n"{raw_output_dxf}"\n16\n_QUIT\n_Y\n')
+            cmd = [acad_console, "/i", dwg_path, "/s", scr_path, "/l", "en-US"]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout_sec)
+            if os.path.exists(raw_output_dxf) and os.path.getsize(raw_output_dxf) > 1000:
+                converted_ok = True
+        except Exception:
+            converted_ok = False
+        finally:
+            if os.path.exists(scr_path):
+                try: os.remove(scr_path)
+                except: pass
+
+    # Fallback to LibreDWG if accoreconsole not available or failed
+    if not converted_ok:
+        candidate_paths = [
+            os.environ.get("LIBREDWG_PATH", ""),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "libredwg", "dwg2dxf.exe"),
+            r"C:\tools\libredwg\dwg2dxf.exe",
+            shutil.which("dwg2dxf") or ""
+        ]
+        converter_exe = None
+        for cp in candidate_paths:
+            if cp and os.path.exists(cp):
+                converter_exe = cp
+                break
+
+        if not converter_exe:
+            return {
+                "status": "CONVERTER_NOT_AVAILABLE",
+                "error_code": "CONVERTER_NOT_AVAILABLE",
+                "message": f"Neither AutoCAD accoreconsole nor LibreDWG executable found. Checked: {candidate_paths}",
+                "duration_ms": int((time.time() - start_time) * 1000)
+            }
+
+        try:
+            cmd = [converter_exe, "-y", "-o", raw_output_dxf, dwg_path]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout_sec)
+        except Exception as e:
+            return {
+                "status": "CONVERTER_EXECUTION_FAILED",
+                "error_code": "EXEC_ERROR",
+                "message": str(e),
+                "duration_ms": int((time.time() - start_time) * 1000)
+            }
+
     try:
-        # Do not force --as r2000 downgrade! Preserving modern blocks (r2018/native) keeps blocks 2 & 3 intact.
-        cmd = [converter_exe, "-y", "-o", raw_output_dxf, dwg_path]
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout_sec)
         
         # Verify source DWG was not modified
         source_sha_after = calculate_sha256(dwg_path)
@@ -198,8 +232,8 @@ def convert_dwg_to_dxf(dwg_path: str, output_dxf_path: str, timeout_sec: int = 1
             "warning_count": 0,
             "warnings": [],
             "duration_ms": int((time.time() - start_time) * 1000),
-            "converter_version": "GNU LibreDWG dwg2dxf 0.14 (Stream Optimized)",
-            "provider": "LIBREDWG"
+            "converter_version": "AutoCAD accoreconsole 2026" if converted_ok else "GNU LibreDWG dwg2dxf 0.14 (Stream Optimized)",
+            "provider": "ACAD_CONSOLE" if converted_ok else "LIBREDWG"
         }
         
     except subprocess.TimeoutExpired:

@@ -168,21 +168,14 @@ export default function CadViewer({
 
   // External CAD launch states
   const [openingCad, setOpeningCad] = useState(false);
-  const [openingFastView, setOpeningFastView] = useState(false);
   const [cadStatusMsg, setCadStatusMsg] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
 
   // Settings Modal states
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [fastviewPathInput, setFastviewPathInput] = useState('');
   const [autocadPathInput, setAutocadPathInput] = useState('');
-  const [detectedFastviewList, setDetectedFastviewList] = useState<string[]>([]);
   const [detectedAutocadList, setDetectedAutocadList] = useState<string[]>([]);
-  const [freeViewerPresets, setFreeViewerPresets] = useState<any[]>([]);
-  const [freeViewerExists, setFreeViewerExists] = useState(false);
-  const [isFreeViewerConfigured, setIsFreeViewerConfigured] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(false);
-  const [testingFastview, setTestingFastview] = useState(false);
   const [testingAutocad, setTestingAutocad] = useState(false);
   const [isAutocadInstalled, setIsAutocadInstalled] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -260,14 +253,13 @@ export default function CadViewer({
       const res = await apiFetch('/api/cad-settings');
       if (res.ok) {
         const data = await res.json();
-        setFastviewPathInput(data.fastviewPath || '');
-        if (data.autocadPath !== undefined) setAutocadPathInput(data.autocadPath || '');
-        if (data.fastviewCandidates) setDetectedFastviewList(data.fastviewCandidates);
+        if (data.autocadPath !== undefined) {
+          setAutocadPathInput(data.autocadPath || '');
+        } else if (data.detectedAutocadPath) {
+          setAutocadPathInput(data.detectedAutocadPath);
+        }
         if (data.autocadCandidates) setDetectedAutocadList(data.autocadCandidates);
-        if (data.freeViewerPresets) setFreeViewerPresets(data.freeViewerPresets);
-        setFreeViewerExists(Boolean(data.fastviewExists));
-        setIsFreeViewerConfigured(Boolean(data.isFreeViewerConfigured));
-        setIsAutocadInstalled(Boolean(data.autocadExists));
+        setIsAutocadInstalled(Boolean(data.isAutocadInstalled));
       }
     } catch {}
   }, []);
@@ -283,11 +275,10 @@ export default function CadViewer({
     loadCadSettings();
   };
 
-  // Test Run CAD Executable
-  const handleTestRunCadApp = async (appType: 'fastview' | 'autocad') => {
-    const targetPath = appType === 'fastview' ? fastviewPathInput : autocadPathInput;
-    if (appType === 'fastview') setTestingFastview(true);
-    else setTestingAutocad(true);
+  // Test Run AutoCAD Executable
+  const handleTestRunCadApp = async () => {
+    const targetPath = autocadPathInput;
+    setTestingAutocad(true);
     setSettingsMsg(null);
 
     try {
@@ -305,8 +296,7 @@ export default function CadViewer({
     } catch (err: any) {
       setSettingsMsg({ type: 'error', text: `통신 오류: ${err.message}` });
     } finally {
-      if (appType === 'fastview') setTestingFastview(false);
-      else setTestingAutocad(false);
+      setTestingAutocad(false);
     }
   };
 
@@ -319,14 +309,13 @@ export default function CadViewer({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fastviewPath: fastviewPathInput,
           autocadPath: autocadPathInput
         })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setSettingsMsg({ type: 'success', text: '✅ 설정이 안전하게 저장되었습니다.' });
-        setCadStatusMsg('CAD 실행 프로그램 경로가 업데이트되었습니다.');
+        setSettingsMsg({ type: 'success', text: '✅ AutoCAD 경로 설정이 안전하게 저장되었습니다.' });
+        setCadStatusMsg('AutoCAD 실행 프로그램 경로가 업데이트되었습니다.');
         setTimeout(() => setCadStatusMsg(null), 4000);
         setTimeout(() => setShowSettingsModal(false), 1200);
         loadCadSettings();
@@ -337,46 +326,6 @@ export default function CadViewer({
       setSettingsMsg({ type: 'error', text: `통신 오류: ${err.message}` });
     } finally {
       setSettingsLoading(false);
-    }
-  };
-
-  // 1. Launch in Free CAD Viewer (DWG FastView, TrueView, ZWCAD, etc.)
-  const handleOpenFreeViewer = async () => {
-    if (!caseId) return;
-
-    // Check if free viewer is configured and valid
-    if (!isFreeViewerConfigured || !fastviewPathInput?.trim() || !freeViewerExists) {
-      setCadStatusMsg('CAD 설정 창에서 무료 뷰어를 설정 후 사용 할 수 있습니다.');
-      setShowSettingsModal(true);
-      setTimeout(() => setCadStatusMsg(null), 5000);
-      return;
-    }
-
-    setOpeningFastView(true);
-    setCadStatusMsg(null);
-    try {
-      const res = await apiFetch(`/api/quotation-cases/${caseId}/open-cad`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ app: 'free_viewer' })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setCadStatusMsg(data.message || '무료 뷰어로 도면을 열었습니다.');
-        setTimeout(() => setCadStatusMsg(null), 4500);
-      } else {
-        if (data.notConfigured) {
-          setCadStatusMsg('CAD 설정 창에서 무료 뷰어를 설정 후 사용 할 수 있습니다.');
-          setShowSettingsModal(true);
-          setTimeout(() => setCadStatusMsg(null), 5000);
-        } else {
-          alert(data.error || '무료 CAD 뷰어 열기에 실패했습니다.');
-        }
-      }
-    } catch (err: any) {
-      alert('서버 통신 오류: ' + err.message);
-    } finally {
-      setOpeningFastView(false);
     }
   };
 
@@ -1442,17 +1391,17 @@ export default function CadViewer({
 
       {/* ⚙️ CAD Program Settings Modal */}
       {showSettingsModal && (
-        <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950">
               <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                <div className="w-8 h-8 rounded-xl bg-rose-600/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
                   <Settings className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-white text-sm">외부 CAD 뷰어 & 프로그램 연동 설정</h3>
-                  <p className="text-[11px] text-slate-400">PC에 설치된 무료 CAD 뷰어(FastView, TrueView, ZWCAD 등) 및 AutoCAD 실행 파일(.exe) 경로를 지정합니다.</p>
+                  <h3 className="font-bold text-white text-sm">AutoCAD 연동 설정</h3>
+                  <p className="text-[11px] text-slate-400">상단 [AutoCAD] 버튼 클릭 시 원본 도면을 열 AutoCAD 실행 파일(.exe) 경로를 설정합니다.</p>
                 </div>
               </div>
               <button
@@ -1464,7 +1413,7 @@ export default function CadViewer({
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-6 text-xs overflow-y-auto max-h-[70vh]">
+            <div className="p-6 space-y-5 text-xs">
               {/* Feedback Message */}
               {settingsMsg && (
                 <div className={`p-3 rounded-xl border text-xs flex items-center space-x-2 ${
@@ -1477,135 +1426,57 @@ export default function CadViewer({
                 </div>
               )}
 
-              {/* Setting 1: 무료 CAD 뷰어 연동 */}
-              <div className="space-y-3 bg-slate-950/70 p-4 rounded-xl border border-slate-800">
-                {!isFreeViewerConfigured && (
-                  <div className="p-3 rounded-xl bg-amber-950/50 border border-amber-500/50 text-amber-200 text-xs flex items-center space-x-2.5">
-                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>현재 설정된 무료 뷰어가 없습니다. 아래 감지된 뷰어 중 하나를 클릭하거나 직접 경로를 지정한 뒤 <strong>[설정 저장]</strong>을 눌러주세요.</span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="font-bold text-cyan-300 text-xs flex items-center space-x-1.5">
-                      <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-                      <span>무료 CAD 뷰어 실행 파일 (.exe) 경로</span>
-                    </label>
-                    <p className="text-[10.5px] text-slate-400 mt-0.5">DWG FastView, Autodesk DWG TrueView, ZWCAD Viewer 등 무료 뷰어를 지정합니다.</p>
-                  </div>
-                  <button
-                    onClick={() => handleTestRunCadApp('fastview')}
-                    disabled={testingFastview || !fastviewPathInput}
-                    className="px-2.5 py-1 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-200 hover:text-white rounded-lg text-[11px] font-bold transition-all flex items-center space-x-1 cursor-pointer disabled:opacity-50"
-                  >
-                    {testingFastview ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3 fill-cyan-300" />}
-                    <span>{testingFastview ? '테스트 중...' : '무료 뷰어 즉시 테스트'}</span>
-                  </button>
-                </div>
-
-                {/* Popular Free Viewer Presets Selection */}
-                {freeViewerPresets.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[11px] text-slate-300 font-bold block">💡 대표 무료 CAD 뷰어 선택 (클릭 시 자동 지정):</span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {freeViewerPresets.map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => setFastviewPathInput(preset.detectedPath || preset.defaultPath)}
-                          className={`p-2 rounded-lg text-left border transition-all cursor-pointer flex items-center justify-between ${
-                            fastviewPathInput === (preset.detectedPath || preset.defaultPath)
-                              ? 'bg-cyan-950/70 border-cyan-400 text-cyan-100 ring-1 ring-cyan-400/40'
-                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-850'
-                          }`}
-                        >
-                          <div className="min-w-0 pr-2">
-                            <div className="font-bold text-[11.5px] text-white flex items-center space-x-1">
-                              <span>{preset.name}</span>
-                            </div>
-                            <div className="text-[10px] text-slate-500 truncate">{preset.vendor}</div>
-                          </div>
-                          {preset.isInstalled ? (
-                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-950 border border-emerald-500/50 text-emerald-400 shrink-0">
-                              PC 감지됨
-                            </span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 rounded text-[9.5px] text-slate-500 bg-slate-950 border border-slate-800 shrink-0">
-                              기본 경로
-                            </span>
-                          )}
-                        </button>
-                      ))}
+              {/* AutoCAD Setting Card */}
+              <div className="space-y-4 bg-slate-950/70 p-5 rounded-xl border border-slate-800">
+                {isAutocadInstalled ? (
+                  <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <div>
+                        <span className="font-bold">PC에서 AutoCAD가 감지되었습니다.</span>
+                        <div className="text-[10.5px] text-emerald-400/80 mt-0.5 font-mono truncate max-w-[360px]">
+                          {detectedAutocadList[0] || 'AutoCAD 실행 환경 준비 완료'}
+                        </div>
+                      </div>
                     </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-900/60 border border-emerald-500/60 text-emerald-300 shrink-0">
+                      감지 완료
+                    </span>
                   </div>
-                )}
-
-                <div className="space-y-1 pt-1">
-                  <span className="text-[11px] text-slate-400 block font-semibold">지정된 실행 파일 경로 (.exe):</span>
-                  <input
-                    type="text"
-                    value={fastviewPathInput}
-                    onChange={(e) => setFastviewPathInput(e.target.value)}
-                    placeholder="예: C:\Gstarsoft\DWGFastView\gcStart.exe"
-                    className="w-full bg-slate-900 text-white font-mono text-xs px-3 py-2 rounded-xl border border-slate-700 focus:outline-hidden focus:border-cyan-400"
-                  />
-                </div>
-
-                {/* Auto-detected candidate paths */}
-                {detectedFastviewList.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[10.5px] text-slate-400 block">시스템에서 발견된 후보 경로:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {detectedFastviewList.map((p, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setFastviewPathInput(p)}
-                          className={`px-2 py-0.5 rounded-lg text-[10.5px] font-mono transition-all text-left flex items-center space-x-1 border cursor-pointer ${
-                            fastviewPathInput === p
-                              ? 'bg-cyan-950 border-cyan-400 text-cyan-200'
-                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
-                          }`}
-                        >
-                          <FolderOpen className="w-3 h-3 shrink-0" />
-                          <span className="truncate max-w-[280px]">{p}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Setting 2: AutoCAD */}
-              <div className="space-y-3 bg-slate-950/70 p-4 rounded-xl border border-slate-800">
-                {!isAutocadInstalled && (
+                ) : (
                   <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-center space-x-2.5">
                     <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>PC 기본 위치에서 AutoCAD가 감지되지 않았습니다. 설치되어 있다면 실행 파일(.exe) 전체 경로를 직접 입력 후 <strong>[설정 저장]</strong>을 눌러주세요.</span>
+                    <span>PC 기본 위치에서 AutoCAD가 감지되지 않았습니다. 설치되어 있다면 실행 파일(.exe) 전체 경로를 직접 입력 후 [설정 저장]을 눌러주세요.</span>
                   </div>
                 )}
+
                 <div className="flex items-center justify-between">
-                  <label className="font-bold text-rose-300 text-xs flex items-center space-x-1.5">
-                    <span className="w-2 h-2 rounded-full bg-rose-400"></span>
-                    <span>AutoCAD 실행 파일 (.exe) 경로</span>
-                  </label>
+                  <div>
+                    <label className="font-bold text-rose-300 text-xs flex items-center space-x-1.5">
+                      <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                      <span>AutoCAD 실행 파일 (.exe) 경로</span>
+                    </label>
+                    <p className="text-[10.5px] text-slate-400 mt-0.5">상단 [AutoCAD] 버튼 클릭 시 원본 도면을 열 실행 파일 경로입니다.</p>
+                  </div>
                   <button
-                    onClick={() => handleTestRunCadApp('autocad')}
+                    onClick={handleTestRunCadApp}
                     disabled={testingAutocad || !autocadPathInput}
-                    className="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 hover:text-white rounded-lg text-[11px] font-bold transition-all flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                    className="px-3 py-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 hover:text-white rounded-lg text-[11px] font-bold transition-all flex items-center space-x-1 cursor-pointer disabled:opacity-50"
                   >
                     {testingAutocad ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3 fill-rose-300" />}
                     <span>{testingAutocad ? '테스트 중...' : 'AutoCAD 즉시 테스트 실행'}</span>
                   </button>
                 </div>
 
-                <input
-                  type="text"
-                  value={autocadPathInput}
-                  onChange={(e) => setAutocadPathInput(e.target.value)}
-                  placeholder="예: C:\Program Files\Autodesk\AutoCAD 2024\acad.exe"
-                  className="w-full bg-slate-900 text-white font-mono text-xs px-3 py-2.5 rounded-xl border border-slate-700 focus:outline-hidden focus:border-rose-400"
-                />
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    value={autocadPathInput}
+                    onChange={(e) => setAutocadPathInput(e.target.value)}
+                    placeholder="예: C:\Program Files\Autodesk\AutoCAD 2026\acad.exe"
+                    className="w-full bg-slate-900 text-white font-mono text-xs px-3.5 py-2.5 rounded-xl border border-slate-700 focus:outline-hidden focus:border-rose-400"
+                  />
+                </div>
 
                 {/* Auto-detected AutoCAD candidates */}
                 {detectedAutocadList.length > 0 && (
@@ -1615,6 +1486,7 @@ export default function CadViewer({
                       {detectedAutocadList.map((p, idx) => (
                         <button
                           key={idx}
+                          type="button"
                           onClick={() => setAutocadPathInput(p)}
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all text-left flex items-center space-x-1 border cursor-pointer ${
                             autocadPathInput === p
@@ -1623,7 +1495,7 @@ export default function CadViewer({
                           }`}
                         >
                           <FolderOpen className="w-3 h-3 shrink-0" />
-                          <span className="truncate max-w-[320px]">{p}</span>
+                          <span className="truncate max-w-[360px]">{p}</span>
                         </button>
                       ))}
                     </div>

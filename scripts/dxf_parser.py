@@ -233,7 +233,7 @@ def parse_dxf_file(dxf_path: str) -> dict:
             if t == 'INSERT':
                 _bname = getattr(e.dxf, 'name', None)
                 _blk = doc.blocks.get(_bname) if _bname else None
-                if _bname and is_empty_block(_blk) and not list(getattr(e, 'attribs', []) or []) and FORM_NAME_PAT.search(_bname):
+                if _bname and is_empty_block(_blk) and FORM_NAME_PAT.search(_bname):
                     _sx = abs(getattr(e.dxf, 'xscale', 1.0) or 1.0)
                     proxy_inserts.append({'insert': (e.dxf.insert[0], e.dxf.insert[1]), 'scale': _sx, 'name': _bname})
 

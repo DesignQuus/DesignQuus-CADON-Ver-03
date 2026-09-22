@@ -1,6 +1,6 @@
 {
-  "name": "cadon-bom-ai-ver02",
-  "version": "0.2.0",
+  "name": "cadon-bom-ai-ver03",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack -p 4005",
@@ -22,7 +22,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@egdesk/next-api-plugin": "^1.5.77",
+    "@egdesk/next-api-plugin": "^1.5.84",
     "@tailwindcss/postcss": "^4.0.9",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.13.9",

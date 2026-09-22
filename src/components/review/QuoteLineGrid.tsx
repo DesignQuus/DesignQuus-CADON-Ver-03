@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CheckCircle2, Clock, HelpCircle, ShieldAlert, AlertCircle,
   Package, Wrench, Ban, Check, ChevronDown, CheckSquare, Square,
@@ -85,6 +85,14 @@ export default function QuoteLineGrid({
 }: QuoteLineGridProps) {
   // 열려있는 인라인 드롭다운 상태 관리
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    if (!openDropdownId) return;
+    const handleOutside = () => setOpenDropdownId(null);
+    window.addEventListener('click', handleOutside);
+    return () => window.removeEventListener('click', handleOutside);
+  }, [openDropdownId]);
 
   // 견적 대상 부품: 조립도, 제외품, 체결구제외, 도면노이즈를 제외한 실 가공/구매 대상
   const quoteTargetLines = lines.filter((l) => {
@@ -223,6 +231,50 @@ export default function QuoteLineGrid({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={10} className="py-16 px-4 text-center">
+                  <div className="max-w-md mx-auto flex flex-col items-center justify-center text-slate-500">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3 text-slate-400">
+                      {filterType === 'NOISE' ? (
+                        <Sparkles className="w-6 h-6 text-amber-500" />
+                      ) : filterType === 'SUPPLIED' ? (
+                        <Package className="w-6 h-6 text-cyan-500" />
+                      ) : (
+                        <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                      )}
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-800 mb-1">
+                      {filterType === 'NOISE'
+                        ? '도면 주석/노이즈 격리실이 비어 있습니다'
+                        : filterType === 'NEEDS_REVIEW'
+                        ? '검토가 필요한 품목이 없습니다'
+                        : filterType === 'UNCONFIRMED'
+                        ? '미확정 품목이 없습니다'
+                        : filterType === 'SUPPLIED'
+                        ? '지정된 고객 사급품이 없습니다'
+                        : filterType === 'EXCLUDED'
+                        ? '제외된 품목이 없습니다'
+                        : '해당 조건에 일치하는 품목이 없습니다'}
+                    </h4>
+                    <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                      {filterType === 'NOISE'
+                        ? '아직 격리실로 이동된 비부품 텍스트가 없습니다. 상단 [🧹 도면 노이즈 격리 & 학습] 액션을 실행하면 이곳에 보관됩니다.'
+                        : filterType === 'UNCONFIRMED'
+                        ? '모든 견적 대상 품목의 단가 확정이 완료되었습니다.'
+                        : '선택하신 필터 조건에 해당하는 부품이 없습니다. 전체 견적 목록으로 돌아가 확인해 보세요.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onFilterChange('ALL')}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>📋 견적 대상 전체 보기 ({quoteTargetLines.length}건)</span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
             {filtered.map((row) => {
               const isSelected = lines.indexOf(row) === selectedIndex;
               const isChecked = selectedIds.includes(row.id);
@@ -310,19 +362,35 @@ export default function QuoteLineGrid({
                   <td className="p-2 text-right font-mono text-slate-500">
                     {isNoise ? (
                       <span className="text-amber-700 font-medium text-[10px]">노이즈제외</span>
-                    ) : isExcluded ? '-' : isSupplied ? (
-                      <span className="text-cyan-700 font-medium text-[10px]">사급제공</span>
+                    ) : isSupplied ? (
+                      <span className="text-cyan-700 font-medium text-[10px]">사급(₩0)</span>
+                    ) : isFastenerExcluded ? (
+                      <span className="text-slate-500 font-medium text-[10px]">체결구제외</span>
+                    ) : isExcluded ? (
+                      <span className="text-slate-400 font-medium text-[10px]">견적제외</span>
                     ) : (row.unitCost > 0 ? `₩${row.unitCost.toLocaleString()}` : <span className="text-slate-400">₩0</span>)}
                   </td>
                   <td className="p-2 text-right font-mono font-bold whitespace-nowrap">
                     {isNoise ? (
-                      <span className="text-amber-700 font-bold text-[10px] bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
-                        🧹 노이즈격리
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-800 border border-amber-300 font-bold" title="도면 주석/노이즈로 격리됨 (견적금액 제외)">
+                        <Sparkles className="w-3 h-3 text-amber-600 shrink-0" />
+                        노이즈 격리
+                      </span>
+                    ) : isSupplied ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] bg-cyan-50 text-cyan-800 border border-cyan-300 font-bold" title="고객 사급품 (단가 0원 정상, 결재 가능)">
+                        <Package className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
+                        사급품 (0원 정상)
+                      </span>
+                    ) : isFastenerExcluded ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-600 border border-slate-300 font-bold" title="표준 체결구 제외">
+                        <Wrench className="w-3 h-3 text-slate-500 shrink-0" />
+                        체결구 제외
                       </span>
                     ) : isExcluded ? (
-                      <span className="text-slate-400">-</span>
-                    ) : isSupplied ? (
-                      <span className="text-cyan-700 font-bold text-[11px]">₩0 (사급품)</span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 border border-rose-200 font-bold" title="견적 대상 제외">
+                        <Ban className="w-3 h-3 text-rose-500 shrink-0" />
+                        견적 제외
+                      </span>
                     ) : row.supplyPrice > 0 ? (
                       (() => {
                         const marginPct = (row.supplyPrice > 0 && row.unitCost > 0)
@@ -443,107 +511,118 @@ export default function QuoteLineGrid({
                   {/* 견적 상태 열 */}
                   <td className="p-2 text-center relative" onClick={(e) => e.stopPropagation()}>
                     {row.isAssembly ? (
-                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                      <span className="px-2 py-1 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
                         조립제외
                       </span>
-                    ) : isNoise ? (
-                      /* 🧹 격리실 품목: 복원 버튼 및 블랙리스트 등록 버튼 */
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => onUpdateLineInclusion && onUpdateLineInclusion(row.id, 'INCLUDED')}
-                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 transition-colors"
-                          title="진짜 부품인 경우 정상 견적 목록으로 복원"
-                        >
-                          ✓ 부품 복원
-                        </button>
-                        {onAddNoiseBlacklist && (
-                          <button
-                            onClick={() => onAddNoiseBlacklist(row.partName || row.partNo)}
-                            className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-300 transition-colors"
-                            title="사내 노이즈 블랙리스트에 영구 등록하여 다음 도면 파싱부터 자동 제외"
-                          >
-                            학습
-                          </button>
-                        )}
-                      </div>
                     ) : (
-                      <div className="flex items-center justify-center gap-1">
-                        {/* 견적 포함 유형 뱃지 & 간편 드롭다운 */}
+                      <div className="flex items-center justify-center gap-1.5">
+                        {/* 💎 견적 포함 유형 뱃지 & 간편 드롭다운 (선택된 내용 완벽 표시) */}
                         <div className="relative">
                           <button
                             onClick={() => setOpenDropdownId(openDropdownId === row.id ? null : row.id)}
-                            className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 transition-all border ${
+                            className={`px-2 py-1 rounded text-[10.5px] font-bold flex items-center gap-1 transition-all border shadow-2xs cursor-pointer whitespace-nowrap ${
                               incType === 'CUSTOMER_SUPPLIED'
-                                ? 'bg-cyan-50 text-cyan-800 border-cyan-300'
+                                ? 'bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border-cyan-400 ring-1 ring-cyan-200'
                                 : incType === 'FASTENER_EXCLUDED'
-                                ? 'bg-slate-100 text-slate-600 border-slate-300'
+                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                                : incType === 'ANNOTATION_NOISE'
+                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-400 ring-1 ring-amber-200'
                                 : incType === 'EXCLUDED'
-                                ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 ring-1 ring-rose-200'
+                                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
                             }`}
-                            title="견적 포함/사급품/체결구/제외/노이즈 상태 변경"
+                            title="클릭하여 상태 변경: 견적 포함 / 고객 사급품 / 체결구 제외 / 노이즈 격리 / 견적 제외"
                           >
                             <span>
-                              {incType === 'CUSTOMER_SUPPLIED' ? '📦 사급' :
-                               incType === 'FASTENER_EXCLUDED' ? '🔩 체결구' :
-                               incType === 'EXCLUDED' ? '🚫 제외' : '포함'}
+                              {incType === 'CUSTOMER_SUPPLIED' ? '📦 고객 사급품' :
+                               incType === 'FASTENER_EXCLUDED' ? '🔩 체결구 제외' :
+                               incType === 'ANNOTATION_NOISE' ? '🧹 노이즈 격리' :
+                               incType === 'EXCLUDED' ? '🚫 견적 제외' : '포함'}
                             </span>
-                            <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                            <ChevronDown className={`w-3 h-3 opacity-60 transition-transform ${openDropdownId === row.id ? 'rotate-180' : ''}`} />
                           </button>
 
                           {/* 인라인 변경 드롭다운 팝오버 */}
                           {openDropdownId === row.id && onUpdateLineInclusion && (
-                            <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-30 w-32 text-left text-xs font-semibold animate-in fade-in zoom-in-95">
+                            <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-40 w-36 text-left text-xs font-semibold animate-in fade-in zoom-in-95">
+                              <div className="px-2.5 py-1 text-[10px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
+                                상태 변경 선택
+                              </div>
                               <button
                                 onClick={() => {
                                   onUpdateLineInclusion(row.id, 'INCLUDED');
                                   setOpenDropdownId(null);
                                 }}
-                                className="w-full px-2.5 py-1 text-left hover:bg-slate-50 flex items-center gap-1.5 text-slate-800"
+                                className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between transition-colors ${
+                                  incType === 'INCLUDED' ? 'bg-emerald-50 text-emerald-800 font-bold' : 'hover:bg-slate-50 text-slate-800'
+                                }`}
                               >
-                                <Check className="w-3 h-3 text-emerald-600" /> 견적 포함
+                                <span className="flex items-center gap-1.5">
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" /> 견적 포함
+                                </span>
+                                {incType === 'INCLUDED' && <Check className="w-3.5 h-3.5 text-emerald-600" />}
                               </button>
                               <button
                                 onClick={() => {
                                   onUpdateLineInclusion(row.id, 'CUSTOMER_SUPPLIED');
                                   setOpenDropdownId(null);
                                 }}
-                                className="w-full px-2.5 py-1 text-left hover:bg-cyan-50 flex items-center gap-1.5 text-cyan-800"
+                                className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between transition-colors ${
+                                  incType === 'CUSTOMER_SUPPLIED' ? 'bg-cyan-50 text-cyan-800 font-bold' : 'hover:bg-cyan-50/60 text-cyan-800'
+                                }`}
                               >
-                                <Package className="w-3 h-3 text-cyan-600" /> 고객 사급품
+                                <span className="flex items-center gap-1.5">
+                                  <Package className="w-3.5 h-3.5 text-cyan-600" /> 고객 사급품
+                                </span>
+                                {incType === 'CUSTOMER_SUPPLIED' && <Check className="w-3.5 h-3.5 text-cyan-600" />}
                               </button>
                               <button
                                 onClick={() => {
                                   onUpdateLineInclusion(row.id, 'FASTENER_EXCLUDED');
                                   setOpenDropdownId(null);
                                 }}
-                                className="w-full px-2.5 py-1 text-left hover:bg-slate-100 flex items-center gap-1.5 text-slate-700"
+                                className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between transition-colors ${
+                                  incType === 'FASTENER_EXCLUDED' ? 'bg-slate-100 text-slate-800 font-bold' : 'hover:bg-slate-100 text-slate-700'
+                                }`}
                               >
-                                <Wrench className="w-3 h-3 text-slate-500" /> 체결구 제외
+                                <span className="flex items-center gap-1.5">
+                                  <Wrench className="w-3.5 h-3.5 text-slate-500" /> 체결구 제외
+                                </span>
+                                {incType === 'FASTENER_EXCLUDED' && <Check className="w-3.5 h-3.5 text-slate-600" />}
                               </button>
                               <button
                                 onClick={() => {
                                   onUpdateLineInclusion(row.id, 'ANNOTATION_NOISE');
                                   setOpenDropdownId(null);
                                 }}
-                                className="w-full px-2.5 py-1 text-left hover:bg-amber-50 flex items-center gap-1.5 text-amber-800"
+                                className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between transition-colors ${
+                                  incType === 'ANNOTATION_NOISE' ? 'bg-amber-50 text-amber-800 font-bold' : 'hover:bg-amber-50/60 text-amber-800'
+                                }`}
                               >
-                                <Sparkles className="w-3 h-3 text-amber-600" /> 🧹 노이즈 격리
+                                <span className="flex items-center gap-1.5">
+                                  <Sparkles className="w-3.5 h-3.5 text-amber-600" /> 노이즈 격리
+                                </span>
+                                {incType === 'ANNOTATION_NOISE' && <Check className="w-3.5 h-3.5 text-amber-600" />}
                               </button>
                               <button
                                 onClick={() => {
                                   onUpdateLineInclusion(row.id, 'EXCLUDED');
                                   setOpenDropdownId(null);
                                 }}
-                                className="w-full px-2.5 py-1 text-left hover:bg-rose-50 flex items-center gap-1.5 text-rose-700"
+                                className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between transition-colors ${
+                                  incType === 'EXCLUDED' ? 'bg-rose-50 text-rose-800 font-bold' : 'hover:bg-rose-50/60 text-rose-700'
+                                }`}
                               >
-                                <Ban className="w-3 h-3 text-rose-500" /> 견적 제외
+                                <span className="flex items-center gap-1.5">
+                                  <Ban className="w-3.5 h-3.5 text-rose-500" /> 견적 제외
+                                </span>
+                                {incType === 'EXCLUDED' && <Check className="w-3.5 h-3.5 text-rose-600" />}
                               </button>
                             </div>
                           )}
                         </div>
 
-                        {/* 확정 버튼: 사급/제외품이 아닐 때만 확정 제어 */}
+                        {/* 확정 상태 뱃지: 상태별 명확한 피드백 */}
                         {incType === 'INCLUDED' ? (
                           <button
                             onClick={() => onToggleConfirm(row.id)}
@@ -557,8 +636,29 @@ export default function QuoteLineGrid({
                           >
                             {isConfirmed ? '확정' : row.supplyPrice <= 0 ? '0원' : isNeedsReview ? '검토' : '미확정'}
                           </button>
+                        ) : incType === 'CUSTOMER_SUPPLIED' ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-cyan-100 text-cyan-800 border border-cyan-300 whitespace-nowrap" title="고객 사급품으로 정상 결재 가능">
+                            사급확정
+                          </span>
+                        ) : incType === 'ANNOTATION_NOISE' ? (
+                          <div className="flex items-center gap-1">
+                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
+                              격리
+                            </span>
+                            {onAddNoiseBlacklist && (
+                              <button
+                                onClick={() => onAddNoiseBlacklist(row.partName || row.partNo)}
+                                className="px-1 py-0.5 rounded text-[9px] font-bold bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-300 transition-colors"
+                                title="사내 노이즈 블랙리스트에 영구 등록하여 다음 도면 파싱부터 자동 제외"
+                              >
+                                학습
+                              </button>
+                            )}
+                          </div>
                         ) : (
-                          <span className="text-[9px] text-slate-400 font-medium">정상</span>
+                          <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 text-slate-600 border border-slate-300 whitespace-nowrap">
+                            제외확정
+                          </span>
                         )}
                       </div>
                     )}

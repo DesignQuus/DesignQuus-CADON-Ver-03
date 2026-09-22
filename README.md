@@ -1,4 +1,4 @@
-# CADON-BOM AI (Ver-02)
+# CADON-BOM AI (Ver-03)
 
 > **CAD 도면(DWG/DXF) 자동 분석, BOM 추출, 마스터 부품 매핑 및 견적 생성 자동화 시스템**
 
@@ -31,8 +31,8 @@
 
 ### 1. 저장소 클론 및 패키지 설치
 ```bash
-git clone https://github.com/DesignQuus/CADON-Ver-02.git
-cd CADON-Ver-02
+git clone https://github.com/DesignQuus/CADON-Ver-03.git
+cd CADON-Ver-03
 npm install
 ```
 

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Send, CheckCircle2, RefreshCw, FileText, AlertTriangle, AlertCircle,
-  ExternalLink, ChevronDown, ChevronUp, Sparkles, Layers, Zap, Database
+  ExternalLink, ChevronDown, ChevronUp, Sparkles, Layers, Zap, Database, HelpCircle
 } from 'lucide-react';
 import QuoteLineGrid, { QuoteReviewLine, InclusionType } from '@/components/review/QuoteLineGrid';
 import SmartBatchActionBar from '@/components/review/SmartBatchActionBar';
@@ -129,6 +129,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const [filterType, setFilterType] = useState<string>('ALL');
   const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
   const [isMasterDrawerOpen, setIsMasterDrawerOpen] = useState<boolean>(false);
+  const [isPilotModalOpen, setIsPilotModalOpen] = useState<boolean>(false);
 
   // 실제 CAD 도면 및 2D 벡터 오브젝트 상태
   const [files, setFiles] = useState<any[]>([]);
@@ -231,11 +232,15 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   nameLower.includes('베어링') || nameLower.includes('스프링') || nameLower.includes('spring') ||
                   specLower.includes('cdq2') || specLower.includes('misumi') || pNoLower.includes('cdq2');
 
+                // 🛡️ 모터/센서/실린더 키워드가 있더라도, 취부/가공용 부품(플랜지, 브라켓, 베이스, 바디, 플레이트 등)은 가공품(MACHINING)으로 분류
+                const isMachiningFixture = /flange|bracket|base|plate|mount|block|dog|cover|body|spacer|stay|fixture|플랜지|브라켓|베이스|플레이트|블록|마운트|커버|바디/i.test(nameLower);
+
                 const isElectricalPurchased =
-                  nameLower.includes('모터') || nameLower.includes('센서') || nameLower.includes('실린더') ||
-                  nameLower.includes('motor') || nameLower.includes('sensor') || nameLower.includes('cylinder') ||
-                  nameLower.includes('valve') || nameLower.includes('plc') || nameLower.includes('servo') ||
-                  nameLower.includes('f3s') || nameLower.includes('sol');
+                  !isMachiningFixture &&
+                  (nameLower.includes('모터') || nameLower.includes('센서') || nameLower.includes('실린더') ||
+                   nameLower.includes('motor') || nameLower.includes('sensor') || nameLower.includes('cylinder') ||
+                   nameLower.includes('valve') || nameLower.includes('plc') || nameLower.includes('servo') ||
+                   nameLower.includes('f3s') || nameLower.includes('sol'));
 
                 // 6대 실무 부품 유형 자동 분류
                 let partType: PartType = 'MACHINING';
@@ -430,11 +435,15 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   nameLower.includes('베어링') || nameLower.includes('스프링') || nameLower.includes('spring') ||
                   specLower.includes('cdq2') || specLower.includes('misumi') || pNoLower.includes('cdq2');
 
+                // 🛡️ 모터/센서/실린더 키워드가 있더라도, 취부/가공용 부품(플랜지, 브라켓, 베이스, 바디, 플레이트 등)은 가공품(MACHINING)으로 분류
+                const isMachiningFixture = /flange|bracket|base|plate|mount|block|dog|cover|body|spacer|stay|fixture|플랜지|브라켓|베이스|플레이트|블록|마운트|커버|바디/i.test(nameLower);
+
                 const isElectricalPurchased =
-                  nameLower.includes('모터') || nameLower.includes('센서') || nameLower.includes('실린더') ||
-                  nameLower.includes('motor') || nameLower.includes('sensor') || nameLower.includes('cylinder') ||
-                  nameLower.includes('valve') || nameLower.includes('plc') || nameLower.includes('servo') ||
-                  nameLower.includes('f3s') || nameLower.includes('sol');
+                  !isMachiningFixture &&
+                  (nameLower.includes('모터') || nameLower.includes('센서') || nameLower.includes('실린더') ||
+                   nameLower.includes('motor') || nameLower.includes('sensor') || nameLower.includes('cylinder') ||
+                   nameLower.includes('valve') || nameLower.includes('plc') || nameLower.includes('servo') ||
+                   nameLower.includes('f3s') || nameLower.includes('sol'));
 
                 // 6대 실무 부품 유형 자동 분류
                 let partType: PartType = 'MACHINING';
@@ -1607,6 +1616,16 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             <span>기준정보 관리</span>
           </Link>
 
+          {/* ℹ️ 워크스페이스 이용 안내 모달 호출 버튼 */}
+          <button
+            onClick={() => setIsPilotModalOpen(true)}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 font-bold text-xs transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+            title="견적 검토 워크스페이스 이용 안내 창을 다시 엽니다"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>이용 안내</span>
+          </button>
+
           <button
             onClick={handleSubmitQuote}
             disabled={unconfirmedCount > 0 || zeroPriceCount > 0 || submittingQuote}
@@ -1814,7 +1833,10 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       />
 
       {/* 💎 6. 파일럿 최초 진입 안내 모달 (P-4) */}
-      <PilotWelcomeModal />
+      <PilotWelcomeModal
+        isOpen={isPilotModalOpen}
+        onOpenChange={setIsPilotModalOpen}
+      />
     </div>
   );
 }

@@ -608,7 +608,9 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    await handleProcessFile(e.target.files[0]);
+    const selectedFile = e.target.files[0];
+    e.target.value = '';
+    await handleProcessFile(selectedFile);
   };
 
   // 2. Start Analysis Manual Trigger (PROMPT 18-R1 / 18-R2)
@@ -2558,6 +2560,9 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                   type="file"
                   id="file-upload"
                   accept=".dwg,.dxf,.pdf,.xls,.xlsx"
+                  onClick={(e) => {
+                    (e.target as HTMLInputElement).value = '';
+                  }}
                   onChange={handleFileUpload}
                   className="hidden"
                 />

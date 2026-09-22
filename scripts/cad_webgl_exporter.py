@@ -1089,7 +1089,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     tb = transform_rect(block_sheet_frames[bname]['BORDER'], ins, sx, sy, rot_deg)
                     if tb:
                         known_sheet_rects.append(tb)
-                elif block_renders_nothing(bname) and not list(getattr(e, 'attribs', []) or []):
+                elif block_renders_nothing(bname):
                     # 프록시 도곽 후보: 이름이 도곽/양식을 뜻하거나, 디코딩 실패한 프록시 엔티티를 가진 빈 블록
                     if FORM_NAME_PAT.search(bname) or block_proxy_failures.get(bname, 0) > 0:
                         proxy_sheet_inserts.append({'insert': ins, 'scale': abs(sx) if sx else 1.0, 'name': bname})
@@ -1462,17 +1462,19 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
 
             # cluster_boxes 실행 (2단계: 간격 기반 연결 요소)
             clusters = cluster_boxes(candidate_boxes, gap)
+            print(f"[DEBUG CLUSTERS] total={len(clusters)}, candidate_boxes={len(candidate_boxes)}, tot_area={tot_area:.1f}")
 
             # 안전장치 필터링
             valid_clusters = []
             for cl in clusters:
                 cbx0, cby0, cbx1, cby1 = cl['bbox']
                 c_area = (cbx1 - cbx0) * (cby1 - cby0)
+                has_geom = any(candidate_meta[idx][0] == 'geom' for idx in cl['indices'])
+                print(f"[DEBUG CLUSTER] bbox={[round(v,1) for v in cl['bbox']]} area_ratio={c_area/tot_area:.3f} has_geom={has_geom}")
                 # 1) 전체 면적의 60%를 넘는 배경/기준선 요소 제외
                 if c_area > tot_area * 0.6:
                     continue
                 # 2) 텍스트만으로 이루어진 요소(기하 요소 미포함) 제외
-                has_geom = any(candidate_meta[idx][0] == 'geom' for idx in cl['indices'])
                 if not has_geom:
                     continue
                 cl_texts = [candidate_meta[idx][1] for idx in cl['indices'] if candidate_meta[idx][0] == 'text']

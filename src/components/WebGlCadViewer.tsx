@@ -163,6 +163,64 @@ export default function WebGlCadViewer({
     currentFileIdRef.current = activeFileId;
   }, [activeFileId]);
 
+  // 💡 정밀 도면 영역(True Drawing Extents) 계산:
+  // DXF 내 멀리 떨어진 이상치(Outlier) 엔티티로 인해 바이너리 bounds가 비정상적으로 커지더라도,
+  // 1) 검증된 도면 시트 프레임(frame_bbox)들의 합집합을 최우선 사용 (전체 86개 시트 등)
+  // 2) 텍스트 좌표 분포를 차순위로 사용
+  // 3) 폴백으로 바이너리 헤더 bounds를 사용하여 화면 전환 시에도 도면이 꽉 찬 크기로 자동 유지
+  const getEffectiveOverviewBounds = useCallback(() => {
+    // 1. 도면 시트 프레임(frame_bbox) 합집합 계산
+    const dwgs = drawingsRef.current || [];
+    let dMinX = Infinity, dMinY = Infinity, dMaxX = -Infinity, dMaxY = -Infinity;
+    let validDwgCount = 0;
+
+    for (const d of dwgs) {
+      try {
+        const fb = typeof d.frame_bbox_json === 'string' ? JSON.parse(d.frame_bbox_json) : d.frame_bbox;
+        if (fb && typeof fb.min_x === 'number' && typeof fb.max_x === 'number' && typeof fb.min_y === 'number' && typeof fb.max_y === 'number') {
+          if (fb.max_x > fb.min_x && fb.max_y > fb.min_y) {
+            dMinX = Math.min(dMinX, fb.min_x);
+            dMinY = Math.min(dMinY, fb.min_y);
+            dMaxX = Math.max(dMaxX, fb.max_x);
+            dMaxY = Math.max(dMaxY, fb.max_y);
+            validDwgCount++;
+          }
+        }
+      } catch {}
+    }
+
+    if (validDwgCount > 0 && dMaxX > dMinX && dMaxY > dMinY) {
+      return { minX: dMinX, minY: dMinY, maxX: dMaxX, maxY: dMaxY };
+    }
+
+    // 2. 텍스트 좌표 합집합 (이상치 선분 배제)
+    const texts = cadTextsRef.current || [];
+    if (texts.length >= 10) {
+      let tMinX = Infinity, tMinY = Infinity, tMaxX = -Infinity, tMaxY = -Infinity;
+      for (const t of texts) {
+        if (typeof t.x === 'number' && typeof t.y === 'number') {
+          tMinX = Math.min(tMinX, t.x);
+          tMinY = Math.min(tMinY, t.y);
+          tMaxX = Math.max(tMaxX, t.x);
+          tMaxY = Math.max(tMaxY, t.y);
+        }
+      }
+      if (tMaxX > tMinX && tMaxY > tMinY) {
+        const padX = Math.max((tMaxX - tMinX) * 0.08, 50);
+        const padY = Math.max((tMaxY - tMinY) * 0.08, 50);
+        return {
+          minX: tMinX - padX,
+          minY: tMinY - padY,
+          maxX: tMaxX + padX,
+          maxY: tMaxY + padY
+        };
+      }
+    }
+
+    // 3. 폴백: 바이너리 헤더 bounds
+    return boundsRef.current;
+  }, []);
+
   // 3. Zoom Camera to Extents or Specific Bounding Box (Robust with Auto-Retry)
   const fitToExtents = useCallback((minX: number, minY: number, maxX: number, maxY: number, animate = true, retryCount = 0) => {
     const camera = cameraRef.current;
@@ -219,6 +277,16 @@ export default function WebGlCadViewer({
     }
     needsRenderRef.current = true;
   }, []);
+
+  // drawings 시트 정보가 없는 단일 도면 파일인 경우, cadTexts가 로드되었을 때 실제 텍스트 영역으로 자동 fit
+  useEffect(() => {
+    if (cadTexts.length > 0 && drawingsRef.current.length === 0 && !focusBboxRef.current && selectedDrawingIdxRef.current < 0) {
+      const b = getEffectiveOverviewBounds();
+      if (b.maxX > b.minX) {
+        fitToExtents(b.minX, b.minY, b.maxX, b.maxY, false);
+      }
+    }
+  }, [cadTexts.length, getEffectiveOverviewBounds, fitToExtents]);
 
   // 1. Initialize Three.js Scene, Camera, and Renderer
   useEffect(() => {
@@ -590,9 +658,12 @@ export default function WebGlCadViewer({
       if (focusBboxRef.current && !isDraggingRef.current) {
         const fb = focusBboxRef.current;
         fitToExtents(fb.min_x, fb.min_y, fb.max_x, fb.max_y, false);
-      } else if (!isDraggingRef.current && boundsRef.current.maxX > boundsRef.current.minX) {
+      } else if (!isDraggingRef.current) {
         // Automatically keep full drawing in view if user is in overall overview mode
-        fitToExtents(boundsRef.current.minX, boundsRef.current.minY, boundsRef.current.maxX, boundsRef.current.maxY, false);
+        const eff = getEffectiveOverviewBounds();
+        if (eff.maxX > eff.minX) {
+          fitToExtents(eff.minX, eff.minY, eff.maxX, eff.maxY, false);
+        }
       }
       needsRenderRef.current = true;
     };
@@ -806,9 +877,11 @@ export default function WebGlCadViewer({
       }
 
       // Auto-fit to view with zero delay + delayed safety fit
-      fitToExtents(minX, minY, maxX, maxY, false);
+      const effBounds = getEffectiveOverviewBounds();
+      fitToExtents(effBounds.minX, effBounds.minY, effBounds.maxX, effBounds.maxY, false);
       setTimeout(() => {
-        fitToExtents(minX, minY, maxX, maxY, false);
+        const b = getEffectiveOverviewBounds();
+        fitToExtents(b.minX, b.minY, b.maxX, b.maxY, false);
       }, 120);
       setLoading(false);
     } catch (err: any) {
@@ -1040,8 +1113,17 @@ export default function WebGlCadViewer({
       loadBinaryData(0);
       loadTexts(0);
       loadRasters();
+    } else if (drawings.length > 0 && prevDrawingCountRef.current !== drawings.length) {
+      prevDrawingCountRef.current = drawings.length;
+      // 도면 시트 목록이 비동기로 채워졌을 때 전체 보기 모드라면 실제 시트 영역으로 자동 포커스
+      if (!focusBboxRef.current && selectedDrawingIdxRef.current < 0) {
+        const b = getEffectiveOverviewBounds();
+        if (b.maxX > b.minX) {
+          fitToExtents(b.minX, b.minY, b.maxX, b.maxY, false);
+        }
+      }
     }
-  }, [drawings.length, loadBinaryData, loadTexts, loadRasters]);
+  }, [drawings.length, loadBinaryData, loadTexts, loadRasters, getEffectiveOverviewBounds, fitToExtents]);
 
   // 🧹 File change cleanup: Remove ghost rasters and clear previous states
   useEffect(() => {
@@ -1226,8 +1308,11 @@ export default function WebGlCadViewer({
   const prevFocusBboxRef = useRef(focusBbox);
   useEffect(() => {
     if (!focusBbox) {
-      if (prevFocusBboxRef.current && boundsRef.current.maxX > boundsRef.current.minX) {
-        fitToExtents(boundsRef.current.minX, boundsRef.current.minY, boundsRef.current.maxX, boundsRef.current.maxY, true);
+      if (prevFocusBboxRef.current) {
+        const eff = getEffectiveOverviewBounds();
+        if (eff.maxX > eff.minX) {
+          fitToExtents(eff.minX, eff.minY, eff.maxX, eff.maxY, true);
+        }
       }
       prevFocusBboxRef.current = null;
       return;
@@ -1235,7 +1320,7 @@ export default function WebGlCadViewer({
 
     prevFocusBboxRef.current = focusBbox;
     fitToExtents(focusBbox.min_x, focusBbox.min_y, focusBbox.max_x, focusBbox.max_y, true);
-  }, [focusBbox, fitToExtents]);
+  }, [focusBbox, fitToExtents, getEffectiveOverviewBounds]);
 
   // 5. Mouse Interaction: 60 FPS Zoom on Wheel (Native non-passive listener to block page scroll 100%)
   useEffect(() => {
@@ -1352,7 +1437,7 @@ export default function WebGlCadViewer({
   };
 
   const handleReset = () => {
-    const { minX, minY, maxX, maxY } = boundsRef.current;
+    const { minX, minY, maxX, maxY } = getEffectiveOverviewBounds();
     fitToExtents(minX, minY, maxX, maxY, true);
     if (onResetFocus) onResetFocus();
   };

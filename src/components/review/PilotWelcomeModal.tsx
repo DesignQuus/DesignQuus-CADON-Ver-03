@@ -5,29 +5,56 @@ import { Sparkles, FileSpreadsheet, CheckCircle2, ArrowRight, X, Info } from 'lu
 import Link from 'next/link';
 
 interface PilotWelcomeModalProps {
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onClose?: () => void;
 }
 
-export default function PilotWelcomeModal({ onClose }: PilotWelcomeModalProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export default function PilotWelcomeModal({
+  isOpen: externalIsOpen,
+  onOpenChange,
+  onClose,
+}: PilotWelcomeModalProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
 
+  const isControlled = externalIsOpen !== undefined;
+  const isOpen = isControlled ? externalIsOpen : internalIsOpen;
+
+  // 1. 초기 마운트 시 localStorage 확인 후 자동 팝업
   useEffect(() => {
     try {
-      const isHidden = localStorage.getItem('cadon_hide_pilot_welcome');
+      const isHidden = localStorage.getItem('cadon_hide_pilot_welcome') === 'true';
       if (!isHidden) {
-        setIsOpen(true);
+        setInternalIsOpen(true);
       }
     } catch {}
   }, []);
 
-  const handleClose = () => {
-    if (dontShowAgain) {
+  // 2. 모달이 열릴 때 localStorage의 현재 '다시 보지 않기' 상태와 체크박스 동기화
+  useEffect(() => {
+    if (isOpen) {
       try {
-        localStorage.setItem('cadon_hide_pilot_welcome', 'true');
+        const isHidden = localStorage.getItem('cadon_hide_pilot_welcome') === 'true';
+        setDontShowAgain(isHidden);
       } catch {}
     }
-    setIsOpen(false);
+  }, [isOpen]);
+
+  const handleClose = () => {
+    try {
+      if (dontShowAgain) {
+        localStorage.setItem('cadon_hide_pilot_welcome', 'true');
+      } else {
+        localStorage.removeItem('cadon_hide_pilot_welcome');
+      }
+    } catch {}
+
+    if (isControlled && onOpenChange) {
+      onOpenChange(false);
+    } else {
+      setInternalIsOpen(false);
+    }
     if (onClose) onClose();
   };
 
@@ -120,14 +147,17 @@ export default function PilotWelcomeModal({ onClose }: PilotWelcomeModalProps) {
 
         {/* 하단 컨트롤 바 */}
         <div className="px-6 py-3.5 bg-slate-100 border-t border-slate-200 flex items-center justify-between">
-          <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-600 select-none">
+          <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 hover:text-slate-900 select-none">
             <input
               type="checkbox"
               checked={dontShowAgain}
               onChange={(e) => setDontShowAgain(e.target.checked)}
               className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
             />
-            <span>다시 보지 않기</span>
+            <span className="font-medium">다시 보지 않기</span>
+            <span className="text-[11px] text-slate-500 font-normal">
+              {dontShowAgain ? '(체크 해제 후 닫으면 다음 방문 시 자동 표시)' : '(체크 시 다음 방문부터 자동 표시 안 함)'}
+            </span>
           </label>
 
           <button
