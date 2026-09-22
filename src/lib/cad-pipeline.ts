@@ -305,8 +305,10 @@ export async function processCadFilePipeline(
           shouldLink = true;
         } else {
           const currentComp = await db.prepare('SELECT company_name FROM companies WHERE id = ?').get(caseRow.company_id);
-          const cName = currentComp?.company_name || '';
-          if (cName.startsWith('T1.') || cName === '1' || cName.includes('세창') || (detectedCustomer === '엠브이텍' && cName !== '엠브이텍')) {
+          const cName = (currentComp?.company_name || '').trim();
+          // 기존 연결 업체가 임시/플레이스홀더 명칭(예: "T1.xxx", 숫자만, 빈 값)일 때만 표제란 고객사로 교체
+          const isPlaceholder = cName === '' || /^T\d+\./i.test(cName) || /^\d+$/.test(cName);
+          if (isPlaceholder) {
             shouldLink = true;
           }
         }

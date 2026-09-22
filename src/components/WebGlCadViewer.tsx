@@ -3,6 +3,9 @@
 import { apiFetch } from '@/lib/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { ZoomIn, ZoomOut, RotateCcw, Sparkles, RefreshCw, Layers, Scan, CheckCircle2, Crosshair, FileText, ExternalLink, AlertTriangle, X, Check, Info, ShieldCheck, ChevronRight } from 'lucide-react';
 
 interface WebGlCadViewerProps {
@@ -131,6 +134,9 @@ export default function WebGlCadViewer({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const lineSegmentsRef = useRef<THREE.LineSegments | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
+  // 💡 선가중치(heavy) 세그먼트: 도곽/여백선/그룹핑 박스를 줌 배율과 무관한 화면 고정 픽셀 굵기로 렌더링 (AutoCAD LWDISPLAY 효과)
+  const heavyGroupRef = useRef<THREE.Group | null>(null);
+  const heavyMaterialsRef = useRef<LineMaterial[]>([]);
   const overlaysGroupRef = useRef<THREE.Group | null>(null);
   const rasterGroupRef = useRef<THREE.Group | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
@@ -577,6 +583,8 @@ export default function WebGlCadViewer({
       cam.bottom = -frustumSize / 2;
       cam.updateProjectionMatrix();
       rendererRef.current.setSize(w, h);
+      // 화면 고정 굵기 선(LineMaterial)은 캔버스 해상도를 알아야 픽셀 폭을 유지함
+      heavyMaterialsRef.current.forEach((m) => m.resolution.set(w, h));
 
       // If a drawing sheet was focused and user is not manually panning/dragging, re-frame to real dimensions
       if (focusBboxRef.current && !isDraggingRef.current) {
@@ -647,11 +655,24 @@ export default function WebGlCadViewer({
       if (version === 2 && arrayBuffer.byteLength < 32) {
         throw new Error('CAD 바이너리 v2 헤더가 올바르지 않습니다 (최소 32바이트 필요).');
       }
-      let numLines = 0, numTris = 0;
+      let numLines = 0, numTris = 0, numHeavy = 0;
       let minX = 0, minY = 0, maxX = 0, maxY = 0;
       let posByteOffset = 28;
 
-      if (version === 2) {
+      if (version >= 3) {
+        // CADW v3: 'CADW' | version | numLines | numTris | numHeavy | minX | minY | maxX | maxY (36바이트 헤더)
+        if (arrayBuffer.byteLength < 36) {
+          throw new Error('CAD 바이너리 v3 헤더가 올바르지 않습니다 (최소 36바이트 필요).');
+        }
+        numLines = dataView.getUint32(8, true);
+        numTris = dataView.getUint32(12, true);
+        numHeavy = dataView.getUint32(16, true);
+        minX = dataView.getFloat32(20, true);
+        minY = dataView.getFloat32(24, true);
+        maxX = dataView.getFloat32(28, true);
+        maxY = dataView.getFloat32(32, true);
+        posByteOffset = 36;
+      } else if (version === 2) {
         numLines = dataView.getUint32(8, true);
         numTris = dataView.getUint32(12, true);
         minX = dataView.getFloat32(16, true);
@@ -668,7 +689,7 @@ export default function WebGlCadViewer({
       }
 
       boundsRef.current = { minX, minY, maxX, maxY };
-      console.log('BINARY_BOUNDS_LOADED:', JSON.stringify({ minX, minY, maxX, maxY, numLines, numTris }));
+      console.log('BINARY_BOUNDS_LOADED:', JSON.stringify({ minX, minY, maxX, maxY, numLines, numTris, numHeavy }));
       setTotalLines(numLines + numTris);
 
       const posCount = numLines * 6;
@@ -698,6 +719,57 @@ export default function WebGlCadViewer({
         triMesh = new THREE.Mesh(triGeometry, triMaterial);
       }
 
+      // v3 heavy 세그먼트 → 선가중치(mm)별 버킷으로 나눠 화면 고정 픽셀 굵기 LineSegments2 생성
+      let heavyGroup: THREE.Group | null = null;
+      const heavyMaterials: LineMaterial[] = [];
+      if (numHeavy > 0) {
+        const heavyPosOffset = colByteOffset + posCount * 4 + numTris * 9 * 4 * 2;
+        const heavyCount = numHeavy * 6;
+        const heavyPos = new Float32Array(arrayBuffer, heavyPosOffset, heavyCount);
+        const heavyCol = new Float32Array(arrayBuffer, heavyPosOffset + heavyCount * 4, heavyCount);
+        const heavyLw = new Float32Array(arrayBuffer, heavyPosOffset + heavyCount * 8, numHeavy);
+
+        // AutoCAD 선가중치(mm) → 화면 픽셀 매핑 (0.5mm≈2px, 0.7mm≈3px, 1.0mm 이상≈4px)
+        const lwToPx = (lw: number) => (lw >= 0.95 ? 4 : lw >= 0.6 ? 3 : 2);
+        const buckets = new Map<number, { pos: number[]; col: number[] }>();
+        for (let i = 0; i < numHeavy; i++) {
+          const px = lwToPx(heavyLw[i]);
+          let b = buckets.get(px);
+          if (!b) {
+            b = { pos: [], col: [] };
+            buckets.set(px, b);
+          }
+          for (let k = 0; k < 6; k++) {
+            b.pos.push(heavyPos[i * 6 + k]);
+            b.col.push(heavyCol[i * 6 + k]);
+          }
+        }
+
+        const container = containerRef.current;
+        const resW = container?.clientWidth || 800;
+        const resH = container?.clientHeight || 600;
+        heavyGroup = new THREE.Group();
+        heavyGroup.renderOrder = 1;
+        buckets.forEach((b, px) => {
+          const geom = new LineSegmentsGeometry();
+          geom.setPositions(new Float32Array(b.pos));
+          geom.setColors(new Float32Array(b.col));
+          const mat = new LineMaterial({
+            vertexColors: true,
+            linewidth: px,
+            worldUnits: false,
+            dashed: false,
+            depthTest: false
+          });
+          mat.resolution.set(resW, resH);
+          heavyMaterials.push(mat);
+          const seg = new LineSegments2(geom, mat);
+          seg.computeLineDistances();
+          seg.renderOrder = 1;
+          heavyGroup!.add(seg);
+        });
+      }
+
       if (sceneRef.current) {
         if (lineSegmentsRef.current) {
           sceneRef.current.remove(lineSegmentsRef.current);
@@ -708,13 +780,28 @@ export default function WebGlCadViewer({
           meshRef.current.geometry.dispose();
           meshRef.current = null;
         }
-        
+        if (heavyGroupRef.current) {
+          sceneRef.current.remove(heavyGroupRef.current);
+          heavyGroupRef.current.children.forEach((child: any) => {
+            child.geometry?.dispose?.();
+            child.material?.dispose?.();
+          });
+          heavyGroupRef.current = null;
+          heavyMaterialsRef.current = [];
+        }
+
         sceneRef.current.add(lineSegments);
         lineSegmentsRef.current = lineSegments;
-        
+
         if (triMesh) {
           sceneRef.current.add(triMesh);
           meshRef.current = triMesh;
+        }
+
+        if (heavyGroup) {
+          sceneRef.current.add(heavyGroup);
+          heavyGroupRef.current = heavyGroup;
+          heavyMaterialsRef.current = heavyMaterials;
         }
       }
 
@@ -996,6 +1083,16 @@ export default function WebGlCadViewer({
             meshRef.current.material.dispose();
         }
         meshRef.current = null;
+      }
+
+      if (heavyGroupRef.current) {
+        heavyGroupRef.current.children.forEach((child: any) => {
+          child.geometry?.dispose?.();
+          child.material?.dispose?.();
+        });
+        sceneRef.current.remove(heavyGroupRef.current);
+        heavyGroupRef.current = null;
+        heavyMaterialsRef.current = [];
       }
     }
   }, [activeFileId, reloadKey]);

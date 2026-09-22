@@ -13,6 +13,14 @@ import math
 from ezdxf import recover
 import ezdxf
 
+# 공용 도곽/표제란 엔진 (프록시 블록 시트 재구성)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+from sheet_frame_engine import rect_from_points, paper_ratio_match, reconstruct_proxy_sheet, is_empty_block
+
+FORM_NAME_PAT = re.compile(r'(DRAWFORM|FORM|SHEET|FRAME|BORDER|TITLE|도곽|양식|^[AB][0-4]$)', re.I)
+
 def clean_cad_text(text: str) -> str:
     if not text:
         return ""
@@ -111,6 +119,12 @@ def parse_dxf_file(dxf_path: str) -> dict:
         global_max_x = float('-inf')
         global_max_y = float('-inf')
 
+        # 프록시(빈) 블록 시트 재구성용 수집 버퍼
+        msp_boxes = []          # 모델 공간 엔티티 bbox (INSERT 제외)
+        msp_rects = []          # 모델 공간 닫힌 사각형 (그룹핑 박스 후보)
+        known_sheet_rects = []  # 블록에서 전개된 규격 용지 비율 사각형 (단품 시트 도곽)
+        proxy_inserts = []      # {'insert': (x,y), 'scale': s, 'name': bname}
+
         def update_bounds(bbox):
             nonlocal global_min_x, global_min_y, global_max_x, global_max_y
             if bbox and (bbox["min_x"] != bbox["max_x"] or bbox["min_y"] != bbox["max_y"]):
@@ -208,6 +222,21 @@ def parse_dxf_file(dxf_path: str) -> dict:
                 sy = getattr(e.dxf, 'yscale', 1.0)
                 geom_data = {"block_name": block_name, "insert": [ins[0], ins[1]], "rotation": rot, "scale": [sx, sy]}
 
+            if t != 'INSERT' and bbox and (bbox["min_x"] != bbox["max_x"] or bbox["min_y"] != bbox["max_y"]):
+                msp_boxes.append((bbox["min_x"], bbox["min_y"], bbox["max_x"], bbox["max_y"]))
+            if t in ['LWPOLYLINE', 'POLYLINE'] and geom_data.get('points') and len(geom_data['points']) in (4, 5):
+                _pts = [(pp[0], pp[1]) for pp in geom_data['points']]
+                _xs = [pp[0] for pp in _pts]; _ys = [pp[1] for pp in _pts]
+                _r = rect_from_points(_pts, max(max(_xs) - min(_xs), max(_ys) - min(_ys), 1e-6) * 0.005)
+                if _r:
+                    msp_rects.append(_r)
+            if t == 'INSERT':
+                _bname = getattr(e.dxf, 'name', None)
+                _blk = doc.blocks.get(_bname) if _bname else None
+                if _bname and is_empty_block(_blk) and not list(getattr(e, 'attribs', []) or []) and FORM_NAME_PAT.search(_bname):
+                    _sx = abs(getattr(e.dxf, 'xscale', 1.0) or 1.0)
+                    proxy_inserts.append({'insert': (e.dxf.insert[0], e.dxf.insert[1]), 'scale': _sx, 'name': _bname})
+
             # 1-1. Modelspace Entity Append (Selective smart filter for Title Block & BOM)
             should_append = False
             if raw_text:
@@ -272,6 +301,10 @@ def parse_dxf_file(dxf_path: str) -> dict:
                                 ys = [p[1] for p in shifted_pts]
                                 b_bbox = {"min_x": min(xs), "min_y": min(ys), "max_x": max(xs), "max_y": max(ys)}
                                 update_bounds(b_bbox)
+                                if len(shifted_pts) in (4, 5):
+                                    _r = rect_from_points([(pp[0], pp[1]) for pp in shifted_pts], max(max(xs) - min(xs), max(ys) - min(ys), 1e-6) * 0.005)
+                                    if _r and paper_ratio_match(_r[2] - _r[0], _r[3] - _r[1]):
+                                        known_sheet_rects.append(_r)
                                 objects.append({
                                     "handle": getattr(sub_e.dxf, 'handle', f"blk_{len(objects)+1}"),
                                     "entity_type": "LWPOLYLINE",
@@ -282,10 +315,82 @@ def parse_dxf_file(dxf_path: str) -> dict:
                                     "geometry_data": {"points": shifted_pts, "is_closed": getattr(sub_e, 'is_closed', False)}
                                 })
             
+        # 1-3. 프록시(빈) 폼 블록 시트 재구성: 메인 조립도 도곽을 합성 폴리라인 객체로 주입 (frame_detector 연동)
+        reconstructed_sheets = []
+        if proxy_inserts:
+            exclusion = []
+            for r in known_sheet_rects:
+                pad = max(r[2] - r[0], r[3] - r[1]) * 0.01
+                exclusion.append((r[0] - pad, r[1] - pad, r[2] + pad, r[3] + pad))
+            for r in msp_rects:
+                # 단품 시트 1개 이상을 통째로 감싸는 사각형(그룹핑 박스)
+                if any(r[0] <= s[0] and r[1] <= s[1] and r[2] >= s[2] and r[3] >= s[3] and (r[2]-r[0])*(r[3]-r[1]) >= 1.5*(s[2]-s[0])*(s[3]-s[1]) for s in known_sheet_rects):
+                    pad = max(r[2] - r[0], r[3] - r[1]) * 0.01
+                    exclusion.append((r[0] - pad, r[1] - pad, r[2] + pad, r[3] + pad))
+
+            def _excluded(px, py):
+                return any(r[0] <= px <= r[2] and r[1] <= py <= r[3] for r in exclusion)
+
+            def _contains_sheet(b):
+                return any(b[0] <= s[0] and b[1] <= s[1] and b[2] >= s[2] and b[3] >= s[3] for s in known_sheet_rects)
+
+            def _nearest(px, py):
+                return min(range(len(proxy_inserts)), key=lambda i: (proxy_inserts[i]['insert'][0]-px)**2 + (proxy_inserts[i]['insert'][1]-py)**2)
+
+            clusters = [None] * len(proxy_inserts)
+            cluster_texts = [[] for _ in proxy_inserts]
+            for b in msp_boxes:
+                cx, cy = (b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0
+                if _excluded(cx, cy) or _contains_sheet(b):
+                    continue
+                i = _nearest(cx, cy)
+                c = clusters[i]
+                clusters[i] = b if c is None else (min(c[0], b[0]), min(c[1], b[1]), max(c[2], b[2]), max(c[3], b[3]))
+            for o in objects:
+                if o.get("raw_text") and o.get("geometry_data", {}).get("insert"):
+                    ix, iy = o["geometry_data"]["insert"]
+                    if _excluded(ix, iy):
+                        continue
+                    i = _nearest(ix, iy)
+                    cluster_texts[i].append({'t': o["raw_text"], 'x': ix, 'y': iy, 'h': o["geometry_data"].get("height") or 10.0})
+
+            for i, ps in enumerate(proxy_inserts):
+                cl = clusters[i]
+                if cl is None and cluster_texts[i]:
+                    xs = [tx['x'] for tx in cluster_texts[i]]; ys = [tx['y'] for tx in cluster_texts[i]]
+                    cl = (min(xs), min(ys), max(xs), max(ys))
+                if cl is None:
+                    continue
+                sheet = reconstruct_proxy_sheet(ps['insert'], cl, cluster_texts[i], ps['scale'])
+                if not sheet:
+                    continue
+                bx0, by0, bx1, by1 = sheet['border']
+                syn_bbox = {"min_x": bx0, "min_y": by0, "max_x": bx1, "max_y": by1}
+                update_bounds({"min_x": sheet['outer'][0], "min_y": sheet['outer'][1], "max_x": sheet['outer'][2], "max_y": sheet['outer'][3]})
+                objects.append({
+                    "handle": f"SYN_FRAME_{i+1}",
+                    "entity_type": "LWPOLYLINE",
+                    "layer": "SYNTHETIC_FRAME",
+                    "color": 2,
+                    "raw_text": None,
+                    "bounding_box": syn_bbox,
+                    "geometry_data": {
+                        "points": [[bx0, by0], [bx1, by0], [bx1, by1], [bx0, by1]],
+                        "is_closed": True,
+                        "synthetic": True,
+                        "source_block": ps['name'],
+                        "paper": sheet['paper'],
+                        "scale": sheet['scale']
+                    }
+                })
+                counts["LWPOLYLINE"] = counts.get("LWPOLYLINE", 0) + 1
+                reconstructed_sheets.append({"block": ps['name'], "paper": sheet['paper'], "scale": sheet['scale'], "border": [bx0, by0, bx1, by1]})
+
         if global_min_x == float('inf'):
             global_min_x, global_min_y, global_max_x, global_max_y = 0.0, 0.0, 1000.0, 700.0
             
         return {
+            "proxy_sheets": reconstructed_sheets,
             "status": "SUCCESS",
             "dxf_version": doc.dxfversion,
             "total_entities": len(objects),

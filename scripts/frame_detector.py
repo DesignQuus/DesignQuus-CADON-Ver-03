@@ -34,6 +34,9 @@ def detect_drawing_frames(cad_data: dict) -> dict:
                 })
 
     # 2. Extract candidate rectangular frames (Closed Polyline or bounding boxes)
+    # 상한은 도면 전체 크기에 비례(대형 배율 시트, 예: A0 x40 = 48,000 단위도 허용)
+    max_w = max(8000.0, float(gb.get("width", 0) or 0))
+    max_h = max(6000.0, float(gb.get("height", 0) or 0))
     raw_boxes = []
     for obj in objects:
         t = obj.get("entity_type")
@@ -41,7 +44,7 @@ def detect_drawing_frames(cad_data: dict) -> dict:
         w = bbox.get("max_x", 0) - bbox.get("min_x", 0)
         h = bbox.get("max_y", 0) - bbox.get("min_y", 0)
         if t in ['LWPOLYLINE', 'POLYLINE']:
-            if 180 <= w <= 8000 and 120 <= h <= 6000:
+            if 180 <= w <= max_w and 120 <= h <= max_h:
                 aspect = w / h if h > 0 else 0
                 if 0.5 <= aspect <= 3.0:
                     anchors_inside = [

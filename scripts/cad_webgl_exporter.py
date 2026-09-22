@@ -20,6 +20,28 @@ import glob
 import ezdxf
 import ezdxf.colors
 
+# 공용 도곽/표제란 엔진 (scripts/ 디렉토리 기준 import 보장)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+from sheet_frame_engine import (
+    ROLE_STYLE, rect_from_points, rects_from_line_segments, rect_segments,
+    classify_block_sheet_frames, detect_msp_frames, reconstruct_proxy_sheet, is_empty_block,
+    segment_on_rect, rect_tol, transform_rect
+)
+
+try:
+    from ezdxf.proxygraphic import ProxyGraphic
+    HAS_PROXY_GRAPHIC = True
+except Exception:
+    ProxyGraphic = None
+    HAS_PROXY_GRAPHIC = False
+
+# CADW 바이너리 포맷 버전 (v3: 선가중치(heavy) 세그먼트 섹션 추가)
+CADW_VERSION = 3
+# 이 값(mm) 이상의 선가중치는 화면 고정 굵기(heavy) 섹션으로도 출력
+HEAVY_LW_THRESHOLD = 0.5
+
 try:
     import ctypes
     from ctypes import wintypes
@@ -140,6 +162,10 @@ def extract_ole_frames_from_dxf(dxf_path):
                         t_start = r + 1
                 if t_start <= max_r:
                     table_ranges.append((t_start, max_r))
+                row_table_start = {}
+                for (tr_s, tr_e) in table_ranges:
+                    for rr in range(tr_s, tr_e + 1):
+                        row_table_start[rr] = tr_s
 
                 YELLOW = (1.0, 1.0, 0.0)
                 GREY = (0.55, 0.55, 0.55)
@@ -193,10 +219,11 @@ def extract_ole_frames_from_dxf(dxf_path):
                             single_row_h = row_ys[r - 1] - row_ys[r] if r < len(row_ys) else cell_h
 
                             ha = 1 # Center by default
-                            if r in [1, 29, 43]: # Title
+                            t_start = row_table_start.get(r, 1)
+                            if r == t_start: # 각 테이블의 제목행
                                 txt_col = '#ffff00'
                                 font_h = min(cell_h * 0.45, 520.0)
-                            elif r in [2, 30, 44]: # Table column headers
+                            elif r == t_start + 1: # 각 테이블의 컬럼 헤더행
                                 txt_col = '#00e676'
                                 font_h = min(single_row_h * 0.42, 240.0)
                             elif c == 5: # Motor model description
@@ -345,8 +372,6 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                 doc = ezdxf.readfile(dxf_path, encoding='utf-8', errors='surrogateescape')
             except Exception:
                 doc = ezdxf.readfile(dxf_path)
-            
-        is_mona200d = 'mona200' in os.path.basename(dxf_path).lower()
 
         # Determine which layout to extract from
         active_lay = doc.layouts.active_layout()
@@ -494,12 +519,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     mtext_ctx = getattr(ctx, 'mtext', None)
                     raw_txt = getattr(mtext_ctx, 'default_content', '') if mtext_ctx else ''
                     cln = clean_txt(raw_txt)
-                    if is_mona200d:
-                        if 'I-BOLT' in raw_txt or 'I-BOLT' in cln:
-                            cln = '양 중  고 리\nI - BOLT'
-                        elif 'HOLES' in raw_txt or 'HOLES' in cln:
-                            cln = '4-Ø18 HOLES'
-                    
+
                     arrow_size = getattr(ml_e.dxf, 'arrow_head_size', 20.0) or 20.0
                     th = max(arrow_size * 0.9, 18.0)
                     txt_col = '#00e676' if ('C3;' in raw_txt or cln == 'BRAKE' or 'HOLES' in cln) else '#ffff00'
@@ -567,43 +587,171 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
             return lines, tris, ml_text
 
         # 1. Pre-process blocks into local line segments and texts
+        # 세그먼트 튜플: (p1, p2, rgb, col, layer, lineweight_mm)
         block_cache = {}
         block_tris = {}
         block_texts = {}
-        
+        block_sheet_frames = {}    # bname -> {'BORDER': rect, 'MARGIN': rect|None, 'paper': str}
+        block_proxy_failures = {}  # bname -> 디코딩 실패한 프록시/미지원 엔티티 수
+
+        RENDERABLE_TYPES = {
+            'LINE', 'LWPOLYLINE', 'POLYLINE', 'SPLINE', 'SOLID', 'TRACE', '3DFACE', 'CIRCLE', 'ARC', 'ELLIPSE',
+            'DIMENSION', 'MULTILEADER', 'LEADER', 'HATCH', 'TEXT', 'MTEXT', 'ATTDEF', 'INSERT'
+        }
+        PASSIVE_TYPES = {'POINT', 'XLINE', 'RAY', 'IMAGE', 'OLE2FRAME', 'OLEFRAME', 'VIEWPORT', 'WIPEOUT', 'ATTRIB', 'SEQEND', 'VERTEX'}
+
+        def proxy_virtual_entities(e):
+            """ACAD_PROXY_ENTITY 또는 proxy_graphic(310) 데이터를 가진 엔티티를 기본 엔티티로 전개 (메카클릭 등 프록시 객체 지원)."""
+            out = []
+            try:
+                if e.dxftype() == 'ACAD_PROXY_ENTITY' and hasattr(e, 'virtual_entities'):
+                    out = list(e.virtual_entities())
+            except Exception:
+                out = []
+            if not out and HAS_PROXY_GRAPHIC:
+                try:
+                    pg = getattr(e, 'proxy_graphic', None)
+                    if pg:
+                        out = list(ProxyGraphic(pg, doc).virtual_entities())
+                except Exception:
+                    out = []
+            return out
+
+        def expand_entities(entities, depth=0):
+            """복합 엔티티(치수, 다중선, 테이블, 프록시)를 기본 기하로 재귀 전개. (전개 결과, 실패 수) 반환"""
+            expanded = []
+            failures = 0
+            for e in entities:
+                t = e.dxftype()
+                if t in ('DIMENSION', 'MLINE', 'ACAD_TABLE', 'MESH', 'POLYFACE', 'POLYMESH'):
+                    try:
+                        ve = list(e.virtual_entities())
+                    except Exception:
+                        ve = []
+                    if ve and depth < 4:
+                        sub, sub_f = expand_entities(ve, depth + 1)
+                        expanded.extend(sub)
+                        failures += sub_f
+                    elif t == 'DIMENSION':
+                        expanded.append(e)
+                    else:
+                        failures += 1
+                elif t == 'ACAD_PROXY_ENTITY' or (t not in RENDERABLE_TYPES and t not in PASSIVE_TYPES and getattr(e, 'proxy_graphic', None)):
+                    ve = proxy_virtual_entities(e)
+                    if ve and depth < 4:
+                        sub, sub_f = expand_entities(ve, depth + 1)
+                        expanded.extend(sub)
+                        failures += sub_f
+                    else:
+                        failures += 1
+                elif t in RENDERABLE_TYPES:
+                    expanded.append(e)
+                elif t in PASSIVE_TYPES:
+                    continue
+                else:
+                    failures += 1
+            return expanded, failures
+
+        def hatch_outline_segments(e):
+            """HATCH 경계 경로를 선분으로 변환 (패턴 채움은 외곽선만 표현)."""
+            segs = []
+            try:
+                for path in e.paths:
+                    verts = getattr(path, 'vertices', None)
+                    if verts:
+                        pts = [(v[0], v[1]) for v in verts]
+                        for i in range(len(pts) - 1):
+                            segs.append((pts[i], pts[i + 1]))
+                        if len(pts) > 2:
+                            segs.append((pts[-1], pts[0]))
+                        continue
+                    for edge in getattr(path, 'edges', []) or []:
+                        et = getattr(edge, 'type', None)
+                        et_name = getattr(et, 'name', str(et)).upper() if et is not None else edge.__class__.__name__.upper()
+                        if 'LINE' in et_name:
+                            segs.append(((edge.start[0], edge.start[1]), (edge.end[0], edge.end[1])))
+                        elif 'ARC' in et_name and hasattr(edge, 'center'):
+                            cx, cy = edge.center[0], edge.center[1]
+                            r = edge.radius
+                            sa, ea = math.radians(edge.start_angle), math.radians(edge.end_angle)
+                            if ea < sa:
+                                ea += 2 * math.pi
+                            steps = max(4, int(abs(ea - sa) / (math.pi / 8)))
+                            a_pts = [(cx + r * math.cos(sa + (ea - sa) * i / steps), cy + r * math.sin(sa + (ea - sa) * i / steps)) for i in range(steps + 1)]
+                            for i in range(steps):
+                                segs.append((a_pts[i], a_pts[i + 1]))
+            except Exception:
+                pass
+            return segs
+
+        def face_outline_segments(e):
+            """3DFACE 네 정점의 외곽선."""
+            try:
+                pts = [(e.dxf.vtx0.x, e.dxf.vtx0.y), (e.dxf.vtx1.x, e.dxf.vtx1.y), (e.dxf.vtx2.x, e.dxf.vtx2.y)]
+                if hasattr(e.dxf, 'vtx3'):
+                    pts.append((e.dxf.vtx3.x, e.dxf.vtx3.y))
+                return [(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
+            except Exception:
+                return []
+
+        def promote_sheet_frames(lines, poly_pts_list, line_segs):
+            """
+            블록 로컬 세그먼트에서 규격 용지 비율의 사각형(닫힌 폴리라인 또는 LINE 4개 조합)을 찾아
+            BORDER(노랑 0.7mm) / MARGIN(빨강 0.5mm)로 승격합니다. (블록 이름·선 개수에 의존하지 않음)
+            """
+            if not lines:
+                return lines, None
+            xs = [p[0] for l in lines for p in (l[0], l[1])]
+            ys = [p[1] for l in lines for p in (l[0], l[1])]
+            extent = (min(xs), min(ys), max(xs), max(ys))
+            ew, eh = extent[2] - extent[0], extent[3] - extent[1]
+            if ew <= 0 or eh <= 0:
+                return lines, None
+            tol = max(ew, eh) * 0.002
+            poly_rects = []
+            for pts in poly_pts_list:
+                r = rect_from_points(pts, tol)
+                if r:
+                    poly_rects.append(r)
+            frames = classify_block_sheet_frames(poly_rects, line_segs, extent, tol)
+            if not frames:
+                return lines, None
+            promoted = []
+            for (p1, p2, rgb_, col_, lay_, lw_) in lines:
+                role = None
+                if segment_on_rect(p1, p2, frames['BORDER'], tol):
+                    role = 'BORDER'
+                elif frames.get('MARGIN') and segment_on_rect(p1, p2, frames['MARGIN'], tol):
+                    role = 'MARGIN'
+                if role:
+                    r_rgb, r_lw = ROLE_STYLE[role]
+                    # col=-1: 역할 색 고정 (BYBLOCK/BYLAYER 상속으로 덮어쓰이지 않도록)
+                    promoted.append((p1, p2, r_rgb, -1, lay_, r_lw))
+                else:
+                    promoted.append((p1, p2, rgb_, col_, lay_, lw_))
+            return promoted, frames
+
         def resolve_block(bname):
             if bname in block_cache:
                 return block_cache[bname], block_tris.get(bname, []), block_texts.get(bname, [])
-                
+
             block = doc.blocks.get(bname)
             if not block:
                 return [], [], []
-                
+
             block_cache[bname] = []
             block_tris[bname] = []
             block_texts[bname] = []
-            
+
             b_lines = []
             b_tris_list = []
             b_txts = []
+            poly_pts_list = []   # 닫힌 폴리라인 정점 (도곽 판정용)
+            line_segs = []       # LINE 세그먼트 (4개 조합 도곽 판정용)
 
-            expanded_block = []
-            for e in block:
-                if e.dxftype() == 'DIMENSION':
-                    try:
-                        ve = list(e.virtual_entities())
-                        if ve:
-                            expanded_block.extend(ve)
-                        else:
-                            expanded_block.append(e)
-                    except Exception:
-                        expanded_block.append(e)
-                else:
-                    expanded_block.append(e)
+            expanded_block, failures = expand_entities(list(block))
+            block_proxy_failures[bname] = failures
 
-            num_lines_in_block = len([e for e in expanded_block if e.dxftype() == 'LINE'])
-            is_sheet_block = bname.upper() in ['A0', 'A1', 'A2', 'A3', 'A4'] or (bname.startswith('*U') and num_lines_in_block in [49, 66])
-            sheet_line_idx = 0
             for e in expanded_block:
                 t = e.dxftype()
                 col = getattr(e.dxf, 'color', 256)
@@ -613,50 +761,52 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                 else:
                     rgb = get_rgb(col)
                     hex_col = f"#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}"
-                
-                if is_sheet_block and t == 'LINE':
-                    if sheet_line_idx < 4:
-                        rgb = (1.0, 1.0, 0.0) # Outer Sheet Border (Yellow)
-                        col = 2
-                    elif sheet_line_idx < 8:
-                        rgb = (1.0, 0.2, 0.2) # Inner Margin Border (Red)
-                        col = 1
-                    else:
-                        rgb = (1.0, 1.0, 0.0) # Title Block Grid (Yellow)
-                        col = 2
-                    sheet_line_idx += 1
-                
-                if t in ['LINE', 'LWPOLYLINE', 'POLYLINE', 'SPLINE', 'SOLID']:
+                lw = 0.0
+
+                if t in ['LINE', 'LWPOLYLINE', 'POLYLINE', 'SPLINE', 'SOLID', 'TRACE']:
                     if t == 'LINE':
-                        b_lines.append(((e.dxf.start.x, e.dxf.start.y), (e.dxf.end.x, e.dxf.end.y), rgb, col, lay_name))
+                        p1 = (e.dxf.start.x, e.dxf.start.y)
+                        p2 = (e.dxf.end.x, e.dxf.end.y)
+                        b_lines.append((p1, p2, rgb, col, lay_name, lw))
+                        line_segs.append((p1, p2))
                     elif t in ['LWPOLYLINE', 'POLYLINE']:
                         pts = list(e.points()) if t == 'POLYLINE' else list(e.get_points())
-                        for i in range(len(pts)-1):
-                            b_lines.append(((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb, col, lay_name))
-                        if (getattr(e, 'closed', False) or getattr(e, 'is_closed', False)) and len(pts) > 2:
-                            b_lines.append(((pts[-1][0], pts[-1][1]), (pts[0][0], pts[0][1]), rgb, col, lay_name))
+                        pts2 = [(p[0], p[1]) for p in pts]
+                        is_closed = (getattr(e, 'closed', False) or getattr(e, 'is_closed', False))
+                        for i in range(len(pts2)-1):
+                            b_lines.append((pts2[i], pts2[i+1], rgb, col, lay_name, lw))
+                        if is_closed and len(pts2) > 2:
+                            b_lines.append((pts2[-1], pts2[0], rgb, col, lay_name, lw))
+                        if len(pts2) in (4, 5) and (is_closed or (len(pts2) == 5)):
+                            poly_pts_list.append(pts2)
                     elif t == 'SPLINE':
                         try:
                             pts = list(e.flattening(distance=0.5))
                             for i in range(len(pts)-1):
-                                b_lines.append(((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb, col, lay_name))
+                                b_lines.append(((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb, col, lay_name, lw))
                             if e.closed and len(pts) > 2:
-                                b_lines.append(((pts[-1][0], pts[-1][1]), (pts[0][0], pts[0][1]), rgb, col, lay_name))
+                                b_lines.append(((pts[-1][0], pts[-1][1]), (pts[0][0], pts[0][1]), rgb, col, lay_name, lw))
                         except Exception:
                             pass
-                    elif t == 'SOLID':
+                    else:  # SOLID / TRACE
                         v0 = (e.dxf.vtx0.x, e.dxf.vtx0.y)
                         v1 = (e.dxf.vtx1.x, e.dxf.vtx1.y)
                         v2 = (e.dxf.vtx2.x, e.dxf.vtx2.y)
                         v3 = (e.dxf.vtx3.x, e.dxf.vtx3.y) if hasattr(e.dxf, 'vtx3') else v2
                         b_tris_list.append((v0, v1, v3, rgb, col, lay_name))
                         b_tris_list.append((v3, v2, v0, rgb, col, lay_name))
+                elif t == '3DFACE':
+                    for p1, p2 in face_outline_segments(e):
+                        b_lines.append((p1, p2, rgb, col, lay_name, lw))
+                elif t == 'HATCH':
+                    for p1, p2 in hatch_outline_segments(e):
+                        b_lines.append((p1, p2, rgb, col, lay_name, lw))
                 elif t == 'CIRCLE':
                     cx, cy, r = e.dxf.center.x, e.dxf.center.y, e.dxf.radius
                     steps = 16 if r > 50 else 12
                     c_pts = [(cx + r * math.cos(i*2*math.pi/steps), cy + r * math.sin(i*2*math.pi/steps)) for i in range(steps)]
                     for i in range(steps):
-                        b_lines.append((c_pts[i], c_pts[(i+1)%steps], rgb, col, lay_name))
+                        b_lines.append((c_pts[i], c_pts[(i+1)%steps], rgb, col, lay_name, lw))
                 elif t == 'ARC':
                     cx, cy, r = e.dxf.center.x, e.dxf.center.y, e.dxf.radius
                     sa, ea = math.radians(e.dxf.start_angle), math.radians(e.dxf.end_angle)
@@ -665,11 +815,11 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     steps = max(4, int(abs(ea - sa) / (math.pi / 8)))
                     a_pts = [(cx + r * math.cos(sa + (ea-sa)*i/steps), cy + r * math.sin(sa + (ea-sa)*i/steps)) for i in range(steps+1)]
                     for i in range(steps):
-                        b_lines.append((a_pts[i], a_pts[i+1], rgb, col, lay_name))
+                        b_lines.append((a_pts[i], a_pts[i+1], rgb, col, lay_name, lw))
                 elif t == 'DIMENSION':
                     d_lines, d_txt, d_rgb = extract_dim_geom_and_text(e)
                     for p1, p2 in d_lines:
-                        b_lines.append((p1, p2, d_rgb, col, lay_name))
+                        b_lines.append((p1, p2, d_rgb, col, lay_name, lw))
                     if d_txt:
                         d_txt['raw_col'] = col
                         d_txt['lay_name'] = lay_name
@@ -678,13 +828,20 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     try:
                         pts = list(e.flattening(distance=0.5))
                         for i in range(len(pts)-1):
-                            b_lines.append(((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb, col, lay_name))
+                            b_lines.append(((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb, col, lay_name, lw))
+                    except Exception:
+                        pass
+                elif t == 'LEADER':
+                    try:
+                        verts = list(e.vertices)
+                        for i in range(len(verts) - 1):
+                            b_lines.append(((verts[i].x, verts[i].y), (verts[i+1].x, verts[i+1].y), rgb, col, lay_name, lw))
                     except Exception:
                         pass
                 elif t == 'MULTILEADER':
                     ml_lines, ml_tris, ml_txt = extract_mleader_geom_and_text(e)
                     for p1, p2 in ml_lines:
-                        b_lines.append((p1, p2, rgb, col, lay_name))
+                        b_lines.append((p1, p2, rgb, col, lay_name, lw))
                     for p1, p2, p3 in ml_tris:
                         b_tris_list.append((p1, p2, p3, rgb, col, lay_name))
                     if ml_txt:
@@ -705,17 +862,17 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         align_pt = getattr(e.dxf, 'align_point', None)
                         ins_pt = e.dxf.insert
                         target_pt = align_pt if ((halign > 0 or valign > 0) and align_pt is not None and (abs(align_pt.x) > 0.001 or abs(align_pt.y) > 0.001)) else ins_pt
-                        
+
                         ha = 1 if halign in [1, 4] else (2 if halign == 2 else 0)
                         va = 1 if valign == 1 else (2 if valign == 2 else (3 if valign == 3 else 0))
                         if t == 'MTEXT':
                             attach = getattr(e.dxf, 'attachment_point', 1)
                             ha = 0 if attach in [1, 4, 7] else (1 if attach in [2, 5, 8] else 2)
                             va = 3 if attach in [1, 2, 3] else (2 if attach in [4, 5, 6] else 1)
-                            
+
                         width_factor = getattr(e.dxf, 'width', 1.0) if t != 'MTEXT' else 1.0
                         txt_w = getattr(e.dxf, 'width', 0.0) if t == 'MTEXT' else (len(cln) * h * 0.80 * width_factor)
-                        
+
                         b_txts.append({
                             't': cln,
                             'x': target_pt.x,
@@ -735,26 +892,35 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     if sub_bname:
                         sub_lines, sub_tris, sub_txts = resolve_block(sub_bname)
                         ins = (e.dxf.insert.x, e.dxf.insert.y)
-                        rot = math.radians(getattr(e.dxf, 'rotation', 0.0))
+                        rot_deg = getattr(e.dxf, 'rotation', 0.0)
+                        rot = math.radians(rot_deg)
                         cos_r, sin_r = math.cos(rot), math.sin(rot)
                         sx = getattr(e.dxf, 'xscale', 1.0)
                         sy = getattr(e.dxf, 'yscale', 1.0)
-                        
-                        for (p1, p2, blk_rgb, blk_col, blk_lay) in sub_lines:
+
+                        # 중첩 시트 블록의 도곽 정보를 상위 블록으로 전파
+                        if sub_bname in block_sheet_frames and bname not in block_sheet_frames:
+                            sub_fr = block_sheet_frames[sub_bname]
+                            tb = transform_rect(sub_fr['BORDER'], ins, sx, sy, rot_deg)
+                            if tb:
+                                tm = transform_rect(sub_fr['MARGIN'], ins, sx, sy, rot_deg) if sub_fr.get('MARGIN') else None
+                                block_sheet_frames[bname] = {'BORDER': tb, 'MARGIN': tm, 'paper': sub_fr.get('paper')}
+
+                        for (p1, p2, blk_rgb, blk_col, blk_lay, blk_lw) in sub_lines:
                             tp1 = transform_pt(p1, ins, cos_r, sin_r, sx, sy)
                             tp2 = transform_pt(p2, ins, cos_r, sin_r, sx, sy)
-                            
+
                             if blk_col == 0: # BYBLOCK
                                 final_rgb = rgb
                                 final_col = col
                             elif blk_lay == '0' and blk_col == 256: # BYLAYER on Layer 0 inherits parent's layer
                                 final_rgb = rgb
                                 final_col = col
-                            else: # Keep its own resolved color/layer
+                            else: # Keep its own resolved color/layer (도곽 승격 색 포함)
                                 final_rgb = blk_rgb
                                 final_col = blk_col
-                                
-                            b_lines.append((tp1, tp2, final_rgb, final_col, blk_lay if blk_lay != '0' else lay_name))
+
+                            b_lines.append((tp1, tp2, final_rgb, final_col, blk_lay if blk_lay != '0' else lay_name, blk_lw))
 
                         for (p1, p2, p3, blk_rgb, blk_col, blk_lay) in sub_tris:
                             tp1 = transform_pt(p1, ins, cos_r, sin_r, sx, sy)
@@ -770,14 +936,14 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                                 final_rgb = blk_rgb
                                 final_col = blk_col
                             b_tris_list.append((tp1, tp2, tp3, final_rgb, final_col, blk_lay if blk_lay != '0' else lay_name))
-                            
+
                         for bt in sub_txts:
                             tp = transform_pt((bt['x'], bt['y']), ins, cos_r, sin_r, sx, sy)
                             total_rot = bt['r'] + math.degrees(rot)
-                            
+
                             b_col = bt.get('raw_col', 256)
                             b_lay = bt.get('lay_name', '0')
-                            
+
                             if b_col == 0:
                                 final_hex = hex_col
                                 final_raw_col = col
@@ -787,7 +953,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                             else:
                                 final_hex = bt['c']
                                 final_raw_col = b_col
-                                
+
                             b_txts.append({
                                 't': bt['t'],
                                 'x': tp[0],
@@ -801,13 +967,21 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                                 'ha': bt.get('ha', 0),
                                 'va': bt.get('va', 0)
                             })
-                            
+
+            # 도곽/여백선 승격 (규격 용지 비율 사각형 기반, 블록 이름 무관)
+            b_lines, frames = promote_sheet_frames(b_lines, poly_pts_list, line_segs)
+            if frames and bname not in block_sheet_frames:
+                block_sheet_frames[bname] = frames
+
             block_cache[bname] = b_lines
             block_tris[bname] = b_tris_list
             block_texts[bname] = b_txts
             return b_lines, b_tris_list, b_txts
 
         for block in doc.blocks:
+            # 레이아웃 블록(*Model_Space/*Paper_Space)은 INSERT되지 않으므로 사전 전개 대상에서 제외
+            if block.name and block.name.upper().startswith(('*MODEL_SPACE', '*PAPER_SPACE')):
+                continue
             resolve_block(block.name)
 
         # 2. Extract geometry into flat Float32 arrays & collect all texts
@@ -815,13 +989,17 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
         col_data = array.array('f') # [r1, g1, b1, r2, g2, b2, ...]
         tri_pos_data = array.array('f') # [x1,y1,z1, x2,y2,z2, x3,y3,z3, ...]
         tri_col_data = array.array('f')
+        # v3: 선가중치(heavy) 세그먼트 - 뷰어에서 화면 고정 픽셀 굵기로 렌더링
+        heavy_pos_data = array.array('f')
+        heavy_col_data = array.array('f')
+        heavy_lw_data = array.array('f')
         all_texts = []
         all_rasters = []
-        
+
         min_x, min_y = float('inf'), float('inf')
         max_x, max_y = float('-inf'), float('-inf')
 
-        def add_seg(p1, p2, rgb):
+        def add_seg(p1, p2, rgb, lw=0.0):
             nonlocal min_x, min_y, max_x, max_y
             pos_data.extend([p1[0], p1[1], 0.0, p2[0], p2[1], 0.0])
             col_data.extend([rgb[0], rgb[1], rgb[2], rgb[0], rgb[1], rgb[2]])
@@ -829,6 +1007,10 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
             min_y = min(min_y, p1[1], p2[1])
             max_x = max(max_x, p1[0], p2[0])
             max_y = max(max_y, p1[1], p2[1])
+            if lw >= HEAVY_LW_THRESHOLD:
+                heavy_pos_data.extend([p1[0], p1[1], 0.0, p2[0], p2[1], 0.0])
+                heavy_col_data.extend([rgb[0], rgb[1], rgb[2], rgb[0], rgb[1], rgb[2]])
+                heavy_lw_data.append(float(lw))
 
         def add_tri(p1, p2, p3, rgb):
             nonlocal min_x, min_y, max_x, max_y
@@ -839,6 +1021,10 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
             max_x = max(max_x, p1[0], p2[0], p3[0])
             max_y = max(max_y, p1[1], p2[1], p3[1])
 
+        def add_role_seg(p1, p2, role):
+            r_rgb, r_lw = ROLE_STYLE[role]
+            add_seg(p1, p2, r_rgb, r_lw)
+
         referenced_blocks = set()
         for e in msp:
             if e.dxftype() == 'INSERT':
@@ -846,25 +1032,103 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                 if bname:
                     referenced_blocks.add(bname)
 
-        expanded_msp = []
-        for e in msp:
-            if e.dxftype() in ['DIMENSION', 'MULTILEADER']:
-                try:
-                    ve = list(e.virtual_entities())
-                    if ve:
-                        expanded_msp.extend(ve)
-                    else:
-                        expanded_msp.append(e)
-                except Exception:
-                    expanded_msp.append(e)
-            else:
-                expanded_msp.append(e)
+        expanded_msp, msp_failures = expand_entities(list(msp))
 
         for block in doc.blocks:
             bname = block.name
             if bname and bname.startswith('*T') and bname not in referenced_blocks:
-                for e in block:
-                    expanded_msp.append(e)
+                sub, _ = expand_entities(list(block))
+                expanded_msp.extend(sub)
+
+        def block_renders_nothing(bname):
+            return (not block_cache.get(bname)) and (not block_tris.get(bname)) and (not block_texts.get(bname))
+
+        FORM_NAME_PAT = re.compile(r'(DRAWFORM|FORM|SHEET|FRAME|BORDER|TITLE|도곽|양식|^[AB][0-4]$)', re.I)
+
+        # ------------------------------------------------------------------
+        # 2-A. 사전 스캔: 모델 공간 사각형 / 텍스트 삽입점 / 시트 블록 INSERT / 프록시(빈) 폼 INSERT
+        # ------------------------------------------------------------------
+        msp_poly_candidates = []   # 닫힌 4/5점 폴리라인 정점 목록
+        msp_line_segs = []
+        text_points = []
+        sheet_insert_points = []
+        known_sheet_rects = []
+        proxy_sheet_inserts = []   # {'insert': (x,y), 'scale': s, 'name': bname}
+        seg_lengths = []
+        for e in expanded_msp:
+            t = e.dxftype()
+            if t in ('LWPOLYLINE', 'POLYLINE'):
+                try:
+                    pts = list(e.points()) if t == 'POLYLINE' else list(e.get_points())
+                except Exception:
+                    continue
+                pts2 = [(p[0], p[1]) for p in pts]
+                is_closed = (getattr(e, 'closed', False) or getattr(e, 'is_closed', False))
+                if len(pts2) in (4, 5) and (is_closed or len(pts2) == 5):
+                    msp_poly_candidates.append(pts2)
+            elif t == 'LINE':
+                p1 = (e.dxf.start.x, e.dxf.start.y)
+                p2 = (e.dxf.end.x, e.dxf.end.y)
+                msp_line_segs.append((p1, p2))
+                seg_lengths.append(math.hypot(p2[0] - p1[0], p2[1] - p1[1]))
+            elif t in ('TEXT', 'MTEXT'):
+                try:
+                    text_points.append((e.dxf.insert.x, e.dxf.insert.y))
+                except Exception:
+                    pass
+            elif t == 'INSERT':
+                bname = getattr(e.dxf, 'name', None)
+                if not bname:
+                    continue
+                ins = (e.dxf.insert.x, e.dxf.insert.y)
+                sx = getattr(e.dxf, 'xscale', 1.0) or 1.0
+                sy = getattr(e.dxf, 'yscale', 1.0) or 1.0
+                rot_deg = getattr(e.dxf, 'rotation', 0.0) or 0.0
+                if bname in block_sheet_frames:
+                    sheet_insert_points.append(ins)
+                    tb = transform_rect(block_sheet_frames[bname]['BORDER'], ins, sx, sy, rot_deg)
+                    if tb:
+                        known_sheet_rects.append(tb)
+                elif block_renders_nothing(bname) and not list(getattr(e, 'attribs', []) or []):
+                    # 프록시 도곽 후보: 이름이 도곽/양식을 뜻하거나, 디코딩 실패한 프록시 엔티티를 가진 빈 블록
+                    if FORM_NAME_PAT.search(bname) or block_proxy_failures.get(bname, 0) > 0:
+                        proxy_sheet_inserts.append({'insert': ins, 'scale': abs(sx) if sx else 1.0, 'name': bname})
+
+        msp_rects = []
+        for pts2 in msp_poly_candidates:
+            xs = [p[0] for p in pts2]
+            ys = [p[1] for p in pts2]
+            p_tol = max(max(xs) - min(xs), max(ys) - min(ys), 1e-6) * 0.005
+            r = rect_from_points(pts2, p_tol)
+            if r:
+                msp_rects.append(r)
+        if msp_line_segs:
+            seg_lengths.sort()
+            med_len = seg_lengths[len(seg_lengths) // 2] if seg_lengths else 1.0
+            line_tol = max(med_len * 0.001, 1e-6)
+            msp_rects.extend(rects_from_line_segments(msp_line_segs, line_tol))
+
+        msp_frames = detect_msp_frames(msp_rects, text_points, sheet_insert_points, known_sheet_rects)
+        role_rects = []
+        for role in ('GROUP_BOX', 'BORDER', 'MARGIN'):
+            for r in msp_frames[role]:
+                role_rects.append((r, role, rect_tol(r)))
+
+        def role_for_segment(p1, p2):
+            for (r, role, tol) in role_rects:
+                if segment_on_rect(p1, p2, r, tol):
+                    return role
+            return None
+
+        def role_for_rect(rect):
+            for (r, role, tol) in role_rects:
+                if all(abs(rect[i] - r[i]) <= tol for i in range(4)):
+                    return role
+            return None
+
+        # 프록시 시트 클러스터링을 위한 엔티티 바운딩 박스 추적
+        track_boxes = bool(proxy_sheet_inserts)
+        msp_entity_boxes = []   # (x0, y0, x1, y1)
 
         for e in expanded_msp:
             t = e.dxftype()
@@ -875,22 +1139,42 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
             else:
                 rgb = get_rgb(col)
                 hex_col = f"#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}"
-            
-            if t in ['LINE', 'LWPOLYLINE', 'POLYLINE', 'SPLINE', 'SOLID', 'CIRCLE', 'ARC']:
+
+            pos_start = len(pos_data)
+            tri_start = len(tri_pos_data)
+            entity_is_sheet_insert = False
+
+            if t in ['LINE', 'LWPOLYLINE', 'POLYLINE', 'SPLINE', 'SOLID', 'TRACE', 'CIRCLE', 'ARC']:
                 if t == 'LINE':
-                    add_seg((e.dxf.start.x, e.dxf.start.y), (e.dxf.end.x, e.dxf.end.y), rgb)
+                    p1 = (e.dxf.start.x, e.dxf.start.y)
+                    p2 = (e.dxf.end.x, e.dxf.end.y)
+                    role = role_for_segment(p1, p2) if role_rects else None
+                    if role:
+                        add_role_seg(p1, p2, role)
+                    else:
+                        add_seg(p1, p2, rgb)
                 elif t in ['LWPOLYLINE', 'POLYLINE']:
                     pts = list(e.points()) if t == 'POLYLINE' else list(e.get_points())
-                    poly_rgb = rgb
-                    if len(pts) in [4, 5] and (getattr(e, 'closed', False) or getattr(e, 'is_closed', False)):
-                        xs = [p[0] for p in pts]
-                        ys = [p[1] for p in pts]
-                        if min(xs) > 65000 and (max(xs) - min(xs)) > 500 and (max(ys) - min(ys)) > 500:
-                            poly_rgb = (1.0, 1.0, 0.0) # Vivid Yellow for sub-drawing framing boxes
-                    for i in range(len(pts)-1):
-                        add_seg((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), poly_rgb)
-                    if (getattr(e, 'closed', False) or getattr(e, 'is_closed', False)) and len(pts) > 2:
-                        add_seg((pts[-1][0], pts[-1][1]), (pts[0][0], pts[0][1]), poly_rgb)
+                    pts2 = [(p[0], p[1]) for p in pts]
+                    is_closed = (getattr(e, 'closed', False) or getattr(e, 'is_closed', False))
+                    role = None
+                    if role_rects and len(pts2) in (4, 5) and (is_closed or len(pts2) == 5):
+                        xs = [p[0] for p in pts2]
+                        ys = [p[1] for p in pts2]
+                        p_tol = max(max(xs) - min(xs), max(ys) - min(ys), 1e-6) * 0.005
+                        rr = rect_from_points(pts2, p_tol)
+                        if rr:
+                            role = role_for_rect(rr)
+                    for i in range(len(pts2)-1):
+                        if role:
+                            add_role_seg(pts2[i], pts2[i+1], role)
+                        else:
+                            add_seg(pts2[i], pts2[i+1], rgb)
+                    if is_closed and len(pts2) > 2:
+                        if role:
+                            add_role_seg(pts2[-1], pts2[0], role)
+                        else:
+                            add_seg(pts2[-1], pts2[0], rgb)
                 elif t == 'SPLINE':
                     try:
                         pts = list(e.flattening(distance=0.5))
@@ -900,7 +1184,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                             add_seg((pts[-1][0], pts[-1][1]), (pts[0][0], pts[0][1]), rgb)
                     except Exception:
                         pass
-                elif t == 'SOLID':
+                elif t in ['SOLID', 'TRACE']:
                     v0 = (e.dxf.vtx0.x, e.dxf.vtx0.y)
                     v1 = (e.dxf.vtx1.x, e.dxf.vtx1.y)
                     v2 = (e.dxf.vtx2.x, e.dxf.vtx2.y)
@@ -922,6 +1206,12 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     a_pts = [(cx + r * math.cos(sa + (ea-sa)*i/steps), cy + r * math.sin(sa + (ea-sa)*i/steps)) for i in range(steps+1)]
                     for i in range(steps):
                         add_seg(a_pts[i], a_pts[i+1], rgb)
+            elif t == '3DFACE':
+                for p1, p2 in face_outline_segments(e):
+                    add_seg(p1, p2, rgb)
+            elif t == 'HATCH':
+                for p1, p2 in hatch_outline_segments(e):
+                    add_seg(p1, p2, rgb)
             elif t in ['TEXT', 'MTEXT']:
                 raw = e.dxf.text if t == 'TEXT' else e.text
                 cln = clean_txt(raw)
@@ -931,13 +1221,13 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     td = getattr(e.dxf, 'text_direction', None)
                     if td and (abs(td.x - 1.0) > 0.01 or abs(td.y) > 0.01):
                         rot = math.degrees(math.atan2(td.y, td.x))
-                        
+
                     halign = getattr(e.dxf, 'halign', 0)
                     valign = getattr(e.dxf, 'valign', 0)
                     align_pt = getattr(e.dxf, 'align_point', None)
                     ins_pt = e.dxf.insert
                     target_pt = align_pt if ((halign > 0 or valign > 0) and align_pt is not None and (abs(align_pt.x) > 0.001 or abs(align_pt.y) > 0.001)) else ins_pt
-                    
+
                     ha = 1 if halign in [1, 4] else (2 if halign == 2 else 0)
                     va = 1 if valign == 1 else (2 if valign == 2 else (3 if valign == 3 else 0))
                     width_factor = getattr(e.dxf, 'width', 1.0) if t == 'TEXT' else 1.0
@@ -956,154 +1246,23 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     gen_flags = getattr(e.dxf, 'generation_flags', 0) if t == 'TEXT' else 0
                     is_mirrored = bool(gen_flags & 2)
 
-                    # Precise Title Block & Spec Table Color Mapping
+                    # 표제란 고정 라벨(범용 영문 라벨)은 AutoCAD 관례대로 노란색 강조, 그 외는 레이어/엔티티 색 그대로
                     final_txt_col = hex_col
-                    if '외' in cln and '형' in cln and '도' in cln:
-                        final_txt_col = '#ffffff'
-                    elif any(lbl in cln for lbl in ['DWG TITLE', 'MODEL NAME', 'DWG NO.', 'Page', 'DESIGNED BY', 'CHECKED BY', 'APPROVED BY', 'DWG SIZE', 'NAME', 'DATE', 'SCALE', 'UNIT']):
+                    if any(lbl in cln for lbl in ['DWG TITLE', 'MODEL NAME', 'DWG NO.', 'Page', 'DESIGNED BY', 'CHECKED BY', 'APPROVED BY', 'DWG SIZE', 'NAME', 'DATE', 'SCALE', 'UNIT']):
                         final_txt_col = '#ffff00'
-                    elif is_mona200d:
-                        if 'MONA200D' in cln and target_pt.y < 200:
-                            final_txt_col = '#38bdf8'
-                        elif 'D000C016' in cln and target_pt.y < 120:
-                            final_txt_col = '#ffffff'
-                        elif target_pt.y > 1550 and target_pt.x < 300 and 'D000C' in cln:
-                            final_txt_col = '#ffffff'
-                            rot = 180.0
-
-                    calc_x = target_pt.x
-                    calc_y = target_pt.y
-                    calc_h = h
-                    calc_w = w
-
-                    # Spec Table alignments and centering (isolated strictly to MONA200D legacy file)
-                    if is_mona200d:
-                        if target_pt.x > 1700 and target_pt.y > 400:
-                            if cln == 'TRACTION\nMACHINE':
-                                calc_x = 1768.4
-                                ha, va = 1, 2
-                                calc_w = 120.0
-                            elif cln == 'BRAKE' and target_pt.x < 1720:
-                                calc_x = 1768.4
-                                ha, va = 1, 2
-                                calc_w = 120.0
-                            elif cln == 'SHEAVE' and target_pt.x > 1800:
-                                calc_x = 1768.4
-                                ha, va = 1, 2
-                                calc_w = 120.0
-                            elif 'GEARLESS TRACTION' in cln:
-                                calc_x = 2090.6
-                                ha, va = 1, 2
-                                calc_w = 680.0
-                            elif 1860 < target_pt.x < 1900: # Parameter col
-                                ha, va = 0, 2
-                                calc_w = 250.0
-                            elif target_pt.x > 2200: # Value col
-                                ha, va = 1, 2
-                                calc_w = 280.0
-
-                        # Sheave & Groove table alignments and clean centering
-                        if 950 < target_pt.x < 1720 and 1370 < target_pt.y < 1560:
-                            if 'SH. Dia' in cln:
-                                calc_x = 1066.5
-                                calc_y = 1514.0
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 180.0
-                            elif 'd' in cln and ('Ø' in cln or '%%C' in raw):
-                                cln = 'Ød'
-                                calc_x = 1202.9
-                                calc_y = 1514.0
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 75.0
-                            elif cln.upper() == 'P' and target_pt.y > 1500:
-                                cln = 'P'
-                                calc_x = 1288.9
-                                calc_y = 1514.0
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 80.0
-                            elif 'Rope' in cln:
-                                cln = 'Rope본수'
-                                calc_x = 1407.5
-                                calc_y = 1514.0
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 140.0
-                            elif 'β' in raw or 'β' in cln or ('1500' in str(round(target_pt.x)) and target_pt.y > 1500):
-                                cln = 'β°'
-                                calc_x = 1511.9
-                                calc_y = 1514.0
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 58.0
-                            elif 'γ' in raw or 'γ' in cln or ('1570' in str(round(target_pt.x)) and target_pt.y > 1500):
-                                cln = 'γ°'
-                                calc_x = 1580.3
-                                calc_y = 1514.0
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 70.0
-                            elif '비' in cln or '비고' in raw or ('1637' in str(round(target_pt.x)) and target_pt.y > 1500):
-                                cln = '비고'
-                                calc_x = 1662.0
-                                calc_y = 1514.0
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 80.0
-                            elif '240' in cln:
-                                calc_x = 1066.5
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 180.0
-                            elif cln == '8':
-                                calc_x = 1202.9
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 75.0
-                            elif cln == '12':
-                                calc_x = 1288.9
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 80.0
-                            elif '3' in cln and ('본' in cln or '3' in raw):
-                                cln = '3 본'
-                                calc_x = 1407.5
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 140.0
-                            elif '4' in cln and ('본' in cln or '4' in raw):
-                                cln = '4 본'
-                                calc_x = 1407.5
-                                calc_h = 18.0
-                                ha, va = 1, 2
-                                calc_w = 140.0
-                            elif '95' in cln and '105' in cln:
-                                calc_x = 1511.9
-                                calc_y = 1459.5 if target_pt.y > 1450 else 1408.5
-                                calc_h = 16.0
-                                ha, va = 1, 2
-                                calc_w = 58.0
-                            elif '25' in cln and '30' in cln:
-                                calc_x = 1580.3
-                                calc_y = 1459.5 if target_pt.y > 1450 else 1408.5
-                                calc_h = 16.0
-                                ha, va = 1, 2
-                                calc_w = 70.0
 
                     txt_item = {
                         't': cln,
-                        'x': round(calc_x, 1),
-                        'y': round(calc_y, 1),
-                        'h': round(calc_h, 1),
+                        'x': round(target_pt.x, 1),
+                        'y': round(target_pt.y, 1),
+                        'h': round(h, 1),
                         'r': round(rot % 360, 1),
                         'c': final_txt_col,
                         'ha': ha,
                         'va': va
                     }
-                    if calc_w > 0:
-                        txt_item['w'] = round(calc_w, 1)
+                    if w > 0:
+                        txt_item['w'] = round(w, 1)
                     if is_mirrored:
                         txt_item['mx'] = True
                     all_texts.append(txt_item)
@@ -1134,6 +1293,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     ml_txt['x'] = round(ml_txt['x'], 1)
                     ml_txt['y'] = round(ml_txt['y'], 1)
                     ml_txt['r'] = round(ml_txt['r'], 1)
+                    all_texts.append(ml_txt)
             elif t == 'LEADER':
                 try:
                     verts = list(e.vertices)
@@ -1141,8 +1301,6 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         add_seg((verts[i].x, verts[i].y), (verts[i+1].x, verts[i+1].y), rgb)
                 except Exception:
                     pass
-            elif t in ['OLE2FRAME', 'IMAGE']:
-                pass
             elif t == 'INSERT':
                 bname = getattr(e.dxf, 'name', None)
                 ins = (e.dxf.insert.x, e.dxf.insert.y)
@@ -1150,20 +1308,21 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                 cos_r, sin_r = math.cos(rot), math.sin(rot)
                 sx = getattr(e.dxf, 'xscale', 1.0)
                 sy = getattr(e.dxf, 'yscale', 1.0)
-                
+                entity_is_sheet_insert = bname in block_sheet_frames
+
                 if bname in block_cache:
-                    for (p1, p2, blk_rgb, blk_col, blk_lay) in block_cache[bname]:
+                    for (p1, p2, blk_rgb, blk_col, blk_lay, blk_lw) in block_cache[bname]:
                         tp1 = transform_pt(p1, ins, cos_r, sin_r, sx, sy)
                         tp2 = transform_pt(p2, ins, cos_r, sin_r, sx, sy)
-                        
+
                         if blk_col == 0:
                             final_rgb = rgb
                         elif blk_lay == '0' and blk_col == 256:
                             final_rgb = rgb
                         else:
                             final_rgb = blk_rgb
-                            
-                        add_seg(tp1, tp2, final_rgb)
+
+                        add_seg(tp1, tp2, final_rgb, blk_lw)
 
                     if bname in block_tris:
                         for (p1, p2, p3, blk_rgb, blk_col, blk_lay) in block_tris[bname]:
@@ -1177,7 +1336,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                             else:
                                 final_rgb = blk_rgb
                             add_tri(tp1, tp2, tp3, final_rgb)
-                
+
                 if bname in block_texts:
                     for bt in block_texts[bname]:
                         tp = transform_pt((bt['x'], bt['y']), ins, cos_r, sin_r, sx, sy)
@@ -1186,14 +1345,14 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                             total_rot = bt['r'] + math.degrees(rot)
                             b_col = bt.get('raw_col', 256)
                             b_lay = bt.get('lay_name', '0')
-                            
+
                             if b_col == 0:
                                 final_hex = hex_col
                             elif b_lay == '0' and b_col == 256:
                                 final_hex = hex_col
                             else:
                                 final_hex = bt['c']
-                                
+
                             all_texts.append({
                                 't': cln,
                                 'x': round(tp[0], 1),
@@ -1233,6 +1392,93 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                             'va': 0
                         })
 
+            # 프록시 시트 클러스터링용 엔티티 바운딩 박스 (시트 블록 INSERT 자체는 제외)
+            if track_boxes and not entity_is_sheet_insert:
+                bx0 = by0 = float('inf')
+                bx1 = by1 = float('-inf')
+                for i in range(pos_start, len(pos_data), 3):
+                    bx0 = min(bx0, pos_data[i]); bx1 = max(bx1, pos_data[i])
+                    by0 = min(by0, pos_data[i + 1]); by1 = max(by1, pos_data[i + 1])
+                for i in range(tri_start, len(tri_pos_data), 3):
+                    bx0 = min(bx0, tri_pos_data[i]); bx1 = max(bx1, tri_pos_data[i])
+                    by0 = min(by0, tri_pos_data[i + 1]); by1 = max(by1, tri_pos_data[i + 1])
+                if bx0 != float('inf'):
+                    msp_entity_boxes.append((bx0, by0, bx1, by1))
+
+        # ------------------------------------------------------------------
+        # 2-C. 프록시(빈) 블록 시트 동적 재구성: 3중 프레임 + 표제란 격자
+        # ------------------------------------------------------------------
+        reconstructed_sheets = []
+        if proxy_sheet_inserts:
+            exclusion_rects = []
+            for r in msp_frames['GROUP_BOX'] + known_sheet_rects:
+                pad = max(r[2] - r[0], r[3] - r[1]) * 0.01
+                exclusion_rects.append((r[0] - pad, r[1] - pad, r[2] + pad, r[3] + pad))
+
+            def is_excluded(px, py):
+                for r in exclusion_rects:
+                    if r[0] <= px <= r[2] and r[1] <= py <= r[3]:
+                        return True
+                return False
+
+            def nearest_proxy_idx(px, py):
+                best_i, best_d = -1, float('inf')
+                for i, ps in enumerate(proxy_sheet_inserts):
+                    d = (ps['insert'][0] - px) ** 2 + (ps['insert'][1] - py) ** 2
+                    if d < best_d:
+                        best_i, best_d = i, d
+                return best_i
+
+            def contains_sheet(bx0, by0, bx1, by1):
+                # 단품 시트 하나 이상을 통째로 감싸는 엔티티(그룹핑 박스 등)는 메인 클러스터에서 제외
+                for r in known_sheet_rects:
+                    if bx0 <= r[0] and by0 <= r[1] and bx1 >= r[2] and by1 >= r[3]:
+                        return True
+                return False
+
+            clusters = [None] * len(proxy_sheet_inserts)
+            cluster_texts = [[] for _ in proxy_sheet_inserts]
+            for (bx0, by0, bx1, by1) in msp_entity_boxes:
+                cx, cy = (bx0 + bx1) / 2.0, (by0 + by1) / 2.0
+                if is_excluded(cx, cy) or (known_sheet_rects and contains_sheet(bx0, by0, bx1, by1)):
+                    continue
+                i = nearest_proxy_idx(cx, cy)
+                if i < 0:
+                    continue
+                c = clusters[i]
+                clusters[i] = (bx0, by0, bx1, by1) if c is None else (min(c[0], bx0), min(c[1], by0), max(c[2], bx1), max(c[3], by1))
+            for tx in all_texts:
+                if is_excluded(tx['x'], tx['y']):
+                    continue
+                i = nearest_proxy_idx(tx['x'], tx['y'])
+                if i >= 0:
+                    cluster_texts[i].append(tx)
+
+            for i, ps in enumerate(proxy_sheet_inserts):
+                cl = clusters[i]
+                txs = cluster_texts[i]
+                if cl is None and txs:
+                    xs = [t['x'] for t in txs]
+                    ys = [t['y'] for t in txs]
+                    cl = (min(xs), min(ys), max(xs), max(ys))
+                if cl is None:
+                    continue
+                sheet = reconstruct_proxy_sheet(ps['insert'], cl, txs, ps['scale'])
+                if not sheet:
+                    continue
+                for (p1, p2, role) in sheet['segments']:
+                    add_role_seg(p1, p2, role)
+                reconstructed_sheets.append({
+                    'block': ps['name'],
+                    'insert': [round(ps['insert'][0], 1), round(ps['insert'][1], 1)],
+                    'paper': sheet['paper'],
+                    'scale': sheet['scale'],
+                    'outer': [round(v, 1) for v in sheet['outer']],
+                    'border': [round(v, 1) for v in sheet['border']],
+                    'margin': [round(v, 1) for v in sheet['margin']],
+                    'title_block': [round(v, 1) for v in sheet['tb_rect']] if sheet['tb_rect'] else None,
+                    'grid_lines': len(sheet['grid'])
+                })
         # 3. Process OLE frames (Embedded Excel tables)
         try:
             ole_frames = extract_ole_frames_from_dxf(dxf_path)
@@ -1261,25 +1507,33 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
         except Exception as _oe:
             pass
 
-        # 4. Native CAD block resolution handles all drawing frames (A0, A3, *U...) cleanly from DXF.
-        # No synthetic database overlay or hardcoded grid injection required.
+        # 4. 도곽/표제란은 (a) 블록 내 규격 사각형 승격, (b) 모델 공간 그룹핑 박스/직접 도곽 판별,
+        #    (c) 프록시(빈) 블록 시트 동적 재구성으로 모두 DXF 데이터에서만 유도됩니다. 좌표 하드코딩 없음.
 
         num_lines = len(pos_data) // 6
         num_tris = len(tri_pos_data) // 9
+        num_heavy = len(heavy_pos_data) // 6
         if min_x == float('inf'):
             min_x, min_y, max_x, max_y = 0.0, 0.0, 1000.0, 700.0
 
         os.makedirs(os.path.dirname(os.path.abspath(output_bin_path)), exist_ok=True)
-        
+
         # High-performance Float32 binary write (direct memory dump)
+        # CADW v3 레이아웃:
+        #   magic 'CADW' | u32 version=3 | u32 numLines | u32 numTris | u32 numHeavy | f32 minX,minY,maxX,maxY
+        #   lines pos (numLines*6 f32) | lines col (numLines*6 f32)
+        #   tris pos (numTris*9 f32)   | tris col (numTris*9 f32)
+        #   heavy pos (numHeavy*6 f32) | heavy col (numHeavy*6 f32) | heavy lineweight mm (numHeavy f32)
         with open(output_bin_path, 'wb') as f:
             f.write(b'CADW')
-            f.write(struct.pack('<IIIffff', 2, num_lines, num_tris, min_x, min_y, max_x, max_y))
+            f.write(struct.pack('<IIIIffff', CADW_VERSION, num_lines, num_tris, num_heavy, min_x, min_y, max_x, max_y))
             f.write(pos_data.tobytes())
             f.write(col_data.tobytes())
             f.write(tri_pos_data.tobytes())
             f.write(tri_col_data.tobytes())
-
+            f.write(heavy_pos_data.tobytes())
+            f.write(heavy_col_data.tobytes())
+            f.write(heavy_lw_data.tobytes())
         # Save Text JSON alongside binary buffer
         output_txt_path = output_bin_path.replace('__cad_webgl.bin', '__cad_texts.json')
         if output_txt_path == output_bin_path:
@@ -1332,7 +1586,18 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
 
         return {
             "status": "SUCCESS",
+            "format_version": CADW_VERSION,
             "num_lines": num_lines,
+            "num_tris": num_tris,
+            "num_heavy": num_heavy,
+            "frames": {
+                "block_sheet_templates": len(block_sheet_frames),
+                "sheet_inserts": len(sheet_insert_points),
+                "group_boxes": len(msp_frames['GROUP_BOX']),
+                "msp_borders": len(msp_frames['BORDER']),
+                "msp_margins": len(msp_frames['MARGIN']),
+                "proxy_sheets": reconstructed_sheets
+            },
             "bounds": {
                 "min_x": round(min_x, 1),
                 "min_y": round(min_y, 1),

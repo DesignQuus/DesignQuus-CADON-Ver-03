@@ -138,6 +138,11 @@
    - 도면 캔버스 조작 시 불필요한 React State 재렌더링을 피하고 Three.js Ref 기반 On-demand 렌더링 패턴을 유지하십시오.
 4. **포트 충돌 금지**:
    - 로컬 테스트는 무조건 `http://localhost:4005`를 사용하십시오.
+5. **도곽/표제란은 좌표·업체명 하드코딩 금지 (범용 엔진 사용)**:
+   - 도곽(BORDER/MARGIN), 그룹핑 박스, 프록시(빈) 폼 블록 시트 재구성은 모두 `scripts/sheet_frame_engine.py`가 DXF 기하·텍스트 분포만으로 판별합니다.
+   - `cad_webgl_exporter.py`(WebGL)와 `dxf_parser.py`(프레임 감지 파이프라인)가 이 엔진을 공용으로 사용하며, 특정 도면 좌표(`65000`, `500,500,48900,34500` 등)나 업체명(`세창`, `엠브이텍` 등)을 코드에 넣지 마십시오.
+   - WebGL 바이너리는 **CADW v3**(36바이트 헤더: `magic | version | numLines | numTris | numHeavy | minX minY maxX maxY`)이며, heavy 세그먼트(선가중치 ≥ 0.5mm)는 뷰어에서 `LineSegments2`로 화면 고정 픽셀 굵기로 렌더링됩니다. 뷰어는 v1/v2 바이너리도 계속 읽습니다.
+   - 회귀 검증용 합성 픽스처: `python scripts/tests/make_synthetic_mechclick_dxf.py <out.dxf>` (빈 `MCL_DRAWFORM2` 프록시 + 익명 단품 시트 블록 111개 + 그룹핑 박스 12개).
 
 ---
 
