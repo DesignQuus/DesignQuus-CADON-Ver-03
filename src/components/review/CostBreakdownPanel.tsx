@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Coins, AlertTriangle, Layers, Calculator, Database, Save, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Coins, AlertTriangle, Layers, Calculator, Database, Save, CheckCircle2, RefreshCw, Zap } from 'lucide-react';
 import { QuoteReviewLine } from './QuoteLineGrid';
 import { apiFetch } from '@/lib/api';
 import { stringifyRemark } from '@/lib/remark-cost-helper';
@@ -13,6 +13,8 @@ interface CostBreakdownPanelProps {
   onUpdateLine: (updated: Partial<QuoteReviewLine>) => void;
   onConfirmLine?: (lineId: string) => Promise<void>;
   onAddNoiseBlacklist?: (keyword: string) => void;
+  onCalculateSingleEngineering?: (lineId: string) => Promise<void>;
+  isCalculatingSingle?: boolean;
 }
 
 export default function CostBreakdownPanel({
@@ -21,7 +23,9 @@ export default function CostBreakdownPanel({
   topMasterPrice,
   onUpdateLine,
   onConfirmLine,
-  onAddNoiseBlacklist
+  onAddNoiseBlacklist,
+  onCalculateSingleEngineering,
+  isCalculatingSingle
 }: CostBreakdownPanelProps) {
   const [savingMaster, setSavingMaster] = useState(false);
   const [masterSaved, setMasterSaved] = useState(false);
@@ -252,6 +256,27 @@ export default function CostBreakdownPanel({
           <span className="text-[11px] px-2 py-0.5 rounded bg-slate-100 font-mono text-slate-600">
             수량 {line.quantity} EA (구간: {line.quantity <= 9 ? '1~9' : line.quantity <= 99 ? '10~99' : '100~'})
           </span>
+
+          {/* ⚡ 현재 품목 전용 1개 AI 원가 계산 버튼 */}
+          {onCalculateSingleEngineering && (
+            <button
+              onClick={() => onCalculateSingleEngineering(line.id)}
+              disabled={isCalculatingSingle}
+              className={`px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                isCalculatingSingle
+                  ? 'bg-amber-100 text-amber-800 border border-amber-300 cursor-wait'
+                  : 'bg-linear-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border border-amber-600'
+              }`}
+              title="현재 품목에 대해 도면 체적/비중 및 표준 가공비를 적용한 AI 공학원가를 즉시 산출하여 자동 기입합니다."
+            >
+              {isCalculatingSingle ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Zap className="w-3.5 h-3.5 fill-white" />
+              )}
+              <span>{isCalculatingSingle ? '산출 중...' : '⚡ 이 품목 AI 원가 계산'}</span>
+            </button>
+          )}
 
           {/* 🚀 마스터 DB 영구 적재 / 갱신 버튼 */}
           <button

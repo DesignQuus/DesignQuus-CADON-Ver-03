@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Send, CheckCircle2, RefreshCw, FileText, AlertTriangle, AlertCircle,
-  ExternalLink, ChevronDown, ChevronUp, Sparkles, Layers, Zap, Database, HelpCircle
+  ExternalLink, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sparkles, Layers, Zap, Database, HelpCircle
 } from 'lucide-react';
 import QuoteLineGrid, { QuoteReviewLine, InclusionType } from '@/components/review/QuoteLineGrid';
 import SmartBatchActionBar from '@/components/review/SmartBatchActionBar';
@@ -1415,6 +1415,177 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     }
   };
 
+  // ⚡ 단일 품목(1개) AI 공학 표준원가 계산 핸들러
+  const [calculatingSingleId, setCalculatingSingleId] = useState<string | null>(null);
+
+  const handleCalculateSingleEngineering = async (lineId: string) => {
+    const target = lines.find((l) => l.id === lineId);
+    if (!target) return;
+
+    if (target.isAssembly) {
+      alert('조립도(Assembly)는 가공비가 자동 0원(배제) 처리됩니다.');
+      return;
+    }
+
+    setCalculatingSingleId(lineId);
+    try {
+      let materialRates: Record<string, number> = {
+        'SS400': 1800, 'S45C': 2200, 'AL6061': 6500, 'AL5052': 6200,
+        'SUS304': 5500, 'SUS316': 7800, 'SKD11': 9500, 'SCS13': 7500,
+        'GCD': 3800, 'FCD': 3900, 'FC250': 2200, 'FCD450': 2600, 'SCM440': 3200, 'BsBM': 12000
+      };
+      let hourlyMachineRate = 45000;
+      let setupBaseCost = 30000;
+      let sheetLaserRate = 1800;
+      let sheetPiercingRate = 80;
+      let sheetBendRate = 800;
+      let castingRate = 2500;
+      let treatmentMinLotCost = 30000;
+      let packagingShippingRate = 0.03;
+      let defaultMargin = 0.18;
+
+      try {
+        const settingsRes = await apiFetch('/api/admin/masters?type=settings');
+        if (settingsRes.ok) {
+          const sJson = await settingsRes.json();
+          if (sJson.materialRates) materialRates = { ...materialRates, ...sJson.materialRates };
+          if (sJson.processRates) {
+            if (sJson.processRates.HOURLY_MACHINE_RATE) hourlyMachineRate = sJson.processRates.HOURLY_MACHINE_RATE;
+            if (sJson.processRates.SETUP_BASE_COST) setupBaseCost = sJson.processRates.SETUP_BASE_COST;
+            if (sJson.processRates.SHEET_LASER_PER_METER) sheetLaserRate = sJson.processRates.SHEET_LASER_PER_METER;
+            if (sJson.processRates.SHEET_PIERCING_RATE) sheetPiercingRate = sJson.processRates.SHEET_PIERCING_RATE;
+            if (sJson.processRates.SHEET_BEND_PER_STROKE) sheetBendRate = sJson.processRates.SHEET_BEND_PER_STROKE;
+            if (sJson.processRates.CASTING_PER_KG_RATE) castingRate = sJson.processRates.CASTING_PER_KG_RATE;
+            if (sJson.processRates.TREATMENT_MIN_LOT_COST) treatmentMinLotCost = sJson.processRates.TREATMENT_MIN_LOT_COST;
+            if (sJson.processRates.PACKAGING_SHIPPING_RATE) packagingShippingRate = sJson.processRates.PACKAGING_SHIPPING_RATE;
+            if (sJson.processRates.DEFAULT_MARGIN_RATE) defaultMargin = sJson.processRates.DEFAULT_MARGIN_RATE;
+          }
+        }
+      } catch {}
+
+      // 도면 매칭
+      const dwg = drawings.find((d: any) =>
+        (d.drawing_no_raw && d.drawing_no_raw.trim().toLowerCase() === target.partNo.trim().toLowerCase()) ||
+        (d.drawing_no_normalized && d.drawing_no_normalized.trim().toLowerCase() === target.partNo.trim().toLowerCase()) ||
+        (d.drawing_name_raw && d.drawing_name_raw.trim().toLowerCase() === target.partName.trim().toLowerCase())
+      );
+
+      let width = 100;
+      let height = 80;
+      let thickness = 15;
+
+      if (dwg && dwg.max_x && dwg.min_x && dwg.max_y && dwg.min_y) {
+        width = Math.max(10, Math.min(2000, Math.round(Math.abs(dwg.max_x - dwg.min_x))));
+        height = Math.max(10, Math.min(2000, Math.round(Math.abs(dwg.max_y - dwg.min_y))));
+      }
+
+      const spec = target.specification || '';
+      const dimMatch = spec.match(/(\d+)\s*[xX*]\s*(\d+)(\s*[xX*]\s*(\d+))?/);
+      if (dimMatch) {
+        width = parseInt(dimMatch[1], 10) || width;
+        height = parseInt(dimMatch[2], 10) || height;
+        if (dimMatch[4]) thickness = parseInt(dimMatch[4], 10) || thickness;
+      }
+
+      const matUpper = (target.material || 'SS400').toUpperCase();
+      const density = matUpper.includes('AL') ? 2.70 :
+                      matUpper.includes('SUS') || matUpper.includes('SCS') ? 7.93 :
+                      matUpper.includes('FC') || matUpper.includes('GCD') || matUpper.includes('CAST') ? 7.25 :
+                      matUpper.includes('BS') || matUpper.includes('BRASS') || matUpper.includes('CU') ? 8.50 :
+                      matUpper.includes('POM') || matUpper.includes('NYLON') ? 1.40 : 7.85;
+
+      const volumeCm3 = (width * height * thickness) / 1000;
+      const rawWeightKg = Math.max(0.2, Number(((volumeCm3 * density) / 1000).toFixed(2)));
+
+      const matKey = Object.keys(materialRates).find(k => matUpper.includes(k)) || 'SS400';
+      const materialKgRate = materialRates[matKey] || 2200;
+
+      let calculated: CostCalculationResult;
+      if (target.partType === 'CASTING') {
+        calculated = calculateCastingCost({
+          netWeightKg: rawWeightKg,
+          materialKgRate,
+          castingProcessRatePerKg: castingRate,
+          marginRate: defaultMargin,
+          quantity: target.quantity
+        });
+      } else if (target.partType === 'SHEET_METAL') {
+        const areaM2 = (width * height) / 1000000;
+        calculated = calculateSheetMetalCost({
+          areaM2: Math.max(0.01, areaM2),
+          thicknessMm: Math.min(20, thickness),
+          materialKgRate,
+          density,
+          cuttingLengthMeter: Math.max(0.4, Number((((width + height) * 2) / 1000).toFixed(2))),
+          laserRatePerMeter: sheetLaserRate,
+          piercingRate: sheetPiercingRate,
+          bendingCount: 2,
+          bendRatePerStroke: sheetBendRate,
+          treatmentMinLotCost,
+          packagingShippingRate,
+          marginRate: defaultMargin,
+          quantity: target.quantity
+        });
+      } else {
+        const machiningHours = Math.max(0.4, Number((rawWeightKg * 0.12 + 0.35).toFixed(2)));
+        calculated = calculateMachiningCost({
+          rawWeightKg,
+          materialKgRate,
+          machiningHours,
+          hourlyMachineRate,
+          setupBaseCost,
+          treatmentMinLotCost,
+          packagingShippingRate,
+          marginRate: defaultMargin,
+          quantity: target.quantity
+        });
+      }
+
+      const hasValidPrice = calculated.unitPrice > 0;
+
+      // 로컬 상태 즉시 반영
+      setLines((prev) =>
+        prev.map((l) => {
+          if (l.id !== lineId) return l;
+          return {
+            ...l,
+            unitCost: calculated.subtotalCost,
+            supplyPrice: calculated.unitPrice,
+            engineSuggestedPrice: calculated.unitPrice,
+            status: hasValidPrice ? ('CONFIRMED' as const) : ('NEEDS_REVIEW' as const),
+            memo: hasValidPrice
+              ? `AI공학표준원가 (${rawWeightKg}kg)`
+              : '공학원가 미확보'
+          };
+        })
+      );
+
+      // DB 저장
+      try {
+        await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lineId: target.id,
+            partKey: `ENGINEERING:${target.partNo}:STD`,
+            isConfirmed: hasValidPrice,
+            unitPrice: calculated.unitPrice,
+            unitCost: calculated.subtotalCost,
+            qtyTier: calculated.qtyTier,
+            lotQuantity: target.quantity,
+            basis: calculated.basis
+          })
+        });
+      } catch (err) {
+        console.warn('Sync single line to DB warning:', err);
+      }
+    } catch (e: any) {
+      alert('품목 AI 원가 계산 중 오류: ' + (e.message || ''));
+    } finally {
+      setCalculatingSingleId(null);
+    }
+  };
+
   // 실제 공급가액에 합산되는 유효 견적 대상 (조립도 및 제외품목 제외, 사급품은 0원으로 포함)
   const quoteActiveLines = lines.filter((l) => {
     if (l.isAssembly) return false;
@@ -1664,9 +1835,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         loadingMaster={matchingMaster}
       />
 
-      {/* ⚠️ 단가 미확보 요약 경고 배너 */}
+      {/* ⚠️ 단가 미확보 요약 경고 배너 & 스마트 1건씩 순회 내비게이터 */}
       {zeroPriceCount > 0 && (
-        <div className="bg-rose-50 border-b border-rose-200 px-5 py-2 flex items-center justify-between text-xs text-rose-800 shrink-0">
+        <div className="bg-rose-50 border-b border-rose-200 px-5 py-2 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs text-rose-800 shrink-0">
           <div className="flex items-center gap-2 font-medium">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 animate-pulse" />
             <span>
@@ -1674,25 +1845,95 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             </span>
             <span className="text-rose-300">|</span>
             <span className="text-slate-600">
-              검토자는 상단 지능형 일괄 액션을 이용하거나, 해당 품목의 <strong>수기 단가 입력</strong>, <strong>[사급품]</strong> 또는 <strong>[체결구 제외]</strong> 처리를 완료해야 합니다.
+              도면을 보며 <strong>1개씩 확인·적용</strong>하거나 하단 <strong>[⚡ 이 품목 AI 원가 계산]</strong> 또는 추천 단가를 채택하세요.
             </span>
           </div>
-          <button
-            onClick={() => {
-              const firstZeroIdx = lines.findIndex((l) => {
-                if (l.isAssembly) return false;
-                const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
-                return inc === 'INCLUDED' && l.supplyPrice <= 0;
-              });
-              if (firstZeroIdx !== -1) {
-                setSelectedIndex(firstZeroIdx);
-              }
-            }}
-            className="px-2.5 py-1 rounded bg-rose-100 hover:bg-rose-200 border border-rose-300 text-rose-800 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
-            title="단가가 0원인 첫 번째 미확보 품목으로 즉시 포커스를 이동합니다"
-          >
-            <span>첫 번째 미확보 품목으로 이동 ➔</span>
-          </button>
+
+          {/* 🎯 1개씩 순회 내비게이터 (이전 / 다음 미확보 탐색) */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* 이전 미확보 품목 */}
+            <button
+              type="button"
+              onClick={() => {
+                const prevZeroIdx = lines.reduce((acc, l, idx) => {
+                  if (idx >= selectedIndex) return acc;
+                  if (l.isAssembly) return acc;
+                  const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+                  if (inc === 'INCLUDED' && l.supplyPrice <= 0) return idx;
+                  return acc;
+                }, -1);
+                if (prevZeroIdx !== -1) {
+                  setSelectedIndex(prevZeroIdx);
+                } else {
+                  // 앞에서 더 없으면 마지막 미확보 품목으로
+                  const lastZeroIdx = lines.reduce((acc, l, idx) => {
+                    if (l.isAssembly) return acc;
+                    const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+                    if (inc === 'INCLUDED' && l.supplyPrice <= 0) return idx;
+                    return acc;
+                  }, -1);
+                  if (lastZeroIdx !== -1) setSelectedIndex(lastZeroIdx);
+                }
+              }}
+              className="px-2 py-1 rounded bg-white hover:bg-rose-100 border border-rose-300 text-rose-700 font-bold text-[11px] flex items-center gap-0.5 transition-colors cursor-pointer shadow-2xs"
+              title="이전 단가 미확보 품목으로 이동"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>이전 미확보</span>
+            </button>
+
+            {/* 현재 포커스가 0원 품목인지 표시 & 직관적 1-클릭 AI 계산 버튼 */}
+            {selectedLine && !selectedLine.isAssembly && (selectedLine.inclusionType === 'INCLUDED' || !selectedLine.inclusionType) && selectedLine.supplyPrice <= 0 ? (
+              <div className="flex items-center gap-1.5">
+                <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-900 font-bold text-[10.5px]">
+                  선택: [No.{selectedLine.itemNo}] ₩0
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCalculateSingleEngineering(selectedLine.id)}
+                  disabled={calculatingSingleId === selectedLine.id}
+                  className="px-2.5 py-1 rounded bg-linear-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-[11px] flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                  title="현재 선택된 품목의 도면 체적/가공비를 적용하여 AI 공학원가를 즉시 산출합니다"
+                >
+                  {calculatingSingleId === selectedLine.id ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="w-3.5 h-3.5 fill-white" />
+                  )}
+                  <span>{calculatingSingleId === selectedLine.id ? '산출 중...' : '⚡ 이 품목 AI 계산'}</span>
+                </button>
+              </div>
+            ) : null}
+
+            {/* 다음 미확보 품목 */}
+            <button
+              type="button"
+              onClick={() => {
+                const nextZeroIdx = lines.findIndex((l, idx) => {
+                  if (idx <= selectedIndex) return false;
+                  if (l.isAssembly) return false;
+                  const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+                  return inc === 'INCLUDED' && l.supplyPrice <= 0;
+                });
+                if (nextZeroIdx !== -1) {
+                  setSelectedIndex(nextZeroIdx);
+                } else {
+                  // 뒤쪽에 더 없으면 처음부터 다시 첫 번째 미확보 품목으로
+                  const firstZeroIdx = lines.findIndex((l) => {
+                    if (l.isAssembly) return false;
+                    const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+                    return inc === 'INCLUDED' && l.supplyPrice <= 0;
+                  });
+                  if (firstZeroIdx !== -1) setSelectedIndex(firstZeroIdx);
+                }
+              }}
+              className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+              title="다음 단가 미확보 품목으로 순차 이동합니다"
+            >
+              <span>다음 미확보 ➔</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -1772,6 +2013,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   onUpdateLine={handleUpdateSelected}
                   onConfirmLine={handleToggleConfirm}
                   onAddNoiseBlacklist={handleAddNoiseBlacklist}
+                  onCalculateSingleEngineering={handleCalculateSingleEngineering}
+                  isCalculatingSingle={calculatingSingleId === selectedLine?.id}
                 />
               );
             })()}
@@ -1782,6 +2025,29 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
               selectedLineCost={selectedLine?.unitCost}
               currentSupplyPrice={selectedLine?.supplyPrice}
               onApplyPrice={(prc) => handleUpdateSelected({ supplyPrice: prc, priceSource: 'MASTER_MATCH' })}
+              onApplyAndNext={(prc) => {
+                handleUpdateSelected({ supplyPrice: prc, priceSource: 'MASTER_MATCH' });
+                // 단가 적용 후 바로 다음 미확보 품목으로 자동 점프
+                setTimeout(() => {
+                  const nextZeroIdx = lines.findIndex((l, idx) => {
+                    if (idx <= selectedIndex) return false;
+                    if (l.isAssembly) return false;
+                    const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+                    return inc === 'INCLUDED' && l.supplyPrice <= 0;
+                  });
+                  if (nextZeroIdx !== -1) {
+                    setSelectedIndex(nextZeroIdx);
+                  } else {
+                    // 뒤쪽에 없으면 앞쪽 첫 번째 미확보 탐색
+                    const firstZeroIdx = lines.findIndex((l) => {
+                      if (l.isAssembly) return false;
+                      const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+                      return inc === 'INCLUDED' && l.supplyPrice <= 0;
+                    });
+                    if (firstZeroIdx !== -1) setSelectedIndex(firstZeroIdx);
+                  }
+                }, 100);
+              }}
               onOpenMasterDrawer={() => setIsMasterDrawerOpen(true)}
             />
           </div>

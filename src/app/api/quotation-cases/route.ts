@@ -58,8 +58,18 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const RETENTION_DAYS = 30;
+    const nowMs = Date.now();
     for (const c of cases) {
       c.created_by_name = userMap.get(c.created_by_user_id) || '담당자';
+      c.is_deleted = !!c.deleted_at || c.status === 'DELETED';
+      if (c.deleted_at) {
+        const deletedMs = new Date(c.deleted_at).getTime();
+        const elapsedDays = Math.floor((nowMs - deletedMs) / (1000 * 60 * 60 * 24));
+        c.remaining_days = Math.max(0, RETENTION_DAYS - elapsedDays);
+      } else {
+        c.remaining_days = null;
+      }
     }
 
     return NextResponse.json({ cases });

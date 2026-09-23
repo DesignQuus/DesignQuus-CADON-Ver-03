@@ -1764,31 +1764,35 @@ export default function CadViewer({
 
         {/* Right: Actions, Dropdown & Controls */}
         <div className="flex flex-wrap items-center gap-1.5">
-          {/* Action Group: AutoCAD & CAD Settings */}
-          <div className="flex items-center space-x-1.5 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80">
-            {/* AutoCAD 1-Click Launch Button */}
-            {caseId && (
+          {/* Action Group: AutoCAD Unified Split Button (Launch & Settings) */}
+          {caseId && (
+            <div className="inline-flex items-center rounded-lg border border-rose-500/40 bg-rose-950/40 p-0.5 shadow-2xs">
+              {/* Primary: 1-Click AutoCAD Launch */}
               <button
+                type="button"
                 onClick={handleOpenAutoCad}
                 disabled={openingCad}
-                className="px-2.5 py-1.5 rounded-lg border border-rose-500/40 bg-rose-950/50 hover:bg-rose-900/80 text-rose-200 hover:text-white text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
+                className="px-2.5 py-1.5 rounded-l-md hover:bg-rose-900/70 text-rose-200 hover:text-white text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
                 title={isAutocadInstalled ? "현재 도면을 PC에 설치된 AutoCAD 프로그램에서 직접 열기" : "AutoCAD 프로그램 연결 (미설정 시 CAD 설정 창으로 연결)"}
               >
                 <ExternalLink className="w-3.5 h-3.5 text-rose-400 shrink-0" />
                 <span className="whitespace-nowrap">{openingCad ? '열기 중...' : 'AutoCAD'}</span>
               </button>
-            )}
 
-            {/* ⚙️ CAD Settings Modal Button */}
-            <button
-              onClick={handleOpenSettingsModal}
-              className="px-2.5 py-1.5 rounded-lg border border-indigo-500/50 bg-indigo-950/70 hover:bg-indigo-900 text-indigo-200 hover:text-white text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0 shadow-2xs"
-              title="CAD 프로그램 실행 파일 경로 설정 (AutoCAD 등)"
-            >
-              <Settings className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span className="whitespace-nowrap">CAD 설정</span>
-            </button>
-          </div>
+              {/* Divider */}
+              <div className="w-[1px] h-4 bg-rose-500/30 my-auto" />
+
+              {/* Secondary: CAD Settings Quick Icon */}
+              <button
+                type="button"
+                onClick={handleOpenSettingsModal}
+                className="px-1.5 py-1.5 rounded-r-md hover:bg-rose-900/70 text-rose-300 hover:text-white transition-all cursor-pointer"
+                title="CAD 프로그램 실행 경로 및 뷰어 환경설정"
+              >
+                <Settings className="w-3.5 h-3.5 text-rose-400/80 hover:text-rose-200 shrink-0" />
+              </button>
+            </div>
+          )}
 
           {/* CAD-specific Controls (Visible when in CAD mode) */}
           {viewMode === 'CAD' && (

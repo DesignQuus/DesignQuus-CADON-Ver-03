@@ -20,6 +20,7 @@ interface MasterRecommendationCardProps {
   selectedLineCost?: number;
   currentSupplyPrice?: number;
   onApplyPrice: (price: number) => void;
+  onApplyAndNext?: (price: number) => void;
   onOpenMasterDrawer?: () => void;
 }
 
@@ -28,6 +29,7 @@ export default function MasterRecommendationCard({
   selectedLineCost,
   currentSupplyPrice,
   onApplyPrice,
+  onApplyAndNext,
   onOpenMasterDrawer
 }: MasterRecommendationCardProps) {
   if (recommendations.length === 0) {
@@ -142,7 +144,31 @@ export default function MasterRecommendationCard({
                     {priceDiff > 0 ? `현재보다 +₩${priceDiff.toLocaleString()}` : `현재보다 -₩${Math.abs(priceDiff).toLocaleString()}`}
                   </div>
                 )}
-                <span className="text-[9.5px] text-slate-400 block">클릭 시 적용</span>
+                <div className="flex items-center gap-1 mt-1 justify-end">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onApplyPrice(rec.unitPrice);
+                    }}
+                    className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] transition-colors"
+                  >
+                    적용
+                  </button>
+                  {onApplyAndNext && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onApplyAndNext(rec.unitPrice);
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] transition-colors shadow-2xs flex items-center gap-0.5"
+                      title="이 단가를 적용하고 다음 단가 미확보 품목으로 즉시 이동합니다"
+                    >
+                      <span>적용 후 다음 ➔</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           );
