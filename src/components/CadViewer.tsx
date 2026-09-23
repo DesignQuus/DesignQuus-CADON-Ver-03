@@ -1691,18 +1691,8 @@ export default function CadViewer({
       ) : (
         /* 1단계용 기본 전문 툴바 */
         <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-800 text-xs">
-        {/* Left: Sidebar Toggle + Mode Switcher Tabs */}
+        {/* Left: Mode Switcher Tabs */}
         <div className="flex items-center space-x-2.5 shrink-0">
-          {onToggleSidebar && (
-            <button
-              onClick={onToggleSidebar}
-              className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
-              title={isSidebarOpen ? "도면 등록 좌측 패널 접기" : "도면 등록 좌측 패널 열기"}
-            >
-              {isSidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
-            </button>
-          )}
-
           {/* Seamless Mode Switcher Tabs */}
           <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shadow-xs">
             <button
