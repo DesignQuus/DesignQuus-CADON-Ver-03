@@ -2752,24 +2752,19 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             </div>
           ) : null}
 
-          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 클래식 화이트 바인더 견출지 스타일 (최고 시인성, HUD 간섭 배제) */}
+          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 클래식 화이트 바인더 견출지 스타일 (정중앙 대칭 정렬) */}
           {!isSidebarOpen && (
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="absolute left-0 top-48 z-30 group flex flex-col items-center py-3.5 px-2 bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-600 border-y border-r border-l-0 border-slate-300 hover:border-blue-400 rounded-r-xl shadow-xl hover:shadow-2xl cursor-pointer transition-colors duration-150"
+              className="absolute left-0 top-48 z-30 group flex flex-col items-center justify-center w-9 py-3.5 bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-600 border-y border-r border-l-0 border-slate-300 hover:border-blue-400 rounded-r-xl shadow-xl hover:shadow-2xl cursor-pointer transition-colors duration-150"
               title={`도면 등록 패널 열기 (${files.length}개 도면 등록됨)`}
             >
-              <div className="flex flex-col items-center space-y-2">
-                <Folder className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
-                <span className="[writing-mode:vertical-lr] text-[11px] font-extrabold tracking-widest text-slate-800 group-hover:text-blue-600 select-none">
+              <div className="flex flex-col items-center justify-center space-y-2.5 w-full">
+                <Folder className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
+                <span className="[writing-mode:vertical-lr] text-[11px] font-extrabold tracking-widest text-slate-800 group-hover:text-blue-600 select-none text-center leading-none">
                   도면 등록
                 </span>
-                {files.length > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white font-mono font-bold text-[10px] leading-none shadow-xs">
-                    {files.length}
-                  </span>
-                )}
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0" />
               </div>
             </button>
           )}
