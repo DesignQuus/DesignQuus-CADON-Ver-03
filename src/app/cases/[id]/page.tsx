@@ -203,6 +203,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const [savingPriceId, setSavingPriceId] = useState<string | null>(null);
   const isSavingInlineRef = useRef(false);
   const isCancelledRef = useRef(false);
+  const hasAutoTriggeredAnalysis = useRef(false);
 
   // 🧠 Self-Learning Price Pool Modal States
   const [showLearnedModal, setShowLearnedModal] = useState(false);
@@ -644,6 +645,27 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       setAnalyzingFileId(null);
     }
   };
+
+  // 🛡️ Auto-Trigger Analysis Fallback: CAD 도면 파일이 있으나 도곽/시트가 0개이고 분석 이력이 없는 경우 즉시 자동 분석 실행
+  useEffect(() => {
+    if (!data || loading || analyzing) return;
+    const rawCadFiles = (data.files || []).filter((f: any) => 
+      ['DWG', 'DXF'].includes(f.file_type) && 
+      f.file_role !== 'VECTOR_SVG' && 
+      f.file_role !== 'DERIVED' &&
+      !f.original_file_name.endsWith('.svg') &&
+      !f.original_file_name.endsWith('.dwg.dxf')
+    );
+    if (
+      rawCadFiles.length > 0 &&
+      (!data.drawings || data.drawings.length === 0) &&
+      !data.latestParseRun &&
+      !hasAutoTriggeredAnalysis.current
+    ) {
+      hasAutoTriggeredAnalysis.current = true;
+      handleStartAnalysis(rawCadFiles[0].id);
+    }
+  }, [data, loading, analyzing]);
 
   // Delete Drawing File (Optimized Instant Deletion)
   const handleDeleteFile = async (fileId: string, fileName: string) => {

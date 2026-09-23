@@ -1128,14 +1128,14 @@ export default function CasesPage() {
 
         {/* Zone 4: Enterprise High-Density Table / Card Grid Section */}
         <div className="space-y-2.5">
-        {/* Top Control Toolbar (Unified & High Density) */}
-        <div className="bg-white p-2.5 rounded border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
-          {/* Status Tabs */}
-          <div className="flex flex-wrap items-center gap-1">
+        {/* Top Control Toolbar (Unified Single-Row High Density) */}
+        <div className="bg-white px-3 py-1.5 rounded border border-slate-200 shadow-xs flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+          {/* Status Tabs (Single Row, No-Wrap) */}
+          <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
               onClick={handleToggleSidebar}
-              className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 border flex items-center space-x-1.5 ${
+              className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 border flex items-center space-x-1 ${
                 isSidebarCollapsed
                   ? 'bg-blue-50 text-blue-700 border-blue-300 shadow-2xs hover:bg-blue-100'
                   : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
@@ -1143,32 +1143,32 @@ export default function CasesPage() {
               title={isSidebarCollapsed ? '좌측 파이프라인 사이드바 펼치기' : '좌측 사이드바 접기 (테이블 100% 넓게 보기)'}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>{isSidebarCollapsed ? '파이프라인 열기' : '넓게보기'}</span>
+              <span>{isSidebarCollapsed ? '열기' : '넓게보기'}</span>
             </button>
 
             <button
               onClick={() => handleSelectTab('ALL')}
-              className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 ${
+              className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 ${
                 selectedTab === 'ALL'
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
-              진행중 전체 ({totalCasesCount})
+              전체 ({totalCasesCount})
             </button>
             <button
               onClick={() => handleSelectTab('READY_FOR_QUOTE')}
-              className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
+              className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                 selectedTab === 'READY_FOR_QUOTE'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700'
               }`}
             >
-              <span>견적준비완료 ({readyCount})</span>
+              <span>견적준비 ({readyCount})</span>
             </button>
             <button
               onClick={() => handleSelectTab('ANALYZED')}
-              className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
+              className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                 selectedTab === 'ANALYZED'
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700'
@@ -1178,7 +1178,7 @@ export default function CasesPage() {
             </button>
             <button
               onClick={() => handleSelectTab('PENDING')}
-              className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
+              className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                 selectedTab === 'PENDING'
                   ? 'bg-amber-600 text-white shadow-xs'
                   : 'bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-700'
@@ -1190,23 +1190,23 @@ export default function CasesPage() {
               <>
                 <button
                   onClick={() => handleSelectTab('PRIVATE_APPROVAL')}
-                  className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
+                  className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                     selectedTab === 'PRIVATE_APPROVAL'
                       ? 'bg-red-600 text-white shadow-xs'
                       : 'bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700'
                   }`}
                 >
-                  <span>결재 대기 ({pendingApprovalCount})</span>
+                  <span>결재대기 ({pendingApprovalCount})</span>
                 </button>
                 <button
                   onClick={() => handleSelectTab('SECURE_VAULT')}
-                  className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
+                  className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                     selectedTab === 'SECURE_VAULT'
                       ? 'bg-slate-800 text-white shadow-xs'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900'
                   }`}
                 >
-                  <span>🔒 보안 견적함 ({secureVaultCount})</span>
+                  <span>🔒 보안 ({secureVaultCount})</span>
                 </button>
               </>
             )}
@@ -1214,7 +1214,7 @@ export default function CasesPage() {
             {/* Archive Tab */}
             <button
               onClick={() => handleSelectTab('ARCHIVED')}
-              className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
+              className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                 selectedTab === 'ARCHIVED'
                   ? 'bg-purple-700 text-white shadow-xs font-black'
                   : 'bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-800'
@@ -1227,7 +1227,7 @@ export default function CasesPage() {
             {/* Trash Tab */}
             <button
               onClick={() => handleSelectTab('TRASHED')}
-              className={`btn-hover-effect-tab px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
+              className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center space-x-1 ${
                 selectedTab === 'TRASHED'
                   ? 'bg-rose-700 text-white shadow-xs font-black'
                   : 'bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-800'
@@ -1238,26 +1238,26 @@ export default function CasesPage() {
             </button>
           </div>
 
-          {/* Right Controls: Compact Single Row (Manager Filter, Company Filter, Search, Rows, View Mode) */}
-          <div className="flex items-center gap-1.5 shrink-0 flex-wrap xl:flex-nowrap">
-            {/* [Solution 4] 실시간 자동 저장 인디케이터 */}
-            <div className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-50/80 border border-emerald-200/80 rounded text-[11px] font-bold text-emerald-700 shrink-0 select-none" title="모든 도면 및 견적 데이터는 실시간으로 영구 자동 저장되고 있습니다.">
+          {/* Right Controls: Compact Single Row (Manager Filter, Company Filter, Search, Rows) */}
+          <div className="flex items-center gap-1.5 shrink-0 flex-nowrap">
+            {/* [Solution 4] 실시간 자동 저장 인디케이터 (2XL 이상 화면에서만 표시하여 폭 절약) */}
+            <div className="hidden 2xl:flex items-center space-x-1.5 px-2 py-1 bg-emerald-50/80 border border-emerald-200/80 rounded text-[11px] font-bold text-emerald-700 shrink-0 select-none" title="모든 도면 및 견적 데이터는 실시간으로 영구 자동 저장되고 있습니다.">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>실시간 자동 저장됨</span>
+              <span>자동저장</span>
             </div>
-            {/* 1. [👤 내 담당건] 1-클릭 빠른 토글 칩 (사원 & 대표 공통 지원) */}
+            {/* 1. [👤 내 담당] 1-클릭 빠른 토글 칩 */}
             {user && (
               <button
                 type="button"
                 onClick={() => setFilterManager(filterManager === user.userId ? 'ALL' : user.userId)}
                 title={filterManager === user.userId ? '전체 공유 견적 보기 (토글 해제)' : `${user.name || '내'} 담당 견적만 모아보기`}
-                className={`btn-hover-effect-tab inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer shrink-0 border ${
+                className={`btn-hover-effect-tab inline-flex items-center space-x-1 px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 border ${
                   filterManager === user.userId
                     ? 'bg-blue-600 text-white border-blue-600 shadow-xs ring-2 ring-blue-600/30'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
               >
-                <span>👤 내 담당건</span>
+                <span>👤 내 담당</span>
                 {filterManager === user.userId && user.name && (
                   <span className="text-[11px] font-semibold text-blue-100">
                     ({user.name})
@@ -1275,18 +1275,18 @@ export default function CasesPage() {
               </button>
             )}
 
-            {/* 2. 회사 대표(TENANT_ADMIN) 또는 시스템 총괄(SUPER_ADMIN)에게만: 사내 모든 담당자 전수 조회 드롭다운 노출 */}
+            {/* 2. 회사 대표(TENANT_ADMIN) 또는 시스템 총괄(SUPER_ADMIN) 드롭다운 */}
             {user && ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user.role) && (
               <select
                 value={filterManager}
                 onChange={e => setFilterManager(e.target.value)}
-                className="px-2 py-1.5 bg-white border border-slate-300 rounded text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-500 max-w-[150px] shrink-0"
+                className="px-2 py-1 bg-white border border-slate-300 rounded text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-500 max-w-[130px] shrink-0"
                 title="회원사 대표 전용: 사내 전체 담당자별 견적 조회"
               >
-                <option value="ALL">👤 모든 담당자 ({uniqueManagers.length}명)</option>
+                <option value="ALL">👤 모든 담당자 ({uniqueManagers.length})</option>
                 {uniqueManagers.map(m => (
                   <option key={m.id} value={m.id}>
-                    {m.id === user.userId ? `👤 [대표 본인] ${m.name}` : `👤 ${m.name}${m.dept ? ` (${m.dept})` : ''}`}
+                    {m.id === user.userId ? `👤 [대표] ${m.name}` : `👤 ${m.name}`}
                   </option>
                 ))}
               </select>
@@ -1296,24 +1296,24 @@ export default function CasesPage() {
             <select
               value={filterCompany}
               onChange={e => setFilterCompany(e.target.value)}
-              className="px-2 py-1.5 bg-white border border-slate-300 rounded text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-500 max-w-[140px] shrink-0"
+              className="px-2 py-1 bg-white border border-slate-300 rounded text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-500 max-w-[125px] shrink-0"
               title="고객사별 견적 필터링"
             >
-              <option value="ALL">🏢 모든 고객사 ({uniqueCompanies.length}개사)</option>
+              <option value="ALL">🏢 모든 고객사 ({uniqueCompanies.length})</option>
               {uniqueCompanies.map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
 
             {/* 4. 스마트 통합 검색창 */}
-            <div className="relative w-44 lg:w-48 shrink-0">
+            <div className="relative w-36 sm:w-40 lg:w-44 shrink-0">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="고객사, 건명, 관리번호..."
+                placeholder="검색... (고객사, 건명)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-6 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-colors font-medium shadow-2xs"
+                className="w-full pl-8 pr-6 py-1 bg-white border border-slate-300 rounded text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-colors font-medium shadow-2xs"
               />
               {searchQuery && (
                 <button
@@ -1328,7 +1328,7 @@ export default function CasesPage() {
             </div>
 
             {/* 5. 페이지당 보기 건수 */}
-            <div className="flex items-center space-x-1 bg-white border border-slate-300 rounded px-2 py-1 shadow-2xs shrink-0">
+            <div className="flex items-center space-x-1 bg-white border border-slate-300 rounded px-1.5 py-1 shadow-2xs shrink-0">
               <span className="text-[11px] font-semibold text-slate-500">보기:</span>
               <select
                 value={pageSize}
@@ -1341,9 +1341,8 @@ export default function CasesPage() {
                 <option value={100}>100건</option>
               </select>
             </div>
-
-            </div>
           </div>
+        </div>
         </div>
 
         {/* Sub-bar: Filtering Summary & Bulk Selection Status */}

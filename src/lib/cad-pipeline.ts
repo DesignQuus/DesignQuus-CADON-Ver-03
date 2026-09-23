@@ -295,36 +295,45 @@ export async function processCadFilePipeline(
     });
     await insertRows('drawings', dwgRows);
 
-    // Auto-link Customer from Title Block to quotation_cases
+    // Auto-link Customer from Title Block to quotation_cases (Exclude supplier/tenant self-name)
     const detectedCustomer = structureResult.drawings.find((d: any) => d.customer && d.customer !== '-' && d.customer !== '')?.customer;
     if (detectedCustomer) {
       try {
-        const caseRow = await db.prepare('SELECT company_id FROM quotation_cases WHERE id = ?').get(quotationCaseId);
-        let shouldLink = false;
-        if (!caseRow || !caseRow.company_id || caseRow.company_id === 'comp_unassigned') {
-          shouldLink = true;
-        } else {
-          const currentComp = await db.prepare('SELECT company_name FROM companies WHERE id = ?').get(caseRow.company_id);
-          const cName = (currentComp?.company_name || '').trim();
-          // 기존 연결 업체가 임시/플레이스홀더 명칭(예: "T1.xxx", 숫자만, 빈 값)일 때만 표제란 고객사로 교체
-          const isPlaceholder = cName === '' || /^T\d+\./i.test(cName) || /^\d+$/.test(cName);
-          if (isPlaceholder) {
-            shouldLink = true;
-          }
-        }
+        const custClean = detectedCustomer.replace(/[\s()]/g, '').toLowerCase();
+        const isSelfSupplier = custClean.includes('세창') || custClean.includes('sechang');
+        if (!isSelfSupplier) {
+          const tenantComps = ((await db.prepare("SELECT company_name FROM companies WHERE company_type = 'TENANT'").all()) as any[]) || [];
+          const isTenantName = tenantComps.some((t: any) => (t.company_name || '').replace(/[\s()]/g, '').toLowerCase() === custClean);
 
-        if (shouldLink) {
-          let comp = await db.prepare('SELECT id FROM companies WHERE company_name = ?').get(detectedCustomer);
-          if (!comp) {
-            const newCompId = `comp_${Date.now()}`;
-            const compCode = `CUST-${Date.now().toString().slice(-4)}`;
-            await db.prepare(`
-              INSERT INTO companies (id, company_code, company_name, company_type, is_active, created_at, updated_at)
-              VALUES (?, ?, ?, 'CUSTOMER', 1, ?, ?)
-            `).run(newCompId, compCode, detectedCustomer, now, now);
-            comp = { id: newCompId };
+          if (!isTenantName) {
+            const caseRow = await db.prepare('SELECT company_id FROM quotation_cases WHERE id = ?').get(quotationCaseId);
+            let shouldLink = false;
+            if (!caseRow || !caseRow.company_id || caseRow.company_id === 'comp_unassigned') {
+              shouldLink = true;
+            } else {
+              const currentComp = await db.prepare('SELECT company_name FROM companies WHERE id = ?').get(caseRow.company_id);
+              const cName = (currentComp?.company_name || '').trim();
+              // 기존 연결 업체가 임시/플레이스홀더 명칭(예: "T1.xxx", 숫자만, 빈 값)일 때만 표제란 고객사로 교체
+              const isPlaceholder = cName === '' || /^T\d+\./i.test(cName) || /^\d+$/.test(cName);
+              if (isPlaceholder) {
+                shouldLink = true;
+              }
+            }
+
+            if (shouldLink) {
+              let comp = await db.prepare('SELECT id FROM companies WHERE company_name = ?').get(detectedCustomer);
+              if (!comp) {
+                const newCompId = `comp_${Date.now()}`;
+                const compCode = `CUST-${Date.now().toString().slice(-4)}`;
+                await db.prepare(`
+                  INSERT INTO companies (id, company_code, company_name, company_type, is_active, created_at, updated_at)
+                  VALUES (?, ?, ?, 'CUSTOMER', 1, ?, ?)
+                `).run(newCompId, compCode, detectedCustomer, now, now);
+                comp = { id: newCompId };
+              }
+              await db.prepare('UPDATE quotation_cases SET company_id = ?, updated_at = ? WHERE id = ?').run(comp.id, now, quotationCaseId);
+            }
           }
-          await db.prepare('UPDATE quotation_cases SET company_id = ?, updated_at = ? WHERE id = ?').run(comp.id, now, quotationCaseId);
         }
       } catch (custErr) {
         console.warn('Auto customer link warning:', custErr);

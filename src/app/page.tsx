@@ -20,6 +20,7 @@ import {
   UploadCloud,
   FileCode2,
   Activity,
+  ChevronLeft,
   ChevronRight,
   DollarSign,
   AlertCircle,
@@ -66,6 +67,7 @@ interface QuotationCase {
 interface CompanySummary {
   id: string;
   company_name: string;
+  company_type?: string;
   is_active: number;
   memberCount: number;
   caseCount: number;
@@ -112,9 +114,22 @@ export default function HomePage() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 순수 외부 발주 고객사 목록 (견적 주체인 '세창인터내쇼날' 자사/테넌트 제외)
+  const customerCompanies = useMemo(() => {
+    return companies.filter(
+      (c) =>
+        c.company_name &&
+        c.company_name.length > 1 &&
+        !/^\d+$/.test(c.company_name.trim()) &&
+        !c.company_name.includes('세창') &&
+        c.company_type !== 'TENANT'
+    );
+  }, [companies]);
+
   const handleOpenUploadModal = () => {
     setNewCaseName('');
-    setSelectedCompanyId(user?.companyId || (companies[0]?.id ?? 'comp_ag_borgwarner'));
+    const defaultCust = customerCompanies[0]?.id || 'comp_1790030182693';
+    setSelectedCompanyId(defaultCust);
     setSelectedFile(null);
     setSubmitError(null);
     setIsUploadModalOpen(true);
@@ -126,7 +141,7 @@ export default function HomePage() {
       setSubmitError('견적의뢰 건명을 입력해 주세요.');
       return;
     }
-    const targetCompId = selectedCompanyId || user?.companyId || 'comp_ag_borgwarner';
+    const targetCompId = selectedCompanyId || customerCompanies[0]?.id || 'comp_1790030182693';
 
     setIsSubmitting(true);
     setSubmitError(null);
@@ -150,7 +165,7 @@ export default function HomePage() {
 
       const newCaseId = createData.caseId;
 
-      // 2. 파일이 선택되어 있으면 업로드 수행
+      // 2. 파일이 선택되어 있으면 업로드 및 자동 분석 수행
       if (selectedFile) {
         const formData = new FormData();
         formData.append('file', selectedFile);
@@ -161,6 +176,20 @@ export default function HomePage() {
         const uploadData = await uploadRes.json();
         if (!uploadRes.ok) {
           console.warn('파일 업로드 경고:', uploadData.error);
+        } else if (uploadData?.file?.id) {
+          // CAD 도면(.dwg, .dxf)인 경우 AI 도면 분석 파이프라인(도곽 분할, 표제란 판독, 가상 BOM 전개) 즉시 실행!
+          const ext = selectedFile.name.slice(selectedFile.name.lastIndexOf('.')).toLowerCase();
+          if (['.dwg', '.dxf'].includes(ext)) {
+            try {
+              await apiFetch(`/api/quotation-cases/${newCaseId}/analyze`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileId: uploadData.file.id })
+              });
+            } catch (analyzeErr) {
+              console.warn('자동 도면 분석 경고:', analyzeErr);
+            }
+          }
         }
       }
 
@@ -363,6 +392,8 @@ export default function HomePage() {
 
   const roleInfo = getRoleBadge(user?.role);
   const [caseFilter, setCaseFilter] = useState<'ALL' | 'MY'>('ALL');
+  const [casePage, setCasePage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(5);
 
   const myCasesCount = useMemo(() => {
     if (!user) return 0;
@@ -371,15 +402,29 @@ export default function HomePage() {
     ).length;
   }, [cases, user]);
 
-  const recentCases = useMemo(() => {
-    let list = cases;
+  const filteredCases = useMemo(() => {
     if (caseFilter === 'MY' && user) {
-      list = cases.filter(
+      return cases.filter(
         (c) => c.created_by_user_id === user.id || c.created_by_name === user.name
       );
     }
-    return list.slice(0, 5);
+    return cases;
   }, [cases, caseFilter, user]);
+
+  const totalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(filteredCases.length / pageSize));
+  }, [filteredCases.length, pageSize]);
+
+  useEffect(() => {
+    if (casePage > totalPages) {
+      setCasePage(1);
+    }
+  }, [totalPages, casePage]);
+
+  const paginatedCases = useMemo(() => {
+    const startIdx = (casePage - 1) * pageSize;
+    return filteredCases.slice(startIdx, startIdx + pageSize);
+  }, [filteredCases, casePage, pageSize]);
 
   const recentQuotes = useMemo(() => quotes.slice(0, 5), [quotes]);
 
@@ -789,13 +834,16 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Right: Personal Filter Tabs & Full Table Link */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* Right: Personal Filter Tabs, Inline Pager & Full Table Link */}
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             {/* Filter Toggle Segment (전사 현황 vs 내 담당 건) */}
             <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold">
               <button
                 type="button"
-                onClick={() => setCaseFilter('ALL')}
+                onClick={() => {
+                  setCaseFilter('ALL');
+                  setCasePage(1);
+                }}
                 className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
                   caseFilter === 'ALL'
                     ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
@@ -806,7 +854,10 @@ export default function HomePage() {
               </button>
               <button
                 type="button"
-                onClick={() => setCaseFilter('MY')}
+                onClick={() => {
+                  setCaseFilter('MY');
+                  setCasePage(1);
+                }}
                 className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
                   caseFilter === 'MY'
                     ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
@@ -824,6 +875,68 @@ export default function HomePage() {
               </button>
             </div>
 
+            {/* Smart Inline Pager Controller */}
+            {filteredCases.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-slate-100/90 border border-slate-200 rounded-lg p-1">
+                {/* 5개씩 / 전체 보기 토글 */}
+                <div className="inline-flex rounded-md bg-white border border-slate-200 p-0.5 text-[11px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPageSize(5);
+                      setCasePage(1);
+                    }}
+                    className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
+                      pageSize === 5
+                        ? 'bg-blue-50 text-blue-700 font-extrabold shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    5개씩
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPageSize(100);
+                      setCasePage(1);
+                    }}
+                    className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
+                      pageSize > 5
+                        ? 'bg-blue-50 text-blue-700 font-extrabold shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    전체
+                  </button>
+                </div>
+
+                {/* ◀ 1 / 2 ▶ 인라인 꺽쇠 내비게이션 */}
+                <div className="flex items-center gap-1 pl-1">
+                  <button
+                    type="button"
+                    onClick={() => setCasePage((p) => Math.max(1, p - 1))}
+                    disabled={casePage <= 1}
+                    className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                    title="이전 페이지"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="text-[11px] font-mono font-bold text-slate-700 px-1 select-none min-w-[36px] text-center">
+                    <span className="text-blue-600">{casePage}</span> / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCasePage((p) => Math.min(totalPages, p + 1))}
+                    disabled={casePage >= totalPages}
+                    className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                    title="다음 페이지"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Direct Case Register / List Link Button */}
             <Link
               href="/cases"
@@ -836,7 +949,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {recentCases.length === 0 ? (
+        {filteredCases.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
             <p className="text-sm font-semibold">
@@ -861,7 +974,10 @@ export default function HomePage() {
               {caseFilter === 'MY' && (
                 <button
                   type="button"
-                  onClick={() => setCaseFilter('ALL')}
+                  onClick={() => {
+                    setCaseFilter('ALL');
+                    setCasePage(1);
+                  }}
                   className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 border border-slate-200 cursor-pointer"
                 >
                   전체 의뢰 보기
@@ -874,6 +990,7 @@ export default function HomePage() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-100">
                 <tr>
+                  <th className="py-3 px-3 font-bold text-center w-12 text-slate-500">No.</th>
                   <th className="py-3 px-3.5 font-bold">의뢰번호 / 명칭</th>
                   <th className="py-3 px-3.5 font-bold">고객사</th>
                   <th className="py-3 px-3.5 font-bold">견적 담당자</th>
@@ -884,10 +1001,11 @@ export default function HomePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {recentCases.map((c) => {
+                {paginatedCases.map((c, idx) => {
                   const isOwner = user && (c.created_by_user_id === user.id || c.created_by_name === user.name);
                   const isDeleted = c.is_deleted || !!c.deleted_at;
                   const companyDisplay = c.company_name === '1' ? '미등록 고객사' : (c.company_name || '고객사 미지정');
+                  const globalIdx = (casePage - 1) * pageSize + idx + 1;
 
                   return (
                     <tr
@@ -899,6 +1017,10 @@ export default function HomePage() {
                           : 'bg-white hover:bg-slate-100/90 border-l-transparent hover:border-l-blue-600'
                       }`}
                     >
+                      {/* 0. No. 순번 */}
+                      <td className="py-3 px-3 text-center font-mono font-bold text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
+                        {String(globalIdx).padStart(2, '0')}
+                      </td>
                       {/* 1. 의뢰번호 / 명칭 */}
                       <td className="py-3 px-3.5">
                         <span className="font-mono text-[11px] text-slate-500 group-hover:text-blue-700 font-bold block transition-colors">{c.case_no}</span>
@@ -1301,24 +1423,26 @@ export default function HomePage() {
 
               {/* 2. 고객사 선택 */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  고객사 (회원사)
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>발주 고객사 (의뢰처) <span className="text-rose-500">*</span></span>
+                  <span className="text-[10.5px] font-medium text-slate-400">견적 주체: 세창인터내쇼날(주)</span>
                 </label>
                 <select
                   value={selectedCompanyId}
                   onChange={(e) => setSelectedCompanyId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer"
                 >
-                  {companies.length > 0 ? (
-                    companies.map((c) => (
+                  {customerCompanies.length > 0 ? (
+                    customerCompanies.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.company_name}
+                        🏢 {c.company_name}
                       </option>
                     ))
                   ) : (
-                    <option value={user?.companyId || 'comp_ag_borgwarner'}>
-                      {user?.companyName || 'A&G/보그워너'}
-                    </option>
+                    <>
+                      <option value="comp_1790030182693">🏢 엠브이텍</option>
+                      <option value="comp_ag_borgwarner">🏢 A&G/보그워너</option>
+                    </>
                   )}
                 </select>
               </div>

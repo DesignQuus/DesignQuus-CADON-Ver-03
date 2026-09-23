@@ -2,7 +2,7 @@ import { db } from '../src/lib/db';
 import { processCadFilePipeline } from '../src/lib/cad-pipeline';
 
 async function main() {
-  const caseId = 'case_1789766302590';
+  const caseId = process.argv[2] || 'case_1790146279678';
   console.log(`Starting CAD pipeline for ${caseId}...`);
 
   const file = (await db.prepare(`

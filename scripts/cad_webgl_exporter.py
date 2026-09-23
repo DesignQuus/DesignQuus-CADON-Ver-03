@@ -391,6 +391,20 @@ def transform_pt(p, ins, cos_r, sin_r, sx, sy):
     x, y = p[0] * sx, p[1] * sy
     return (ins[0] + x * cos_r - y * sin_r, ins[1] + x * sin_r + y * cos_r)
 
+def calc_circle_steps(r: float, scale_hint: float = 1.0) -> int:
+    """AutoCAD standard adaptive tessellation based on 0.05mm sagitta tolerance."""
+    eff_r = max(abs(r * scale_hint), 0.1)
+    # N = ceil(pi * sqrt(eff_r / (2 * 0.05))) = ceil(pi * sqrt(10 * eff_r))
+    steps = int(math.ceil(math.pi * math.sqrt(10.0 * eff_r)))
+    return max(32, min(256, steps))
+
+def calc_arc_steps(r: float, sweep_angle_rad: float, scale_hint: float = 1.0) -> int:
+    """Arc tessellation proportional to sweep angle with 0.05mm sagitta tolerance."""
+    base_n = calc_circle_steps(r, scale_hint)
+    ratio = abs(sweep_angle_rad) / (2.0 * math.pi)
+    steps = int(math.ceil(base_n * ratio))
+    return max(8, min(256, steps))
+
 def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
     start_time = time.time()
     
@@ -516,8 +530,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     r = math.hypot(p_start.x - center.x, p_start.y - center.y)
                     a1 = math.atan2(p_start.y - center.y, p_start.x - center.x)
                     a2 = math.atan2(p_end.y - center.y, p_end.x - center.x)
-                    if a2 < a1: a2 += 2 * math.pi
-                    steps = max(6, int(abs(a2 - a1) / (math.pi / 16)))
+                    steps = calc_arc_steps(r, abs(a2 - a1))
                     arc_pts = [(center.x + r * math.cos(a1 + (a2-a1)*i/steps), center.y + r * math.sin(a1 + (a2-a1)*i/steps)) for i in range(steps+1)]
                     for i in range(steps):
                         lines.append((arc_pts[i], arc_pts[i+1]))
@@ -710,7 +723,8 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                             sa, ea = math.radians(edge.start_angle), math.radians(edge.end_angle)
                             if ea < sa:
                                 ea += 2 * math.pi
-                            steps = max(4, int(abs(ea - sa) / (math.pi / 8)))
+                            sweep = abs(ea - sa)
+                            steps = calc_arc_steps(r, sweep)
                             a_pts = [(cx + r * math.cos(sa + (ea - sa) * i / steps), cy + r * math.sin(sa + (ea - sa) * i / steps)) for i in range(steps + 1)]
                             for i in range(steps):
                                 segs.append((a_pts[i], a_pts[i + 1]))
@@ -759,7 +773,8 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                                 center, sa, ea, r = bulge_to_arc(p1, p2, b)
                                 if ea < sa:
                                     ea += 2 * math.pi
-                                steps = max(6, int(abs(ea - sa) / (math.pi / 8)))
+                                sweep = abs(ea - sa)
+                                steps = calc_arc_steps(r, sweep)
                                 a_pts = [(center.x + r * math.cos(sa + (ea - sa) * k / steps),
                                           center.y + r * math.sin(sa + (ea - sa) * k / steps)) for k in range(steps + 1)]
                                 for k in range(steps):
@@ -816,8 +831,10 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     role = 'PAPER_EDGE'
                 if role:
                     r_rgb, r_lw = ROLE_STYLE[role]
-                    # col=-1: 역할 색 고정 (BYBLOCK/BYLAYER 상속으로 덮어쓰이지 않도록)
-                    promoted.append((p1, p2, r_rgb, -1, lay_, r_lw))
+                    # AutoCAD 원본 색상 보존: 명시적 엔티티 색상(col_ > 0)이 지정된 경우 해당 색상 유지
+                    final_rgb = rgb_ if col_ > 0 else r_rgb
+                    # 화면 렌더링 시에는 3px 두꺼운 형광선 대신 AutoCAD 원본과 동일한 정밀 1px 세선 유지
+                    promoted.append((p1, p2, final_rgb, col_, lay_, 0.0))
                 else:
                     promoted.append((p1, p2, rgb_, col_, lay_, lw_))
             return promoted, frames
@@ -868,7 +885,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                             poly_pts_list.append(pts2)
                     elif t == 'SPLINE':
                         try:
-                            pts = list(e.flattening(distance=0.5))
+                            pts = list(e.flattening(distance=0.05))
                             for i in range(len(pts)-1):
                                 b_lines.append(((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb, col, lay_name, lw))
                             if e.closed and len(pts) > 2:
@@ -890,7 +907,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         b_lines.append((p1, p2, rgb, col, lay_name, lw))
                 elif t == 'CIRCLE':
                     cx, cy, r = e.dxf.center.x, e.dxf.center.y, e.dxf.radius
-                    steps = 16 if r > 50 else 12
+                    steps = calc_circle_steps(r)
                     c_pts = [(cx + r * math.cos(i*2*math.pi/steps), cy + r * math.sin(i*2*math.pi/steps)) for i in range(steps)]
                     for i in range(steps):
                         b_lines.append((c_pts[i], c_pts[(i+1)%steps], rgb, col, lay_name, lw))
@@ -899,7 +916,8 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     sa, ea = math.radians(e.dxf.start_angle), math.radians(e.dxf.end_angle)
                     if ea < sa:
                         ea += 2 * math.pi
-                    steps = max(4, int(abs(ea - sa) / (math.pi / 8)))
+                    sweep = abs(ea - sa)
+                    steps = calc_arc_steps(r, sweep)
                     a_pts = [(cx + r * math.cos(sa + (ea-sa)*i/steps), cy + r * math.sin(sa + (ea-sa)*i/steps)) for i in range(steps+1)]
                     for i in range(steps):
                         b_lines.append((a_pts[i], a_pts[i+1], rgb, col, lay_name, lw))
@@ -913,7 +931,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         b_txts.append(d_txt)
                 elif t == 'ELLIPSE':
                     try:
-                        pts = list(e.flattening(distance=0.5))
+                        pts = list(e.flattening(distance=0.05))
                         for i in range(len(pts)-1):
                             b_lines.append(((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb, col, lay_name, lw))
                     except Exception:
@@ -1239,33 +1257,18 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
             tri_start = len(tri_pos_data)
             entity_is_sheet_insert = False
 
-            if t in ['LINE', 'LWPOLYLINE', 'POLYLINE', 'SPLINE', 'SOLID', 'TRACE', 'CIRCLE', 'ARC']:
+            if t in ['LINE', 'LWPOLYLINE', 'POLYLINE', 'SPLINE', 'SOLID', 'TRACE', 'CIRCLE', 'ARC', 'ELLIPSE']:
                 if t == 'LINE':
                     p1 = (e.dxf.start.x, e.dxf.start.y)
                     p2 = (e.dxf.end.x, e.dxf.end.y)
-                    role = role_for_segment(p1, p2) if role_rects else None
-                    if role:
-                        add_role_seg(p1, p2, role)
-                    else:
-                        add_seg(p1, p2, rgb)
+                    add_seg(p1, p2, rgb)
                 elif t in ['LWPOLYLINE', 'POLYLINE']:
                     segs, pts2, is_rect_cand = decompose_polyline_entity(e)
-                    role = None
-                    if role_rects and is_rect_cand:
-                        xs = [p[0] for p in pts2]
-                        ys = [p[1] for p in pts2]
-                        p_tol = max(max(xs) - min(xs), max(ys) - min(ys), 1e-6) * 0.005
-                        rr = rect_from_points(pts2, p_tol)
-                        if rr:
-                            role = role_for_rect(rr)
                     for p1, p2 in segs:
-                        if role:
-                            add_role_seg(p1, p2, role)
-                        else:
-                            add_seg(p1, p2, rgb)
+                        add_seg(p1, p2, rgb)
                 elif t == 'SPLINE':
                     try:
-                        pts = list(e.flattening(distance=0.5))
+                        pts = list(e.flattening(distance=0.05))
                         for i in range(len(pts)-1):
                             add_seg((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb)
                         if e.closed and len(pts) > 2:
@@ -1281,7 +1284,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     add_tri(v3, v2, v0, rgb)
                 elif t == 'CIRCLE':
                     cx, cy, r = e.dxf.center.x, e.dxf.center.y, e.dxf.radius
-                    steps = 16 if r > 50 else 12
+                    steps = calc_circle_steps(r)
                     c_pts = [(cx + r * math.cos(i*2*math.pi/steps), cy + r * math.sin(i*2*math.pi/steps)) for i in range(steps)]
                     for i in range(steps):
                         add_seg(c_pts[i], c_pts[(i+1)%steps], rgb)
@@ -1290,10 +1293,18 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     sa, ea = math.radians(e.dxf.start_angle), math.radians(e.dxf.end_angle)
                     if ea < sa:
                         ea += 2 * math.pi
-                    steps = max(4, int(abs(ea - sa) / (math.pi / 8)))
+                    sweep = abs(ea - sa)
+                    steps = calc_arc_steps(r, sweep)
                     a_pts = [(cx + r * math.cos(sa + (ea-sa)*i/steps), cy + r * math.sin(sa + (ea-sa)*i/steps)) for i in range(steps+1)]
                     for i in range(steps):
                         add_seg(a_pts[i], a_pts[i+1], rgb)
+                elif t == 'ELLIPSE':
+                    try:
+                        pts = list(e.flattening(distance=0.05))
+                        for i in range(len(pts)-1):
+                            add_seg((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb)
+                    except Exception:
+                        pass
             elif t == '3DFACE':
                 for p1, p2 in face_outline_segments(e):
                     add_seg(p1, p2, rgb)
@@ -1505,7 +1516,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
         # 2-C. 프록시(빈) 블록 시트 동적 재구성: 3중 프레임 + 표제란 격자
         # ------------------------------------------------------------------
         reconstructed_sheets = []
-        if proxy_sheet_inserts:
+        if proxy_sheet_inserts and len(known_sheet_rects) == 0:
             # 동일 좌표에 과거 리비전 DRAWFORM 블록들이 중첩된 경우 단일화
             unique_proxies = []
             for ps in proxy_sheet_inserts:
@@ -1605,10 +1616,18 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     print(f"[CAD Export] No valid cluster adopted for proxy sheet {ps['name']} at {ins}")
                     continue
 
+                cw = best_cl['bbox'][2] - best_cl['bbox'][0]
+                ch = best_cl['bbox'][3] - best_cl['bbox'][1]
+                if cw > 25000.0 or ch > 25000.0 or (max(cw, ch) / max(min(cw, ch), 1.0) > 4.0):
+                    print(f"[CAD Export] Cluster dimensions ({cw:.1f} x {ch:.1f}) exceed sheet limits, skipping proxy sheet")
+                    continue
+
                 sheet = reconstruct_proxy_sheet(ps['insert'], best_cl['bbox'], best_cl['texts'], ps['scale'])
                 if not sheet:
                     continue
                 for (p1, p2, role) in sheet['segments']:
+                    if role == 'GRID' and math.hypot(p2[0] - p1[0], p2[1] - p1[1]) > 5000.0:
+                        continue
                     add_role_seg(p1, p2, role)
                 reconstructed_sheets.append({
                     'block': ps['name'],

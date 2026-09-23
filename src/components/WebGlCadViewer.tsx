@@ -241,12 +241,16 @@ export default function WebGlCadViewer({
       return;
     }
 
-    const margin = 1.12; // 12% margin for spacious AutoCAD look
-    const dx = Math.max(maxX - minX, 50) * margin;
-    const dy = Math.max(maxY - minY, 50) * margin;
+    const margin = 1.18; // 18% margin for spacious AutoCAD look
+    const spanX = Math.max(maxX - minX, 50);
+    const spanY = Math.max(maxY - minY, 50);
+    // Add extra top breathing room (8% of spanY) so HUD badges never overlap drawing content
+    const topPadding = spanY * 0.08;
+    const dx = spanX * margin;
+    const dy = (spanY + topPadding) * margin;
 
     const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
+    const centerY = (minY + maxY + topPadding * 0.5) / 2;
 
     const frustumSize = 1000;
     const aspect = w / h;
@@ -318,6 +322,7 @@ export default function WebGlCadViewer({
     cameraRef.current = camera;
     if (typeof window !== 'undefined') {
       (window as any).__cadCamera = camera;
+      (window as any).__cadFitToExtents = fitToExtents;
       (window as any).__cadDebugHistory = (window as any).__cadDebugHistory || [];
       (window as any).__cadDebugHistory.push({ type: 'camera_created', time: Date.now() });
     }
@@ -420,8 +425,8 @@ export default function WebGlCadViewer({
             }
 
             const isInteracting = isInteractingRef.current;
-            const minPxH = isInteracting ? 3.5 : 2.0;
-            const maxAllowedTexts = isInteracting ? 1200 : 5000;
+            const minPxH = isInteracting ? 2.5 : 0.8;
+            const maxAllowedTexts = isInteracting ? 3000 : 30000;
             let textDrawCount = 0;
 
             for (let i = 0; i < candidateTexts.length; i++) {

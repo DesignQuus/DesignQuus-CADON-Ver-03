@@ -467,6 +467,9 @@ def reconstruct_proxy_sheet(insert, cluster_bbox, texts, scale_hint=1.0):
     cw, ch = cx1 - cx0, cy1 - cy0
     if cw <= 0 or ch <= 0:
         return None
+    # Sanity guard: Any candidate larger than standard CAD drawing limits or extreme aspect ratio is not a single sheet
+    if cw > 25000.0 or ch > 25000.0 or (max(cw, ch) / max(min(cw, ch), 1.0) > 4.0):
+        return None
 
     ix, iy = float(insert[0]), float(insert[1])
     # 삽입점이 클러스터 좌하단 근방이면 그대로 앵커, 아니면 클러스터 좌하단에서 소폭 여유

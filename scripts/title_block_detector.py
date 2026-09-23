@@ -170,6 +170,15 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
         if not dno:
             dno = f"DWG-{idx:03d}"
 
+        # 자사(견적 주체/공급사) 키워드 - 절대 고객사(발주처)로 추출되지 않도록 차단
+        SUPPLIER_KEYWORDS = ["세창", "SECHANG", "세창인터내쇼날"]
+
+        def is_supplier_like(txt_val):
+            if not txt_val:
+                return False
+            u = txt_val.replace(" ", "").upper()
+            return any(k.upper() in u for k in SUPPLIER_KEYWORDS) or (company_global and txt_val == company_global)
+
         # Extract Customer (Spatial proximity to CUSTOMER label)
         customer = None
         cust_labels = [t for t in in_frame if t["text"].strip().upper() in ["CUSTOMER", "고객사", "발주처", "CLIENT"]]
@@ -185,16 +194,17 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                     "PROJECT NO.", "PROJECT NO", "PROJECT NAME", "DWG NO.", "DWG NO", "TITLE",
                     "고객사", "발주처", "설계", "검도", "승인", "도번", "품명", "일자", "척도", "PAGE"
                 ]
+                and not is_supplier_like(t["text"].strip())
             ]
             if c_cands:
                 c_cands.sort(key=lambda t: (cl["y"] - t["y"])**2 + (cl["x"] - t["x"])**2)
                 customer = c_cands[0]["text"].strip()
 
-        # 라벨이 없을 때: 회사형 텍스트 중 도면 소유 업체(전 시트 공통)가 아닌 것을 고객사로 채택
+        # 라벨이 없을 때: 회사형 텍스트 중 도면 소유 업체(전 시트 공통) 및 자사가 아닌 것을 고객사로 채택
         if not customer:
             for t in in_frame:
                 txt = t["text"].strip()
-                if is_company_like(txt) and txt != company_global:
+                if is_company_like(txt) and txt != company_global and not is_supplier_like(txt):
                     customer = txt
                     break
 

@@ -350,7 +350,7 @@ def parse_dxf_file(dxf_path: str) -> dict:
             
         # 1-3. 프록시(빈) 폼 블록 시트 재구성: 메인 조립도 도곽을 합성 폴리라인 객체로 주입 (frame_detector 연동)
         reconstructed_sheets = []
-        if proxy_inserts:
+        if proxy_inserts and len(known_sheet_rects) == 0:
             unique_proxies = []
             for ps in proxy_inserts:
                 ins = ps['insert']

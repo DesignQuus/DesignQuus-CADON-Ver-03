@@ -410,39 +410,50 @@ export async function PATCH(
     let targetProjectId = qc.project_id;
     let targetCaseName = qc.case_name;
 
-    // 1. Resolve company
+    // 1. Resolve company with strict sanitization & duplicate guard
     if (companyId) {
       targetCompanyId = companyId;
     } else if (companyName && companyName.trim()) {
-      const trimmed = companyName.trim();
-      const existing = (await db.prepare('SELECT id FROM companies WHERE company_name = ?').get(trimmed)) as any;
-      if (existing) {
-        targetCompanyId = existing.id;
-      } else {
-        const newCompId = `comp_${Date.now()}`;
-        const code = `CUST-${Date.now().toString().slice(-4)}`;
-        await db.prepare(`
-          INSERT INTO companies (id, company_code, company_name, company_type, is_active, created_at, updated_at)
-          VALUES (?, ?, ?, 'CUSTOMER', 1, ?, ?)
-        `).run(newCompId, code, trimmed, now, now);
+      let trimmed = companyName.trim();
+      // Remove drawing thickness/metadata prefixes (e.g. "T1.45;세창..." -> "세창...")
+      trimmed = trimmed.replace(/^T\d+(\.\d+)?[;|/_\s]+/i, '').trim();
 
-        // Grant access
-        const allUsers = (await db.prepare('SELECT id FROM users').all()) as any[];
-        for (const u of allUsers) {
+      // Guard: Reject single character, pure numbers, or placeholder words
+      const isInvalid = !trimmed || trimmed.length <= 1 || /^\d+$/.test(trimmed) || ['미지정', '미등록', '고객사', '1'].includes(trimmed);
+
+      if (!isInvalid) {
+        const allCompanies = (await db.prepare('SELECT id, company_name FROM companies WHERE deleted_at IS NULL').all()) as any[];
+        const norm = (s: string) => (s || '').replace(/[\s/_-]/g, '').toLowerCase();
+        const existing = allCompanies.find(c => c.company_name === trimmed || norm(c.company_name) === norm(trimmed));
+
+        if (existing) {
+          targetCompanyId = existing.id;
+        } else {
+          const newCompId = `comp_${Date.now()}`;
+          const code = `CUST-${Date.now().toString().slice(-4)}`;
           await db.prepare(`
-            INSERT OR IGNORE INTO user_company_access (user_id, company_id, access_role, is_active)
-            VALUES (?, ?, 'MANAGER', 1)
-          `).run(u.id, newCompId);
-        }
-        targetCompanyId = newCompId;
+            INSERT INTO companies (id, company_code, company_name, company_type, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, 'CUSTOMER', 1, ?, ?)
+          `).run(newCompId, code, trimmed, now, now);
 
-        // Auto create project for new company
-        const newProjId = `proj_${Date.now()}`;
-        await db.prepare(`
-          INSERT INTO projects (id, company_id, project_code, project_name, status, created_at, updated_at)
-          VALUES (?, ?, 'PRJ-MAIN', ?, 'ACTIVE', ?, ?)
-        `).run(newProjId, newCompId, `${trimmed} 표준 견적 프로젝트`, now, now);
-        targetProjectId = newProjId;
+          // Grant access
+          const allUsers = (await db.prepare('SELECT id FROM users').all()) as any[];
+          for (const u of allUsers) {
+            await db.prepare(`
+              INSERT OR IGNORE INTO user_company_access (user_id, company_id, access_role, is_active)
+              VALUES (?, ?, 'MANAGER', 1)
+            `).run(u.id, newCompId);
+          }
+          targetCompanyId = newCompId;
+
+          // Auto create project for new company
+          const newProjId = `proj_${Date.now()}`;
+          await db.prepare(`
+            INSERT INTO projects (id, company_id, project_code, project_name, status, created_at, updated_at)
+            VALUES (?, ?, 'PRJ-MAIN', ?, 'ACTIVE', ?, ?)
+          `).run(newProjId, newCompId, `${trimmed} 표준 견적 프로젝트`, now, now);
+          targetProjectId = newProjId;
+        }
       }
     }
 
