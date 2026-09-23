@@ -2743,27 +2743,31 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             </div>
           ) : null}
 
-          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 추천안 B: 라운드 손잡이 + 호버 시 완전 돌출 */}
+          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 추천안 B + 보이지 않는 투명 히트박스(Invisible Hitbox) */}
           {!isSidebarOpen && (
             <button
+              type="button"
               onClick={() => setIsSidebarOpen(true)}
-              className="absolute left-0 top-48 z-30 group flex flex-col items-center justify-center bg-white hover:bg-blue-50/90 text-slate-800 hover:text-blue-600 border-y border-r border-l-0 border-slate-300 hover:border-blue-400 rounded-r-xl shadow-md hover:shadow-2xl cursor-pointer transition-all duration-200 ease-out py-3.5 w-[11px] hover:w-9 overflow-hidden"
+              className="absolute left-0 top-48 z-30 group cursor-pointer w-9 text-left select-none focus:outline-hidden"
               title={`도면 등록 패널 열기 (${files.length}개 도면 등록됨)`}
             >
-              {/* 평상시 살짝 보이는 라운드 엣지의 블루 핸들 인디케이터 바 */}
-              <div className="absolute right-[3px] top-1/2 -translate-y-1/2 w-[3px] h-8 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity duration-150" />
+              {/* 시각적 손잡이 & 돌출 본체 (평상시 11px 노출 -> 호버 시 36px 완전 돌출) */}
+              <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 text-slate-800 group-hover:text-blue-600 border-y border-r border-l-0 border-slate-300 group-hover:border-blue-400 rounded-r-xl shadow-md group-hover:shadow-2xl transition-all duration-200 ease-out py-3.5 w-[11px] group-hover:w-9 overflow-hidden relative">
+                {/* 평상시 살짝 보이는 라운드 엣지의 블루 핸들 인디케이터 바 */}
+                <div className="absolute right-[3px] top-1/2 -translate-y-1/2 w-[3px] h-8 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity duration-150" />
 
-              {/* 호버 시 우측으로 돌출되며 온전하게 표출되는 견출지 콘텐츠 */}
-              <div className="flex flex-col items-center justify-center space-y-2.5 w-9 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                <Folder className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
-                <div className="flex flex-col items-center justify-center select-none text-[11px] font-extrabold text-slate-800 group-hover:text-blue-600 leading-[1.25] tracking-tight">
-                  <span>도</span>
-                  <span>면</span>
-                  <span className="h-1" />
-                  <span>등</span>
-                  <span>록</span>
+                {/* 호버 시 우측으로 돌출되며 온전하게 표출되는 견출지 콘텐츠 */}
+                <div className="flex flex-col items-center justify-center space-y-2.5 w-9 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <Folder className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
+                  <div className="flex flex-col items-center justify-center text-[11px] font-extrabold text-slate-800 group-hover:text-blue-600 leading-[1.25] tracking-tight">
+                    <span>도</span>
+                    <span>면</span>
+                    <span className="h-1" />
+                    <span>등</span>
+                    <span>록</span>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0 translate-y-[3px]" />
                 </div>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0 translate-y-[3px]" />
               </div>
             </button>
           )}
