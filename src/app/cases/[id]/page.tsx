@@ -2752,10 +2752,14 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             >
               <div className="flex flex-col items-center justify-center space-y-2.5 w-full">
                 <Folder className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
-                <span className="[writing-mode:vertical-lr] text-[11px] font-extrabold tracking-widest text-slate-800 group-hover:text-blue-600 select-none text-center leading-none">
-                  도면 등록
-                </span>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0" />
+                <div className="flex flex-col items-center justify-center select-none text-[11px] font-extrabold text-slate-800 group-hover:text-blue-600 leading-[1.25] tracking-tight">
+                  <span>도</span>
+                  <span>면</span>
+                  <span className="h-1" />
+                  <span>등</span>
+                  <span>록</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0 translate-y-[3px]" />
               </div>
             </button>
           )}
