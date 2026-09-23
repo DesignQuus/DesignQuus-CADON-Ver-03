@@ -2520,7 +2520,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* TAB 1: CAD File Upload & Viewer (PROMPT 03, 04, 05, 06, 18-R1, 18-R2) */}
-      <div className={activeTab === 'cad' ? "flex flex-col lg:flex-row gap-4 items-start w-full" : "hidden"}>
+      <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${isSidebarOpen ? 'gap-4' : ''} items-start w-full relative` : "hidden"}>
           {/* Unified Upload & Files Left Panel (Collapsible) */}
           {isSidebarOpen ? (
             <div className="w-full lg:w-[340px] xl:w-[360px] shrink-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 animate-in fade-in slide-in-from-left-2">
@@ -2750,14 +2750,27 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 })}
               </div>
             </div>
-          ) : (
+          ) : null}
+
+          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 (Vertical Bookmark Ribbon) */}
+          {!isSidebarOpen && (
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="hidden lg:flex flex-col items-center justify-center p-3 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-2xl text-slate-600 hover:text-blue-600 text-xs font-bold space-y-2 cursor-pointer transition-all shadow-xs shrink-0"
-              title="도면 등록 패널 펼치기"
+              className="absolute left-0 top-20 z-30 group flex flex-col items-center py-3 px-1.5 bg-slate-900/95 hover:bg-blue-600 text-slate-300 hover:text-white border-y border-r border-slate-700/90 hover:border-blue-400 rounded-r-xl shadow-xl hover:shadow-blue-500/25 cursor-pointer transition-all duration-200 hover:translate-x-1"
+              title={`도면 파일 등록 및 목록 패널 열기 (${files.length}개 도면 등록됨)`}
             >
-              <ChevronRight className="w-4 h-4" />
-              <span className="[writing-mode:vertical-lr] tracking-widest text-[11px] font-bold">도면 파일 패널 열기</span>
+              <div className="flex flex-col items-center space-y-2">
+                <Folder className="w-3.5 h-3.5 text-blue-400 group-hover:text-white transition-colors" />
+                <span className="[writing-mode:vertical-lr] text-[10.5px] font-bold tracking-widest text-slate-200 group-hover:text-white select-none">
+                  도면 파일
+                </span>
+                {files.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-blue-500/30 group-hover:bg-white/20 text-blue-300 group-hover:text-white font-mono font-bold text-[9px] leading-none">
+                    {files.length}
+                  </span>
+                )}
+                <ChevronRight className="w-3 h-3 text-slate-400 group-hover:text-white group-hover:translate-x-0.5 transition-transform" />
+              </div>
             </button>
           )}
 
