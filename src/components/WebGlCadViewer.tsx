@@ -116,8 +116,15 @@ export default function WebGlCadViewer({
   const showTextsRef = useRef(showTexts);
   showTextsRef.current = showTexts;
 
+  const showOverlaysRef = useRef(showOverlays);
+  showOverlaysRef.current = showOverlays;
+
   const drawingsRef = useRef<any[]>(drawings);
   drawingsRef.current = drawings;
+  if (typeof window !== 'undefined') (window as any).__cadDrawings = drawings;
+
+  const bomAreasRef = useRef<any[]>(bomAreas);
+  bomAreasRef.current = bomAreas;
 
   const highlightDrawingIdsRef = useRef<string[]>(highlightDrawingIds);
   highlightDrawingIdsRef.current = highlightDrawingIds;
@@ -156,6 +163,10 @@ export default function WebGlCadViewer({
   const requestRender = useCallback(() => {
     needsRenderRef.current = true;
   }, []);
+
+  useEffect(() => {
+    requestRender();
+  }, [showOverlays, showTexts, requestRender]);
 
   // Track current active file id to prevent race conditions in async fetches
   const currentFileIdRef = useRef<string | undefined>(activeFileId);
@@ -322,6 +333,8 @@ export default function WebGlCadViewer({
     cameraRef.current = camera;
     if (typeof window !== 'undefined') {
       (window as any).__cadCamera = camera;
+      (window as any).__cadScene = scene;
+      (window as any).__cadRequestRender = requestRender;
       (window as any).__cadFitToExtents = fitToExtents;
       (window as any).__cadDebugHistory = (window as any).__cadDebugHistory || [];
       (window as any).__cadDebugHistory.push({ type: 'camera_created', time: Date.now() });
@@ -633,6 +646,116 @@ export default function WebGlCadViewer({
               tctx.textBaseline = 'middle';
               tctx.fillText(tagText, sx + 10, sy - ph / 2 - 8);
             }
+            tctx.restore();
+          }
+
+          // 4. Render Detection Overlays (도면 프레임, 표제란, BOM 영역 오버레이 & 뱃지)
+          if (showOverlaysRef.current && drawingsRef.current.length > 0 && cameraRef.current) {
+            tctx.save();
+            tctx.scale(dpr, dpr);
+            const dwgs = drawingsRef.current;
+            const boms = bomAreasRef.current || [];
+            const cam = cameraRef.current;
+            const frustumW = (cam.right - cam.left) / cam.zoom;
+            const scale = w / frustumW;
+
+            // ① 도면 시트 프레임 (스카이 블루 외곽선 & 소프트 글로우 필)
+            for (let i = 0; i < dwgs.length; i++) {
+              const d = dwgs[i];
+              const fbox = typeof d.frame_bbox_json === 'string' ? JSON.parse(d.frame_bbox_json) : d.frame_bbox;
+              if (!fbox || typeof fbox.min_x !== 'number') continue;
+              const sx = (fbox.min_x - cam.position.x) * scale + w / 2;
+              const sy = h / 2 - (fbox.max_y - cam.position.y) * scale;
+              const sw = (fbox.max_x - fbox.min_x) * scale;
+              const sh = (fbox.max_y - fbox.min_y) * scale;
+
+              // Viewport Culling
+              if (sx + sw < -50 || sx > w + 50 || sy + sh < -50 || sy > h + 50) continue;
+
+              // Light glowing fill
+              tctx.fillStyle = 'rgba(56, 189, 248, 0.06)';
+              tctx.fillRect(sx, sy, sw, sh);
+
+              // 1.5px crisp border
+              tctx.strokeStyle = '#38bdf8';
+              tctx.lineWidth = 1.5;
+              tctx.strokeRect(sx, sy, sw, sh);
+
+              // Mini Sheet Tag
+              if (sw > 40 && sh > 25) {
+                const tagW = Math.min(Math.max(sw * 0.45, 36), 140);
+                const tagH = 16;
+                tctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                tctx.fillRect(sx, sy, tagW, tagH);
+                tctx.strokeStyle = '#38bdf8';
+                tctx.lineWidth = 1;
+                tctx.strokeRect(sx, sy, tagW, tagH);
+
+                tctx.fillStyle = '#38bdf8';
+                tctx.font = 'bold 9px sans-serif';
+                tctx.textAlign = 'left';
+                tctx.textBaseline = 'middle';
+                const labelText = `${i + 1}. ${d.drawing_no_raw || '시트'}`;
+                tctx.fillText(labelText, sx + 4, sy + tagH / 2, tagW - 8);
+              }
+
+              // ② 표제란 영역 (에메랄드 그린 외곽선 & 필)
+              const tbox = typeof d.title_block_bbox_json === 'string' ? JSON.parse(d.title_block_bbox_json) : d.title_block_bbox;
+              if (tbox && typeof tbox.min_x === 'number') {
+                const tsx = (tbox.min_x - cam.position.x) * scale + w / 2;
+                const tsy = h / 2 - (tbox.max_y - cam.position.y) * scale;
+                const tsw = (tbox.max_x - tbox.min_x) * scale;
+                const tsh = (tbox.max_y - tbox.min_y) * scale;
+
+                if (tsx + tsw >= -50 && tsx <= w + 50 && tsy + tsh >= -50 && tsy <= h + 50) {
+                  tctx.fillStyle = 'rgba(16, 185, 129, 0.16)';
+                  tctx.fillRect(tsx, tsy, tsw, tsh);
+                  tctx.strokeStyle = '#10b981';
+                  tctx.lineWidth = 1.5;
+                  tctx.strokeRect(tsx, tsy, tsw, tsh);
+
+                  if (tsw > 30 && tsh > 14) {
+                    tctx.fillStyle = 'rgba(6, 78, 59, 0.92)';
+                    tctx.fillRect(tsx, tsy, 38, 14);
+                    tctx.fillStyle = '#34d399';
+                    tctx.font = 'bold 8.5px sans-serif';
+                    tctx.textAlign = 'left';
+                    tctx.textBaseline = 'middle';
+                    tctx.fillText('표제란', tsx + 3, tsy + 7);
+                  }
+                }
+              }
+            }
+
+            // ③ BOM 영역 (골든 앰버 외곽선 & 필)
+            for (let i = 0; i < boms.length; i++) {
+              const ba = boms[i];
+              const bbox = typeof ba.bbox_json === 'string' ? JSON.parse(ba.bbox_json) : ba.bbox;
+              if (!bbox || typeof bbox.min_x !== 'number') continue;
+              const bsx = (bbox.min_x - cam.position.x) * scale + w / 2;
+              const bsy = h / 2 - (bbox.max_y - cam.position.y) * scale;
+              const bsw = (bbox.max_x - bbox.min_x) * scale;
+              const bsh = (bbox.max_y - bbox.min_y) * scale;
+
+              if (bsx + bsw >= -50 && bsx <= w + 50 && bsy + bsh >= -50 && bsy <= h + 50) {
+                tctx.fillStyle = 'rgba(245, 158, 11, 0.2)';
+                tctx.fillRect(bsx, bsy, bsw, bsh);
+                tctx.strokeStyle = '#f59e0b';
+                tctx.lineWidth = 1.5;
+                tctx.strokeRect(bsx, bsy, bsw, bsh);
+
+                if (bsw > 25 && bsh > 14) {
+                  tctx.fillStyle = 'rgba(120, 53, 15, 0.92)';
+                  tctx.fillRect(bsx, bsy, 32, 14);
+                  tctx.fillStyle = '#fbbf24';
+                  tctx.font = 'bold 8.5px sans-serif';
+                  tctx.textAlign = 'left';
+                  tctx.textBaseline = 'middle';
+                  tctx.fillText('BOM', bsx + 3, bsy + 7);
+                }
+              }
+            }
+
             tctx.restore();
           }
         }
