@@ -2757,12 +2757,12 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             <button
               onClick={() => setIsSidebarOpen(true)}
               className="absolute left-0 top-48 z-30 group flex flex-col items-center py-3.5 px-2 bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-600 border-y border-r border-l-0 border-slate-300 hover:border-blue-400 rounded-r-xl shadow-xl hover:shadow-2xl cursor-pointer transition-colors duration-150"
-              title={`도면 파일 등록 및 목록 패널 열기 (${files.length}개 도면 등록됨)`}
+              title={`도면 등록 패널 열기 (${files.length}개 도면 등록됨)`}
             >
               <div className="flex flex-col items-center space-y-2">
                 <Folder className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
                 <span className="[writing-mode:vertical-lr] text-[11px] font-extrabold tracking-widest text-slate-800 group-hover:text-blue-600 select-none">
-                  도면 파일
+                  도면 등록
                 </span>
                 {files.length > 0 && (
                   <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white font-mono font-bold text-[10px] leading-none shadow-xs">
