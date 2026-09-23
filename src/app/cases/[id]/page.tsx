@@ -2529,22 +2529,13 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                   <Upload className="w-4 h-4 text-blue-600" />
                   <span>통합 도면 파일 등록</span>
                 </h2>
-                <div className="flex items-center space-x-1">
-                  <Link
-                    href="/cases"
-                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition-colors"
-                    title="메인 견적 목록으로 돌아가기"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </Link>
-                  <button
-                    onClick={() => setIsSidebarOpen(false)}
-                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
-                    title="도면 등록 패널 접기"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  title="도면 등록 패널 접기"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
               </div>
 
               {/* Unified Dropzone with Native Drag & Drop */}
