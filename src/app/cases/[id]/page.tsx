@@ -2752,11 +2752,11 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             </div>
           ) : null}
 
-          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 클래식 화이트 바인더 견출지 스타일 (최고 시인성) */}
+          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 클래식 화이트 바인더 견출지 스타일 (최고 시인성, HUD 간섭 배제) */}
           {!isSidebarOpen && (
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="absolute left-0 top-20 z-30 group flex flex-col items-center py-3.5 px-2 bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-600 border-y border-r border-slate-300 hover:border-blue-400 rounded-r-xl shadow-2xl cursor-pointer transition-all duration-200 hover:translate-x-1"
+              className="absolute left-0 top-48 z-30 group flex flex-col items-center py-3.5 px-2 bg-white hover:bg-blue-50 text-slate-800 hover:text-blue-600 border-y border-r border-l-0 border-slate-300 hover:border-blue-400 rounded-r-xl shadow-xl hover:shadow-2xl cursor-pointer transition-colors duration-150"
               title={`도면 파일 등록 및 목록 패널 열기 (${files.length}개 도면 등록됨)`}
             >
               <div className="flex flex-col items-center space-y-2">
