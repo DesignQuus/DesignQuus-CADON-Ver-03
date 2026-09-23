@@ -322,6 +322,12 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
           stats={{
             marginWarning: false
           }}
+          caseInfo={{
+            caseNo: quoteData.caseNo,
+            caseName: quoteData.projectName,
+            companyName: quoteData.customerName,
+            quoteItemCount: quoteData.items.length
+          }}
         />
 
         {/* 미승인 차단 메인 배너 및 안내 */}
@@ -531,6 +537,12 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
         currentStep={3}
         stats={{
           marginWarning: isLowMargin
+        }}
+        caseInfo={{
+          caseNo: quoteData.caseNo,
+          caseName: quoteData.projectName,
+          companyName: quoteData.customerName,
+          quoteItemCount: quoteData.items.length
         }}
       />
 

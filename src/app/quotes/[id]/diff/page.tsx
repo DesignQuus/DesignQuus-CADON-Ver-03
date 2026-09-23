@@ -196,6 +196,10 @@ export default function RevisionDiffPage({ params }: { params: Promise<{ id: str
         stats={{
           hasRevisionDiff: true
         }}
+        caseInfo={{
+          caseNo: caseId,
+          quoteItemCount: diffItems.length
+        }}
       />
 
       {/* 1. 상단 헤더 */}

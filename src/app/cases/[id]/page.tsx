@@ -2499,8 +2499,8 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {/* 🚀 CADON v2.0: 3단계 직관적 파이프라인 네비게이터 */}
-      <div className="no-print print:hidden mb-1">
+      {/* 🚀 CADON v2.0: 3단계 직관적 파이프라인 네비게이터 & 가이드 통합 카드 (개선안 1) */}
+      <div className="no-print print:hidden mb-2 rounded-2xl overflow-hidden border border-slate-200 shadow-2xs">
         <PipelineNavigator 
           caseId={id} 
           currentStep={1}
@@ -2508,14 +2508,23 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             unconfirmedCount: normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length || (drawings.length - 16),
             hasRevisionDiff: false
           }}
+          caseInfo={{
+            caseNo: qc?.case_no,
+            caseName: qc?.case_name,
+            companyName: (qc?.company_name && qc?.company_name !== '고객사 미지정' && qc?.company_name !== 'comp_unassigned') ? qc.company_name : '',
+            drawingsCount: drawings.length,
+            bomCount: normalizedItems.length || rawBomItems.length || drawings.length,
+            quoteItemCount: quoteIncCount || normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length
+          }}
         />
 
         {/* 3분할 워크스페이스 퀵 네비게이션 팁 */}
-        <div className="bg-slate-900 text-slate-200 px-4 py-1.5 flex items-center justify-between text-xs border-b border-slate-800">
+        <div className="bg-slate-900 text-slate-200 px-4 sm:px-6 py-2 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2 text-[11px]">
             <span className="px-1.5 py-0.5 rounded bg-blue-600 font-semibold text-[10px] text-white">가이드</span>
             <span className="text-slate-300">1단계에서 도면 및 표제란 정보를 검토한 후, 상단 <strong>[2단계: 3분할 통합 단가 검토]</strong> 탭을 클릭하여 부품별 단가 계산을 진행하세요. (조립도 16건은 자동 예외 처리됨)</span>
           </div>
+          <span className="text-slate-500 text-[10px] font-mono hidden md:inline">CADON Engine v3.0</span>
         </div>
       </div>
 

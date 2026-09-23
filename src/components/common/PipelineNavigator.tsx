@@ -12,6 +12,15 @@ import {
   AlertCircle
 } from 'lucide-react';
 
+export interface PipelineCaseInfo {
+  caseNo?: string;
+  caseName?: string;
+  companyName?: string;
+  drawingsCount?: number;
+  bomCount?: number;
+  quoteItemCount?: number;
+}
+
 export interface PipelineNavigatorProps {
   caseId: string;
   currentStep: 1 | 2 | 3;
@@ -20,14 +29,18 @@ export interface PipelineNavigatorProps {
     hasRevisionDiff?: boolean;
     marginWarning?: boolean;
   };
+  caseInfo?: PipelineCaseInfo;
   showHomeLink?: boolean;
+  className?: string;
 }
 
 export default function PipelineNavigator({
   caseId,
   currentStep,
   stats = {},
-  showHomeLink = false
+  caseInfo,
+  showHomeLink = false,
+  className = ''
 }: PipelineNavigatorProps) {
   const steps = [
     {
@@ -56,8 +69,11 @@ export default function PipelineNavigator({
   ];
 
   return (
-    <nav aria-label="3단계 견적 파이프라인" className="no-print bg-white border-b border-slate-200 px-5 py-2.5 flex items-center justify-between shadow-2xs">
-      <div className="flex items-center gap-1 sm:gap-2">
+    <nav 
+      aria-label="3단계 견적 파이프라인" 
+      className={`no-print bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 flex items-center justify-between shadow-2xs gap-3 ${className}`}
+    >
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         {steps.map((item, idx) => {
           const Icon = item.icon;
           const isActive = currentStep === item.step;
@@ -112,8 +128,54 @@ export default function PipelineNavigator({
         })}
       </div>
 
-      {showHomeLink && (
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5 shrink-0">
+        {/* 🌟 우측 케이스 요약 미니 HUD (개선안 1) */}
+        {caseInfo && (caseInfo.caseNo || caseInfo.caseName || caseInfo.companyName) && (
+          <div className="hidden lg:flex items-center space-x-2 bg-slate-50 border border-slate-200/90 px-3 py-1.5 rounded-xl shadow-2xs text-xs">
+            {caseInfo.caseNo && (
+              <span className="font-mono font-bold text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px]">
+                {caseInfo.caseNo}
+              </span>
+            )}
+            <span 
+              className="text-slate-800 font-bold truncate max-w-[200px]" 
+              title={`${caseInfo.caseName || ''}${caseInfo.companyName ? ` (${caseInfo.companyName})` : ''}`}
+            >
+              {caseInfo.caseName || ''}
+              {caseInfo.companyName ? ` (${caseInfo.companyName})` : ''}
+            </span>
+            {(caseInfo.drawingsCount !== undefined || caseInfo.bomCount !== undefined || caseInfo.quoteItemCount !== undefined) && (
+              <>
+                <span className="text-slate-300">|</span>
+                <div className="flex items-center space-x-1.5 text-[11px]">
+                  {caseInfo.drawingsCount !== undefined && (
+                    <span className="text-slate-500">
+                      도면 <strong className="text-blue-600 font-bold">{caseInfo.drawingsCount}장</strong>
+                    </span>
+                  )}
+                  {caseInfo.bomCount !== undefined && (
+                    <>
+                      <span className="text-slate-300">·</span>
+                      <span className="text-slate-500">
+                        BOM <strong className="text-emerald-600 font-bold">{caseInfo.bomCount}개</strong>
+                      </span>
+                    </>
+                  )}
+                  {caseInfo.quoteItemCount !== undefined && (
+                    <>
+                      <span className="text-slate-300">·</span>
+                      <span className="text-slate-500">
+                        견적대상 <strong className="text-purple-600 font-bold">{caseInfo.quoteItemCount}종</strong>
+                      </span>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {showHomeLink && (
           <Link
             href="/cases"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 font-bold text-xs transition-colors shadow-2xs"
@@ -122,8 +184,8 @@ export default function PipelineNavigator({
             <ArrowLeft className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">견적의뢰 목록</span>
           </Link>
-        </div>
-      )}
+        )}
+      </div>
     </nav>
   );
 }

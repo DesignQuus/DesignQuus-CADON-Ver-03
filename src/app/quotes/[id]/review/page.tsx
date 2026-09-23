@@ -1694,6 +1694,14 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           unconfirmedCount,
           marginWarning: avgMargin < 12.0
         }}
+        caseInfo={{
+          caseNo: caseInfo?.case_no,
+          caseName: caseInfo?.case_name,
+          companyName: caseInfo?.company_name,
+          drawingsCount: lines.length,
+          bomCount: lines.length,
+          quoteItemCount: lines.length
+        }}
       />
 
       {/* 1. 상단 워크스페이스 헤더 */}
