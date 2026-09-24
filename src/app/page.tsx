@@ -616,48 +616,58 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Action 1: Official Quotes (공식 견적서 관리) */}
-          <Link
-            href="/quotes"
-            className="group bg-white p-5 rounded-xl border border-emerald-200 hover:border-emerald-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer ring-1 ring-emerald-100"
-          >
-            <div>
-              <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
-                <FileSpreadsheet className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
-                <span>공식 견적서 관리 대장</span>
-                <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
-              </h3>
-              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                채번된 견적번호(Q-XXXX), 버전별 공급가/부가세/총액 조회 및 엑셀 다운로드
-              </p>
-            </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-emerald-600">
-              <span>견적서 대장 바로가기</span>
-              <ChevronRight className="w-3.5 h-3.5 ml-1" />
-            </div>
-          </Link>
-
-          {/* Action 2: Cases (도면 의뢰 목록) */}
+          {/* Action 1: Cases (도면 접수 & 견적 작업실 - 작업 공간) */}
           <Link
             href="/cases"
-            className="group bg-white p-5 rounded-xl border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+            className="group bg-white p-5 rounded-xl border border-blue-200 hover:border-blue-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer ring-1 ring-blue-50"
           >
             <div>
-              <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
-                <FileText className="w-5 h-5" />
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                  도면·BOM 작업
+                </span>
               </div>
               <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center justify-between">
-                <span>견적의뢰 관리 대장</span>
+                <span>도면 접수 & 견적 작업실</span>
                 <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
               </h3>
               <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
                 접수된 CAD 도면 목록을 조회하고, AI 가상 BOM 추출 및 단가 산출 작업을 진행합니다.
               </p>
             </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-blue-600">
-              <span>목록 바로가기</span>
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-blue-600">
+              <span>견적 작업실 바로가기</span>
+              <ChevronRight className="w-3.5 h-3.5 ml-1" />
+            </div>
+          </Link>
+
+          {/* Action 2: Official Quotes (발행 견적서 보관함 - 결과물 문서) */}
+          <Link
+            href="/quotes"
+            className="group bg-white p-5 rounded-xl border border-emerald-200 hover:border-emerald-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer ring-1 ring-emerald-50"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                  완료·엑셀 출력
+                </span>
+              </div>
+              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
+                <span>발행 견적서 보관함 (엑셀 출력)</span>
+                <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+              </h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                채번된 견적번호(Q-XXXX), 버전별 공급가/부가세/총액 조회 및 엑셀 다운로드
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-emerald-600">
+              <span>견적서 보관함 바로가기</span>
               <ChevronRight className="w-3.5 h-3.5 ml-1" />
             </div>
           </Link>
