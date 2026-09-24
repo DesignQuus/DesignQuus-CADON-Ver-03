@@ -48,7 +48,9 @@ import {
   RotateCcw,
   Trash,
   AlertTriangle,
-  Filter
+  Filter,
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 
 type SortField = 'date' | 'amount' | 'drawings' | 'bom' | 'case_no' | 'case_name';
@@ -177,6 +179,16 @@ export default function CasesPage() {
     });
   };
 
+  // 신규 도면 견적 등록 표준 모달 상태
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [newCaseName, setNewCaseName] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isSubmittingModal, setIsSubmittingModal] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isModalDragging, setIsModalDragging] = useState(false);
+  const modalFileInputRef = useRef<HTMLInputElement>(null);
+
   // Drag & Drop Quick Upload States (Local & Global)
   const [isDragging, setIsDragging] = useState(false);
   const [globalDragging, setGlobalDragging] = useState(false);
@@ -185,6 +197,87 @@ export default function CasesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchFileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  // 순수 외부 발주 고객사 목록 (견적 주체인 '세창인터내쇼날' 자사/테넌트 제외)
+  const customerCompanies = useMemo(() => {
+    return companies.filter(
+      (c) =>
+        c.company_name &&
+        c.company_name.length > 1 &&
+        !/^\d+$/.test(c.company_name.trim()) &&
+        !c.company_name.includes('세창') &&
+        c.company_type !== 'TENANT'
+    );
+  }, [companies]);
+
+  const handleOpenUploadModal = () => {
+    setNewCaseName('');
+    const defaultCust = customerCompanies[0]?.id || 'comp_1790030182693';
+    setSelectedCompanyId(defaultCust);
+    setSelectedFile(null);
+    setSubmitError(null);
+    setIsUploadModalOpen(true);
+  };
+
+  const handleCreateCaseFromModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCaseName.trim()) {
+      setSubmitError('견적의뢰 건명을 입력해 주세요.');
+      return;
+    }
+    const targetCompId = selectedCompanyId || customerCompanies[0]?.id || 'comp_1790030182693';
+    setIsSubmittingModal(true);
+    setSubmitError(null);
+
+    try {
+      // 1. 견적 건 생성
+      const createRes = await apiFetch('/api/quotation-cases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          caseName: newCaseName.trim(),
+          companyId: targetCompId,
+          projectId: 'proj_unassigned',
+        })
+      });
+      const createData = await createRes.json();
+      if (!createRes.ok || !createData.caseId) {
+        throw new Error(createData.error || '견적의뢰 등록에 실패했습니다.');
+      }
+      const newCaseId = createData.caseId;
+
+      // 2. 도면 파일 첨부된 경우 업로드 및 자동 분석
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        const uploadRes = await apiFetch(`/api/quotation-cases/${newCaseId}/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadData?.file?.id) {
+          const ext = selectedFile.name.slice(selectedFile.name.lastIndexOf('.')).toLowerCase();
+          if (['.dwg', '.dxf'].includes(ext)) {
+            try {
+              await apiFetch(`/api/quotation-cases/${newCaseId}/analyze`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileId: uploadData.file.id })
+              });
+            } catch (analyzeErr) {
+              console.warn('자동 도면 분석 경고:', analyzeErr);
+            }
+          }
+        }
+      }
+
+      setIsUploadModalOpen(false);
+      router.push(`/cases/${newCaseId}`);
+    } catch (err: any) {
+      setSubmitError(err.message || '견적 등록 중 오류가 발생했습니다.');
+      setIsSubmittingModal(false);
+    }
+  };
 
   const fetchCompanies = async () => {
     try {
@@ -1022,7 +1115,7 @@ export default function CasesPage() {
           }}
           latestReadyCase={latestReadyCase}
           user={user}
-          onSingleUploadClick={() => fileInputRef.current?.click()}
+          onSingleUploadClick={handleOpenUploadModal}
           onBatchUploadClick={handleBatchUploadPrompt}
           isDragging={isDragging}
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -1341,6 +1434,17 @@ export default function CasesPage() {
                 <option value={100}>100건</option>
               </select>
             </div>
+
+            {/* 6. 표준 신규 견적 등록 버튼 (AutoCAD Ribbon Style Primary Action) */}
+            <button
+              type="button"
+              onClick={handleOpenUploadModal}
+              className="btn-hover-effect-tab inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-bold shadow-xs cursor-pointer shrink-0 transition-colors ml-1"
+              title="신규 도면 견적의뢰 건을 등록합니다."
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>신규 견적 등록</span>
+            </button>
           </div>
         </div>
         </div>
@@ -1495,13 +1599,14 @@ export default function CasesPage() {
         ) : cases.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-[4px] border border-slate-200 shadow-xs">
             <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-700 font-bold text-sm">등록된 견적 프로젝트가 없습니다.</p>
-            <p className="text-slate-400 text-xs mt-1">상단의 DWG 퀵 드롭존을 이용해 첫 도면을 등록해 보세요.</p>
+            <p className="text-slate-800 font-bold text-sm">등록된 견적 프로젝트가 없습니다.</p>
+            <p className="text-slate-500 text-xs mt-1">상단 툴바 또는 아래 버튼을 눌러 첫 번째 견적 프로젝트를 등록해 보세요.</p>
             <button
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-[3px] text-xs font-bold transition-colors cursor-pointer"
+              onClick={handleOpenUploadModal}
+              className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-[4px] text-xs font-bold shadow-md shadow-blue-600/30 transition-all cursor-pointer"
             >
-              DWG 도면 파일 등록하기
+              <Plus className="w-4 h-4" />
+              <span>신규 도면 견적 등록</span>
             </button>
           </div>
         ) : (
@@ -2254,6 +2359,228 @@ export default function CasesPage() {
             </button>
           </div>
         </aside>
+      )}
+
+      {/* 신규 도면 견적 등록 표준 모달 (AutoCAD Standard Dialog) */}
+      {isUploadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400">
+                  <UploadCloud className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
+                    <span>신규 도면 견적 등록</span>
+                    <span className="text-[10px] font-bold bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">FAST</span>
+                  </h3>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    {selectedFile
+                      ? 'DWG 도면을 등록하여 AI 가상 BOM 추출 및 원가 산출을 시작합니다.'
+                      : '신규 견적의뢰 건을 등록합니다. (도면은 등록 후 언제든 추가 첨부 가능)'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isSubmittingModal && setIsUploadModalOpen(false)}
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleCreateCaseFromModal} className="p-6 space-y-4 overflow-y-auto">
+              {submitError && (
+                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{submitError}</span>
+                </div>
+              )}
+
+              {/* 1. 건명 */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  견적의뢰 건명 <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newCaseName}
+                  onChange={(e) => setNewCaseName(e.target.value)}
+                  placeholder="예: 240314 컨베이어 라인 도면 견적"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                />
+              </div>
+
+              {/* 2. 고객사 선택 */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>발주 고객사 (의뢰처) <span className="text-rose-500">*</span></span>
+                  <span className="text-[10.5px] font-medium text-slate-400">견적 주체: 세창인터내쇼날(주)</span>
+                </label>
+                <select
+                  value={selectedCompanyId}
+                  onChange={(e) => setSelectedCompanyId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer"
+                >
+                  {customerCompanies.length > 0 ? (
+                    customerCompanies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        🏢 {c.company_name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="comp_1790030182693">🏢 엠브이텍</option>
+                      <option value="comp_ag_borgwarner">🏢 A&G/보그워너</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* 3. DWG 도면 파일 업로드 (드래그 앤 드롭) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    CAD 도면 파일 첨부 <span className="text-slate-400 font-normal">(선택)</span>
+                  </label>
+                  {!selectedFile && (
+                    <span className="text-[11px] text-slate-400">
+                      * 도면 없이 건 먼저 등록 가능
+                    </span>
+                  )}
+                </div>
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsModalDragging(true);
+                  }}
+                  onDragLeave={() => setIsModalDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsModalDragging(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      setSelectedFile(e.dataTransfer.files[0]);
+                    }
+                  }}
+                  onClick={() => modalFileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+                    isModalDragging
+                      ? 'border-blue-500 bg-blue-50/60'
+                      : selectedFile
+                      ? 'border-emerald-400 bg-emerald-50/40'
+                      : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    ref={modalFileInputRef}
+                    type="file"
+                    accept=".dwg,.dxf,.pdf,.zip"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setSelectedFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                  {selectedFile ? (
+                    <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-emerald-200">
+                      <div className="flex items-center space-x-2.5 min-w-0">
+                        <FileCode2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                        <div className="text-left min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate">{selectedFile.name}</p>
+                          <p className="text-[10px] text-slate-500">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFile(null);
+                        }}
+                        className="text-slate-400 hover:text-rose-500 p-1 rounded cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <UploadCloud className="w-8 h-8 text-blue-500 mx-auto mb-2 opacity-80" />
+                      <p className="text-xs font-bold text-slate-700">
+                        클릭하거나 DWG / DXF 도면 파일을 끌어다 놓으세요
+                      </p>
+                      <p className="text-[10.5px] text-slate-400 mt-1">
+                        지원 형식: .dwg, .dxf, .pdf (최대 200MB)
+                      </p>
+                      <div className="mt-2 inline-block px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10.5px] text-slate-500">
+                        도면 없이 건을 먼저 생성한 후 상세 화면에서 언제든 도면을 등록할 수 있습니다.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={isSubmittingModal}
+                  onClick={() => setIsUploadModalOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingModal}
+                  className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50 ${
+                    selectedFile
+                      ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'
+                      : 'bg-slate-800 hover:bg-slate-700 shadow-slate-800/30'
+                  }`}
+                >
+                  {isSubmittingModal ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>
+                        {selectedFile
+                          ? ['.dwg', '.dxf'].some(ext => selectedFile.name.toLowerCase().endsWith(ext))
+                            ? '도면 업로드 및 분석 시작 중...'
+                            : '파일 업로드 및 등록 중...'
+                          : '신규 견적 건 등록 중...'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      {selectedFile ? (
+                        ['.dwg', '.dxf'].some(ext => selectedFile.name.toLowerCase().endsWith(ext)) ? (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>등록 및 도면 분석 시작</span>
+                          </>
+                        ) : (
+                          <>
+                            <UploadCloud className="w-3.5 h-3.5" />
+                            <span>등록 및 도면 첨부</span>
+                          </>
+                        )
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>신규 견적 건 등록</span>
+                        </>
+                      )}
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

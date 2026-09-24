@@ -524,7 +524,7 @@ export default function HomePage() {
         {/* Card 1: Total Quote Amount (누적 견적 산출액) */}
         <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">총 견적 산출액</span>
+            <span className="text-base font-extrabold tracking-tight text-slate-900">총 견적 산출액</span>
             <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
               <DollarSign className="w-5 h-5" />
             </div>
@@ -545,7 +545,7 @@ export default function HomePage() {
         {/* Card 2: Approved / Ordered Amount (승인·수주 확정액) */}
         <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">승인·수주 확정액</span>
+            <span className="text-base font-extrabold tracking-tight text-slate-900">승인·수주 확정액</span>
             <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
               <TrendingUp className="w-5 h-5" />
             </div>
@@ -564,7 +564,7 @@ export default function HomePage() {
         {/* Card 3: Pending Quote & Approval (결재·산출 대기액) */}
         <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">결재·산출 대기액</span>
+            <span className="text-base font-extrabold tracking-tight text-slate-900">결재·산출 대기액</span>
             <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
               <Clock className="w-5 h-5" />
             </div>
@@ -580,10 +580,10 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Card 4: Total Cases & Drawings (도면 및 테넌트 현황) */}
+        {/* Card 4: Total Cases & Drawings (견적의뢰 및 도면 현황) */}
         <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">도면 분석 및 테넌트</span>
+            <span className="text-base font-extrabold tracking-tight text-slate-900">견적의뢰 및 도면 현황</span>
             <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
               <FileText className="w-5 h-5" />
             </div>
@@ -625,7 +625,7 @@ export default function HomePage() {
               <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
                 <FileSpreadsheet className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
+              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
                 <span>공식 견적서 관리 대장</span>
                 <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
               </h3>
@@ -648,7 +648,7 @@ export default function HomePage() {
               <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
                 <FileText className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center justify-between">
+              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center justify-between">
                 <span>견적의뢰 관리 대장</span>
                 <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
               </h3>
@@ -672,7 +672,7 @@ export default function HomePage() {
               <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
                 <UploadCloud className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors flex items-center justify-between">
+              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors flex items-center justify-between">
                 <span>신규 도면 견적 등록</span>
                 <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
               </h3>
@@ -696,7 +696,7 @@ export default function HomePage() {
                 <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
                   <Users className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
                   <span>사원 관리 센터</span>
                   <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
                 </h3>
@@ -721,7 +721,7 @@ export default function HomePage() {
                 <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
                   <Sliders className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-purple-600 transition-colors flex items-center justify-between">
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-purple-600 transition-colors flex items-center justify-between">
                   <span>사내 승인 및 결재 관리</span>
                   <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 transition-colors" />
                 </h3>
@@ -743,7 +743,7 @@ export default function HomePage() {
                 <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold mb-3 shadow-xs">
                   <Sparkles className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center justify-between">
                   <span>AI 도면 분석 & 견적 지원</span>
                 </h3>
                 <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
@@ -771,7 +771,7 @@ export default function HomePage() {
                     최고관리자
                   </span>
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center justify-between">
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center justify-between">
                   <span>회원사 관리 센터</span>
                   <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
                 </h3>
@@ -780,7 +780,7 @@ export default function HomePage() {
                 </p>
               </div>
               <div className="mt-4 pt-3 border-t border-blue-100 flex items-center text-xs font-bold text-blue-700">
-                <span>테넌트 관리 바로가기</span>
+                <span>회원사 관리 바로가기</span>
                 <ChevronRight className="w-3.5 h-3.5 ml-1" />
               </div>
             </Link>
@@ -796,7 +796,7 @@ export default function HomePage() {
                 <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors flex items-center justify-between">
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-slate-700 transition-colors flex items-center justify-between">
                   <span>사용자 활동 로그</span>
                   <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
                 </h3>
@@ -1384,7 +1384,9 @@ export default function HomePage() {
                     <span className="text-[10px] font-bold bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">FAST</span>
                   </h3>
                   <p className="text-xs text-slate-300 mt-0.5">
-                    DWG 도면을 등록하여 AI 가상 BOM 추출 및 원가 산출을 시작합니다.
+                    {selectedFile
+                      ? 'DWG 도면을 등록하여 AI 가상 BOM 추출 및 원가 산출을 시작합니다.'
+                      : '신규 견적의뢰 건을 등록합니다. (도면은 등록 후 언제든 추가 첨부 가능)'}
                   </p>
                 </div>
               </div>
@@ -1449,9 +1451,16 @@ export default function HomePage() {
 
               {/* 3. DWG 도면 파일 업로드 (드래그 앤 드롭) */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  CAD 도면 파일 첨부 (선택)
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    CAD 도면 파일 첨부 <span className="text-slate-400 font-normal">(선택)</span>
+                  </label>
+                  {!selectedFile && (
+                    <span className="text-[11px] text-slate-400">
+                      * 도면 없이 건 먼저 등록 가능
+                    </span>
+                  )}
+                </div>
                 <div
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -1500,7 +1509,7 @@ export default function HomePage() {
                           e.stopPropagation();
                           setSelectedFile(null);
                         }}
-                        className="text-slate-400 hover:text-rose-500 p-1 rounded"
+                        className="text-slate-400 hover:text-rose-500 p-1 rounded cursor-pointer"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -1514,6 +1523,9 @@ export default function HomePage() {
                       <p className="text-[10.5px] text-slate-400 mt-1">
                         지원 형식: .dwg, .dxf, .pdf (최대 200MB)
                       </p>
+                      <div className="mt-2 inline-block px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10.5px] text-slate-500">
+                        도면 없이 건을 먼저 생성한 후 상세 화면에서 언제든 도면을 등록할 수 있습니다.
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1532,17 +1544,43 @@ export default function HomePage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/30 transition-all cursor-pointer disabled:opacity-50"
+                  className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50 ${
+                    selectedFile
+                      ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'
+                      : 'bg-slate-800 hover:bg-slate-700 shadow-slate-800/30'
+                  }`}
                 >
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>등록 및 도면 분석 시작 중...</span>
+                      <span>
+                        {selectedFile
+                          ? ['.dwg', '.dxf'].some(ext => selectedFile.name.toLowerCase().endsWith(ext))
+                            ? '도면 업로드 및 분석 시작 중...'
+                            : '파일 업로드 및 등록 중...'
+                          : '신규 견적 건 등록 중...'}
+                      </span>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>등록 및 도면 분석 시작</span>
+                      {selectedFile ? (
+                        ['.dwg', '.dxf'].some(ext => selectedFile.name.toLowerCase().endsWith(ext)) ? (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>등록 및 도면 분석 시작</span>
+                          </>
+                        ) : (
+                          <>
+                            <UploadCloud className="w-3.5 h-3.5" />
+                            <span>등록 및 도면 첨부</span>
+                          </>
+                        )
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>신규 견적 건 등록</span>
+                        </>
+                      )}
                     </>
                   )}
                 </button>

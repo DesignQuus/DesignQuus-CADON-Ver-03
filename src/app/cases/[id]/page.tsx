@@ -426,6 +426,9 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       if (res.ok) {
         const json = await res.json();
         setData(json);
+        if (!json.files || json.files.length === 0) {
+          setIsSidebarOpen(true);
+        }
         if (json.normalizedItems?.length > 0) {
           if (!selectedNormItem) {
             setSelectedNormItem(json.normalizedItems[0]);
@@ -2527,6 +2530,36 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
           <span className="text-slate-500 text-[10px] font-mono hidden md:inline">CADON Engine v3.0</span>
         </div>
       </div>
+
+      {/* 등록된 도면이 없는 경우 직관적인 업로드 유도 가이드 배너 */}
+      {files.length === 0 && !loading && (
+        <div className="mb-4 p-4 rounded-xl bg-gradient-to-r from-blue-50 via-sky-50 to-indigo-50 border border-blue-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Upload className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-bold text-slate-900 text-xs">
+                현재 등록된 도면 파일이 없습니다.
+              </p>
+              <p className="text-slate-600 text-[11px] mt-0.5">
+                좌측의 <strong>[통합 도면 파일 등록]</strong> 영역에 DWG 또는 DXF 도면 파일을 끌어다 놓으시면 AI 도면 분석 및 BOM 전개가 시작됩니다.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSidebarOpen(true);
+              document.getElementById('file-upload')?.click();
+            }}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shrink-0 transition-colors shadow-xs cursor-pointer flex items-center space-x-1.5"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>도면 파일 첨부하기</span>
+          </button>
+        </div>
+      )}
 
       {/* TAB 1: CAD File Upload & Viewer (PROMPT 03, 04, 05, 06, 18-R1, 18-R2) */}
       <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${isSidebarOpen ? 'gap-4' : ''} items-start w-full relative` : "hidden"}>
