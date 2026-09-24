@@ -46,6 +46,25 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const [analyzingFileId, setAnalyzingFileId] = useState<string | null>(null);
   const [exportResult, setExportResult] = useState<any>(null);
   const [externalFocusIdx, setExternalFocusIdx] = useState<number | null>(null);
+  
+  // 🎯 5단계 통합 스마트 파이프라인 단계 관리 (1: 도면접수, 2: AI도면파싱, 3: 가상BOM, 4: 단가매칭, 5: 견적발행)
+  const [workflowStep, setWorkflowStep] = useState<1 | 2 | 3 | 4 | 5>(2);
+
+  // URL step 쿼리 파라미터 연동 (?step=1, ?step=2, ?step=3)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const stepParam = sp.get('step');
+      if (stepParam === '1') {
+        setWorkflowStep(1);
+        setIsSidebarOpen(true);
+      } else if (stepParam === '2') {
+        setWorkflowStep(2);
+      } else if (stepParam === '3') {
+        setWorkflowStep(3);
+      }
+    }
+  }, []);
 
   // 🚀 Smart Upload Intent & Multi-Drawing Filter States
   const [uploadIntentModal, setUploadIntentModal] = useState<{ file: File; uploadJson: any } | null>(null);
@@ -2502,11 +2521,15 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {/* 🚀 CADON v2.0: 3단계 직관적 파이프라인 네비게이터 & 가이드 통합 카드 (개선안 1) */}
+      {/* 🚀 CADON v3.0: 5단계 스마트 분석 파이프라인 네비게이터 & 실시간 가이드 (대시보드 100% 일치화) */}
       <div className="no-print print:hidden mb-2 rounded-2xl overflow-hidden border border-slate-200 shadow-2xs">
         <PipelineNavigator 
           caseId={id} 
-          currentStep={1}
+          currentStep={workflowStep}
+          onStepChange={(s) => {
+            setWorkflowStep(s);
+            if (s === 1) setIsSidebarOpen(true);
+          }}
           stats={{
             unconfirmedCount: normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length || (drawings.length - 16),
             hasRevisionDiff: false
@@ -2521,11 +2544,24 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
           }}
         />
 
-        {/* 3분할 워크스페이스 퀵 네비게이션 팁 */}
+        {/* 5단계 실시간 스마트 가이드 팁 */}
         <div className="bg-slate-900 text-slate-200 px-4 sm:px-6 py-2 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2 text-[11px]">
             <span className="px-1.5 py-0.5 rounded bg-blue-600 font-semibold text-[10px] text-white">가이드</span>
-            <span className="text-slate-300">1단계에서 도면 및 표제란 정보를 검토한 후, 상단 <strong>[2단계: 3분할 통합 단가 검토]</strong> 탭을 클릭하여 부품별 단가 계산을 진행하세요. (조립도 16건은 자동 예외 처리됨)</span>
+            <span className="text-slate-300">
+              {workflowStep === 1 && (
+                <span>1단계: 좌측 패널에서 고객사로부터 접수된 도면 파일(DWG, DXF)을 등록하고 관리하세요. 완료 후 상단 <strong>[2. AI 도면 파싱]</strong>을 클릭하세요.</span>
+              )}
+              {workflowStep === 2 && (
+                <span>2단계: AI가 파싱한 86개 시트의 2D CAD 벡터 도면 형상, 치수, 도곽을 검토하세요. 검토 후 상단 <strong>[3. 가상 BOM 추출]</strong>을 클릭하세요. (WebGL 60FPS 무랙 가동)</span>
+              )}
+              {workflowStep === 3 && (
+                <span>3단계: 도면 표제란 기반 가상 BOM 부품 목록과 수량을 검토하세요. 검토 완료 후 상단 <strong>[4. 마스터 단가 매칭]</strong>을 클릭하여 3분할 통합 단가 계산을 진행하세요.</span>
+              )}
+              {workflowStep >= 4 && (
+                <span>현재 단가 검토 및 견적서 발행 단계입니다. 상단 네비게이터를 클릭하여 언제든 전 단계로 0초(무랙) 복귀할 수 있습니다.</span>
+              )}
+            </span>
           </div>
           <span className="text-slate-500 text-[10px] font-mono hidden md:inline">CADON Engine v3.0</span>
         </div>
@@ -2838,6 +2874,8 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               allFiles={files}
               onSelectFile={(fileId) => setSelectedFileId(fileId)}
               onBomUpdated={fetchData}
+              controlledViewMode={workflowStep === 3 ? 'SHEET' : 'CAD'}
+              onViewModeChange={(m) => setWorkflowStep(m === 'CAD' ? 2 : 3)}
             />
           </div>
       </div>

@@ -9,7 +9,10 @@ import {
   ArrowLeft, 
   ChevronRight, 
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Scan,
+  FileSpreadsheet,
+  Coins
 } from 'lucide-react';
 
 export interface PipelineCaseInfo {
@@ -23,7 +26,8 @@ export interface PipelineCaseInfo {
 
 export interface PipelineNavigatorProps {
   caseId: string;
-  currentStep: 1 | 2 | 3;
+  currentStep: 1 | 2 | 3 | 4 | 5;
+  onStepChange?: (step: 1 | 2 | 3 | 4 | 5) => void;
   stats?: {
     unconfirmedCount?: number;
     hasRevisionDiff?: boolean;
@@ -37,6 +41,7 @@ export interface PipelineNavigatorProps {
 export default function PipelineNavigator({
   caseId,
   currentStep,
+  onStepChange,
   stats = {},
   caseInfo,
   showHomeLink = false,
@@ -44,23 +49,37 @@ export default function PipelineNavigator({
 }: PipelineNavigatorProps) {
   const steps = [
     {
-      step: 1,
-      name: '도면 등록 & BOM 검증',
-      desc: '표제란·계층구조 판독 및 보강',
-      href: `/cases/${caseId}`,
+      step: 1 as const,
+      name: '1. 도면 접수',
+      desc: 'DWG/DXF 파일 접수·등록',
+      href: `/cases/${caseId}?step=1`,
       icon: FileCheck2
     },
     {
-      step: 2,
-      name: '3분할 통합 단가 검토',
-      desc: '도면 + BOM + 마스터 단가 원스톱',
+      step: 2 as const,
+      name: '2. AI 도면 파싱',
+      desc: '2D CAD 벡터 (60FPS WebGL)',
+      href: `/cases/${caseId}?step=2`,
+      icon: Scan
+    },
+    {
+      step: 3 as const,
+      name: '3. 가상 BOM 추출',
+      desc: '표제란·계층구조 판독 검증',
+      href: `/cases/${caseId}?step=3`,
+      icon: FileSpreadsheet
+    },
+    {
+      step: 4 as const,
+      name: '4. 마스터 단가 매칭',
+      desc: '도면 + BOM + 가공단가 원스톱',
       href: `/quotes/${caseId}/review`,
-      icon: Layers,
+      icon: Coins,
       badge: stats.unconfirmedCount && stats.unconfirmedCount > 0 ? `${stats.unconfirmedCount}행 미확정` : undefined
     },
     {
-      step: 3,
-      name: '리비전 Diff & 견적 발행',
+      step: 5 as const,
+      name: '5. 공식 견적서 발행',
       desc: '단가 일괄 계승 및 2종 견적서 출력',
       href: stats.hasRevisionDiff ? `/quotes/${caseId}/diff` : `/quotes/${caseId}/publish`,
       icon: Send,
@@ -70,59 +89,79 @@ export default function PipelineNavigator({
 
   return (
     <nav 
-      aria-label="3단계 견적 파이프라인" 
-      className={`no-print bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 flex items-center justify-between shadow-2xs gap-3 ${className}`}
+      aria-label="5단계 스마트 견적 파이프라인" 
+      className={`no-print bg-white border-b border-slate-200 px-3 sm:px-6 py-2 flex items-center justify-between shadow-2xs gap-2 flex-wrap ${className}`}
     >
-      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 flex-wrap">
         {steps.map((item, idx) => {
           const Icon = item.icon;
           const isActive = currentStep === item.step;
           const isDone = currentStep > item.step;
 
+          const buttonContent = (
+            <>
+              <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${
+                isActive
+                  ? 'bg-white/20 text-white'
+                  : isDone
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-200 text-slate-600'
+              }`}>
+                {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : item.step}
+              </div>
+
+              <div className="text-left hidden lg:block">
+                <div className="flex items-center gap-1 leading-tight">
+                  <span className="text-xs">{item.name}</span>
+                  {item.badge && (
+                    <span className="px-1.5 py-0.2 text-[9px] rounded bg-amber-500 text-white font-bold">
+                      {item.badge}
+                    </span>
+                  )}
+                  {item.warning && (
+                    <span className="px-1.5 py-0.2 text-[9px] rounded bg-rose-500 text-white font-bold flex items-center gap-0.5">
+                      <AlertCircle className="w-2.5 h-2.5" /> 마진주의
+                    </span>
+                  )}
+                </div>
+                <span className={`text-[10px] block truncate max-w-[130px] ${isActive ? 'text-blue-100 font-normal' : 'text-slate-400'}`}>
+                  {item.desc}
+                </span>
+              </div>
+            </>
+          );
+
+          const classNameStr = `flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            isActive
+              ? 'bg-blue-600 text-white font-bold shadow-xs'
+              : isDone
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`;
+
           return (
             <React.Fragment key={item.step}>
               {idx > 0 && (
-                <ChevronRight className="w-4 h-4 text-slate-300 shrink-0 mx-0.5" />
+                <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0 mx-0.2 hidden sm:block" />
               )}
-              <Link
-                href={item.href}
-                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
-                  isActive
-                    ? 'bg-blue-600 text-white font-bold shadow-xs'
-                    : isDone
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${
-                  isActive
-                    ? 'bg-white/20 text-white'
-                    : isDone
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-slate-200 text-slate-600'
-                }`}>
-                  {isDone ? <CheckCircle2 className="w-4 h-4" /> : item.step}
-                </div>
-
-                <div className="text-left hidden md:block">
-                  <div className="flex items-center gap-1.5 leading-tight">
-                    <span>{item.name}</span>
-                    {item.badge && (
-                      <span className="px-1.5 py-0.2 text-[10px] rounded bg-amber-500 text-white font-bold">
-                        {item.badge}
-                      </span>
-                    )}
-                    {item.warning && (
-                      <span className="px-1.5 py-0.2 text-[10px] rounded bg-rose-500 text-white font-bold flex items-center gap-0.5">
-                        <AlertCircle className="w-3 h-3" /> 마진주의
-                      </span>
-                    )}
-                  </div>
-                  <span className={`text-[10px] ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
-                    {item.desc}
-                  </span>
-                </div>
-              </Link>
+              {onStepChange && (item.step === 1 || item.step === 2 || item.step === 3) ? (
+                <button
+                  type="button"
+                  onClick={() => onStepChange(item.step)}
+                  className={classNameStr}
+                  title={`${item.name} 화면으로 즉시 전환 (무랙)`}
+                >
+                  {buttonContent}
+                </button>
+              ) : (
+                <Link
+                  href={item.href}
+                  className={classNameStr}
+                  title={item.name}
+                >
+                  {buttonContent}
+                </Link>
+              )}
             </React.Fragment>
           );
         })}

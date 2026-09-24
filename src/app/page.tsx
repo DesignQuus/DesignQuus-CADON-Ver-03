@@ -19,6 +19,7 @@ import {
   Sparkles,
   UploadCloud,
   FileCode2,
+  Database,
   Activity,
   ChevronLeft,
   ChevronRight,
@@ -104,6 +105,28 @@ export default function HomePage() {
   const [auditCount, setAuditCount] = useState<number>(0);
   const [downloadingQuoteId, setDownloadingQuoteId] = useState<string | null>(null);
 
+  // Persistent Sidebar Collapsed State (좌측 관제탑 사이드바 & 견출 탭)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cadon_dashboard_sidebar_open');
+      if (saved !== null) {
+        setIsSidebarOpen(saved === 'true');
+      }
+    } catch {}
+  }, []);
+
+  const handleToggleSidebar = () => {
+    setIsSidebarOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('cadon_dashboard_sidebar_open', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   // 신규 도면 견적 등록 모달 상태
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [newCaseName, setNewCaseName] = useState('');
@@ -126,12 +149,31 @@ export default function HomePage() {
     );
   }, [companies]);
 
+  const [isSampleMode, setIsSampleMode] = useState(false);
+  const [isNewCompanyInput, setIsNewCompanyInput] = useState(false);
+  const [newCustomCompanyName, setNewCustomCompanyName] = useState('');
+
   const handleOpenUploadModal = () => {
     setNewCaseName('');
     const defaultCust = customerCompanies[0]?.id || 'comp_1790030182693';
     setSelectedCompanyId(defaultCust);
     setSelectedFile(null);
     setSubmitError(null);
+    setIsSampleMode(false);
+    setIsNewCompanyInput(false);
+    setNewCustomCompanyName('');
+    setIsUploadModalOpen(true);
+  };
+
+  const handleOpenSampleModal = () => {
+    setNewCaseName('[체험용] 판금 모터 브라켓 가공 견적 (샘플)');
+    const defaultCust = customerCompanies[0]?.id || 'comp_1790030182693';
+    setSelectedCompanyId(defaultCust);
+    setSelectedFile(null);
+    setSubmitError(null);
+    setIsSampleMode(true);
+    setIsNewCompanyInput(false);
+    setNewCustomCompanyName('');
     setIsUploadModalOpen(true);
   };
 
@@ -141,10 +183,43 @@ export default function HomePage() {
       setSubmitError('견적의뢰 건명을 입력해 주세요.');
       return;
     }
-    const targetCompId = selectedCompanyId || customerCompanies[0]?.id || 'comp_1790030182693';
 
     setIsSubmitting(true);
     setSubmitError(null);
+
+    let targetCompId = selectedCompanyId;
+
+    // 신규 고객사 직접 입력 처리
+    if (isNewCompanyInput || selectedCompanyId === '__NEW__') {
+      const trimmedCustom = newCustomCompanyName.trim();
+      if (!trimmedCustom) {
+        setSubmitError('신규 발주 고객사명을 입력해 주세요.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      try {
+        const compRes = await apiFetch('/api/companies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ companyName: trimmedCustom })
+        });
+        const compData = await compRes.json();
+        if (!compRes.ok || !compData.company?.id) {
+          throw new Error(compData.error || '고객사 등록에 실패했습니다.');
+        }
+        targetCompId = compData.company.id;
+        if (!companies.some((c) => c.id === targetCompId)) {
+          setCompanies((prev) => [{ id: targetCompId, company_name: trimmedCustom, company_type: 'CUSTOMER' } as any, ...prev]);
+        }
+      } catch (cErr: any) {
+        setSubmitError(cErr.message || '신규 고객사 등록 중 오류가 발생했습니다.');
+        setIsSubmitting(false);
+        return;
+      }
+    } else if (!targetCompId) {
+      targetCompId = customerCompanies[0]?.id || 'comp_1790030182693';
+    }
 
     try {
       // 1. 견적 건 생성
@@ -195,7 +270,8 @@ export default function HomePage() {
 
       // 3. 완료 후 해당 건 상세 페이지로 즉시 이동
       setIsUploadModalOpen(false);
-      router.push(`/cases/${newCaseId}`);
+      setIsSubmitting(false);
+      window.location.href = `/cases/${newCaseId}`;
     } catch (err: any) {
       setSubmitError(err.message || '견적 등록 중 오류가 발생했습니다.');
       setIsSubmitting(false);
@@ -392,8 +468,60 @@ export default function HomePage() {
 
   const roleInfo = getRoleBadge(user?.role);
   const [caseFilter, setCaseFilter] = useState<'ALL' | 'MY'>('ALL');
+  const [pipelineFilter, setPipelineFilter] = useState<'ALL' | '1' | '2' | '3' | '4' | '5'>('ALL');
   const [casePage, setCasePage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(5);
+
+  // 5단계 스마트 분석 파이프라인 판별 헬퍼 (배너-테이블 1:1 연동)
+  const getCasePipelineStage = (c: QuotationCase): '1' | '2' | '3' | '4' | '5' => {
+    if (c.quote_total_amount && Number(c.quote_total_amount) > 0) return '5';
+    if (c.bom_items_count > 0) {
+      const stage = (c.lifecycle_stage || '').toUpperCase();
+      if (stage.includes('PRICE') || stage.includes('REVIEW') || stage.includes('APPROV') || stage.includes('COST')) {
+        return '4';
+      }
+      return '3';
+    }
+    if (c.drawings_count > 0) return '2';
+    return '1';
+  };
+
+  // Lifecycle Partitions (휴지통, 보관함, 활성 실무 프로젝트 분리)
+  const isCaseDeleted = (c: any) => Boolean(c.deleted_at && c.deleted_at !== 'NULL' && c.deleted_at !== 'null') || c.is_deleted || c.lifecycle_status === 'TRASHED' || c.status === 'DELETED';
+  const isCaseArchived = (c: any) => !isCaseDeleted(c) && (c.lifecycle_status === 'ARCHIVED' || c.status === 'ARCHIVED');
+  const isCaseActive = (c: any) => !isCaseDeleted(c) && !isCaseArchived(c);
+
+  const activeCases = useMemo(() => cases.filter(isCaseActive), [cases]);
+  const archivedCases = useMemo(() => cases.filter(isCaseArchived), [cases]);
+  const trashedCases = useMemo(() => cases.filter(isCaseDeleted), [cases]);
+
+  // 김세창 (또는 로그인 담당자)의 실제 활성 프로젝트 (보관/휴지통 제외)
+  const myActiveCases = useMemo(() => {
+    if (!user) return [];
+    return activeCases.filter(
+      (c) => c.created_by_user_id === user.id || c.created_by_name === user.name
+    );
+  }, [activeCases, user]);
+
+  // 단가 매칭/승인 검토 대기 건 (4단계: BOM 항목은 있으나 최종 견적이 미발행된 활성 건)
+  const pendingReviewCases = useMemo(() => {
+    return activeCases.filter((c) => {
+      const hasBom = Number(c.bom_items_count || 0) > 0;
+      const hasQuote = Boolean(c.quote_total_amount && Number(c.quote_total_amount) > 0);
+      return hasBom && !hasQuote;
+    });
+  }, [activeCases]);
+
+  // 파이프라인 단계별 실시간 건수 집계 (활성 프로젝트 대상, 1~5단계 배타적 할당)
+  const pipelineCounts = useMemo(() => {
+    const targetList = caseFilter === 'MY' ? myActiveCases : activeCases;
+    const counts = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+    for (const c of targetList) {
+      const stage = getCasePipelineStage(c);
+      counts[stage]++;
+    }
+    return counts;
+  }, [activeCases, myActiveCases, caseFilter]);
 
   const myCasesCount = useMemo(() => {
     if (!user) return 0;
@@ -403,13 +531,20 @@ export default function HomePage() {
   }, [cases, user]);
 
   const filteredCases = useMemo(() => {
+    let result = cases;
     if (caseFilter === 'MY' && user) {
-      return cases.filter(
+      result = result.filter(
         (c) => c.created_by_user_id === user.id || c.created_by_name === user.name
       );
     }
-    return cases;
-  }, [cases, caseFilter, user]);
+    if (pipelineFilter !== 'ALL') {
+      result = result.filter((c) => {
+        if (!isCaseActive(c)) return false;
+        return getCasePipelineStage(c) === pipelineFilter;
+      });
+    }
+    return result;
+  }, [cases, caseFilter, pipelineFilter, user]);
 
   const totalPages = useMemo(() => {
     return Math.max(1, Math.ceil(filteredCases.length / pageSize));
@@ -464,371 +599,410 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 px-4 sm:px-6 lg:px-8 py-6 space-y-6 max-w-[1640px] mx-auto">
-      {/* 1. Hero & Welcome Section (Compact 2-Row Layout) */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 rounded-2xl py-4 sm:py-5 px-6 sm:px-8 text-white shadow-xl shadow-slate-950/10">
-        <div className="absolute right-0 top-0 -mt-12 -mr-12 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute right-40 bottom-0 -mb-12 w-64 h-64 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 p-4 sm:p-6 max-w-[1760px] mx-auto relative">
+            {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 사이드바 접힘 시 좌측 벽면에 11px 노출 -> 호버 시 36px 돌출 */}
+      {!isSidebarOpen && (
+        <button
+          type="button"
+          onClick={handleToggleSidebar}
+          className="fixed left-0 top-32 z-30 group cursor-pointer w-9 text-left select-none focus:outline-hidden"
+          title="스마트 견적 관제탑 열기"
+        >
+          {/* 시각적 손잡이 & 돌출 본체 (평상시 11px 노출 -> 호버 시 36px 완전 돌출, 120ms 초고속 반응) */}
+          <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 text-slate-800 group-hover:text-blue-600 border-y border-r border-l-0 border-slate-300 group-hover:border-blue-400 rounded-r-xl shadow-md group-hover:shadow-2xl transition-all duration-[120ms] ease-out py-3.5 w-[11px] group-hover:w-9 overflow-hidden relative">
+            {/* 평상시 살짝 보이는 라운드 엣지의 블루 핸들 인디케이터 바 */}
+            <div className="absolute right-[3px] top-1/2 -translate-y-1/2 w-[3px] h-8 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity duration-[100ms]" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          {/* Left: 2-Row Stack */}
-          <div className="space-y-1.5">
-            {/* Row 1: Greeting Title + Inline Role Badge */}
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white flex items-center gap-1.5">
+            {/* 호버 시 우측으로 돌출되며 온전하게 표출되는 견출지 콘텐츠 */}
+            <div className="flex flex-col items-center justify-center space-y-2 w-9 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
+              <Layers className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
+              <div className="flex flex-col items-center justify-center text-[10.5px] font-extrabold text-slate-800 group-hover:text-blue-600 leading-[1.2] tracking-tight">
+                <span>관</span>
+                <span>제</span>
+                <span className="h-0.5" />
+                <span>탑</span>
+              </div>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0" />
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* Main Split Layout: Left Control Panel + Right Main Work Table */}
+      <div className="flex gap-5 items-start">
+        {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
+        {isSidebarOpen && (
+          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-4 flex flex-col transition-all sticky top-4">
+            {/* Sidebar Header with Collapse Button */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black shadow-2xs">
+                  <Layers className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-slate-900 tracking-tight block">스마트 견적 관제탑</span>
+                  <span className="text-[10px] text-slate-400 font-semibold">AutoCAD 실무 파이프라인</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleToggleSidebar}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                title="사이드바 접기 (도면 넓게 보기)"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scope Switcher: 내 담당 vs 전사 관제 */}
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                <span>작업 관제 모드</span>
+                <span className="text-blue-600 font-extrabold">{caseFilter === 'MY' ? '내 담당 모드' : '전사 총괄 모드'}</span>
+              </div>
+              <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCaseFilter('MY');
+                    setCasePage(1);
+                  }}
+                  className={`py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                    caseFilter === 'MY'
+                      ? 'bg-blue-600 text-white shadow-xs font-extrabold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <User className="w-3 h-3" />
+                  <span>내 담당 ({myActiveCases.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCaseFilter('ALL');
+                    setCasePage(1);
+                  }}
+                  className={`py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                    caseFilter === 'ALL'
+                      ? 'bg-blue-600 text-white shadow-xs font-extrabold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Building2 className="w-3 h-3" />
+                  <span>전사 관제 ({activeCases.length})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 5-Step Pipeline Vertical Navigation */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-extrabold text-slate-800">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>5단계 견적 파이프라인</span>
+                </span>
+                {pipelineFilter !== 'ALL' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPipelineFilter('ALL');
+                      setCasePage(1);
+                    }}
+                    className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer"
+                  >
+                    필터 해제
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1.5 text-xs">
+                {/* Step 1 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPipelineFilter((prev) => (prev === '1' ? 'ALL' : '1'));
+                    setCasePage(1);
+                  }}
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    pipelineFilter === '1'
+                      ? 'border-blue-400 bg-blue-50/70 ring-2 ring-blue-400/40 shadow-xs'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-blue-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">1</span>
+                    <div>
+                      <div className="font-extrabold text-slate-900">도면 접수</div>
+                      <div className="text-[10px] text-slate-400">DWG 도면 등록 대기</div>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['1'] > 0 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                    {pipelineCounts['1']}건
+                  </span>
+                </button>
+
+                {/* Step 2 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPipelineFilter((prev) => (prev === '2' ? 'ALL' : '2'));
+                    setCasePage(1);
+                  }}
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    pipelineFilter === '2'
+                      ? 'border-indigo-400 bg-indigo-50/70 ring-2 ring-indigo-400/40 shadow-xs'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-indigo-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">2</span>
+                    <div>
+                      <div className="font-extrabold text-slate-900">AI 형상·치수 파싱</div>
+                      <div className="text-[10px] text-slate-400">60FPS WebGL 분할</div>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['2'] > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                    {pipelineCounts['2']}건
+                  </span>
+                </button>
+
+                {/* Step 3 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPipelineFilter((prev) => (prev === '3' ? 'ALL' : '3'));
+                    setCasePage(1);
+                  }}
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    pipelineFilter === '3'
+                      ? 'border-indigo-500 bg-indigo-50/80 ring-2 ring-indigo-500/40 shadow-xs'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">3</span>
+                    <div>
+                      <div className="font-extrabold text-slate-900">가상 BOM 추출</div>
+                      <div className="text-[10px] text-slate-400">표제란·계층구조 판독</div>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['3'] > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                    {pipelineCounts['3']}건
+                  </span>
+                </button>
+
+                {/* Step 4 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPipelineFilter((prev) => (prev === '4' ? 'ALL' : '4'));
+                    setCasePage(1);
+                  }}
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    pipelineFilter === '4'
+                      ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-400/40 shadow-xs'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-amber-500 text-slate-900 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
+                    <div>
+                      <div className="font-extrabold text-slate-900">마스터 단가 매칭</div>
+                      <div className="text-[10px] text-slate-400">단가 검토 및 승인 대기</div>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['4'] > 0 ? 'bg-amber-500 text-slate-900' : 'bg-slate-100 text-slate-400'}`}>
+                    {pipelineCounts['4']}건
+                  </span>
+                </button>
+
+                {/* Step 5 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPipelineFilter((prev) => (prev === '5' ? 'ALL' : '5'));
+                    setCasePage(1);
+                  }}
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    pipelineFilter === '5'
+                      ? 'border-emerald-400 bg-emerald-50/70 ring-2 ring-emerald-400/40 shadow-xs'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-emerald-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">5</span>
+                    <div>
+                      <div className="font-extrabold text-slate-900">공식 견적서 발행</div>
+                      <div className="text-[10px] text-slate-400">견적번호 채번 및 엑셀</div>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['5'] > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                    {pipelineCounts['5']}건
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Compact 4-KPI Overview */}
+            <div className="pt-3 border-t border-slate-100 space-y-2">
+              <div className="text-xs font-extrabold text-slate-800 flex items-center justify-between">
+                <span>핵심 현황 요약</span>
+                <span className="text-[10px] text-slate-400 font-semibold">{user?.companyName || '등록사 연동'}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                  <div className="text-[10px] font-bold text-slate-500">진행 프로젝트</div>
+                  <div className="text-base font-black text-blue-600 font-mono mt-0.5">
+                    {user?.role === 'SUPER_ADMIN' ? activeCases.length : myActiveCases.length}건
+                  </div>
+                  <div className="text-[9.5px] text-slate-400">전사 {activeCases.length}건</div>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                  <div className="text-[10px] font-bold text-slate-500">보관/휴지통</div>
+                  <div className="text-base font-black text-slate-600 font-mono mt-0.5">
+                    {archivedCases.length} / {trashedCases.length}건
+                  </div>
+                  <div className="text-[9.5px] text-rose-500">총 {archivedCases.length + trashedCases.length}건 격리</div>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 col-span-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500">총 견적 산출액</span>
+                    <span className="text-[10px] font-bold text-emerald-600">공식 {quotes.length}건 발행</span>
+                  </div>
+                  <div className="text-lg font-black text-slate-900 font-mono mt-0.5">
+                    ₩{stats.totalQuoteAmount.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Action Buttons */}
+            <div className="pt-3 border-t border-slate-100 space-y-2">
+              <button
+                type="button"
+                onClick={handleOpenUploadModal}
+                className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>신규 도면 견적 등록</span>
+                <UploadCloud className="w-3.5 h-3.5 text-blue-200" />
+              </button>
+
+              <div className="grid grid-cols-1 gap-1.5 text-xs font-bold text-slate-700">
+                <Link
+                  href="/cases?tab=ANALYZED"
+                  className="p-2 rounded-lg hover:bg-slate-100 border border-slate-200/80 flex items-center justify-between transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                    <span>단가 미매칭 검토 큐</span>
+                  </span>
+                  <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800">
+                    {pendingReviewCases.length}건
+                  </span>
+                </Link>
+
+                <Link
+                  href="/quotes"
+                  className="p-2 rounded-lg hover:bg-slate-100 border border-slate-200/80 flex items-center justify-between transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>발행 견적서 보관함</span>
+                  </span>
+                  <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">
+                    {quotes.length}건
+                  </span>
+                </Link>
+
+                <Link
+                  href="/admin/masters"
+                  className="p-2 rounded-lg hover:bg-slate-100 border border-slate-200/80 flex items-center justify-between transition-colors text-slate-600"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Database className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>마스터 기준정보 (단가표)</span>
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                </Link>
+
+                {user?.role === 'SUPER_ADMIN' && (
+                  <>
+                    <Link
+                      href="/admin/companies"
+                      className="p-2 rounded-lg hover:bg-blue-50 border border-blue-200/80 flex items-center justify-between transition-colors text-blue-700"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                        <span>회원사 관리 센터</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-blue-400" />
+                    </Link>
+                    <Link
+                      href="/admin/audit"
+                      className="p-2 rounded-lg hover:bg-slate-100 border border-slate-200/80 flex items-center justify-between transition-colors text-slate-700"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-slate-600" />
+                        <span>사용자 활동 로그</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    </Link>
+                  </>
+                )}
+              </div>
+            </div>
+          </aside>
+        )}
+
+        {/* RIGHT MAIN WORKSPACE: Cases Table & Recent Quotes (Maximized Height, Zero Scroll!) */}
+        <div className="flex-1 min-w-0 space-y-5">
+          {/* Top Slim Welcome Strip */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 rounded-2xl py-3.5 px-6 text-white shadow-md flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {!isSidebarOpen && (
+                <button
+                  type="button"
+                  onClick={handleToggleSidebar}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-blue-200 border border-white/20 transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+                  title="관제 패널 펼치기"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>관제탑 펼치기</span>
+                </button>
+              )}
+              <h1 className="text-base sm:text-lg font-black tracking-tight flex items-center gap-2">
                 <span>안녕하세요,</span>
                 <span className="text-blue-400">{user?.name || '담당자'}</span>
                 <span>님! 👋</span>
               </h1>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-white/10 text-blue-200 border border-white/15 backdrop-blur-md shadow-2xs">
-                <span className={`w-2 h-2 rounded-full ${roleInfo.dot}`}></span>
+              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-white/10 text-blue-200 border border-white/15">
+                <span className={`w-1.5 h-1.5 rounded-full ${roleInfo.dot}`}></span>
                 <span>{roleInfo.label}</span>
-                {user?.companyName && user.companyName !== '고객사 미지정' && (
-                  <span className="border-l border-white/20 pl-1.5 text-white font-bold">{user.companyName}</span>
-                )}
               </div>
             </div>
 
-            {/* Row 2: Subtitle Description (Single Line) */}
-            <p className="text-xs sm:text-sm text-slate-300 max-w-4xl leading-relaxed whitespace-normal lg:whitespace-nowrap">
-              CADON AI 기반 DWG 도면 자동 파싱, 실시간 가상 BOM 추출 및 스마트 제조 원가 견적 관제 시스템입니다.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={handleOpenUploadModal}
-              className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>신규 도면 견적 등록</span>
-              <UploadCloud className="w-4 h-4 text-blue-200 ml-0.5" />
-            </button>
-
-            {user?.role === 'SUPER_ADMIN' && (
-              <Link
-                href="/admin/companies"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold border border-white/20 backdrop-blur-md transition-all cursor-pointer"
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-300">
+                실무 관제 활성: <strong className="text-white">{myActiveCases.length}건</strong> (전사 {activeCases.length}건)
+              </span>
+              <button
+                type="button"
+                onClick={handleOpenUploadModal}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold shadow-sm transition-all cursor-pointer"
               >
-                <Building2 className="w-4 h-4 text-blue-300" />
-                <span>회원사 관리 센터</span>
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Key KPI Statistics Cards (견적 금액 중심 비즈니스 관제) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total Quote Amount (누적 견적 산출액) */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-base font-extrabold tracking-tight text-slate-900">총 견적 산출액</span>
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-              <DollarSign className="w-5 h-5" />
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                <span>도면 견적 등록</span>
+              </button>
             </div>
           </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-extrabold text-slate-900 font-mono">
-              ₩{stats.totalQuoteAmount.toLocaleString()}
-            </span>
-          </div>
-          <p className="mt-2 text-xs text-slate-500 flex items-center justify-between">
-            <span>공식 견적서 {stats.totalQuotesCount}건 발행</span>
-            <Link href="/quotes" className="text-blue-600 hover:underline font-bold text-[11px]">
-              견적대장 ➡️
-            </Link>
-          </p>
-        </div>
 
-        {/* Card 2: Approved / Ordered Amount (승인·수주 확정액) */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-base font-extrabold tracking-tight text-slate-900">승인·수주 확정액</span>
-            <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-extrabold text-emerald-600 font-mono">
-              ₩{stats.approvedQuoteAmount.toLocaleString()}
-            </span>
-          </div>
-          <p className="mt-2 text-xs text-slate-500 flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span>최종 승인 및 발주 완료 견적</span>
-          </p>
-        </div>
-
-        {/* Card 3: Pending Quote & Approval (결재·산출 대기액) */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-base font-extrabold tracking-tight text-slate-900">결재·산출 대기액</span>
-            <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-              <Clock className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-extrabold text-amber-600 font-mono">
-              ₩{stats.pendingQuoteAmount.toLocaleString()}
-            </span>
-          </div>
-          <p className="mt-2 text-xs text-slate-500 flex items-center gap-1">
-            <Activity className="w-3.5 h-3.5 text-amber-500" />
-            <span>진행 중 {stats.inProgressCount}건 / 결재대기 {stats.pendingApprovalCount}건</span>
-          </p>
-        </div>
-
-        {/* Card 4: Total Cases & Drawings (견적의뢰 및 도면 현황) */}
-        <div className="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-base font-extrabold tracking-tight text-slate-900">견적의뢰 및 도면 현황</span>
-            <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-              <FileText className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-purple-600">{stats.totalCases}</span>
-            <span className="text-xs font-semibold text-slate-500">건 의뢰 (도면 {stats.totalDrawings}매)</span>
-          </div>
-          <p className="mt-2 text-xs text-slate-500 flex items-center gap-1">
-            <Building2 className="w-3.5 h-3.5 text-purple-500" />
-            <span>
-              {user?.role === 'SUPER_ADMIN'
-                ? `회원사 ${stats.activeCompanies}개사 가동 중`
-                : `${user?.companyName || '등록 고객사 연동 완료'}`}
-            </span>
-          </p>
-        </div>
-      </div>
-
-      {/* 3. Smart Quick Action Hub */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-blue-600" />
-              <span>업무 퀵 액세스 허브 (Quick Actions)</span>
-            </h2>
-            <p className="text-xs text-slate-500">자주 사용하는 주요 핵심 기능으로 즉시 이동합니다.</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Action 1: Cases (도면 접수 & 견적 작업실 - 작업 공간) */}
-          <Link
-            href="/cases"
-            className="group bg-white p-5 rounded-xl border border-blue-200 hover:border-blue-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer ring-1 ring-blue-50"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                  도면·BOM 작업
-                </span>
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center justify-between">
-                <span>도면 접수 & 견적 작업실</span>
-                <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
-              </h3>
-              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                접수된 CAD 도면 목록을 조회하고, AI 가상 BOM 추출 및 단가 산출 작업을 진행합니다.
-              </p>
-            </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-blue-600">
-              <span>견적 작업실 바로가기</span>
-              <ChevronRight className="w-3.5 h-3.5 ml-1" />
-            </div>
-          </Link>
-
-          {/* Action 2: Official Quotes (발행 견적서 보관함 - 결과물 문서) */}
-          <Link
-            href="/quotes"
-            className="group bg-white p-5 rounded-xl border border-emerald-200 hover:border-emerald-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer ring-1 ring-emerald-50"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
-                  <FileSpreadsheet className="w-5 h-5" />
-                </div>
-                <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  완료·엑셀 출력
-                </span>
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
-                <span>발행 견적서 보관함 (엑셀 출력)</span>
-                <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
-              </h3>
-              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                채번된 견적번호(Q-XXXX), 버전별 공급가/부가세/총액 조회 및 엑셀 다운로드
-              </p>
-            </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-emerald-600">
-              <span>견적서 보관함 바로가기</span>
-              <ChevronRight className="w-3.5 h-3.5 ml-1" />
-            </div>
-          </Link>
-
-          {/* Action 2: New Case (공통) */}
-          <button
-            type="button"
-            onClick={handleOpenUploadModal}
-            className="group bg-white p-5 rounded-xl border border-slate-200 hover:border-indigo-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer text-left w-full"
-          >
-            <div>
-              <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
-                <UploadCloud className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors flex items-center justify-between">
-                <span>신규 도면 견적 등록</span>
-                <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-              </h3>
-              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                DWG CAD 도면(DWG, DXF)을 업로드하여 신규 견적의뢰 건을 생성합니다.
-              </p>
-            </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-indigo-600">
-              <span>견적 등록 팝업 열기</span>
-              <ChevronRight className="w-3.5 h-3.5 ml-1" />
-            </div>
-          </button>
-
-          {/* Action 3: 회원사 대표(TENANT_ADMIN) 전용 - 사원 관리 */}
-          {user?.role === 'TENANT_ADMIN' && (
-            <Link
-              href="/admin/members"
-              className="group bg-white p-5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
-            >
-              <div>
-                <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
-                  <Users className="w-5 h-5" />
-                </div>
-                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center justify-between">
-                  <span>사원 관리 센터</span>
-                  <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
-                </h3>
-                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                  소속 임직원 신규 등록, 계정 권한 관리 및 사원별 활동 상태를 관리합니다.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-emerald-600">
-                <span>사원 목록 바로가기</span>
-                <ChevronRight className="w-3.5 h-3.5 ml-1" />
-              </div>
-            </Link>
-          )}
-
-          {/* Action 4: 회원사 대표(TENANT_ADMIN) 전용 - 사내 승인 및 결재 권한 */}
-          {user?.role === 'TENANT_ADMIN' && (
-            <Link
-              href="/admin/permissions"
-              className="group bg-white p-5 rounded-xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
-            >
-              <div>
-                <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
-                  <Sliders className="w-5 h-5" />
-                </div>
-                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-purple-600 transition-colors flex items-center justify-between">
-                  <span>사내 승인 및 결재 관리</span>
-                  <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 transition-colors" />
-                </h3>
-                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                  사원별 견적 수정 권한 매트릭스를 확인하고, 접수된 결재 요청을 검토 및 승인합니다.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-purple-600">
-                <span>결재함 바로가기</span>
-                <ChevronRight className="w-3.5 h-3.5 ml-1" />
-              </div>
-            </Link>
-          )}
-
-          {/* Action 5: 일반 실무 사원(SALES_USER) 전용 - AI 가상 BOM 분석 안내 */}
-          {user?.role === 'SALES_USER' && (
-            <div className="bg-gradient-to-br from-blue-50/70 to-indigo-50/50 p-5 rounded-xl border border-blue-100 flex flex-col justify-between">
-              <div>
-                <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold mb-3 shadow-xs">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <h3 className="text-base font-extrabold text-slate-900 flex items-center justify-between">
-                  <span>AI 도면 분석 & 견적 지원</span>
-                </h3>
-                <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-                  도면 업로드 시 CADON AI가 형상·치수·재질을 자동 추출하여 공정별 가상 BOM 및 단가를 즉시 산출합니다.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-blue-100/80 flex items-center text-xs font-bold text-blue-700">
-                <span>스마트 견적 프로세스 활성화</span>
-              </div>
-            </div>
-          )}
-
-          {/* Action 6: 최고관리자(SUPER_ADMIN) 전용 - 회원사 관리 센터 */}
-          {user?.role === 'SUPER_ADMIN' && (
-            <Link
-              href="/admin/companies"
-              className="group bg-white p-5 rounded-xl border border-blue-200 bg-blue-50/20 hover:border-blue-600 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold group-hover:scale-110 transition-transform shadow-xs">
-                    <Building2 className="w-5 h-5" />
-                  </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-blue-100 text-blue-800">
-                    최고관리자
-                  </span>
-                </div>
-                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center justify-between">
-                  <span>회원사 관리 센터</span>
-                  <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
-                </h3>
-                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                  SaaS 회원사 등록, 사업자 인증 및 서비스 이용 상태를 총괄합니다.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-blue-100 flex items-center text-xs font-bold text-blue-700">
-                <span>회원사 관리 바로가기</span>
-                <ChevronRight className="w-3.5 h-3.5 ml-1" />
-              </div>
-            </Link>
-          )}
-
-          {/* Action 7: 최고관리자(SUPER_ADMIN) 전용 - 감사 로그 */}
-          {user?.role === 'SUPER_ADMIN' && (
-            <Link
-              href="/admin/audit"
-              className="group bg-white p-5 rounded-xl border border-slate-200 hover:border-slate-400 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
-            >
-              <div>
-                <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold mb-3 group-hover:scale-110 transition-transform">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-slate-700 transition-colors flex items-center justify-between">
-                  <span>사용자 활동 로그</span>
-                  <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
-                </h3>
-                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                  로그인, 도면 수정, 단가 승인 등 8대 감사 활동 로그를 모니터링합니다.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-xs font-semibold text-slate-600">
-                <span>감사 로그 조회</span>
-                <ChevronRight className="w-3.5 h-3.5 ml-1" />
-              </div>
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* 4. Recent Quotation Cases Table */}
+    {/* 4. Recent Quotation Cases Table */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-50/50 via-white to-white">
           {/* Left: Title & Personalization */}
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight">최근 견적의뢰 내역</h2>
               {user?.name && (
                 <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
@@ -836,10 +1010,36 @@ export default function HomePage() {
                   <span>{user.name} 담당 관제</span>
                 </span>
               )}
+              {pipelineFilter !== 'ALL' && (
+                <span className="text-[11px] font-extrabold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs animate-in fade-in">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                  <span>
+                    {pipelineFilter === '1' && '1단계: 도면 접수 필터링'}
+                    {pipelineFilter === '2' && '2단계: AI 형상·치수 파싱 필터링'}
+                    {pipelineFilter === '3' && '3단계: 가상 BOM 추출 필터링'}
+                    {pipelineFilter === '4' && '4단계: 마스터 단가 매칭 대기 필터링'}
+                    {pipelineFilter === '5' && '5단계: 공식 견적서 발행 완료 필터링'}
+                    {' '}({filteredCases.length}건)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPipelineFilter('ALL');
+                      setCasePage(1);
+                    }}
+                    className="ml-1 text-slate-500 hover:text-slate-900 bg-white/80 hover:bg-white px-1.5 py-0.2 rounded border border-amber-300 text-[10px] font-black cursor-pointer transition-colors"
+                    title="전체 단계 보기로 초기화"
+                  >
+                    × 해제
+                  </button>
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              {caseFilter === 'MY'
-                ? `${user?.name || '박세창'} 담당자님이 등록·관리하는 견적 건입니다. (총 ${myCasesCount}건)`
+              {pipelineFilter !== 'ALL'
+                ? `상단 5단계 파이프라인에서 [${pipelineFilter}단계]를 선택하여 해당 진행 상태의 건만 집중 모니터링 중입니다.`
+                : caseFilter === 'MY'
+                ? `${user?.name || '담당자'} 담당자님이 등록·관리하는 견적 건입니다. (총 ${myCasesCount}건)`
                 : `최근 시스템에 등록되거나 갱신된 전사 견적 건입니다. (총 ${cases.length}건)`}
             </p>
           </div>
@@ -972,14 +1172,23 @@ export default function HomePage() {
                 ? '상단의 [+ 신규 도면 견적 등록] 버튼을 눌러 첫 번째 담당 견적을 시작해 보세요.'
                 : '도면 파일을 업로드하여 첫 번째 견적을 생성해 보세요.'}
             </p>
-            <div className="mt-4 flex items-center justify-center gap-2">
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
               <button
                 type="button"
                 onClick={handleOpenUploadModal}
-                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shadow-md shadow-blue-600/20 cursor-pointer"
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shadow-md shadow-blue-600/20 cursor-pointer transition-all"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
                 <span>신규 도면 견적 등록</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenSampleModal}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-all cursor-pointer shadow-2xs"
+                title="CAD 도면 파일이 없어도 표준 판금 샘플 도면으로 즉시 AI 견적 과정을 체험해보실 수 있습니다."
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <span>표준 판금 샘플로 견적 체험하기</span>
               </button>
               {caseFilter === 'MY' && (
                 <button
@@ -1121,40 +1330,59 @@ export default function HomePage() {
                           : '-'}
                       </td>
 
-                      {/* 6. 진행 / 보관 상태 (단일 옅은 회색 톤으로 통일) */}
+                      {/* 6. 파이프라인 진행 상태 (상단 5단계 파이프라인과 1:1 일치) */}
                       <td className="py-3 px-3.5 text-center">
                         {isDeleted ? (
                           <div className="flex flex-col items-center">
-                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                               삭제보관
                             </span>
-                            <span className="text-[10px] text-slate-500 font-medium mt-0.5">
+                            <span className="text-[10px] text-rose-500 font-medium mt-0.5">
                               {typeof c.remaining_days === 'number'
                                 ? `D-${c.remaining_days}일 후 완전삭제`
                                 : '보관 만료 임박'}
                             </span>
                           </div>
-                        ) : c.drawings_count === 0 ? (
-                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
-                            도면미등록
-                          </span>
-                        ) : c.quote_total_amount ? (
-                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-300">
-                            견적완료
-                          </span>
+                        ) : c.quote_total_amount && Number(c.quote_total_amount) > 0 ? (
+                          <div className="flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              5/5 견적발행
+                            </span>
+                            <span className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                              공식 견적서 채번
+                            </span>
+                          </div>
                         ) : c.bom_items_count > 0 ? (
                           <div className="flex flex-col items-center">
-                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
-                              BOM완료 ({c.bom_items_count}건)
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                              4/5 단가검토
                             </span>
-                            <span className="text-[10px] text-slate-500 font-medium mt-0.5">
-                              단가산출 대기
+                            <span className="text-[10px] text-amber-700 font-medium mt-0.5">
+                              BOM {c.bom_items_count}건 매칭중
+                            </span>
+                          </div>
+                        ) : c.drawings_count > 0 ? (
+                          <div className="flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                              2/5 AI파싱
+                            </span>
+                            <span className="text-[10px] text-indigo-600 font-medium mt-0.5">
+                              도면 {c.drawings_count}매 추출
                             </span>
                           </div>
                         ) : (
-                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                            견적작성
-                          </span>
+                          <div className="flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                              1/5 접수대기
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium mt-0.5">
+                              CAD 도면 등록필요
+                            </span>
+                          </div>
                         )}
                       </td>
 
@@ -1377,6 +1605,8 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+        </div>
+      </div>
 
       {/* 신규 도면 견적 등록 모달 */}
       {isUploadModalOpen && (
@@ -1386,15 +1616,19 @@ export default function HomePage() {
             <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400">
-                  <UploadCloud className="w-5 h-5" />
+                  {isSampleMode ? <Sparkles className="w-5 h-5 text-amber-400" /> : <UploadCloud className="w-5 h-5" />}
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
-                    <span>신규 도면 견적 등록</span>
-                    <span className="text-[10px] font-bold bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">FAST</span>
+                    <span>{isSampleMode ? '표준 판금 샘플 견적 체험' : '신규 도면 견적 등록'}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isSampleMode ? 'bg-amber-500/30 text-amber-300' : 'bg-blue-500/30 text-blue-300'}`}>
+                      {isSampleMode ? 'SAMPLE' : 'FAST'}
+                    </span>
                   </h3>
                   <p className="text-xs text-slate-300 mt-0.5">
-                    {selectedFile
+                    {isSampleMode
+                      ? 'CAD 도면이 없어도 표준 판금 샘플 프로젝트로 AI 견적 워크플로우를 즉시 체험합니다.'
+                      : selectedFile
                       ? 'DWG 도면을 등록하여 AI 가상 BOM 추출 및 원가 산출을 시작합니다.'
                       : '신규 견적의뢰 건을 등록합니다. (도면은 등록 후 언제든 추가 첨부 가능)'}
                   </p>
@@ -1408,6 +1642,16 @@ export default function HomePage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Sample Mode Friendly Callout */}
+            {isSampleMode && (
+              <div className="bg-amber-50/90 border-b border-amber-200 px-6 py-3 text-xs text-amber-900 flex items-center gap-2.5">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                <span className="leading-relaxed">
+                  <strong>[체험 모드 안내]</strong> 별도 도면 파일 없이도 생성 즉시 <strong>AI 가상 BOM 전개, 가공 공정 단가 매칭, 공식 견적서 발행</strong>까지의 전체 과정을 안전하게 테스트해보실 수 있습니다.
+                </span>
+              </div>
+            )}
 
             {/* Modal Body */}
             <form onSubmit={handleCreateCase} className="p-6 space-y-4 overflow-y-auto">
@@ -1433,30 +1677,80 @@ export default function HomePage() {
                 />
               </div>
 
-              {/* 2. 고객사 선택 */}
+              {/* 2. 고객사 선택 또는 직접 입력 */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                  <span>발주 고객사 (의뢰처) <span className="text-rose-500">*</span></span>
-                  <span className="text-[10.5px] font-medium text-slate-400">견적 주체: 세창인터내쇼날(주)</span>
-                </label>
-                <select
-                  value={selectedCompanyId}
-                  onChange={(e) => setSelectedCompanyId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer"
-                >
-                  {customerCompanies.length > 0 ? (
-                    customerCompanies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        🏢 {c.company_name}
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    발주 고객사 (의뢰처) <span className="text-rose-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNewCompanyInput(!isNewCompanyInput);
+                      if (!isNewCompanyInput) {
+                        setNewCustomCompanyName('');
+                      }
+                    }}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    {isNewCompanyInput ? (
+                      <span>🏢 기존 목록에서 선택</span>
+                    ) : (
+                      <span>➕ 신규 고객사 직접 입력</span>
+                    )}
+                  </button>
+                </div>
+
+                {isNewCompanyInput ? (
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      required
+                      value={newCustomCompanyName}
+                      onChange={(e) => setNewCustomCompanyName(e.target.value)}
+                      placeholder="신규 고객사명 입력 (예: (주)한국기계, 현대위아)"
+                      className="w-full px-3.5 py-2.5 rounded-lg border border-blue-400 bg-blue-50/20 text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all"
+                      autoFocus
+                    />
+                    <p className="text-[10.5px] text-blue-600 font-medium">
+                      * 입력하신 신규 고객사는 시스템에 자동 등록되어 향후에도 바로 선택하실 수 있습니다.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <select
+                      value={selectedCompanyId}
+                      onChange={(e) => {
+                        if (e.target.value === '__NEW__') {
+                          setIsNewCompanyInput(true);
+                        } else {
+                          setSelectedCompanyId(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer"
+                    >
+                      {customerCompanies.length > 0 ? (
+                        customerCompanies.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            🏢 {c.company_name}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="comp_1790030182693">🏢 엠브이텍</option>
+                          <option value="comp_ag_borgwarner">🏢 A&G/보그워너</option>
+                        </>
+                      )}
+                      <option value="__NEW__" className="text-blue-600 font-bold">
+                        ➕ [직접 입력] 목록에 없는 새 고객사 입력...
                       </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="comp_1790030182693">🏢 엠브이텍</option>
-                      <option value="comp_ag_borgwarner">🏢 A&G/보그워너</option>
-                    </>
-                  )}
-                </select>
+                    </select>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-[10.5px] text-slate-400 mt-1">
+                  <span>견적 주체: 세창인터내쇼날(주)</span>
+                  <span>{isNewCompanyInput ? '새 고객사 등록 모드' : '목록 외 회사도 직접 입력 가능'}</span>
+                </div>
               </div>
 
               {/* 3. DWG 도면 파일 업로드 (드래그 앤 드롭) */}
@@ -1573,7 +1867,12 @@ export default function HomePage() {
                     </>
                   ) : (
                     <>
-                      {selectedFile ? (
+                      {isSampleMode ? (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          <span>샘플 프로젝트 생성 및 체험 시작</span>
+                        </>
+                      ) : selectedFile ? (
                         ['.dwg', '.dxf'].some(ext => selectedFile.name.toLowerCase().endsWith(ext)) ? (
                           <>
                             <Sparkles className="w-3.5 h-3.5" />

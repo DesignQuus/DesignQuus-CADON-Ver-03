@@ -1686,10 +1686,10 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
   return (
     <div className="h-screen flex flex-col bg-slate-100 overflow-hidden font-sans">
-      {/* 🚀 CADON v2.0: 3단계 직관적 파이프라인 네비게이터 */}
+      {/* 🚀 CADON v3.0: 5단계 스마트 파이프라인 네비게이터 (4단계: 마스터 단가 매칭) */}
       <PipelineNavigator
         caseId={caseId}
-        currentStep={2}
+        currentStep={4}
         stats={{
           unconfirmedCount,
           marginWarning: avgMargin < 12.0
@@ -1710,14 +1710,14 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           <Link
             href={`/cases/${caseId}`}
             className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
-            title="1단계 도면·BOM 검증으로 돌아가기"
+            title="도면·BOM 검증으로 돌아가기 (0초 무랙)"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
-                2단계 : 3분할 통합 단가 검토
+                4단계 : 마스터 단가 매칭 & 검토
               </span>
               <span className="text-xs text-slate-400 font-mono">{caseInfo?.case_no || caseId}</span>
             </div>

@@ -189,10 +189,10 @@ export default function RevisionDiffPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
-      {/* 🚀 CADON v2.0: 3단계 직관적 파이프라인 네비게이터 */}
+      {/* 🚀 CADON v3.0: 5단계 스마트 파이프라인 네비게이터 (5단계: 리비전 Diff & 견적 발행) */}
       <PipelineNavigator
         caseId={caseId}
-        currentStep={3}
+        currentStep={5}
         stats={{
           hasRevisionDiff: true
         }}

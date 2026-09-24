@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 // Auto-read .env.development.local if process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID is not yet set
-if (typeof process !== 'undefined' && !process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID) {
+if (typeof process !== 'undefined') {
   try {
     const envPath = path.join(process.cwd(), '.env.development.local');
     if (fs.existsSync(envPath)) {
@@ -15,6 +15,11 @@ if (typeof process !== 'undefined' && !process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID
       }
     }
   } catch (e) {}
+
+  // Enforce local EGDesk endpoint for local dev/preview to eliminate render tunnel latency & auth dropouts
+  if (!process.env.NEXT_PUBLIC_EGDESK_API_URL || process.env.NEXT_PUBLIC_EGDESK_API_URL.includes('tunneling-service.onrender.com')) {
+    process.env.NEXT_PUBLIC_EGDESK_API_URL = 'http://localhost:8080';
+  }
 }
 
 import {

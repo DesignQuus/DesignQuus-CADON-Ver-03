@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { queryTable, insertRows, updateRows } from '../../../../egdesk-helpers';
+import { db, queryTable, insertRows, updateRows } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
 import bcrypt from 'bcryptjs';
@@ -81,16 +81,25 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session || session.role !== 'SUPER_ADMIN') {
-    return NextResponse.json({ success: false, error: '최고관리자 권한이 필요합니다.' }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ success: false, error: '인증이 필요합니다.' }, { status: 401 });
+  }
+
+  const isSuperAdmin = session.role === 'SUPER_ADMIN';
+  const isTenantOrSales = session.role === 'TENANT_ADMIN' || session.role === 'SALES_USER';
+  if (!isSuperAdmin && !isTenantOrSales) {
+    return NextResponse.json({ success: false, error: '권한이 없습니다.' }, { status: 403 });
   }
 
   try {
     const body = await req.json();
     const companyName = (body.companyName || body.company_name || '').trim();
     const companyCode = (body.companyCode || body.company_code || '').trim();
-    const companyType = (body.companyType || body.company_type || 'CUSTOMER').toUpperCase();
-    const createAdmin = Boolean(body.createAdminWithCompany || body.create_admin);
+    // 비 최고관리자(영업사원)는 거래처(CUSTOMER)로만 등록 가능
+    const companyType = isSuperAdmin
+      ? (body.companyType || body.company_type || 'CUSTOMER').toUpperCase()
+      : 'CUSTOMER';
+    const createAdmin = isSuperAdmin && Boolean(body.createAdminWithCompany || body.create_admin);
     const adminLoginId = (body.adminLoginId || body.compAdminLoginId || '').trim();
     const adminPassword = (body.adminPassword || body.compAdminPassword || '').trim();
     const adminName = (body.adminName || body.compAdminName || '대표 관리자').trim();
@@ -98,21 +107,53 @@ export async function POST(req: NextRequest) {
     const adminPhone = (body.adminPhone || body.compAdminPhone || '').trim();
 
     if (!companyName) {
-      return NextResponse.json({ success: false, error: '회원사명을 입력해주세요.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: '회사명을 입력해주세요.' }, { status: 400 });
     }
 
-    // 중복 검사
+    // 중복 검사: 이미 동일한 이름의 고객사가 있으면 해당 고객사를 즉시 반환
     const all = normalizeRows(await queryTable('companies'));
-    const existing = all.find((c: any) => !c.deleted_at && c.company_name === companyName);
+    const existing = all.find((c: any) => !c.deleted_at && c.company_name.toLowerCase() === companyName.toLowerCase());
     if (existing) {
-      return NextResponse.json({ success: false, error: '이미 동일한 이름의 회원사가 존재합니다.' }, { status: 400 });
+      return NextResponse.json({ success: true, company: existing, isExisting: true });
     }
 
     const newId = `comp_${Date.now()}`;
     const code = companyCode || `CUST-${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();
 
-    // 1. 테넌트 회사 등록
+    // 발주 고객사(CUSTOMER) 등록인 경우 (영업 사원 및 실무자 원스톱 처리)
+    if (companyType === 'CUSTOMER') {
+      const myTenantId = session.tenant_id || session.companyId || 'tenant-cadon';
+      await insertRows('companies', [{
+        id: newId,
+        company_code: code,
+        company_name: companyName,
+        company_type: 'CUSTOMER',
+        is_active: 1,
+        tenant_id: myTenantId,
+        uuid: newId,
+        created_at: now,
+        updated_at: now
+      }]);
+
+      await insertRows('user_company_access', [{
+        id: `uca_${session.userId}_${newId}`,
+        user_id: session.userId,
+        company_id: newId,
+        access_role: 'MANAGER',
+        is_active: 1,
+        tenant_id: myTenantId,
+        uuid: `uca_${session.userId}_${newId}`,
+        updated_at: now
+      }]);
+
+      return NextResponse.json({
+        success: true,
+        company: { id: newId, company_code: code, company_name: companyName, company_type: 'CUSTOMER' }
+      });
+    }
+
+    // 1. 테넌트 회원사 등록 (최고관리자 전용)
     await insertRows('companies', [{
       id: newId,
       company_code: code,

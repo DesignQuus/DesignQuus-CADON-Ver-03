@@ -13,12 +13,15 @@ import {
   ArrowRight,
   Lock,
   Building,
-  Info
+  Info,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export default function LoginPage() {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -119,9 +122,9 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleLogin} autoComplete="off" className="space-y-4">
-          {/* 브라우저 자동완성 강제 주입 방지용 더미 필드 */}
-          <input type="text" name="fake_user_login" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
-          <input type="password" name="fake_pwd_login" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+
+
+
 
           {/* Login ID Input */}
           <div>
@@ -154,16 +157,28 @@ export default function LoginPage() {
             <div className="relative">
               <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
-                autoComplete="new-password"
+                autoComplete="current-password"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                spellCheck={false}
                 readOnly={isReadOnly}
                 onFocus={() => setIsReadOnly(false)}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="비밀번호를 입력하세요"
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                className="w-full pl-10 pr-11 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
               />
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer p-0.5 transition-colors select-none"
+                title={showPassword ? '비밀번호 숨기기' : '비밀번호 표시'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

@@ -118,6 +118,8 @@ interface CadViewerProps {
   onToggleBalloonNotice?: () => void;
   selectedBalloonNo?: string;
   selectedPartNo?: string;
+  controlledViewMode?: 'CAD' | 'SHEET';
+  onViewModeChange?: (mode: 'CAD' | 'SHEET') => void;
 }
 
 export default function CadViewer({
@@ -146,10 +148,23 @@ export default function CadViewer({
   showBalloonNotice = true,
   onToggleBalloonNotice,
   selectedBalloonNo,
-  selectedPartNo
+  selectedPartNo,
+  controlledViewMode,
+  onViewModeChange
 }: CadViewerProps) {
   // Mode switcher: 'CAD' (2D Vector Viewer) vs 'SHEET' (Full-width Excel Grid)
-  const [viewMode, setViewMode] = useState<'CAD' | 'SHEET'>('CAD');
+  const [viewMode, setViewMode] = useState<'CAD' | 'SHEET'>(controlledViewMode || 'CAD');
+
+  useEffect(() => {
+    if (controlledViewMode && controlledViewMode !== viewMode) {
+      setViewMode(controlledViewMode);
+    }
+  }, [controlledViewMode]);
+
+  const handleSetViewMode = useCallback((mode: 'CAD' | 'SHEET') => {
+    setViewMode(mode);
+    if (onViewModeChange) onViewModeChange(mode);
+  }, [onViewModeChange]);
 
   // WebGL camera focus state
   const [webGlFocusBbox, setWebGlFocusBbox] = useState<{ min_x: number; min_y: number; max_x: number; max_y: number } | null>(null);
@@ -1696,7 +1711,7 @@ export default function CadViewer({
           {/* Seamless Mode Switcher Tabs */}
           <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shadow-xs">
             <button
-              onClick={() => setViewMode('CAD')}
+              onClick={() => handleSetViewMode('CAD')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${
                 viewMode === 'CAD'
                   ? 'bg-blue-600 text-white shadow-xs'
@@ -1713,7 +1728,7 @@ export default function CadViewer({
             </button>
 
             <button
-              onClick={() => setViewMode('SHEET')}
+              onClick={() => handleSetViewMode('SHEET')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${
                 viewMode === 'SHEET'
                   ? 'bg-amber-500 text-slate-950 shadow-xs'

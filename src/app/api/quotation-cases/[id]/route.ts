@@ -13,24 +13,27 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (typeof process !== 'undefined') {
+    process.env.NEXT_PUBLIC_EGDESK_API_URL = 'http://localhost:8080';
+  }
+
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   }
 
   const { id } = await params;
-
   try {
     const rawQc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
-  if (!rawQc) {
-    return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
-  }
+    if (!rawQc) {
+      return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
+    }
 
-  const [company, project, creator] = await Promise.all([
-    rawQc.company_id ? db.prepare('SELECT company_name, company_code FROM companies WHERE id = ?').get(rawQc.company_id) as Promise<any> : Promise.resolve(null),
-    rawQc.project_id ? db.prepare('SELECT project_name, project_code FROM projects WHERE id = ?').get(rawQc.project_id) as Promise<any> : Promise.resolve(null),
-    rawQc.created_by_user_id ? db.prepare('SELECT name FROM users WHERE id = ?').get(rawQc.created_by_user_id) as Promise<any> : Promise.resolve(null)
-  ]);
+    const [company, project, creator] = await Promise.all([
+      rawQc.company_id ? db.prepare('SELECT company_name, company_code FROM companies WHERE id = ?').get(rawQc.company_id) as Promise<any> : Promise.resolve(null),
+      rawQc.project_id ? db.prepare('SELECT project_name, project_code FROM projects WHERE id = ?').get(rawQc.project_id) as Promise<any> : Promise.resolve(null),
+      rawQc.created_by_user_id ? db.prepare('SELECT name FROM users WHERE id = ?').get(rawQc.created_by_user_id) as Promise<any> : Promise.resolve(null)
+    ]);
 
   const qc = {
     ...rawQc,
@@ -112,6 +115,7 @@ export async function GET(
       latestParseRun: null
     });
   }
+
   // Auto-cleanup orphaned drawings whose source file was deleted from this case
   if (sourceFiles.length > 0) {
     const validFileIds = new Set(sourceFiles.map((f: any) => f.id));
@@ -349,9 +353,9 @@ export async function GET(
   let cadObjects: any[] = [];
   if (latestParseRun) {
     cadObjects = (await db.prepare(`
-      SELECT * FROM cad_objects
+      SELECT id, parse_run_id, entity_type, layer, color, raw_text, bounding_box_json FROM cad_objects
       WHERE parse_run_id = ?
-      LIMIT 60000
+      LIMIT 1000
     `).all(latestParseRun.id)) as any[];
   }
 
@@ -380,7 +384,7 @@ export async function GET(
   } catch (err: any) {
     console.error(`[GET /api/quotation-cases/${id}] Error:`, err);
     return NextResponse.json(
-      { error: err?.message || '견적건을 불러오는 중 오류가 발생했습니다.' },
+      { error: err?.message || '견적건을 불러오는 중 오류가 발생했습니다.', stack: err?.stack },
       { status: 500 }
     );
   }
