@@ -632,8 +632,30 @@ export default function HomePage() {
       <div className="flex gap-5 items-start">
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
-          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-4 flex flex-col transition-all sticky top-4">
-            {/* Sidebar Header with Collapse Button */}
+          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-4 flex flex-col transition-all sticky top-4 relative">
+            {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 열림 상태에서도 사이드바 우측 외곽 테두리에 11px 노출 -> 호버 시 36px 돌출 */}
+            <button
+              type="button"
+              onClick={handleToggleSidebar}
+              className="absolute left-full top-8 z-30 group cursor-pointer w-9 text-left select-none focus:outline-hidden"
+              title="스마트 견적 관제탑 접기 (도면 넓게 보기)"
+            >
+              <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 text-slate-800 group-hover:text-blue-600 border-y border-r border-l-0 border-slate-300 group-hover:border-blue-400 rounded-r-xl shadow-md group-hover:shadow-2xl transition-all duration-[120ms] ease-out py-3 w-[11px] group-hover:w-9 overflow-hidden relative">
+                {/* 평상시 살짝 보이는 라운드 엣지의 블루 핸들 인디케이터 바 */}
+                <div className="absolute right-[3px] top-1/2 -translate-y-1/2 w-[3px] h-7 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity duration-[100ms]" />
+
+                {/* 호버 시 우측으로 돌출되며 온전하게 표출되는 견출지 콘텐츠 */}
+                <div className="flex flex-col items-center justify-center space-y-1.5 w-9 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
+                  <ChevronLeft className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
+                  <div className="flex flex-col items-center justify-center text-[10px] font-extrabold text-slate-800 group-hover:text-blue-600 leading-[1.15] tracking-tight">
+                    <span>접</span>
+                    <span>기</span>
+                  </div>
+                </div>
+              </div>
+            </button>
+
+            {/* Sidebar Header with Unified Tab Style Collapse Button */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black shadow-2xs">
@@ -647,10 +669,12 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={handleToggleSidebar}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="group flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-600 border border-slate-200 hover:border-blue-300 transition-all duration-120 cursor-pointer text-xs font-bold shadow-2xs"
                 title="사이드바 접기 (도면 넓게 보기)"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-600 group-hover:-translate-x-0.5 transition-transform" />
+                <span>접기</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
               </button>
             </div>
 
