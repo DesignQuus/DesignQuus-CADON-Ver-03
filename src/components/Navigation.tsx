@@ -1,7 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/api';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home, Users, Building2, LayoutDashboard, FileSpreadsheet, Database } from 'lucide-react';
@@ -9,14 +9,23 @@ import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserC
 export default function Navigation() {
   const [user, setUser] = useState<any>(null);
   const [pendingCount, setPendingCount] = useState<number>(0);
+  const lastFetchRef = useRef<number>(0);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
+    // 1. 빠른 캐시 우선 복원 (화면 깜빡임 방지)
     try {
       const cached = localStorage.getItem('cadon_user');
       if (cached) setUser(JSON.parse(cached));
     } catch {}
+
+    const now = Date.now();
+    // 30초 내 동일 세션 재요청 차단 (중복 네트워크 방지)
+    if (now - lastFetchRef.current < 30000 && user) {
+      return;
+    }
+    lastFetchRef.current = now;
 
     apiFetch('/api/auth/me')
       .then((res) => (res.ok ? res.json() : { user: null }))
@@ -46,14 +55,16 @@ export default function Navigation() {
     router.push('/login');
   };
 
+  // 로그인 전용 화면에서는 상단 GNB 숨김
   if (pathname === '/login') return null;
 
   return (
     <header className="no-print print:hidden bg-white border-b border-slate-200 sticky top-0 z-50 shadow-xs">
-      <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div className="w-full px-2.5 sm:px-3 h-16 flex items-center justify-between">
         <div className="flex items-center space-x-4 sm:space-x-6">
           <Link
             href={user?.role === 'SUPER_ADMIN' ? '/admin/companies' : '/'}
+            prefetch={true}
             className="flex items-center space-x-2"
             title={user?.role === 'SUPER_ADMIN' ? '최고관리자 회원사 관리 센터로 이동' : 'CADON 홈 대시보드로 이동'}
           >
@@ -72,13 +83,13 @@ export default function Navigation() {
             </div>
           </Link>
 
-
           <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-slate-200">
             {user?.role === 'SUPER_ADMIN' ? (
-              /* 최고관리자(SaaS 운영자) 전용 메뉴: 견적업무 배제, 회원사 및 테넌트 관리 전용 */
+              /* 최고관리자(SaaS 운영자) 전용 메뉴 */
               <>
                 <Link
                   href="/admin/companies"
+                  prefetch={true}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     pathname.startsWith('/admin/companies')
                       ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
@@ -90,6 +101,7 @@ export default function Navigation() {
                 </Link>
                 <Link
                   href="/admin/audit"
+                  prefetch={true}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     pathname.startsWith('/admin/audit')
                       ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
@@ -101,32 +113,49 @@ export default function Navigation() {
                 </Link>
               </>
             ) : (
-              /* 일반 회원사 실무자 메뉴: 견적의뢰, BOM, 결재 승인, (대표관리자: 사원 관리) */
+              /* 일반 회원사 실무자 메뉴: 대시보드, 견적의뢰 관리, 공식 견적서 관리, 마스터 기준정보 */
               <>
                 <Link
                   href="/"
+                  prefetch={true}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     pathname === '/'
                       ? 'bg-blue-50 text-blue-700 font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
-                  <LayoutDashboard className="w-4 h-4" />
+                  <LayoutDashboard className="w-4 h-4 text-blue-600" />
                   <span>대시보드</span>
                 </Link>
                 <Link
                   href="/cases"
+                  prefetch={true}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
-                    pathname === '/cases'
+                    (pathname === '/cases' || pathname.startsWith('/cases/'))
                       ? 'bg-blue-50 text-blue-700 font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
+                  title={user?.name ? `${user.name} 님의 담당 견적의뢰 관리` : '견적의뢰 관리'}
                 >
-                  <FileText className="w-4 h-4" />
+                  <FileText className="w-4 h-4 text-blue-600" />
                   <span>견적의뢰 관리</span>
+                  {user?.name && user.role !== 'SUPER_ADMIN' && (
+                    <span
+                      className={`ml-1 px-1.5 py-0.2 rounded-full text-[11px] font-black inline-flex items-center gap-0.5 tracking-tight transition-all ${
+                        (pathname === '/cases' || pathname.startsWith('/cases/'))
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                      }`}
+                      title={`${user.name} 담당 진행 견적: ${user.myActiveCasesCount ?? 0}건`}
+                    >
+                      <span className="text-[10px] opacity-85 font-medium">내</span>
+                      <span>{user.myActiveCasesCount ?? 0}</span>
+                    </span>
+                  )}
                 </Link>
                 <Link
                   href="/quotes"
+                  prefetch={true}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     pathname.startsWith('/quotes')
                       ? 'bg-blue-50 text-blue-700 font-bold'
@@ -138,6 +167,7 @@ export default function Navigation() {
                 </Link>
                 <Link
                   href="/admin/masters"
+                  prefetch={true}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     pathname.startsWith('/admin/masters')
                       ? 'bg-blue-50 text-blue-700 font-bold'
@@ -151,6 +181,7 @@ export default function Navigation() {
                 {user?.role === 'TENANT_ADMIN' && (
                   <Link
                     href="/admin/members"
+                    prefetch={true}
                     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                       pathname.startsWith('/admin/members')
                         ? 'bg-blue-50 text-blue-700 font-bold'
@@ -164,6 +195,7 @@ export default function Navigation() {
                 {['SUPER_ADMIN', 'TENANT_ADMIN'].includes(user?.role) && (
                   <Link
                     href="/admin/permissions"
+                    prefetch={true}
                     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                       pathname.startsWith('/admin/permissions')
                         ? 'bg-blue-50 text-blue-700 font-bold'
@@ -212,7 +244,7 @@ export default function Navigation() {
               </div>
               <button
                 onClick={handleLogout}
-                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                 title="로그아웃"
               >
                 <LogOut className="w-5 h-5" />

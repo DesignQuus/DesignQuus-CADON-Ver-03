@@ -50,8 +50,9 @@ export async function GET(req: NextRequest) {
       const allCases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
       cases = allCases.filter((c: any) => {
         const isOwner = c.created_by_user_id === session.userId;
-        const isMyTenant = !c.tenant_id || c.tenant_id === session.tenant_id || c.tenant_id === session.companyId || c.tenant_id === 'tenant-cadon';
-        const hasCompanyAccess = compIds.size === 0 || !c.company_id || c.company_id === 'comp_unassigned' || compIds.has(c.company_id);
+        const userTenant = session.tenant_id || session.companyId;
+        const isMyTenant = !c.tenant_id || c.tenant_id === userTenant || c.tenant_id === 'tenant-cadon' || (userTenant && c.company_id === userTenant);
+        const hasCompanyAccess = compIds.size === 0 || !c.company_id || c.company_id === 'comp_unassigned' || compIds.has(c.company_id) || (userTenant && c.company_id === userTenant);
         const hasVisibility = !c.visibility || c.visibility === 'SHARED' || isOwner;
 
         return (isOwner || (isMyTenant && hasCompanyAccess)) && hasVisibility;

@@ -729,7 +729,7 @@ export default function MasterDataManagerPage() {
                     </tr>
                   ) : (
                     items.map((it, idx) => (
-                      <tr key={it.id} className="hover:bg-slate-50 transition-colors">
+                      <tr key={it.id || it.master_code || `master-item-${idx}`} className="hover:bg-slate-50 transition-colors">
                         <td className="p-3 text-center text-slate-400 font-mono">{idx + 1}</td>
                         <td className="p-3 font-mono font-bold text-slate-900">{it.master_code}</td>
                         <td className="p-3 font-medium text-slate-900">{it.standard_name}</td>

@@ -4,6 +4,7 @@ import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
 import {
   Layers,
   FileText,
@@ -39,12 +40,14 @@ import {
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 
 interface UserProfile {
-  id: string;
+  id?: string;
+  userId?: string;
   name: string;
   loginId: string;
   role: string;
   companyId?: string;
   companyName?: string;
+  myActiveCasesCount?: number;
 }
 
 interface QuotationCase {
@@ -99,7 +102,18 @@ export default function HomePage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [cases, setCases] = useState<QuotationCase[]>([]);
+  const [cases, setCases] = useState<QuotationCase[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('cadon_cached_cases');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
   const [companies, setCompanies] = useState<CompanySummary[]>([]);
   const [auditCount, setAuditCount] = useState<number>(0);
@@ -306,85 +320,104 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    // 1. Check user session
-    apiFetch('/api/auth/me')
-      .then((res) => {
-        if (!res.ok) {
-          router.replace('/login');
-          return null;
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (!data || !data.user) {
+    let isMounted = true;
+
+    async function loadDashboardData() {
+      setLoading(true);
+      try {
+        // 1. Check user session
+        const meRes = await apiFetch('/api/auth/me');
+        if (!meRes.ok) {
           router.replace('/login');
           return;
         }
-        if (data.user.role === 'SUPER_ADMIN') {
+        const meData = await meRes.json();
+        if (!meData || !meData.user) {
+          router.replace('/login');
+          return;
+        }
+        if (meData.user.role === 'SUPER_ADMIN') {
           router.replace('/admin/companies');
           return;
         }
 
-        setUser(data.user);
+        if (!isMounted) return;
+        const normalizedUser: UserProfile = {
+          ...meData.user,
+          id: meData.user.id || meData.user.userId,
+          userId: meData.user.userId || meData.user.id
+        };
+        setUser(normalizedUser);
         try {
-          localStorage.setItem('cadon_user', JSON.stringify(data.user));
+          localStorage.setItem('cadon_user', JSON.stringify(normalizedUser));
         } catch {}
 
-        // 2. Fetch cases
-        apiFetch('/api/quotation-cases')
-          .then((r) => (r.ok ? r.json() : { cases: [] }))
-          .then((cData) => {
-            if (Array.isArray(cData.cases)) {
-              setCases(cData.cases);
-            }
-          })
-          .catch(() => {});
+        // 일반 견적 담당자(SALES_USER)인 경우 내 담당건 뷰 우선 적용
+        if (normalizedUser.role === 'SALES_USER') {
+          setCaseFilter('MY');
+        }
 
-        // 2-B. Fetch quotes for quote amount KPI & recent quotes list
-        apiFetch('/api/quotes')
-          .then((r) => (r.ok ? r.json() : { quotes: [] }))
-          .then((qData) => {
-            if (Array.isArray(qData.quotes)) {
-              setQuotes(qData.quotes);
-            }
-          })
-          .catch(() => {});
+        // 2. Fetch cases, quotes, companies concurrently with Promise.all
+        const [cData, qData, compData] = await Promise.all([
+          apiFetch('/api/quotation-cases')
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          apiFetch('/api/quotes')
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          apiFetch('/api/companies')
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        ]);
 
-        // 2-C. Fetch companies for select dropdown
-        apiFetch('/api/companies')
-          .then((r) => (r.ok ? r.json() : { companies: [] }))
-          .then((compData) => {
-            if (Array.isArray(compData.companies)) {
-              setCompanies(compData.companies);
-            }
-          })
-          .catch(() => {});
+        if (!isMounted) return;
+
+        // Stale-While-Revalidate: 유효한 데이터가 성공적으로 로드된 경우에만 상태 갱신 (오류/지연 시 기존 데이터 안전 보존)
+        if (cData && Array.isArray(cData.cases)) {
+          setCases(cData.cases);
+          try {
+            localStorage.setItem('cadon_cached_cases', JSON.stringify(cData.cases));
+          } catch {}
+        }
+        if (qData && Array.isArray(qData.quotes)) {
+          setQuotes(qData.quotes);
+        }
+        if (compData && Array.isArray(compData.companies)) {
+          setCompanies(compData.companies);
+        }
 
         // 3. If SUPER_ADMIN, fetch company stats and audit logs
-        if (data.user.role === 'SUPER_ADMIN') {
-          apiFetch('/api/companies?include_stats=true')
-            .then((r) => (r.ok ? r.json() : { companies: [] }))
-            .then((compData) => {
-              if (Array.isArray(compData.companies)) {
-                setCompanies(compData.companies);
-              }
-            })
-            .catch(() => {});
-
-          apiFetch('/api/admin/audit-logs?limit=1')
-            .then((r) => (r.ok ? r.json() : { total: 0 }))
-            .then((aData) => {
-              if (typeof aData.total === 'number') {
-                setAuditCount(aData.total);
-              }
-            })
-            .catch(() => {});
+        if (normalizedUser.role === 'SUPER_ADMIN') {
+          const [adminCompRes, auditRes] = await Promise.all([
+            apiFetch('/api/companies?include_stats=true')
+              .then((r) => (r.ok ? r.json() : { companies: [] }))
+              .catch(() => ({ companies: [] })),
+            apiFetch('/api/admin/audit-logs?limit=1')
+              .then((r) => (r.ok ? r.json() : { total: 0 }))
+              .catch(() => ({ total: 0 }))
+          ]);
+          if (!isMounted) return;
+          if (Array.isArray(adminCompRes.companies)) {
+            setCompanies(adminCompRes.companies);
+          }
+          if (typeof auditRes.total === 'number') {
+            setAuditCount(auditRes.total);
+          }
         }
-      })
-      .catch(() => {
-        router.replace('/login');
-      })
-      .finally(() => setLoading(false));
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadDashboardData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
 
   // Statistics calculation
@@ -499,7 +532,7 @@ export default function HomePage() {
   const myActiveCases = useMemo(() => {
     if (!user) return [];
     return activeCases.filter(
-      (c) => c.created_by_user_id === user.id || c.created_by_name === user.name
+      (c) => ((user.userId || user.id) && c.created_by_user_id === (user.userId || user.id)) || (user.name && c.created_by_name === user.name)
     );
   }, [activeCases, user]);
 
@@ -526,7 +559,7 @@ export default function HomePage() {
   const myCasesCount = useMemo(() => {
     if (!user) return 0;
     return cases.filter(
-      (c) => c.created_by_user_id === user.id || c.created_by_name === user.name
+      (c) => ((user.userId || user.id) && c.created_by_user_id === (user.userId || user.id)) || (user.name && c.created_by_name === user.name)
     ).length;
   }, [cases, user]);
 
@@ -534,7 +567,7 @@ export default function HomePage() {
     let result = cases;
     if (caseFilter === 'MY' && user) {
       result = result.filter(
-        (c) => c.created_by_user_id === user.id || c.created_by_name === user.name
+        (c) => ((user.userId || user.id) && c.created_by_user_id === (user.userId || user.id)) || (user.name && c.created_by_name === user.name)
       );
     }
     if (pipelineFilter !== 'ALL') {
@@ -599,33 +632,17 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 p-4 sm:p-6 max-w-[1760px] mx-auto relative">
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 w-full px-1.5 sm:px-2.5 py-3 relative">
             {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 사이드바 접힘 시 좌측 벽면에 11px 노출 -> 호버 시 36px 돌출 */}
+      {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
       {!isSidebarOpen && (
-        <button
-          type="button"
+        <SidebarBookmarkTab
+          mode="expand"
           onClick={handleToggleSidebar}
-          className="fixed left-0 top-32 z-30 group cursor-pointer w-9 text-left select-none focus:outline-hidden"
+          label="관제탑"
+          icon={Layers}
           title="스마트 견적 관제탑 열기"
-        >
-          {/* 시각적 손잡이 & 돌출 본체 (평상시 11px 노출 -> 호버 시 36px 완전 돌출, 120ms 초고속 반응) */}
-          <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 text-slate-800 group-hover:text-blue-600 border-y border-r border-l-0 border-slate-300 group-hover:border-blue-400 rounded-r-xl shadow-md group-hover:shadow-2xl transition-all duration-[120ms] ease-out py-3.5 w-[11px] group-hover:w-9 overflow-hidden relative">
-            {/* 평상시 살짝 보이는 라운드 엣지의 블루 핸들 인디케이터 바 */}
-            <div className="absolute right-[3px] top-1/2 -translate-y-1/2 w-[3px] h-8 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity duration-[100ms]" />
-
-            {/* 호버 시 우측으로 돌출되며 온전하게 표출되는 견출지 콘텐츠 */}
-            <div className="flex flex-col items-center justify-center space-y-2 w-9 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
-              <Layers className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
-              <div className="flex flex-col items-center justify-center text-[10.5px] font-extrabold text-slate-800 group-hover:text-blue-600 leading-[1.2] tracking-tight">
-                <span>관</span>
-                <span>제</span>
-                <span className="h-0.5" />
-                <span>탑</span>
-              </div>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0" />
-            </div>
-          </div>
-        </button>
+        />
       )}
 
       {/* Main Split Layout: Left Control Panel + Right Main Work Table */}
@@ -633,27 +650,13 @@ export default function HomePage() {
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
           <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-4 flex flex-col transition-all sticky top-4 relative">
-            {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 열림 상태에서도 사이드바 우측 외곽 테두리에 11px 노출 -> 호버 시 36px 돌출 */}
-            <button
-              type="button"
+            {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
+            <SidebarBookmarkTab
+              mode="collapse"
               onClick={handleToggleSidebar}
-              className="absolute left-full top-8 z-30 group cursor-pointer w-9 text-left select-none focus:outline-hidden"
+              label="접기"
               title="스마트 견적 관제탑 접기 (도면 넓게 보기)"
-            >
-              <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 text-slate-800 group-hover:text-blue-600 border-y border-r border-l-0 border-slate-300 group-hover:border-blue-400 rounded-r-xl shadow-md group-hover:shadow-2xl transition-all duration-[120ms] ease-out py-3 w-[11px] group-hover:w-9 overflow-hidden relative">
-                {/* 평상시 살짝 보이는 라운드 엣지의 블루 핸들 인디케이터 바 */}
-                <div className="absolute right-[3px] top-1/2 -translate-y-1/2 w-[3px] h-7 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity duration-[100ms]" />
-
-                {/* 호버 시 우측으로 돌출되며 온전하게 표출되는 견출지 콘텐츠 */}
-                <div className="flex flex-col items-center justify-center space-y-1.5 w-9 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
-                  <ChevronLeft className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
-                  <div className="flex flex-col items-center justify-center text-[10px] font-extrabold text-slate-800 group-hover:text-blue-600 leading-[1.15] tracking-tight">
-                    <span>접</span>
-                    <span>기</span>
-                  </div>
-                </div>
-              </div>
-            </button>
+            />
 
             {/* Sidebar Header with Unified Tab Style Collapse Button */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -932,7 +935,7 @@ export default function HomePage() {
                 >
                   <span className="flex items-center gap-1.5">
                     <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>발행 견적서 보관함</span>
+                    <span>공식 견적서대장</span>
                   </span>
                   <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">
                     {quotes.length}건
@@ -1007,16 +1010,25 @@ export default function HomePage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-300">
+              <span className="text-xs text-slate-300 hidden xl:inline">
                 실무 관제 활성: <strong className="text-white">{myActiveCases.length}건</strong> (전사 {activeCases.length}건)
               </span>
+              <Link
+                href="/cases"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-blue-100 hover:text-white border border-white/20 transition-all text-xs font-bold cursor-pointer"
+                title="견적의뢰대장 전체 목록으로 이동"
+              >
+                <span>견적의뢰대장 바로가기</span>
+                <ArrowUpRight className="w-3.5 h-3.5 text-blue-300" />
+              </Link>
               <button
                 type="button"
                 onClick={handleOpenUploadModal}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold shadow-sm transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold shadow-sm transition-all cursor-pointer"
+                title="새로운 CAD 도면을 업로드하여 신규 견적의뢰 생성"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                <span>도면 견적 등록</span>
+                <span>신규 도면 견적 등록</span>
               </button>
             </div>
           </div>
@@ -1175,9 +1187,9 @@ export default function HomePage() {
             <Link
               href="/cases"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs border border-slate-200 hover:border-blue-300 transition-all cursor-pointer"
-              title="견적의뢰 관리 대장 전체 목록으로 이동"
+              title="견적의뢰대장 전체 목록으로 이동"
             >
-              <span>의뢰 대장 바로가기</span>
+              <span>견적의뢰대장 바로가기</span>
               <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600" />
             </Link>
           </div>
@@ -1245,7 +1257,7 @@ export default function HomePage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {paginatedCases.map((c, idx) => {
-                  const isOwner = user && (c.created_by_user_id === user.id || c.created_by_name === user.name);
+                  const uid = user?.userId || user?.id; const isOwner = user && ((uid && c.created_by_user_id === uid) || (user.name && c.created_by_name === user.name));
                   const isDeleted = c.is_deleted || !!c.deleted_at;
                   const companyDisplay = c.company_name === '1' ? '미등록 고객사' : (c.company_name || '고객사 미지정');
                   const globalIdx = (casePage - 1) * pageSize + idx + 1;
@@ -1461,7 +1473,7 @@ export default function HomePage() {
             href="/quotes"
             className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
           >
-            <span>견적서 대장 전체보기</span>
+            <span>공식 견적서대장 전체보기</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>

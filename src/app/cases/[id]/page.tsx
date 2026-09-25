@@ -15,6 +15,7 @@ import CadViewer from '@/components/CadViewer';
 import QuotationDocumentPreview from '@/components/QuotationDocumentPreview';
 import FabricationFeaturesPanel from '@/components/FabricationFeaturesPanel';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
+import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
 
 export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -1922,7 +1923,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const ownerName = permission?.ownerName || qc?.created_by_name || '담당자';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-3 sm:px-4 py-3">
       {/* Top Breadcrumb & Return to Main Navigation Bar */}
       <div className="no-print print:hidden flex flex-wrap items-center justify-between gap-3 bg-white px-5 py-3 rounded-2xl border border-slate-200/90 shadow-2xs">
         <div className="flex items-center space-x-3">
@@ -2601,7 +2602,14 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${isSidebarOpen ? 'gap-4' : ''} items-start w-full relative` : "hidden"}>
           {/* Unified Upload & Files Left Panel (Collapsible) */}
           {isSidebarOpen ? (
-            <div className="w-full lg:w-[340px] xl:w-[360px] shrink-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 animate-in fade-in slide-in-from-left-2">
+            <div className="w-full lg:w-[340px] xl:w-[360px] shrink-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 animate-in fade-in slide-in-from-left-2 relative">
+              {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
+              <SidebarBookmarkTab
+                mode="collapse"
+                onClick={() => setIsSidebarOpen(false)}
+                label="접기"
+                title="도면 등록 패널 접기"
+              />
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
                   <Upload className="w-4 h-4 text-blue-600" />
@@ -2821,33 +2829,16 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             </div>
           ) : null}
 
-          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 추천안 B + 보이지 않는 투명 히트박스(Invisible Hitbox) */}
+          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
           {!isSidebarOpen && (
-            <button
-              type="button"
+            <SidebarBookmarkTab
+              mode="expand"
               onClick={() => setIsSidebarOpen(true)}
-              className="absolute left-0 top-48 z-30 group cursor-pointer w-9 text-left select-none focus:outline-hidden"
+              label="도면등록"
+              icon={Folder}
               title={`도면 등록 패널 열기 (${files.length}개 도면 등록됨)`}
-            >
-              {/* 시각적 손잡이 & 돌출 본체 (평상시 11px 노출 -> 호버 시 36px 완전 돌출, 120ms 초고속 반응) */}
-              <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 text-slate-800 group-hover:text-blue-600 border-y border-r border-l-0 border-slate-300 group-hover:border-blue-400 rounded-r-xl shadow-md group-hover:shadow-2xl transition-all duration-[120ms] ease-out py-3.5 w-[11px] group-hover:w-9 overflow-hidden relative">
-                {/* 평상시 살짝 보이는 라운드 엣지의 블루 핸들 인디케이터 바 */}
-                <div className="absolute right-[3px] top-1/2 -translate-y-1/2 w-[3px] h-8 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity duration-[100ms]" />
-
-                {/* 호버 시 우측으로 돌출되며 온전하게 표출되는 견출지 콘텐츠 */}
-                <div className="flex flex-col items-center justify-center space-y-2.5 w-9 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
-                  <Folder className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
-                  <div className="flex flex-col items-center justify-center text-[11px] font-extrabold text-slate-800 group-hover:text-blue-600 leading-[1.25] tracking-tight">
-                    <span>도</span>
-                    <span>면</span>
-                    <span className="h-1" />
-                    <span>등</span>
-                    <span>록</span>
-                  </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0 translate-y-[3px]" />
-                </div>
-              </div>
-            </button>
+              positionOverride="absolute"
+            />
           )}
 
           {/* 2D Real CAD Vector Viewer (Takes 100% of remaining width!) */}

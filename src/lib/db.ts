@@ -1,20 +1,32 @@
 import fs from 'fs';
 import path from 'path';
 
-// Auto-read .env.development.local if process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID is not yet set
+// Auto-read .env.local and .env.development.local if process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID is not yet set
 if (typeof process !== 'undefined') {
-  try {
-    const envPath = path.join(process.cwd(), '.env.development.local');
-    if (fs.existsSync(envPath)) {
-      const envContent = fs.readFileSync(envPath, 'utf8');
-      for (const line of envContent.split('\n')) {
-        const match = line.match(/^([^=]+)=(.*)$/);
-        if (match) {
-          process.env[match[1].trim()] = match[2].trim();
+  for (const envName of ['.env.local', '.env.development.local', '.env']) {
+    try {
+      const envPath = path.join(process.cwd(), envName);
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        for (const line of envContent.split('\n')) {
+          const match = line.match(/^([^=]+)=(.*)$/);
+          if (match && !process.env[match[1].trim()]) {
+            process.env[match[1].trim()] = match[2].trim();
+          }
         }
       }
-    }
-  } catch (e) {}
+    } catch (e) {}
+  }
+
+  if (!process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID) {
+    process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID = '8dd35536-8cbb-4e1c-bb65-b35f2920cb03';
+  }
+  if (!process.env.NEXT_PUBLIC_EGDESK_ENV) {
+    process.env.NEXT_PUBLIC_EGDESK_ENV = 'development';
+  }
+  if (!process.env.NEXT_PUBLIC_EGDESK_API_KEY) {
+    process.env.NEXT_PUBLIC_EGDESK_API_KEY = '48632c34-0fd1-4b53-b448-b8162e19b925';
+  }
 
   // Enforce local EGDesk endpoint for local dev/preview to eliminate render tunnel latency & auth dropouts
   if (!process.env.NEXT_PUBLIC_EGDESK_API_URL || process.env.NEXT_PUBLIC_EGDESK_API_URL.includes('tunneling-service.onrender.com')) {

@@ -13,7 +13,6 @@ import {
   ArrowRight,
   Lock,
   Building,
-  Info,
   Eye,
   EyeOff
 } from 'lucide-react';
@@ -122,10 +121,6 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleLogin} autoComplete="off" className="space-y-4">
-
-
-
-
           {/* Login ID Input */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -196,6 +191,23 @@ export default function LoginPage() {
             <span>{loading ? '로그인 중...' : '로그인'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
+
+          {/* 김세창 견적담당자 퀵 원클릭 로그인 버튼 */}
+          <div className="pt-1">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => {
+                setLoginId('001');
+                setPassword('1234');
+                executeLogin('001', '1234');
+              }}
+              className="w-full py-2.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 rounded-xl font-semibold text-xs transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+            >
+              <User className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>김세창 견적담당자 (001) 원클릭 로그인</span>
+            </button>
+          </div>
         </form>
 
         {/* Audit Log Guarantee Note */}

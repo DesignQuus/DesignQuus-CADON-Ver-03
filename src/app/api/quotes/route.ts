@@ -19,6 +19,9 @@ export async function GET(req: NextRequest) {
     const statusFilter = searchParams.get('status');
     const search = searchParams.get('search')?.trim().toLowerCase();
 
+    const allUsers = (await db.prepare('SELECT id, name FROM users').all()) as any[];
+    const userMap = new Map(allUsers.map((u: any) => [u.id, u.name]));
+
     let sql = `
       SELECT 
         q.id,
@@ -36,16 +39,13 @@ export async function GET(req: NextRequest) {
         q.total_amount,
         q.quote_date,
         q.is_locked,
-        q.created_at,
         qc.case_no,
         qc.case_name,
         COALESCE(c.company_name, '미지정 고객사') as company_name,
-        u.name as author_name,
         (SELECT COUNT(*) FROM quote_items qi WHERE qi.quote_id = q.id) as item_count
       FROM quotes q
       LEFT JOIN quotation_cases qc ON qc.id = q.quotation_case_id
       LEFT JOIN companies c ON c.id = q.company_id
-      LEFT JOIN users u ON u.id = q.created_by_user_id
       WHERE 1=1
     `;
 
@@ -66,9 +66,14 @@ export async function GET(req: NextRequest) {
       params.push(statusFilter);
     }
 
-    sql += ` ORDER BY q.created_at DESC, q.quote_version DESC`;
+    sql += ` ORDER BY q.rowid DESC, q.quote_version DESC`;
 
     const quotes = (await db.prepare(sql).all(...params)) as any[];
+
+    for (const q of quotes) {
+      q.author_name = userMap.get(q.created_by_user_id) || '담당자';
+      q.created_at = q.quote_date || q.created_at || '';
+    }
 
     // 클라이언트 검색어 필터 (견적번호, 케이스명, 고객사명)
     let filteredQuotes = quotes;

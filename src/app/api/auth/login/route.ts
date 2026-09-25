@@ -33,11 +33,12 @@ export async function POST(req: NextRequest) {
 
     return res;
   } catch (error: any) {
+    console.error('LOGIN ERROR:', error);
     let msg = error.message || '서버 오류';
     if (msg.includes('X-Api-Key') || msg.toLowerCase().includes('unauthorized')) {
       msg = '데이터베이스 인증 연결에 실패했습니다. (API Key 설정을 확인해주세요.)';
     }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: msg, rawError: error?.message, stack: error?.stack }, { status: 500 });
   }
 }
 

@@ -122,7 +122,11 @@ export async function GET(req: NextRequest) {
 
     sql += ` ORDER BY (CASE WHEN COALESCE(pm.unit_price, 0) > 0 THEN 1 ELSE 0 END) DESC, p.id DESC, p.master_code ASC LIMIT 200`;
 
-    const items = await db.prepare(sql).all(...params);
+    const rawItems = await db.prepare(sql).all(...params);
+    const items = (rawItems || []).map((it: any, idx: number) => ({
+      ...it,
+      id: it.p_id || it.id || it.master_code || `pm_item_${idx}`,
+    }));
 
     // 카테고리 통계 집계 (6대 실무 분류)
     const stats = (await db.prepare(`

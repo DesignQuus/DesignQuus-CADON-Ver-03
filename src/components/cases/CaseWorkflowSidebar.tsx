@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
 import {
   UploadCloud,
   FileCode2,
@@ -15,6 +16,7 @@ import {
   Clock,
   Lock,
   ChevronRight,
+  ChevronLeft,
   Plus,
   Copy,
   DownloadCloud,
@@ -82,120 +84,23 @@ export default function CaseWorkflowSidebar({
 }: CaseWorkflowSidebarProps) {
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
-  // 접힌 상태 (Slim Icon Mode)
+  // 접힌 상태 (완전 접힘 & 좌측 견출 탭으로 대체)
   if (isCollapsed) {
-    return (
-      <aside className="w-16 shrink-0 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col items-center py-3 space-y-4 select-none">
-        {/* Expand Button */}
-        <button
-          onClick={onToggleCollapse}
-          className="w-10 h-10 rounded-md bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 flex items-center justify-center transition-colors cursor-pointer"
-          title="파이프라인 사이드바 펼치기"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
-
-        {/* Quick Upload Icon */}
-        <button
-          onClick={onSingleUploadClick}
-          className="w-10 h-10 rounded-md bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-all cursor-pointer shadow-xs"
-          title="도면 파일 업로드 (원스톱 쾌속)"
-        >
-          <UploadCloud className="w-5 h-5" />
-        </button>
-
-        <div className="w-8 border-t border-slate-200 my-1"></div>
-
-        {/* Tab 1: 전체 */}
-        <button
-          onClick={() => onSelectTab('ALL')}
-          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
-            selectedTab === 'ALL' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-          }`}
-          title={`전체 견적의뢰 (${counts.total}건)`}
-        >
-          <Layers className="w-4 h-4" />
-          <span className="text-[9px] font-bold mt-0.5">{counts.total}</span>
-        </button>
-
-        {/* Tab 2: 도면 대기 */}
-        <button
-          onClick={() => onSelectTab('PENDING')}
-          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
-            selectedTab === 'PENDING' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-600 hover:bg-amber-50 hover:text-amber-700'
-          }`}
-          title={`도면 대기 / 분석 대기 (${counts.pending}건)`}
-        >
-          <Clock className="w-4 h-4" />
-          <span className="text-[9px] font-bold mt-0.5">{counts.pending}</span>
-        </button>
-
-        {/* Tab 3: 분석완료 / 매칭중 */}
-        <button
-          onClick={() => onSelectTab('ANALYZED')}
-          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
-            selectedTab === 'ANALYZED' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-700'
-          }`}
-          title={`BOM 분석완료 / 단가 매칭중 (${counts.analyzed}건)`}
-        >
-          <Cpu className="w-4 h-4" />
-          <span className="text-[9px] font-bold mt-0.5">{counts.analyzed}</span>
-        </button>
-
-        {/* Tab 4: 견적준비완료 (단일 건 시 즉시 직행) */}
-        {counts.ready === 1 && latestReadyCase ? (
-          <Link
-            href={`/cases/${latestReadyCase.id}?tab=quote`}
-            className="w-10 h-10 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white flex flex-col items-center justify-center relative cursor-pointer transition-all shadow-xs group"
-            title={`[${latestReadyCase.case_no}] 견적서 즉시 발행 화면으로 직행`}
-          >
-            <Zap className="w-4 h-4 text-emerald-100 group-hover:scale-115 transition-transform" />
-            <span className="text-[8.5px] font-extrabold mt-0.5">발행</span>
-          </Link>
-        ) : (
-          <button
-            onClick={() => onSelectTab('READY_FOR_QUOTE')}
-            className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
-              selectedTab === 'READY_FOR_QUOTE' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
-            }`}
-            title={`견적 준비 완료 (${counts.ready}건)`}
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span className="text-[9px] font-bold mt-0.5">{counts.ready}</span>
-          </button>
-        )}
-
-        <div className="w-8 border-t border-slate-200 my-1"></div>
-
-        {/* 보관함 */}
-        <button
-          onClick={() => onSelectTab('ARCHIVED')}
-          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
-            selectedTab === 'ARCHIVED' ? 'bg-purple-600 text-white shadow-xs' : 'text-purple-600 hover:bg-purple-50'
-          }`}
-          title={`보관함 (${counts.archived ?? 0}건)`}
-        >
-          <span className="text-xs">📦</span>
-          <span className="text-[9px] font-bold mt-0.5">{counts.archived ?? 0}</span>
-        </button>
-
-        {/* 휴지통 */}
-        <button
-          onClick={() => onSelectTab('TRASHED')}
-          className={`w-10 h-10 rounded-md flex flex-col items-center justify-center relative cursor-pointer transition-colors ${
-            selectedTab === 'TRASHED' ? 'bg-rose-600 text-white shadow-xs' : 'text-rose-600 hover:bg-rose-50'
-          }`}
-          title={`휴지통 (${counts.trashed ?? 0}건)`}
-        >
-          <span className="text-xs">🗑️</span>
-          <span className="text-[9px] font-bold mt-0.5">{counts.trashed ?? 0}</span>
-        </button>
-      </aside>
-    );
+    return null;
   }
 
   return (
-    <aside className="w-full lg:w-80 shrink-0 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col overflow-hidden transition-all duration-200">
+    <aside className="w-full lg:w-80 shrink-0 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col transition-all duration-200 relative">
+      {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
+      {onToggleCollapse && (
+        <SidebarBookmarkTab
+          mode="collapse"
+          onClick={onToggleCollapse}
+          label="접기"
+          title="작업 파이프라인 접기 (도면/테이블 넓게 보기)"
+        />
+      )}
+
       {/* Sidebar Header */}
       <div className="p-3.5 border-b border-slate-200 bg-slate-50/80">
         <div className="flex items-center justify-between">
