@@ -448,6 +448,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         setData(json);
         if (!json.files || json.files.length === 0) {
           setIsSidebarOpen(true);
+          setWorkflowStep(1);
         }
         if (json.normalizedItems?.length > 0) {
           if (!selectedNormItem) {

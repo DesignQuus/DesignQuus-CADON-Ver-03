@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-25T13:03:32.617Z
+ * Generated at: 2026-09-25T20:07:51.390Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -81,7 +81,7 @@ export const TABLES = {
   table9: {
     name: 'user_company_access',
     displayName: '사용자-회사 접근 권한',
-    rowCount: 5,
+    rowCount: 6,
     columnCount: 14,
     columns: ['id', '_version', 'user_id', 'company_id', 'access_role', 'is_active', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -116,7 +116,7 @@ export const TABLES = {
   table14: {
     name: 'user_activity_logs',
     displayName: '사용자 감사 활동 로그',
-    rowCount: 218,
+    rowCount: 221,
     columnCount: 20,
     columns: ['id', '_version', 'user_id', 'user_name', 'user_login_id', 'user_role', 'activity_type', 'quotation_case_id', 'case_name', 'details', 'ip_address', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

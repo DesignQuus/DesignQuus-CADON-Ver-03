@@ -35,7 +35,8 @@ import {
   X,
   Loader2,
   User,
-  RotateCcw
+  RotateCcw,
+  FileWarning
 } from 'lucide-react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 
@@ -50,6 +51,8 @@ interface UserProfile {
   myActiveCasesCount?: number;
 }
 
+export type PipelineStage = '0' | '1' | '2' | '3' | '4' | '5';
+
 interface QuotationCase {
   id: string;
   case_no: string;
@@ -57,6 +60,7 @@ interface QuotationCase {
   company_name: string;
   company_code: string;
   lifecycle_stage: string;
+  files_count?: number;
   drawings_count: number;
   bom_items_count: number;
   quote_total_amount?: number;
@@ -501,12 +505,18 @@ export default function HomePage() {
 
   const roleInfo = getRoleBadge(user?.role);
   const [caseFilter, setCaseFilter] = useState<'ALL' | 'MY'>('ALL');
-  const [pipelineFilter, setPipelineFilter] = useState<'ALL' | '1' | '2' | '3' | '4' | '5'>('ALL');
+  const [pipelineFilter, setPipelineFilter] = useState<'ALL' | PipelineStage>('ALL');
   const [casePage, setCasePage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(5);
 
   // 5단계 스마트 분석 파이프라인 판별 헬퍼 (배너-테이블 1:1 연동)
-  const getCasePipelineStage = (c: QuotationCase): '1' | '2' | '3' | '4' | '5' => {
+  // Stage '0': 도면 미첨부 (사전 접수 / 도면 대기)
+  // Stage '1': 도면 파일 접수 완료 (AI 도면 파싱 대기)
+  // Stage '2': AI 형상·치수 파싱 완료 (2D WebGL 60FPS 뷰어 가동)
+  // Stage '3': 가상 BOM 추출 완료 (표제란·계층구조 판독)
+  // Stage '4': 마스터 단가 매칭 / 검토 및 승인 대기
+  // Stage '5': 공식 견적서 발행 완료 (견적번호 채번)
+  const getCasePipelineStage = (c: QuotationCase): PipelineStage => {
     if (c.quote_total_amount && Number(c.quote_total_amount) > 0) return '5';
     if (c.bom_items_count > 0) {
       const stage = (c.lifecycle_stage || '').toUpperCase();
@@ -516,7 +526,8 @@ export default function HomePage() {
       return '3';
     }
     if (c.drawings_count > 0) return '2';
-    return '1';
+    if (c.files_count && c.files_count > 0) return '1';
+    return '0';
   };
 
   // Lifecycle Partitions (휴지통, 보관함, 활성 실무 프로젝트 분리)
@@ -545,10 +556,10 @@ export default function HomePage() {
     });
   }, [activeCases]);
 
-  // 파이프라인 단계별 실시간 건수 집계 (활성 프로젝트 대상, 1~5단계 배타적 할당)
+  // 파이프라인 단계별 실시간 건수 집계 (활성 프로젝트 대상, 0~5단계 배타적 할당)
   const pipelineCounts = useMemo(() => {
     const targetList = caseFilter === 'MY' ? myActiveCases : activeCases;
-    const counts = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+    const counts: Record<PipelineStage, number> = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
     for (const c of targetList) {
       const stage = getCasePipelineStage(c);
       counts[stage]++;
@@ -743,6 +754,36 @@ export default function HomePage() {
               </div>
 
               <div className="space-y-1.5 text-xs">
+                {/* Stage 0: 도면 대기 (사전 접수) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPipelineFilter((prev) => (prev === '0' ? 'ALL' : '0'));
+                    setCasePage(1);
+                  }}
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    pipelineFilter === '0'
+                      ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400/40 shadow-xs'
+                      : 'border-amber-200/80 bg-amber-50/50 hover:bg-amber-100/60 hover:border-amber-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-amber-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                      <FileWarning className="w-3 h-3" />
+                    </span>
+                    <div>
+                      <div className="font-extrabold text-amber-950 flex items-center gap-1">
+                        <span>도면 대기 (사전접수)</span>
+                        <span className="text-[9px] px-1.5 py-0.2 bg-amber-200/90 text-amber-900 rounded font-bold">보완필요</span>
+                      </div>
+                      <div className="text-[10px] text-amber-700">도면 미첨부 의뢰 관리</div>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['0'] > 0 ? 'bg-amber-500 text-white shadow-2xs' : 'bg-slate-100 text-slate-400'}`}>
+                    {pipelineCounts['0']}건
+                  </span>
+                </button>
+
                 {/* Step 1 */}
                 <button
                   type="button"
@@ -760,7 +801,7 @@ export default function HomePage() {
                     <span className="w-5 h-5 rounded-md bg-blue-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">1</span>
                     <div>
                       <div className="font-extrabold text-slate-900">도면 접수</div>
-                      <div className="text-[10px] text-slate-400">DWG 도면 등록 대기</div>
+                      <div className="text-[10px] text-slate-400">DWG 파일 접수·파싱 대기</div>
                     </div>
                   </div>
                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['1'] > 0 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
@@ -1013,6 +1054,24 @@ export default function HomePage() {
               <span className="text-xs text-slate-300 hidden xl:inline">
                 실무 관제 활성: <strong className="text-white">{myActiveCases.length}건</strong> (전사 {activeCases.length}건)
               </span>
+              {pipelineCounts['0'] > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPipelineFilter((prev) => (prev === '0' ? 'ALL' : '0'));
+                    setCasePage(1);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer shadow-xs ${
+                    pipelineFilter === '0'
+                      ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
+                      : 'bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 border border-amber-400/40'
+                  }`}
+                  title="도면 미첨부로 분석 대기 중인 의뢰건만 필터링"
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  <span>도면 보완 필요 <strong>{pipelineCounts['0']}건</strong></span>
+                </button>
+              )}
               <Link
                 href="/cases"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-blue-100 hover:text-white border border-white/20 transition-all text-xs font-bold cursor-pointer"
@@ -1050,6 +1109,7 @@ export default function HomePage() {
                 <span className="text-[11px] font-extrabold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs animate-in fade-in">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
                   <span>
+                    {pipelineFilter === '0' && '도면 대기 (사전 접수 / 보완 필요) 필터링'}
                     {pipelineFilter === '1' && '1단계: 도면 접수 필터링'}
                     {pipelineFilter === '2' && '2단계: AI 형상·치수 파싱 필터링'}
                     {pipelineFilter === '3' && '3단계: 가상 BOM 추출 필터링'}
@@ -1072,7 +1132,9 @@ export default function HomePage() {
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              {pipelineFilter !== 'ALL'
+              {pipelineFilter === '0'
+                ? '고객사로부터 의뢰는 접수되었으나 CAD 도면(DWG/DXF)이 아직 등록되지 않은 건입니다. 도면을 투입하여 실무 파이프라인을 가동하세요.'
+                : pipelineFilter !== 'ALL'
                 ? `상단 5단계 파이프라인에서 [${pipelineFilter}단계]를 선택하여 해당 진행 상태의 건만 집중 모니터링 중입니다.`
                 : caseFilter === 'MY'
                 ? `${user?.name || '담당자'} 담당자님이 등록·관리하는 견적 건입니다. (총 ${myCasesCount}건)`
@@ -1353,9 +1415,13 @@ export default function HomePage() {
                             </span>
                           </div>
                         ) : (
-                          <span className="text-slate-400 font-medium text-[11px]">
-                            도면 미첨부 (0매)
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="inline-flex items-center gap-1 text-amber-700 font-bold text-[11px]">
+                              <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />
+                              도면 미첨부 (0매)
+                            </span>
+                            <span className="text-[10px] text-slate-400 mt-0.5">DWG/DXF 파일 등록 필요</span>
+                          </div>
                         )}
                       </td>
 
@@ -1409,14 +1475,24 @@ export default function HomePage() {
                               도면 {c.drawings_count}매 추출
                             </span>
                           </div>
+                        ) : c.files_count && c.files_count > 0 ? (
+                          <div className="flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                              1/5 도면접수
+                            </span>
+                            <span className="text-[10px] text-blue-600 font-medium mt-0.5">
+                              AI 분석 대기중
+                            </span>
+                          </div>
                         ) : (
                           <div className="flex flex-col items-center">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                              1/5 접수대기
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                              사전접수 (도면대기)
                             </span>
-                            <span className="text-[10px] text-slate-400 font-medium mt-0.5">
-                              CAD 도면 등록필요
+                            <span className="text-[10px] text-amber-600 font-medium mt-0.5">
+                              도면 미첨부 상태
                             </span>
                           </div>
                         )}
@@ -1434,6 +1510,24 @@ export default function HomePage() {
                             <RotateCcw className="w-3 h-3 text-slate-500" />
                             <span>복구</span>
                           </button>
+                        ) : c.drawings_count === 0 && (!c.files_count || c.files_count === 0) ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <Link
+                              href={`/cases/${c.id}?step=1`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-800 text-[11px] font-extrabold border border-blue-200 transition-all cursor-pointer shadow-2xs shrink-0"
+                              title="해당 의뢰건에 CAD 도면 즉시 첨부하기"
+                            >
+                              <Plus className="w-3 h-3 stroke-[3]" />
+                              <span>도면 투입</span>
+                            </Link>
+                            <Link
+                              href={`/cases/${c.id}`}
+                              className="p-1 text-slate-400 group-hover:text-blue-600 transition-colors"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </Link>
+                          </div>
                         ) : (
                           <Link
                             href={`/cases/${c.id}`}

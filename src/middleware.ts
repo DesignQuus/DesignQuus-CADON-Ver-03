@@ -24,6 +24,12 @@ function visitorUpstreamHeaders(request: NextRequest): Record<string, string> {
   return headers;
 }
 
+
+function getProxyApiUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+  return raw.includes('tunneling-service.onrender.com') ? 'http://localhost:8080' : raw;
+}
+
 function workspaceUpstreamHeaders(request: NextRequest): Record<string, string> {
   const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -55,7 +61,7 @@ export async function middleware(request: NextRequest) {
 
       // Read API key and URL from environment
       const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
@@ -88,7 +94,7 @@ export async function middleware(request: NextRequest) {
       const body = await request.text();
 
       const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
@@ -120,7 +126,7 @@ export async function middleware(request: NextRequest) {
       const body = await request.text();
 
       const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
@@ -152,7 +158,7 @@ export async function middleware(request: NextRequest) {
       const body = await request.text();
 
       const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
@@ -184,7 +190,7 @@ export async function middleware(request: NextRequest) {
       const body = await request.text();
 
       const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
@@ -214,7 +220,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__drive_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
 
       const response = await fetch(`${apiUrl}/drive/tools/call`, {
         method: 'POST',
@@ -234,7 +240,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__docs_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
 
       const response = await fetch(`${apiUrl}/docs/tools/call`, {
         method: 'POST',
@@ -254,7 +260,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__slides_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
 
       const response = await fetch(`${apiUrl}/slides/tools/call`, {
         method: 'POST',
@@ -274,7 +280,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__sheets_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
 
       const response = await fetch(`${apiUrl}/sheets/tools/call`, {
         method: 'POST',
@@ -301,7 +307,7 @@ export async function middleware(request: NextRequest) {
       }
       const method = payload.method === 'POST' ? 'POST' : 'GET';
       const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
       const projectId = process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID;
       const egdeskEnv = process.env.NEXT_PUBLIC_EGDESK_ENV;
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
@@ -332,7 +338,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__gmail_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
       const response = await fetch(`${apiUrl}/gmail/tools/call`, {
         method: 'POST',
         headers: workspaceUpstreamHeaders(request),
@@ -351,7 +357,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__apps_script_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
       const response = await fetch(`${apiUrl}/apps-script/tools/call`, {
         method: 'POST',
         headers: workspaceUpstreamHeaders(request),
@@ -370,7 +376,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__visitor_auth_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
 
       const response = await fetch(`${apiUrl}/visitor-auth/tools/call`, {
         method: 'POST',
@@ -390,7 +396,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__visitor_google_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
+      const apiUrl = getProxyApiUrl();
       const headers = visitorUpstreamHeaders(request);
       const authorization = request.headers.get('authorization');
       if (authorization) headers['Authorization'] = authorization;

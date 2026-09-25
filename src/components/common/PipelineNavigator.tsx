@@ -47,13 +47,16 @@ export default function PipelineNavigator({
   showHomeLink = false,
   className = ''
 }: PipelineNavigatorProps) {
+  const isZeroDrawing = caseInfo?.drawingsCount === 0;
+
   const steps = [
     {
       step: 1 as const,
       name: '1. 도면 접수',
-      desc: 'DWG/DXF 파일 접수·등록',
+      desc: isZeroDrawing ? 'DWG/DXF 파일 등록 필요' : 'DWG/DXF 파일 접수·등록',
       href: `/cases/${caseId}?step=1`,
-      icon: FileCheck2
+      icon: FileCheck2,
+      badge: isZeroDrawing ? '도면 대기' : undefined
     },
     {
       step: 2 as const,
@@ -147,7 +150,14 @@ export default function PipelineNavigator({
               {onStepChange && (item.step === 1 || item.step === 2 || item.step === 3) ? (
                 <button
                   type="button"
-                  onClick={() => onStepChange(item.step)}
+                  onClick={() => {
+                    if (isZeroDrawing && item.step > 1) {
+                      alert('현재 의뢰건에 등록된 CAD 도면이 없습니다.\n1단계 [도면 접수]에서 먼저 DWG/DXF 도면 파일을 업로드해 주세요.');
+                      onStepChange(1);
+                      return;
+                    }
+                    onStepChange(item.step);
+                  }}
                   className={classNameStr}
                   title={`${item.name} 화면으로 즉시 전환 (무랙)`}
                 >
@@ -156,6 +166,12 @@ export default function PipelineNavigator({
               ) : (
                 <Link
                   href={item.href}
+                  onClick={(e) => {
+                    if (isZeroDrawing && item.step > 1) {
+                      e.preventDefault();
+                      alert('현재 의뢰건에 등록된 CAD 도면이 없습니다.\n1단계 [도면 접수]에서 먼저 DWG/DXF 도면 파일을 업로드해 주세요.');
+                    }
+                  }}
                   className={classNameStr}
                   title={item.name}
                 >
@@ -188,8 +204,11 @@ export default function PipelineNavigator({
                 <span className="text-slate-300">|</span>
                 <div className="flex items-center space-x-1.5 text-[11px]">
                   {caseInfo.drawingsCount !== undefined && (
-                    <span className="text-slate-500">
-                      도면 <strong className="text-blue-600 font-bold">{caseInfo.drawingsCount}장</strong>
+                    <span className={isZeroDrawing ? "text-amber-700 font-bold" : "text-slate-500"}>
+                      도면{' '}
+                      <strong className={isZeroDrawing ? "text-amber-600 font-extrabold" : "text-blue-600 font-bold"}>
+                        {isZeroDrawing ? '0장 (미등록)' : `${caseInfo.drawingsCount}장`}
+                      </strong>
                     </span>
                   )}
                   {caseInfo.bomCount !== undefined && (
