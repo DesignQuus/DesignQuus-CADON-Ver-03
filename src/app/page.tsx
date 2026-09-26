@@ -652,7 +652,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 w-full px-1.5 sm:px-2.5 py-3 relative">
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 w-full px-2.5 sm:px-3 py-3 relative">
             {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 사이드바 접힘 시 좌측 벽면에 11px 노출 -> 호버 시 36px 돌출 */}
       {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
       {!isSidebarOpen && (

@@ -544,7 +544,7 @@ export default function MasterDataManagerPage() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 shadow-2xs flex items-center justify-between">
+      <header className="bg-white border-b border-slate-200 w-full px-2.5 sm:px-3 py-3.5 shadow-2xs flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <Link href="/cases" className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors">
             <ArrowLeft className="w-5 h-5" />
@@ -586,7 +586,7 @@ export default function MasterDataManagerPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+      <main className="flex-1 w-full px-2.5 sm:px-3 py-4 space-y-4">
         {activeTab === 'products' ? (
           <>
             {/* Top Stat Cards: 6대 실무 분류 */}
