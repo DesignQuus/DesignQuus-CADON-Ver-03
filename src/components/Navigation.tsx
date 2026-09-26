@@ -232,28 +232,30 @@ export default function Navigation() {
         <div className="flex items-center space-x-3">
           {user ? (
             <div className="flex items-center space-x-3">
-              <div className="text-right hidden sm:block">
-                <div className="text-sm font-semibold text-slate-800 flex items-center justify-end space-x-1">
-                  <span>{user.name}</span>
-                  {user.role === 'SUPER_ADMIN' ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800">
-                      최고관리자
-                    </span>
-                  ) : user.role === 'TENANT_ADMIN' ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800">
-                      대표관리자
-                    </span>
-                  ) : user.role === 'REVIEWER' ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-                      검토자
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
-                      영업담당
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs text-slate-500">{user.loginId}</div>
+              <div className="hidden sm:flex items-center space-x-1.5 text-sm">
+                <span className="font-bold text-slate-800">{user.name}</span>
+                {user.loginId && (
+                  <span className="text-xs font-semibold text-slate-400 font-mono tracking-tight">
+                    ({user.loginId})
+                  </span>
+                )}
+                {user.role === 'SUPER_ADMIN' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800">
+                    최고관리자
+                  </span>
+                ) : user.role === 'TENANT_ADMIN' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800">
+                    대표관리자
+                  </span>
+                ) : user.role === 'REVIEWER' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                    검토자
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                    영업담당
+                  </span>
+                )}
               </div>
               <button
                 onClick={handleLogout}
