@@ -670,14 +670,6 @@ export default function HomePage() {
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
           <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-4 flex flex-col transition-all sticky top-4 relative">
-            {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
-            <SidebarBookmarkTab
-              mode="collapse"
-              onClick={handleToggleSidebar}
-              label="접기"
-              title="스마트 견적 관제탑 접기 (도면 넓게 보기)"
-            />
-
             {/* Sidebar Header with Unified Tab Style Collapse Button */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
