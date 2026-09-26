@@ -5,6 +5,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home, Users, Building2, LayoutDashboard, FileSpreadsheet, Database } from 'lucide-react';
+import { prefetchPageData } from '@/lib/cacheStore';
 
 export default function Navigation() {
   const [user, setUser] = useState<any>(null);
@@ -90,6 +91,8 @@ export default function Navigation() {
                 <Link
                   href="/admin/companies"
                   prefetch={true}
+                  onMouseEnter={() => prefetchPageData('/admin/companies')}
+                  onTouchStart={() => prefetchPageData('/admin/companies')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     pathname.startsWith('/admin/companies')
                       ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
@@ -102,6 +105,8 @@ export default function Navigation() {
                 <Link
                   href="/admin/audit"
                   prefetch={true}
+                  onMouseEnter={() => prefetchPageData('/admin/audit')}
+                  onTouchStart={() => prefetchPageData('/admin/audit')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     pathname.startsWith('/admin/audit')
                       ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
@@ -118,6 +123,8 @@ export default function Navigation() {
                 <Link
                   href="/"
                   prefetch={true}
+                  onMouseEnter={() => prefetchPageData('/')}
+                  onTouchStart={() => prefetchPageData('/')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     pathname === '/'
                       ? 'bg-blue-50 text-blue-700 font-bold'
@@ -130,6 +137,8 @@ export default function Navigation() {
                 <Link
                   href="/cases"
                   prefetch={true}
+                  onMouseEnter={() => prefetchPageData('/cases')}
+                  onTouchStart={() => prefetchPageData('/cases')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     (pathname === '/cases' || pathname.startsWith('/cases/'))
                       ? 'bg-blue-50 text-blue-700 font-bold'
@@ -156,6 +165,8 @@ export default function Navigation() {
                 <Link
                   href="/quotes"
                   prefetch={true}
+                  onMouseEnter={() => prefetchPageData('/quotes')}
+                  onTouchStart={() => prefetchPageData('/quotes')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     pathname.startsWith('/quotes')
                       ? 'bg-blue-50 text-blue-700 font-bold'
@@ -168,6 +179,8 @@ export default function Navigation() {
                 <Link
                   href="/admin/masters"
                   prefetch={true}
+                  onMouseEnter={() => prefetchPageData('/admin/masters')}
+                  onTouchStart={() => prefetchPageData('/admin/masters')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
                     pathname.startsWith('/admin/masters')
                       ? 'bg-blue-50 text-blue-700 font-bold'

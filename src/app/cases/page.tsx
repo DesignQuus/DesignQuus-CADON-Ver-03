@@ -7,6 +7,7 @@ import CaseWorkflowSidebar, { WorkflowTab } from '@/components/cases/CaseWorkflo
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
 import { useRouter } from 'next/navigation';
+import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
 import {
   FileText,
   Plus,
@@ -138,7 +139,7 @@ function getRemainingTrashDays(deletedAt: string | null | undefined): number {
 export default function CasesPage() {
   const [cases, setCases] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [showModal, setShowModal] = useState(false);
   const [caseName, setCaseName] = useState('');
   const [companies, setCompanies] = useState<any[]>([]);
@@ -343,6 +344,7 @@ export default function CasesPage() {
         const data = await res.json();
         const compList = data.companies || [];
         setCompanies(compList);
+        setClientCache('companies', data);
         if (compList.length > 0) {
           setCompanyId(compList[0].id);
         }
@@ -358,6 +360,7 @@ export default function CasesPage() {
       if (res.ok) {
         const data = await res.json();
         setOperators(data.operators || []);
+        setClientCache('operators', data);
       }
     } catch (e) {
       console.error('Failed to fetch operators:', e);
@@ -373,10 +376,16 @@ export default function CasesPage() {
       }
       if (res.ok) {
         const data = await res.json();
-        setCases(data.cases || []);
+        const list = data.cases || [];
+        setCases(list);
+        setClientCache('cases', data);
+        try {
+          localStorage.setItem('cadon_cached_cases', JSON.stringify(list));
+        } catch {}
       }
     } catch {
-      setCases([]);
+      // 캐시가 없을 때만 빈 배열 처리
+      setCases((prev) => (prev.length > 0 ? prev : []));
     } finally {
       setLoading(false);
     }
@@ -546,22 +555,41 @@ export default function CasesPage() {
   }, [handleQuickUploadFile, router]);
 
   useEffect(() => {
-    fetchCases();
-    fetchCompanies();
-    fetchOperators();
-    apiFetch('/api/auth/me')
-      .then((res) => (res.ok ? res.json() : { user: null }))
-      .then((data) => {
-        setUser(data.user);
-        if (data.user && !['TENANT_ADMIN', 'SUPER_ADMIN'].includes(data.user.role)) {
-          // 일반 견적 담당자는 로그인 시 '내 담당건' 필터로 기본 적용
-          setFilterManager(data.user.userId);
-        } else {
-          // 대표/관리자는 기본적으로 사내 '모든 담당자' 전체 조회
-          setFilterManager('ALL');
-        }
-      })
-      .catch(() => setUser(null));
+    // 클라이언트 마운트 즉시 캐시 복원 (Hydration 일치 및 0ms 즉시 렌더링)
+    try {
+      const cachedCases = getClientCache('cases')?.cases || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('cadon_cached_cases') || 'null') : null);
+      const cachedUser = getClientCache('user') || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('cadon_user') || 'null') : null);
+      const cachedCompanies = getClientCache('companies')?.companies;
+      const cachedOperators = getClientCache('operators')?.operators;
+
+      if (cachedCases && Array.isArray(cachedCases)) setCases(cachedCases);
+      if (cachedUser) setUser(cachedUser);
+      if (cachedCompanies && Array.isArray(cachedCompanies)) setCompanies(cachedCompanies);
+      if (cachedOperators && Array.isArray(cachedOperators)) setOperators(cachedOperators);
+    } catch {}
+
+    // 비동기 요청들을 완전 병렬로 동시 실행
+    Promise.all([
+      fetchCases(),
+      fetchCompanies(),
+      fetchOperators(),
+      apiFetch('/api/auth/me')
+        .then((res) => (res.ok ? res.json() : { user: null }))
+        .then((data) => {
+          if (data.user) {
+            setUser(data.user);
+            setClientCache('user', data.user);
+            try { localStorage.setItem('cadon_user', JSON.stringify(data.user)); } catch {}
+            if (!['TENANT_ADMIN', 'SUPER_ADMIN'].includes(data.user.role)) {
+              // 일반 견적 담당자는 로그인 시 '내 담당건' 필터로 기본 적용
+              setFilterManager(data.user.userId);
+            } else {
+              setFilterManager('ALL');
+            }
+          }
+        })
+        .catch(() => {})
+    ]);
 
     // 전역 윈도우 드래그 앤 드롭 감지
     let dragCounter = 0;

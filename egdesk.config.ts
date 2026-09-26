@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-25T20:07:51.390Z
+ * Generated at: 2026-09-26T02:21:50.059Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -81,7 +81,7 @@ export const TABLES = {
   table9: {
     name: 'user_company_access',
     displayName: '사용자-회사 접근 권한',
-    rowCount: 6,
+    rowCount: 5,
     columnCount: 14,
     columns: ['id', '_version', 'user_id', 'company_id', 'access_role', 'is_active', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -102,7 +102,7 @@ export const TABLES = {
   table12: {
     name: 'users',
     displayName: '사용자 계정 대장',
-    rowCount: 5,
+    rowCount: 4,
     columnCount: 20,
     columns: ['id', '_version', 'login_id', 'password_hash', 'name', 'role', 'company_id', 'employee_number', 'phone', 'is_active', 'last_login_at', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -116,21 +116,21 @@ export const TABLES = {
   table14: {
     name: 'user_activity_logs',
     displayName: '사용자 감사 활동 로그',
-    rowCount: 221,
+    rowCount: 266,
     columnCount: 20,
     columns: ['id', '_version', 'user_id', 'user_name', 'user_login_id', 'user_role', 'activity_type', 'quotation_case_id', 'case_name', 'details', 'ip_address', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table15: {
     name: 'dwg_conversion_runs',
     displayName: 'DWG 변환 실행 이력',
-    rowCount: 22,
+    rowCount: 23,
     columnCount: 27,
     columns: ['id', '_version', 'source_file_id', 'derived_file_id', 'provider', 'converter_version', 'source_dwg_signature', 'source_dwg_version', 'output_dxf_version', 'status', 'started_at', 'completed_at', 'duration_ms', 'exit_code', 'warning_count', 'warnings_json', 'error_code', 'error_message', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table16: {
     name: 'cad_parse_runs',
     displayName: 'CAD 파싱 실행 이력',
-    rowCount: 19,
+    rowCount: 20,
     columnCount: 18,
     columns: ['id', '_version', 'source_file_id', 'dxf_version', 'total_entities', 'entity_counts_json', 'global_bounds_json', 'status', 'duration_ms', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -179,14 +179,14 @@ export const TABLES = {
   table23: {
     name: 'quote_items',
     displayName: '견적서 명세 품목',
-    rowCount: 1001,
+    rowCount: 1003,
     columnCount: 28,
     columns: ['id', '_version', 'quote_id', 'final_bom_item_id', 'master_id', 'item_no', 'master_code', 'item_name', 'specification', 'material', 'quantity', 'unit', 'unit_price', 'amount', 'price_source', 'price_status', 'drawing_no', 'remark', 'is_included', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table24: {
     name: 'quotes',
     displayName: '견적서 마스터',
-    rowCount: 9,
+    rowCount: 11,
     columnCount: 31,
     columns: ['id', '_version', 'quotation_case_id', 'quote_no', 'quote_version', 'company_id', 'project_id', 'status', 'currency', 'subtotal', 'discount_type', 'discount_rate', 'discount_amount', 'tax_rate', 'tax_amount', 'total_amount', 'quote_date', 'is_locked', 'created_by_user_id', 'approved_by_user_id', 'approved_at', 'override_reason', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -228,28 +228,28 @@ export const TABLES = {
   table30: {
     name: 'bom_approval_records',
     displayName: 'BOM 승인/수정 이력',
-    rowCount: 250,
+    rowCount: 251,
     columnCount: 20,
     columns: ['id', '_version', 'quotation_case_id', 'normalized_item_id', 'selected_master_id', 'decision_type', 'decision_reason', 'difference_notes', 'is_override', 'approved_by_user_id', 'approved_at', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table31: {
     name: 'final_bom_items',
     displayName: '최종 확정 견적 BOM',
-    rowCount: 395,
+    rowCount: 396,
     columnCount: 23,
     columns: ['id', '_version', 'quotation_case_id', 'normalized_item_id', 'final_master_id', 'final_master_code', 'final_name', 'final_spec', 'final_material', 'final_quantity', 'final_unit', 'approval_status', 'approved_by_user_id', 'approved_at', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table32: {
     name: 'flattened_bom_items',
     displayName: '다단계 집계 BOM',
-    rowCount: 1340,
+    rowCount: 1341,
     columnCount: 21,
     columns: ['id', '_version', 'quotation_case_id', 'item_key', 'part_no', 'name', 'specification', 'material', 'total_quantity', 'unit', 'source_drawings_json', 'source_item_ids_json', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table33: {
     name: 'normalized_bom_items',
     displayName: '정규화 BOM 아이템',
-    rowCount: 1340,
+    rowCount: 1341,
     columnCount: 24,
     columns: ['id', '_version', 'quotation_case_id', 'raw_item_id', 'raw_name', 'normalized_name', 'search_name', 'direction', 'spec_candidate', 'material_candidate', 'quantity', 'unit', 'is_quote_included', 'exclude_reason', 'status', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -263,14 +263,14 @@ export const TABLES = {
   table35: {
     name: 'bom_areas',
     displayName: 'BOM 검출 영역',
-    rowCount: 256,
+    rowCount: 257,
     columnCount: 18,
     columns: ['id', '_version', 'quotation_case_id', 'source_file_id', 'drawing_no', 'table_type', 'bbox_json', 'confidence_score', 'status', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table36: {
     name: 'cad_objects',
     displayName: 'CAD 객체 기하 데이터',
-    rowCount: 242482,
+    rowCount: 243337,
     columnCount: 19,
     columns: ['id', '_version', 'parse_run_id', 'handle', 'entity_type', 'layer', 'color', 'raw_text', 'bounding_box_json', 'geometry_data_json', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -284,21 +284,21 @@ export const TABLES = {
   table38: {
     name: 'drawings',
     displayName: '도면 시트 및 표제란',
-    rowCount: 1251,
+    rowCount: 1252,
     columnCount: 28,
     columns: ['id', '_version', 'quotation_case_id', 'source_file_id', 'drawing_index', 'drawing_no_raw', 'drawing_no_normalized', 'drawing_name_raw', 'drawing_name_normalized', 'revision', 'material', 'scale', 'drawing_type', 'is_quote_included', 'exclude_reason', 'frame_bbox_json', 'title_block_bbox_json', 'confidence_score', 'status', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table39: {
     name: 'uploaded_files',
     displayName: '업로드/파생 파일 관리',
-    rowCount: 40,
+    rowCount: 43,
     columnCount: 22,
     columns: ['id', '_version', 'quotation_case_id', 'original_file_name', 'stored_file_name', 'storage_path', 'file_type', 'file_role', 'derived_from_file_id', 'file_size', 'checksum', 'upload_status', 'uploaded_by_user_id', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table40: {
     name: 'quotation_cases',
     displayName: '견적의뢰 건 관리',
-    rowCount: 19,
+    rowCount: 20,
     columnCount: 20,
     columns: ['id', '_version', 'case_no', 'company_id', 'project_id', 'case_name', 'request_date', 'status', 'revision', 'quote_readiness', 'created_by_user_id', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

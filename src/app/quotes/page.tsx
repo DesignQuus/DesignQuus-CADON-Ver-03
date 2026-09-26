@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { getClientCache, setClientCache } from '@/lib/cacheStore';
 import {
   FileSpreadsheet,
   Download,
@@ -45,13 +46,16 @@ interface QuoteItem {
 
 export default function QuotesListPage() {
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'APPROVED' | 'ISSUED'>('ALL');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const fetchQuotes = async () => {
-    setLoading(true);
+    // 캐시가 없을 때만 전체 로딩 스피너 표시
+    if (quotes.length === 0) {
+      setLoading(true);
+    }
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
@@ -60,7 +64,11 @@ export default function QuotesListPage() {
       const res = await apiFetch(`/api/quotes?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        setQuotes(data.quotes || []);
+        const list = data.quotes || [];
+        setQuotes(list);
+        if (statusFilter === 'ALL' && !searchQuery.trim()) {
+          setClientCache('quotes', data);
+        }
       }
     } catch (err) {
       console.error('Fetch quotes error:', err);
@@ -70,6 +78,12 @@ export default function QuotesListPage() {
   };
 
   useEffect(() => {
+    try {
+      const cached = getClientCache<{ quotes?: QuoteItem[] }>('quotes');
+      if (cached?.quotes && Array.isArray(cached.quotes)) {
+        setQuotes(cached.quotes);
+      }
+    } catch {}
     fetchQuotes();
   }, [statusFilter]);
 

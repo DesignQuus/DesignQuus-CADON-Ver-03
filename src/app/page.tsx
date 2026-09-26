@@ -39,6 +39,7 @@ import {
   FileWarning
 } from 'lucide-react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
+import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
 
 interface UserProfile {
   id?: string;
@@ -105,21 +106,11 @@ interface QuoteItem {
 export default function HomePage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [cases, setCases] = useState<QuotationCase[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('cadon_cached_cases');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
+  const [cases, setCases] = useState<QuotationCase[]>([]);
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
   const [companies, setCompanies] = useState<CompanySummary[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+
   const [auditCount, setAuditCount] = useState<number>(0);
   const [downloadingQuoteId, setDownloadingQuoteId] = useState<string | null>(null);
 
@@ -326,18 +317,45 @@ export default function HomePage() {
   useEffect(() => {
     let isMounted = true;
 
+    // 클라이언트 마운트 즉시 캐시 복원 (서버 Hydration 에러 방지 및 0ms 즉시 표출)
+    try {
+      const cachedUser = getClientCache('user') || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('cadon_user') || 'null') : null);
+      const cachedCases = getClientCache('cases')?.cases || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('cadon_cached_cases') || 'null') : null);
+      const cachedQuotes = getClientCache('quotes')?.quotes;
+      const cachedCompanies = getClientCache('companies')?.companies;
+
+      if (cachedUser) setUser(cachedUser);
+      if (cachedCases && Array.isArray(cachedCases)) setCases(cachedCases);
+      if (cachedQuotes && Array.isArray(cachedQuotes)) setQuotes(cachedQuotes);
+      if (cachedCompanies && Array.isArray(cachedCompanies)) setCompanies(cachedCompanies);
+    } catch {}
+
     async function loadDashboardData() {
-      setLoading(true);
+      // 캐시가 전혀 없는 첫 방문일 때만 전체 로딩 인디케이터 표시
+      const hasAnyData = getClientCache('cases') || (typeof window !== 'undefined' && localStorage.getItem('cadon_cached_cases'));
+      if (!hasAnyData) {
+        setLoading(true);
+      }
+
       try {
-        // 1. Check user session
-        const meRes = await apiFetch('/api/auth/me');
-        if (!meRes.ok) {
-          router.replace('/login');
+        // 모든 핵심 API를 워터폴 없이 완전 동시 병렬(Promise.all)로 실행!
+        const [meRes, cData, qData, compData] = await Promise.all([
+          apiFetch('/api/auth/me').catch(() => null),
+          apiFetch('/api/quotation-cases').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          apiFetch('/api/quotes').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          apiFetch('/api/companies').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        ]);
+
+        if (!isMounted) return;
+
+        // 1. 유저 인증 결과 처리
+        if (!meRes || !meRes.ok) {
+          if (!user) router.replace('/login');
           return;
         }
         const meData = await meRes.json();
-        if (!meData || !meData.user) {
-          router.replace('/login');
+        if (!meData?.user) {
+          if (!user) router.replace('/login');
           return;
         }
         if (meData.user.role === 'SUPER_ADMIN') {
@@ -345,49 +363,40 @@ export default function HomePage() {
           return;
         }
 
-        if (!isMounted) return;
         const normalizedUser: UserProfile = {
           ...meData.user,
           id: meData.user.id || meData.user.userId,
           userId: meData.user.userId || meData.user.id
         };
         setUser(normalizedUser);
+        setClientCache('user', normalizedUser);
         try {
           localStorage.setItem('cadon_user', JSON.stringify(normalizedUser));
         } catch {}
 
-        // 일반 견적 담당자(SALES_USER)인 경우 내 담당건 뷰 우선 적용
         if (normalizedUser.role === 'SALES_USER') {
           setCaseFilter('MY');
         }
 
-        // 2. Fetch cases, quotes, companies concurrently with Promise.all
-        const [cData, qData, compData] = await Promise.all([
-          apiFetch('/api/quotation-cases')
-            .then((r) => (r.ok ? r.json() : null))
-            .catch(() => null),
-          apiFetch('/api/quotes')
-            .then((r) => (r.ok ? r.json() : null))
-            .catch(() => null),
-          apiFetch('/api/companies')
-            .then((r) => (r.ok ? r.json() : null))
-            .catch(() => null)
-        ]);
-
-        if (!isMounted) return;
-
-        // Stale-While-Revalidate: 유효한 데이터가 성공적으로 로드된 경우에만 상태 갱신 (오류/지연 시 기존 데이터 안전 보존)
+        // 2. 견적의뢰 목록 (Stale-While-Revalidate 및 전역 캐시 저장)
         if (cData && Array.isArray(cData.cases)) {
           setCases(cData.cases);
+          setClientCache('cases', cData);
           try {
             localStorage.setItem('cadon_cached_cases', JSON.stringify(cData.cases));
           } catch {}
         }
+
+        // 3. 공식 견적서 목록 캐시 저장
         if (qData && Array.isArray(qData.quotes)) {
           setQuotes(qData.quotes);
+          setClientCache('quotes', qData);
         }
+
+        // 4. 고객사 목록 캐시 저장
         if (compData && Array.isArray(compData.companies)) {
           setCompanies(compData.companies);
+          setClientCache('companies', compData);
         }
 
         // 3. If SUPER_ADMIN, fetch company stats and audit logs

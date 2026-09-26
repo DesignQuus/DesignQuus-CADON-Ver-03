@@ -3,11 +3,24 @@ import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
 
+// High-speed server-side memory cache (3.5s TTL for hover prefetch & 0ms instant tab switching)
+const serverCasesCache = new Map<string, { data: any[]; timestamp: number }>();
+export function invalidateCasesCache() {
+  serverCasesCache.clear();
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+    }
+
+    const cacheKey = `${session.userId}_${session.role}_${session.tenant_id || session.companyId}`;
+    const cached = serverCasesCache.get(cacheKey);
+    const requestTimeMs = Date.now();
+    if (cached && requestTimeMs - cached.timestamp < 3500) {
+      return NextResponse.json({ cases: cached.data });
     }
 
     const baseSelect = `
@@ -25,13 +38,23 @@ export async function GET(req: NextRequest) {
       LEFT JOIN projects p ON qc.project_id = p.id
     `;
 
-    const allUsers = (await db.prepare('SELECT id, name FROM users').all()) as any[];
+    // 모든 독립 DB 쿼리를 병렬(Promise.all)로 동시 실행
+    const isSuperOrTenantAdmin = session.role === 'SUPER_ADMIN' || session.role === 'TENANT_ADMIN';
+    const [allUsers, allCases, accessibleCompanies] = await Promise.all([
+      db.prepare('SELECT id, name FROM users').all() as Promise<any[]>,
+      db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all() as Promise<any[]>,
+      isSuperOrTenantAdmin
+        ? Promise.resolve([])
+        : (db.prepare(`
+            SELECT company_id FROM user_company_access
+            WHERE user_id = ? AND is_active = 1
+          `).all(session.userId) as Promise<any[]>)
+    ]);
+
     const userMap = new Map(allUsers.map((u: any) => [u.id, u.name]));
 
     let cases: any[];
-    if (session.role === 'SUPER_ADMIN' || session.role === 'TENANT_ADMIN') {
-      // 시스템 최고관리자 및 회원사 대표: 소속 테넌트/전사 견적건 전체 조회 가능
-      const allCases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
+    if (isSuperOrTenantAdmin) {
       if (session.role === 'SUPER_ADMIN') {
         cases = allCases;
       } else {
@@ -41,13 +64,7 @@ export async function GET(req: NextRequest) {
         );
       }
     } else {
-      const accessibleCompanies = (await db.prepare(`
-        SELECT company_id FROM user_company_access
-        WHERE user_id = ? AND is_active = 1
-      `).all(session.userId)) as any[];
       const compIds = new Set(accessibleCompanies.map((c: any) => c.company_id));
-
-      const allCases = (await db.prepare(`${baseSelect} ORDER BY qc.rowid DESC`).all()) as any[];
       cases = allCases.filter((c: any) => {
         const isOwner = c.created_by_user_id === session.userId;
         const userTenant = session.tenant_id || session.companyId;
@@ -60,19 +77,19 @@ export async function GET(req: NextRequest) {
     }
 
     const RETENTION_DAYS = 30;
-    const nowMs = Date.now();
     for (const c of cases) {
       c.created_by_name = userMap.get(c.created_by_user_id) || '담당자';
       c.is_deleted = !!c.deleted_at || c.status === 'DELETED';
       if (c.deleted_at) {
         const deletedMs = new Date(c.deleted_at).getTime();
-        const elapsedDays = Math.floor((nowMs - deletedMs) / (1000 * 60 * 60 * 24));
+        const elapsedDays = Math.floor((requestTimeMs - deletedMs) / (1000 * 60 * 60 * 24));
         c.remaining_days = Math.max(0, RETENTION_DAYS - elapsedDays);
       } else {
         c.remaining_days = null;
       }
     }
 
+    serverCasesCache.set(cacheKey, { data: cases, timestamp: requestTimeMs });
     return NextResponse.json({ cases });
   } catch (err: any) {
     console.error('[quotation-cases GET Error]:', err);
@@ -81,6 +98,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  invalidateCasesCache();
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
