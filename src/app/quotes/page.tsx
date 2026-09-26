@@ -131,7 +131,7 @@ export default function QuotesListPage() {
     <div className="min-h-screen bg-slate-50 pb-16">
       {/* 1. Page Header */}
       <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="w-full px-3 sm:px-5 lg:px-6 py-5">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <div className="flex items-center space-x-2 text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
@@ -216,7 +216,7 @@ export default function QuotesListPage() {
       </div>
 
       {/* 3. Main List Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+      <div className="w-full px-3 sm:px-5 lg:px-6 mt-4">
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
           {/* Toolbar */}
           <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -298,7 +298,7 @@ export default function QuotesListPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                   {quotes.map((q) => (
-                    <tr key={q.id} className="hover:bg-blue-50/30 transition-colors">
+                    <tr key={q.id} className="hover:bg-blue-50/50 transition-colors">
                       {/* Quote No */}
                       <td className="py-3 px-4 font-mono font-bold text-blue-700">
                         <Link
