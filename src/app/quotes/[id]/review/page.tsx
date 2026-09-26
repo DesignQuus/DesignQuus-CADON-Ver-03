@@ -1807,129 +1807,142 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       />
 
       {/* 1. 상단 워크스페이스 헤더 */}
-      <header className="bg-white border-b border-slate-200 px-5 py-2 flex items-center justify-between z-10 shrink-0">
-        <div className="flex items-center gap-3">
+      <header className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between z-10 shrink-0 gap-3">
+        {/* 좌측: 단계 뱃지 & 건명 */}
+        <div className="flex items-center gap-2.5 shrink-0">
           <Link
             href={`/cases/${caseId}`}
-            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
+            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors shrink-0"
             title="도면·BOM 검증으로 돌아가기 (0초 무랙)"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">
-                4단계 : 마스터 단가 매칭 & 검토
+              <span className="text-[11px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200 whitespace-nowrap">
+                4단계 : 마스터 단가 매칭
               </span>
-              <span className="text-xs text-slate-400 font-mono">{caseInfo?.case_no || caseId}</span>
+              <span className="text-xs text-slate-400 font-mono whitespace-nowrap">{caseInfo?.case_no || caseId}</span>
             </div>
-            <h1 className="text-sm font-bold text-slate-900 mt-0.5">
+            <h1 className="text-sm font-bold text-slate-900 mt-0.5 truncate max-w-[200px]" title={caseInfo?.case_name || '견적 검토'}>
               {caseInfo?.case_name || '견적 검토'}
             </h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 text-xs">
-          <div className="hidden md:flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
-            <span>원가 합계: <strong className="font-mono text-slate-700">₩{totalCost.toLocaleString()}</strong></span>
+        {/* 우측: 요약 지표 & 액션 버튼 그룹 */}
+        <div className="flex items-center gap-2 text-xs shrink-0 flex-nowrap">
+          {/* 금액 요약 뱃지 */}
+          <div className="hidden xl:flex items-center gap-2.5 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 text-xs shrink-0 whitespace-nowrap">
+            <span>원가: <strong className="font-mono text-slate-700 font-semibold">₩{totalCost.toLocaleString()}</strong></span>
             <span className="text-slate-300">|</span>
-            <span>공급 합계: <strong className="font-mono text-blue-700 font-bold">₩{totalSupply.toLocaleString()}</strong></span>
+            <span>공급: <strong className="font-mono text-blue-700 font-bold">₩{totalSupply.toLocaleString()}</strong></span>
             <span className="text-slate-300">|</span>
-            <span>평균 마진: <strong className="font-mono text-emerald-700 font-bold">{avgMargin}%</strong></span>
+            <span>마진: <strong className="font-mono text-emerald-700 font-bold">{avgMargin}%</strong></span>
           </div>
 
           {/* ⭐ 1순위: 사내 마스터 단가 자동 매칭 버튼 */}
           <button
             onClick={handleAutoMatchMasterPrices}
             disabled={matchingMaster}
-            className={`px-3.5 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow-xs border transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs border transition-all cursor-pointer whitespace-nowrap shrink-0 text-xs ${
               matchingMaster
                 ? 'bg-amber-100 text-amber-800 border-amber-300 cursor-wait'
                 : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 hover:border-emerald-400'
             }`}
-            title="사내 마스터 단가표에 등록된 확정 단가를 품명/도번 일치 품목에 1초 만에 자동 매칭하고 견적 DB에 영구 저장합니다."
+            title="사내 마스터 및 과거 수주 단가표에 등록된 확정 단가를 품명/도번 일치 품목에 1초 만에 자동 매칭하고 견적 DB에 영구 저장합니다."
           >
             {matchingMaster ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600 shrink-0" />
             ) : (
-              <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-400 shrink-0" />
             )}
-            <span>{matchingMaster ? '단가 매칭 중...' : '⭐ 마스터 단가 자동 매칭'}</span>
+            <span>{matchingMaster ? '매칭 중...' : '⭐ 마스터 자동 매칭'}</span>
           </button>
 
           {/* ⚡ 2순위 AI 공학 표준원가 일괄 산출 버튼 */}
           <button
             onClick={handleCalculateEngineeringCosts}
             disabled={calculatingEngineering}
-            className={`px-3.5 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow-xs border transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs border transition-all cursor-pointer whitespace-nowrap shrink-0 text-xs ${
               calculatingEngineering
                 ? 'bg-amber-100 text-amber-800 border-amber-300 cursor-wait'
-                : 'bg-linear-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-amber-600 shadow-sm'
+                : 'bg-linear-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-amber-600 shadow-2xs'
             }`}
             title="DB에 없는 신규 품목에 대해 [바운딩박스 체적 × 재질 비중 × 소재 단가] + [표준 가공비] 공학 원가를 자동 산출하여 기본값으로 주입합니다."
           >
             {calculatingEngineering ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
             ) : (
-              <Zap className="w-3.5 h-3.5 fill-white" />
+              <Zap className="w-3.5 h-3.5 fill-white shrink-0" />
             )}
-            <span>{calculatingEngineering ? '공학 표준원가 산출 중...' : '⚡ AI 공학 표준원가 일괄 산출'}</span>
+            <span>{calculatingEngineering ? '산출 중...' : '⚡ AI 공학원가 산출'}</span>
           </button>
 
           {/* 📋 사내 마스터 단가표 참고 드로어 토글 버튼 */}
           <button
             onClick={() => setIsMasterDrawerOpen(true)}
-            className="px-3 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs border transition-all cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 hover:border-blue-300 text-xs"
+            className="px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 shadow-2xs border transition-all cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 hover:border-blue-300 text-xs whitespace-nowrap shrink-0"
             title="사내 표준 마스터 단가, 원자재 kg 시세 및 공정 임률표를 실시간으로 확인합니다 (단축키 F7)"
           >
-            <Database className="w-3.5 h-3.5 text-blue-600" />
-            <span>📋 마스터 단가표 (F7)</span>
+            <Database className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>단가표 (F7)</span>
           </button>
 
           {/* 마스터 기준정보 관리 이동 버튼 */}
           <Link
             href="/admin/masters"
             target="_blank"
-            className="hidden lg:flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs transition-colors shadow-2xs"
-            title="표준 품목, 기준단가 및 소재/가공 임률 설정 관리"
+            className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs transition-colors shadow-2xs whitespace-nowrap shrink-0"
+            title="표준 품목, 기준단가 및 소재/가공 임률 설정 관리 (새 창)"
           >
-            <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-            <span>기준정보 관리</span>
+            <ExternalLink className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span>기준정보</span>
           </Link>
 
-          {/* ℹ️ 워크스페이스 이용 안내 모달 호출 버튼 */}
+          {/* ℹ️ 이용 안내 모달 호출 버튼 */}
           <button
             onClick={() => setIsPilotModalOpen(true)}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 font-bold text-xs transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+            className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 font-bold text-xs transition-all shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
             title="견적 검토 워크스페이스 이용 안내 창을 다시 엽니다"
           >
             <HelpCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
             <span>이용 안내</span>
           </button>
 
+          {/* 결재 상신 버튼 */}
           <button
             onClick={handleSubmitQuote}
             disabled={unconfirmedCount > 0 || zeroPriceCount > 0 || submittingQuote}
-            className={`px-4 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow-sm transition-colors ${
+            className={`px-3.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-sm transition-colors whitespace-nowrap shrink-0 text-xs ${
               unconfirmedCount > 0 || zeroPriceCount > 0
-                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                ? 'bg-slate-200 text-slate-500 border border-slate-300 cursor-not-allowed'
                 : submittingQuote
                 ? 'bg-emerald-700 text-white cursor-wait opacity-80'
                 : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
             }`}
+            title={
+              zeroPriceCount > 0
+                ? `단가 미확보(0원) 품목이 ${zeroPriceCount}건 남아있어 결재 상신이 불가합니다. 단가를 입력하거나 [사급품]/[견적제외] 처리해 주세요.`
+                : unconfirmedCount > 0
+                ? `미확정 품목이 ${unconfirmedCount}건 남아있습니다.`
+                : '최종 결재 상신 및 공식 견적서 발행 화면으로 이동합니다.'
+            }
           >
             {submittingQuote ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
+              <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="w-3.5 h-3.5 shrink-0" />
             )}
-            {submittingQuote
-              ? '견적서 생성 및 이동 중...'
-              : zeroPriceCount > 0
-              ? `결재 상신 불가 (단가 미확보 ${zeroPriceCount}건)`
-              : unconfirmedCount > 0
-              ? `결재 상신 (${unconfirmedCount}행 미확정)`
-              : '결재 상신'}
+            <span>
+              {submittingQuote
+                ? '이동 중...'
+                : zeroPriceCount > 0
+                ? `결재 상신 (미확보 ${zeroPriceCount}건)`
+                : unconfirmedCount > 0
+                ? `결재 상신 (미확정 ${unconfirmedCount}건)`
+                : '결재 상신'}
+            </span>
           </button>
         </div>
       </header>
