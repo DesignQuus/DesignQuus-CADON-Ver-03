@@ -665,19 +665,11 @@ export default function HomePage() {
         />
       )}
 
-      {/* Main Split Layout: Left Control Panel + Right Main Work Table (Tight gap to eliminate whitespace) */}
-      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-2.5 lg:gap-3' : 'gap-0'}`}>
+      {/* Main Split Layout: Left Control Panel + Right Main Work Table */}
+      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-3 lg:gap-4' : 'gap-0'}`}>
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
-          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-4 flex flex-col transition-all sticky top-4 relative">
-            {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
-            <SidebarBookmarkTab
-              mode="collapse"
-              onClick={handleToggleSidebar}
-              label="접기"
-              title="관제탑 접기"
-            />
-
+          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-3.5 flex flex-col transition-all sticky top-4 relative">
             {/* Sidebar Header with Unified Tab Style Collapse Button */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
@@ -762,7 +754,7 @@ export default function HomePage() {
                 )}
               </div>
 
-              <div className="space-y-1.5 text-xs">
+              <div className="space-y-1 text-xs">
                 {/* Stage 0: 도면 대기 (사전 접수) */}
                 <button
                   type="button"
@@ -770,7 +762,7 @@ export default function HomePage() {
                     setPipelineFilter((prev) => (prev === '0' ? 'ALL' : '0'));
                     setCasePage(1);
                   }}
-                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '0'
                       ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400/40 shadow-xs'
                       : 'border-amber-200/80 bg-amber-50/50 hover:bg-amber-100/60 hover:border-amber-300'
@@ -800,7 +792,7 @@ export default function HomePage() {
                     setPipelineFilter((prev) => (prev === '1' ? 'ALL' : '1'));
                     setCasePage(1);
                   }}
-                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '1'
                       ? 'border-blue-400 bg-blue-50/70 ring-2 ring-blue-400/40 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
@@ -825,7 +817,7 @@ export default function HomePage() {
                     setPipelineFilter((prev) => (prev === '2' ? 'ALL' : '2'));
                     setCasePage(1);
                   }}
-                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '2'
                       ? 'border-indigo-400 bg-indigo-50/70 ring-2 ring-indigo-400/40 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
@@ -850,7 +842,7 @@ export default function HomePage() {
                     setPipelineFilter((prev) => (prev === '3' ? 'ALL' : '3'));
                     setCasePage(1);
                   }}
-                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '3'
                       ? 'border-indigo-500 bg-indigo-50/80 ring-2 ring-indigo-500/40 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
@@ -875,7 +867,7 @@ export default function HomePage() {
                     setPipelineFilter((prev) => (prev === '4' ? 'ALL' : '4'));
                     setCasePage(1);
                   }}
-                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '4'
                       ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-400/40 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
@@ -900,17 +892,17 @@ export default function HomePage() {
                     setPipelineFilter((prev) => (prev === '5' ? 'ALL' : '5'));
                     setCasePage(1);
                   }}
-                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '5'
                       ? 'border-emerald-400 bg-emerald-50/70 ring-2 ring-emerald-400/40 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-emerald-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">5</span>
+                    <span className="w-5 h-5 rounded-md bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">5</span>
                     <div>
                       <div className="font-extrabold text-slate-900">공식 견적서 발행</div>
-                      <div className="text-[10px] text-slate-400">견적번호 채번 및 엑셀</div>
+                      <div className="text-[10px] text-slate-400">견적채번 완료 및 엑셀</div>
                     </div>
                   </div>
                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['5'] > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
@@ -1033,7 +1025,7 @@ export default function HomePage() {
         )}
 
         {/* RIGHT MAIN WORKSPACE: Cases Table & Recent Quotes (Maximized Height, Zero Scroll!) */}
-        <div className="flex-1 min-w-0 space-y-5">
+        <div className="flex-1 min-w-0 space-y-3">
           {/* Top Slim Welcome Strip */}
           <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 rounded-2xl py-3.5 px-6 text-white shadow-md flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
