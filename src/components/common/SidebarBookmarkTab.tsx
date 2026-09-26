@@ -48,7 +48,7 @@ export default function SidebarBookmarkTab({
         type="button"
         onClick={onClick}
         className={`${posClass} group cursor-pointer w-auto text-left select-none focus:outline-hidden ${className}`}
-        title={title || `${label} 펼치기 (사이드바 열기)`}
+        title={title || `${label} 펼치기`}
       >
         {/* 시각적 손잡이 & 돌출 본체 (평상시 11px 노출 -> 호버 시 36px 완전 돌출, 120ms 초고속 반응) */}
         <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 text-slate-800 group-hover:text-blue-600 border-y border-r border-l-0 border-slate-300 group-hover:border-blue-400 rounded-r-xl shadow-md group-hover:shadow-2xl transition-all duration-[120ms] ease-out py-3.5 w-[11px] group-hover:w-9 overflow-hidden relative">
@@ -80,7 +80,7 @@ export default function SidebarBookmarkTab({
       type="button"
       onClick={onClick}
       className={`${posClass} group cursor-pointer w-auto text-left select-none focus:outline-hidden ${className}`}
-      title={title || `${label} 접기 (도면/테이블 넓게 보기)`}
+      title={title || `${label}`}
     >
       <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 text-slate-800 group-hover:text-blue-600 border-y border-r border-l-0 border-slate-300 group-hover:border-blue-400 rounded-r-xl shadow-md group-hover:shadow-xl transition-all duration-[120ms] ease-out py-3 w-[11px] group-hover:w-8 overflow-hidden relative">
         {/* 평상시 살짝 보이는 라운드 엣지의 블루 핸들 인디케이터 바 */}

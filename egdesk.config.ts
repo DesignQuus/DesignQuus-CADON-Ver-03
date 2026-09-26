@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-26T04:59:01.349Z
+ * Generated at: 2026-09-26T22:49:12.659Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -46,7 +46,7 @@ export const TABLES = {
   table4: {
     name: 'price_history_v2',
     displayName: 'v2.0 수량구간별 단가 이력',
-    rowCount: 426,
+    rowCount: 502,
     columnCount: 29,
     columns: ['id', '_version', 'part_master_id', 'part_key', 'quotation_case_id', 'quote_item_id', 'qty_tier', 'lot_quantity', 'material_cost', 'process_cost', 'subtotal_cost', 'margin_rate', 'unit_price', 'material_base_date', 'price_basis_type', 'basis_calc_json', 'is_ordered', 'confirmed_by', 'effective_from', 'effective_to', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -116,7 +116,7 @@ export const TABLES = {
   table14: {
     name: 'user_activity_logs',
     displayName: '사용자 감사 활동 로그',
-    rowCount: 267,
+    rowCount: 279,
     columnCount: 20,
     columns: ['id', '_version', 'user_id', 'user_name', 'user_login_id', 'user_role', 'activity_type', 'quotation_case_id', 'case_name', 'details', 'ip_address', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

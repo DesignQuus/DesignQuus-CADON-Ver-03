@@ -665,8 +665,8 @@ export default function HomePage() {
         />
       )}
 
-      {/* Main Split Layout: Left Control Panel + Right Main Work Table */}
-      <div className="flex gap-5 lg:gap-8 items-start">
+      {/* Main Split Layout: Left Control Panel + Right Main Work Table (Tight gap to eliminate whitespace) */}
+      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-2.5 lg:gap-3' : 'gap-0'}`}>
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
           <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-4 flex flex-col transition-all sticky top-4 relative">
@@ -675,7 +675,7 @@ export default function HomePage() {
               mode="collapse"
               onClick={handleToggleSidebar}
               label="접기"
-              title="스마트 견적 관제탑 접기 (도면 넓게 보기)"
+              title="관제탑 접기"
             />
 
             {/* Sidebar Header with Unified Tab Style Collapse Button */}
