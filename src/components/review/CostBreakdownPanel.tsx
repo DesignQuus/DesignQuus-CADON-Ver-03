@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Coins, AlertTriangle, Layers, Calculator, Database, Save, CheckCircle2, RefreshCw, Zap } from 'lucide-react';
+import { Coins, AlertTriangle, Layers, Calculator, Database, Save, CheckCircle2, RefreshCw, Zap, Sparkles } from 'lucide-react';
 import { QuoteReviewLine } from './QuoteLineGrid';
 import { apiFetch } from '@/lib/api';
 import { stringifyRemark } from '@/lib/remark-cost-helper';
@@ -243,7 +243,7 @@ export default function CostBreakdownPanel({
           </span>
           {topMasterPrice && topMasterPrice > 0 ? (
             <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shrink-0 shadow-2xs">
-              📋 마스터 등록품 (₩{topMasterPrice.toLocaleString()})
+              📋 마스터 추천 단가 (₩{topMasterPrice.toLocaleString()})
             </span>
           ) : (
             <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0 shadow-2xs">
@@ -278,46 +278,70 @@ export default function CostBreakdownPanel({
             </button>
           )}
 
-          {/* 🚀 마스터 DB 영구 적재 / 갱신 버튼 */}
-          <button
-            onClick={handleSaveToMaster}
-            disabled={savingMaster || line.supplyPrice <= 0 || isPriceMasterMatched}
-            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-2xs ${
-              masterSaved
-                ? 'bg-emerald-600 text-white'
-                : isPriceMasterMatched
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 opacity-90 cursor-default'
-                : isPriceMasterDiff
-                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 ring-1 ring-amber-200 cursor-pointer'
-                : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer'
-            }`}
-            title={
-              isPriceMasterMatched
-                ? '현재 공급단가가 이미 사내 표준 마스터 DB 단가와 일치합니다.'
-                : isPriceMasterDiff
-                ? `기존 마스터 단가(₩${topMasterPrice?.toLocaleString()})를 현재 단가(₩${line.supplyPrice.toLocaleString()})로 갱신합니다.`
-                : '이 품목과 확정 단가를 사내 표준 마스터 DB에 신규 등록하여 향후 견적 시 자동 추천되도록 학습시킵니다.'
-            }
-          >
-            {savingMaster ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-            ) : masterSaved ? (
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            ) : isPriceMasterMatched ? (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            ) : (
-              <Database className="w-3.5 h-3.5 text-indigo-600" />
-            )}
-            <span>
-              {masterSaved
-                ? '마스터 등록 완료'
-                : isPriceMasterMatched
-                ? `✓ 마스터 프라이스 일치 (₩${topMasterPrice?.toLocaleString()})`
-                : isPriceMasterDiff
-                ? `기존 ₩${topMasterPrice?.toLocaleString()} ➔ ₩${line.supplyPrice.toLocaleString()} 프라이스 갱신`
-                : '+ 마스터 프라이스 신규 등록'}
-            </span>
-          </button>
+          {/* 💡 단가 0원일 때: 추천 마스터가 원클릭 즉시 적용 버튼 표출 */}
+          {line.supplyPrice <= 0 && topMasterPrice && topMasterPrice > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                const sPrice = Number(topMasterPrice);
+                const uCost = Math.round(sPrice * 0.82);
+                onUpdateLine({
+                  supplyPrice: sPrice,
+                  unitCost: uCost,
+                  materialCost: Math.round(uCost * 0.45),
+                  processCost: Math.round(uCost * 0.45),
+                  treatmentCost: Math.round(uCost * 0.1),
+                  priceSource: 'MASTER_MATCH'
+                });
+              }}
+              className="px-3 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 cursor-pointer animate-pulse"
+              title={`사내 마스터 추천 단가(₩${topMasterPrice.toLocaleString()})를 본 품목에 즉시 채택합니다.`}
+            >
+              <Sparkles className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
+              <span>⭐ 마스터가(₩{topMasterPrice.toLocaleString()}) 적용</span>
+            </button>
+          ) : (
+            /* 🚀 마스터 DB 영구 적재 / 갱신 버튼 (공급단가가 0원 초과일 때만 유효) */
+            <button
+              onClick={handleSaveToMaster}
+              disabled={savingMaster || line.supplyPrice <= 0 || isPriceMasterMatched}
+              className={`px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-2xs ${
+                masterSaved
+                  ? 'bg-emerald-600 text-white'
+                  : isPriceMasterMatched
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 opacity-90 cursor-default'
+                  : isPriceMasterDiff && line.supplyPrice > 0
+                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 ring-1 ring-amber-200 cursor-pointer'
+                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer'
+              }`}
+              title={
+                isPriceMasterMatched
+                  ? '현재 공급단가가 이미 사내 표준 마스터 DB 단가와 일치합니다.'
+                  : isPriceMasterDiff && line.supplyPrice > 0
+                  ? `기존 마스터 단가(₩${topMasterPrice?.toLocaleString()})를 현재 단가(₩${line.supplyPrice.toLocaleString()})로 갱신합니다.`
+                  : '이 품목과 확정 단가를 사내 표준 마스터 DB에 신규 등록하여 향후 견적 시 자동 추천되도록 학습시킵니다.'
+              }
+            >
+              {savingMaster ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : masterSaved ? (
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              ) : isPriceMasterMatched ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <Database className="w-3.5 h-3.5 text-indigo-600" />
+              )}
+              <span>
+                {masterSaved
+                  ? '마스터 등록 완료'
+                  : isPriceMasterMatched
+                  ? `✓ 마스터 프라이스 일치 (₩${topMasterPrice?.toLocaleString()})`
+                  : isPriceMasterDiff && line.supplyPrice > 0
+                  ? `기존 ₩${topMasterPrice?.toLocaleString()} ➔ ₩${line.supplyPrice.toLocaleString()} 프라이스 갱신`
+                  : '+ 마스터 프라이스 신규 등록'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -709,6 +733,10 @@ export default function CostBreakdownPanel({
                 <span className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
                   ✓ 마스터 표준 일치
                 </span>
+              ) : line.supplyPrice <= 0 ? (
+                <span className="px-1.5 py-0.2 rounded font-bold font-mono text-[10px] bg-rose-100 text-rose-800 border border-rose-200">
+                  단가 미확보 (0원)
+                </span>
               ) : (
                 <span className={`px-1.5 py-0.2 rounded font-bold font-mono text-[10px] ${
                   isExtremeDiff
@@ -727,11 +755,22 @@ export default function CostBreakdownPanel({
             {!isPriceMasterMatched && (
               <button
                 type="button"
-                onClick={() => onUpdateLine({ supplyPrice: topMasterPrice, priceSource: 'MASTER_MATCH' })}
+                onClick={() => {
+                  const sPrice = Number(topMasterPrice);
+                  const uCost = Math.round(sPrice * 0.82);
+                  onUpdateLine({
+                    supplyPrice: sPrice,
+                    unitCost: uCost,
+                    materialCost: Math.round(uCost * 0.45),
+                    processCost: Math.round(uCost * 0.45),
+                    treatmentCost: Math.round(uCost * 0.1),
+                    priceSource: 'MASTER_MATCH'
+                  });
+                }}
                 className="px-2 py-0.5 rounded bg-white hover:bg-blue-100 text-blue-700 font-bold text-[10.5px] border border-blue-300 shadow-2xs transition-colors shrink-0 cursor-pointer flex items-center gap-1"
-                title="현재 공급단가를 사내 표준 마스터 단가로 원클릭 복원합니다"
+                title="현재 공급단가를 사내 표준 마스터 단가로 원클릭 적용합니다"
               >
-                <span>⟲ 마스터가로 복원</span>
+                <span>{line.supplyPrice <= 0 ? '⭐ 마스터가 채택' : '⟲ 마스터가로 복원'}</span>
               </button>
             )}
           </div>

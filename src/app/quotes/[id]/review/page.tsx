@@ -117,6 +117,114 @@ function computeMasterSimilarity(
   };
 }
 
+// 🔍 지능형 마스터 & 과거 수주단가 다단계 매칭 헬퍼
+function findBestPriceMatch(
+  partNoStr: string,
+  partNameStr: string,
+  materialStr: string,
+  specStr: string,
+  partTypeStr: string,
+  pricedMasters: any[],
+  learnedPool: any[] = []
+): { matched: any; similarity: any; source: 'MASTER_MATCH' | 'LEARNED_MATCH' } | null {
+  const pNo = (partNoStr || '').trim().toUpperCase();
+  const pName = (partNameStr || '').trim().toUpperCase();
+  const pNoCompact = pNo.replace(/[\s\-_]/g, '');
+  const pNameCompact = pName.replace(/[\s\-_]/g, '');
+
+  // 1단계: 마스터 기준정보 완전 일치 (Exact / Compact)
+  for (const pm of pricedMasters) {
+    if (!pm.unit_price || Number(pm.unit_price) <= 0) continue;
+    const pmCode = (pm.master_code || '').trim().toUpperCase();
+    const pmName = (pm.standard_name || '').trim().toUpperCase();
+    const pmCodeCompact = pmCode.replace(/[\s\-_]/g, '');
+    const pmNameCompact = pmName.replace(/[\s\-_]/g, '');
+
+    const isExactMatch =
+      (pmCode && (pmCode === pNo || pmCode === pName || pmCodeCompact === pNoCompact || pmCodeCompact === pNameCompact)) ||
+      (pmName && (pmName === pName || pmName === pNo || pmNameCompact === pNameCompact || pmNameCompact === pNoCompact));
+
+    if (isExactMatch) {
+      const sim = computeMasterSimilarity(partNoStr, partNameStr, materialStr, specStr, partTypeStr, pm);
+      return { matched: pm, similarity: sim, source: 'MASTER_MATCH' };
+    }
+  }
+
+  // 2단계: 마스터 기준정보 키워드/토큰 유사 매칭 (유사도 65점 이상 중 최고점)
+  let bestCandidate: { pm: any; score: number; sim: any } | null = null;
+  for (const pm of pricedMasters) {
+    if (!pm.unit_price || Number(pm.unit_price) <= 0) continue;
+    const pmCode = (pm.master_code || '').trim().toUpperCase();
+    const pmName = (pm.standard_name || '').trim().toUpperCase();
+
+    const isKeywordMatch =
+      (pName.length >= 2 && (pmName.includes(pName) || pName.includes(pmName))) ||
+      (pNo.length >= 3 && (pmCode.includes(pNo) || pNo.includes(pmCode))) ||
+      (pmName.length >= 2 && pName.split(/[\s\-_/]+/).some(token => token.length >= 2 && pmName.includes(token)));
+
+    if (isKeywordMatch) {
+      const sim = computeMasterSimilarity(partNoStr, partNameStr, materialStr, specStr, partTypeStr, pm);
+      if (sim.totalScore >= 65 && (!bestCandidate || sim.totalScore > bestCandidate.score)) {
+        bestCandidate = { pm, score: sim.totalScore, sim };
+      }
+    }
+  }
+
+  if (bestCandidate) {
+    return { matched: bestCandidate.pm, similarity: bestCandidate.sim, source: 'MASTER_MATCH' };
+  }
+
+  // 3단계: 과거 수주/견적 승인 이력 풀 (learnedPool) 완전 일치
+  for (const lp of learnedPool) {
+    if (!lp.unit_price || Number(lp.unit_price) <= 0) continue;
+    const lpName = (lp.item_name || '').trim().toUpperCase();
+    const lpNameCompact = lpName.replace(/[\s\-_]/g, '');
+
+    const isLearnedExact =
+      (lpName && (lpName === pName || lpName === pNo || lpNameCompact === pNameCompact || lpNameCompact === pNoCompact));
+
+    if (isLearnedExact) {
+      const mockPm = {
+        standard_name: lp.item_name,
+        master_code: lp.item_name,
+        unit_price: lp.unit_price,
+        material: lp.material,
+        specification: lp.specification,
+        category: partTypeStr
+      };
+      const sim = computeMasterSimilarity(partNoStr, partNameStr, materialStr, specStr, partTypeStr, mockPm);
+      return { matched: mockPm, similarity: sim, source: 'LEARNED_MATCH' };
+    }
+  }
+
+  // 4단계: 과거 수주 이력 풀에서 부분 일치 (유사도 70점 이상)
+  let bestLearnedCandidate: { lp: any; score: number; sim: any } | null = null;
+  for (const lp of learnedPool) {
+    if (!lp.unit_price || Number(lp.unit_price) <= 0) continue;
+    const lpName = (lp.item_name || '').trim().toUpperCase();
+    if (lpName.length >= 2 && (lpName.includes(pName) || pName.includes(lpName))) {
+      const mockPm = {
+        standard_name: lp.item_name,
+        master_code: lp.item_name,
+        unit_price: lp.unit_price,
+        material: lp.material,
+        specification: lp.specification,
+        category: partTypeStr
+      };
+      const sim = computeMasterSimilarity(partNoStr, partNameStr, materialStr, specStr, partTypeStr, mockPm);
+      if (sim.totalScore >= 70 && (!bestLearnedCandidate || sim.totalScore > bestLearnedCandidate.score)) {
+        bestLearnedCandidate = { lp: mockPm, score: sim.totalScore, sim };
+      }
+    }
+  }
+
+  if (bestLearnedCandidate) {
+    return { matched: bestLearnedCandidate.lp, similarity: bestLearnedCandidate.sim, source: 'LEARNED_MATCH' };
+  }
+
+  return null;
+}
+
 export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: caseId } = use(params);
   const router = useRouter();
@@ -150,10 +258,11 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     async function loadData() {
       setLoading(true);
       try {
-        // 케이스 데이터와 사내 마스터 확정 단가표를 병렬 조회
-        const [res, mastersRes] = await Promise.all([
+        // 케이스 데이터, 사내 마스터 단가표, 과거 수주/견적 학습 풀을 병렬 조회
+        const [res, mastersRes, learnedRes] = await Promise.all([
           apiFetch(`/api/quotation-cases/${caseId}`),
-          apiFetch('/api/admin/masters?type=products&onlyPriced=true')
+          apiFetch('/api/admin/masters?type=products&onlyPriced=true'),
+          apiFetch('/api/manual-prices?mode=ALL_LEARNED')
         ]);
 
         let pricedMasters: any[] = [];
@@ -164,29 +273,13 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           } catch (e) {}
         }
 
-
-
-        // 🔍 마스터 단가 대조 헬퍼 (품명 또는 도번 일치 및 공백 제거 일치 지원)
-        const matchMasterPrice = (partNoStr: string, partNameStr: string) => {
-          const pNo = (partNoStr || '').trim().toUpperCase();
-          const pName = (partNameStr || '').trim().toUpperCase();
-          const pNoCompact = pNo.replace(/\s+/g, '');
-          const pNameCompact = pName.replace(/\s+/g, '');
-
-          return pricedMasters.find((pm: any) => {
-            const pmCode = (pm.master_code || '').trim().toUpperCase();
-            const pmName = (pm.standard_name || '').trim().toUpperCase();
-            const pmCodeCompact = pmCode.replace(/\s+/g, '');
-            const pmNameCompact = pmName.replace(/\s+/g, '');
-
-            if (!pm.unit_price || Number(pm.unit_price) <= 0) return false;
-
-            return (
-              (pmCode && (pmCode === pNo || pmCode === pName || pmCodeCompact === pNoCompact || pmCodeCompact === pNameCompact)) ||
-              (pmName && (pmName === pName || pmName === pNo || pmNameCompact === pNameCompact || pmNameCompact === pNoCompact))
-            );
-          });
-        };
+        let learnedPool: any[] = [];
+        if (learnedRes?.ok) {
+          try {
+            const learnedJson = await learnedRes.json();
+            learnedPool = learnedJson.list || [];
+          } catch (e) {}
+        }
 
         if (res.ok) {
           const json = await res.json();
@@ -283,22 +376,23 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
                 // 💡 마스터 단가 대조 및 유사도 산출
                 if (!isAssembly) {
-                  const matched = matchMasterPrice(qi.drawing_no || qi.master_code, qi.item_name);
-                  if (matched && Number(matched.unit_price) > 0) {
-                    similarityBreakdown = computeMasterSimilarity(
-                      qi.drawing_no || qi.master_code,
-                      qi.item_name,
-                      qi.material,
-                      qi.specification,
-                      partType,
-                      matched
-                    );
+                  const matchResult = findBestPriceMatch(
+                    qi.drawing_no || qi.master_code || resolvedPartNo,
+                    qi.item_name,
+                    cleanMaterial,
+                    qi.specification || '',
+                    partType,
+                    pricedMasters,
+                    learnedPool
+                  );
+                  if (matchResult && Number(matchResult.matched.unit_price) > 0) {
+                    similarityBreakdown = matchResult.similarity;
 
                     // 단가가 0원이면 마스터 단가로 자동 채우기 및 동기화
                     if (supplyPrice === 0) {
-                      supplyPrice = Number(matched.unit_price);
+                      supplyPrice = Number(matchResult.matched.unit_price);
                       unitCost = Math.round(supplyPrice * 0.82);
-                      priceSource = 'MASTER_MATCH';
+                      priceSource = matchResult.source;
                       priceStatus = 'READY';
                       isMatchedFromMaster = true;
                       autoSyncItems.push({
@@ -484,11 +578,19 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
                 // 💡 마스터 단가 자동 매칭 시도
                 if (!isAssembly) {
-                  const matched = matchMasterPrice(resolvedPartNo || it.spec_candidate, it.normalized_name || it.raw_name);
-                  if (matched && Number(matched.unit_price) > 0) {
-                    supplyPrice = Number(matched.unit_price);
+                  const matchResult = findBestPriceMatch(
+                    resolvedPartNo || it.spec_candidate,
+                    it.normalized_name || it.raw_name,
+                    cleanMaterial,
+                    resolvedSpec,
+                    partType,
+                    pricedMasters,
+                    learnedPool
+                  );
+                  if (matchResult && Number(matchResult.matched.unit_price) > 0) {
+                    supplyPrice = Number(matchResult.matched.unit_price);
                     unitCost = Math.round(supplyPrice * 0.82);
-                    priceSource = 'MASTER_MATCH';
+                    priceSource = matchResult.source;
                     masterPrice = supplyPrice;
                   }
                 }
@@ -1117,13 +1219,25 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const handleAutoMatchMasterPrices = async () => {
     setMatchingMaster(true);
     try {
-      const mastersRes = await apiFetch('/api/admin/masters?type=products&onlyPriced=true');
+      const [mastersRes, learnedRes] = await Promise.all([
+        apiFetch('/api/admin/masters?type=products&onlyPriced=true'),
+        apiFetch('/api/manual-prices?mode=ALL_LEARNED')
+      ]);
+
       if (!mastersRes.ok) throw new Error('마스터 단가 조회 실패');
       const mastersJson = await mastersRes.json();
       const pricedMasters: any[] = mastersJson.items || [];
 
-      if (pricedMasters.length === 0) {
-        alert('사내 마스터에 등록된 유효 단가가 없습니다.');
+      let learnedPool: any[] = [];
+      if (learnedRes?.ok) {
+        try {
+          const learnedJson = await learnedRes.json();
+          learnedPool = learnedJson.list || [];
+        } catch (e) {}
+      }
+
+      if (pricedMasters.length === 0 && learnedPool.length === 0) {
+        alert('사내 마스터 및 과거 수주 단가표에 등록된 유효 단가가 없습니다.');
         return;
       }
 
@@ -1131,39 +1245,27 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       const updatedLines = await Promise.all(
         lines.map(async (line) => {
           if (line.isAssembly) return line;
+          const inc = line.inclusionType || (line.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+          if (inc !== 'INCLUDED') return line;
+          // 이미 단가가 확정된 품목은 보호
           if (line.supplyPrice > 0 && line.status === 'CONFIRMED') return line;
 
-          const pNo = (line.partNo || '').trim().toUpperCase();
-          const pName = (line.partName || '').trim().toUpperCase();
-          const pNoCompact = pNo.replace(/\s+/g, '');
-          const pNameCompact = pName.replace(/\s+/g, '');
+          const matchResult = findBestPriceMatch(
+            line.partNo,
+            line.partName,
+            line.material,
+            line.specification || '',
+            line.partType,
+            pricedMasters,
+            learnedPool
+          );
 
-          const matched = pricedMasters.find((pm: any) => {
-            const pmCode = (pm.master_code || '').trim().toUpperCase();
-            const pmName = (pm.standard_name || '').trim().toUpperCase();
-            const pmCodeCompact = pmCode.replace(/\s+/g, '');
-            const pmNameCompact = pmName.replace(/\s+/g, '');
-
-            if (!pm.unit_price || Number(pm.unit_price) <= 0) return false;
-
-            return (
-              (pmCode && (pmCode === pNo || pmCode === pName || pmCodeCompact === pNoCompact || pmCodeCompact === pNameCompact)) ||
-              (pmName && (pmName === pName || pmName === pNo || pmNameCompact === pNameCompact || pmNameCompact === pNoCompact))
-            );
-          });
-
-          if (matched && Number(matched.unit_price) > 0) {
+          if (matchResult && Number(matchResult.matched.unit_price) > 0) {
             matchedCount++;
-            const sPrice = Number(matched.unit_price);
+            const sPrice = Number(matchResult.matched.unit_price);
             const uCost = Math.round(sPrice * 0.82);
-            const similarityBreakdown = computeMasterSimilarity(
-              line.partNo,
-              line.partName,
-              line.material,
-              line.specification || '',
-              line.partType,
-              matched
-            );
+            const similarityBreakdown = matchResult.similarity;
+            const sourceLabel = matchResult.source === 'MASTER_MATCH' ? '사내 마스터 단가' : '과거 수주 실적 단가';
 
             try {
               await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
@@ -1177,7 +1279,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   unitCost: uCost,
                   qtyTier: line.quantity <= 9 ? '1~9' : line.quantity <= 99 ? '10~99' : '100~',
                   lotQuantity: line.quantity,
-                  remark: `[MASTER_MATCH] 사내 마스터 단가 자동 매칭 (일치도 ${similarityBreakdown.totalScore}%)`
+                  remark: `[${matchResult.source}] ${sourceLabel} 자동 매칭 (일치도 ${similarityBreakdown.totalScore}%)`
                 })
               });
             } catch (e) {
@@ -1189,7 +1291,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
               supplyPrice: sPrice,
               unitCost: uCost,
               status: 'CONFIRMED' as const,
-              priceSource: 'MASTER_MATCH',
+              priceSource: matchResult.source,
               similarityBreakdown,
               masterPrice: sPrice
             };
@@ -1200,9 +1302,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
       setLines(updatedLines);
       if (matchedCount > 0) {
-        alert(`사내 마스터 단가표와 일치하는 품목 총 ${matchedCount}건에 대해 확정 단가를 성공적으로 자동 매칭 및 영구 저장하였습니다!`);
+        alert(`사내 마스터 및 과거 수주 단가표와 매칭된 품목 총 ${matchedCount}건에 대해 확정 단가를 성공적으로 자동 적용하고 영구 저장하였습니다!`);
       } else {
-        alert('현재 목록에서 마스터 단가표와 일치하는 추가 0원 품목이 없습니다.');
+        alert('현재 목록에서 마스터 또는 수주 단가표와 매칭되는 추가 0원 품목이 없습니다.\n[⚡ AI 공학 표준원가 일괄 산출]을 실행하시거나 품목별 추천 카드를 확인해 주세요.');
       }
     } catch (e: any) {
       alert('마스터 단가 매칭 중 오류가 발생했습니다: ' + e.message);
