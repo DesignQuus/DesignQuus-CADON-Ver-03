@@ -16,11 +16,15 @@ export async function POST(req: NextRequest) {
 
     const token = await createSession(session);
 
-    // Audit log: LOGIN
-    await recordActivity(req, session, {
-      activityType: 'LOGIN',
-      details: `${session.name} (${session.loginId}) 담당자 시스템 접속 로그인 완료`
-    });
+    // Audit log: LOGIN (Non-blocking safe execution)
+    try {
+      await recordActivity(req, session, {
+        activityType: 'LOGIN',
+        details: `${session.name} (${session.loginId}) 담당자 시스템 접속 로그인 완료`
+      });
+    } catch (auditErr: any) {
+      console.warn('[LOGIN] Non-critical audit log warning:', auditErr?.message);
+    }
 
     const res = NextResponse.json({ success: true, user: session, token });
     res.cookies.set('cadon_session', token, {
@@ -38,7 +42,7 @@ export async function POST(req: NextRequest) {
     if (msg.includes('X-Api-Key') || msg.toLowerCase().includes('unauthorized')) {
       msg = '데이터베이스 인증 연결에 실패했습니다. (API Key 설정을 확인해주세요.)';
     }
-    return NextResponse.json({ error: msg, rawError: error?.message, stack: error?.stack }, { status: 500 });
+    return NextResponse.json({ error: msg, rawError: error?.message }, { status: 500 });
   }
 }
 

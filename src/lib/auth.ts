@@ -97,7 +97,11 @@ export async function authenticateUser(loginId: string, plainPass: string): Prom
   const valid = bcrypt.compareSync(plainPass, user.password_hash);
   if (!valid) return null;
 
-  await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
+  try {
+    await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
+  } catch (updateErr: any) {
+    console.warn('[authenticateUser] Non-critical last_login_at update warning:', updateErr?.message);
+  }
 
   const tenantId = user.tenant_id || user.company_id || 'comp_unassigned';
   return {
