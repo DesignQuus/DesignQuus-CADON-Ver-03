@@ -47,7 +47,7 @@ export default function SidebarBookmarkTab({
       <button
         type="button"
         onClick={onClick}
-        className={`${posClass} group cursor-pointer w-9 text-left select-none focus:outline-hidden ${className}`}
+        className={`${posClass} group cursor-pointer w-auto text-left select-none focus:outline-hidden ${className}`}
         title={title || `${label} 펼치기 (사이드바 열기)`}
       >
         {/* 시각적 손잡이 & 돌출 본체 (평상시 11px 노출 -> 호버 시 36px 완전 돌출, 120ms 초고속 반응) */}
@@ -79,15 +79,15 @@ export default function SidebarBookmarkTab({
     <button
       type="button"
       onClick={onClick}
-      className={`${posClass} group cursor-pointer w-9 text-left select-none focus:outline-hidden ${className}`}
+      className={`${posClass} group cursor-pointer w-auto text-left select-none focus:outline-hidden ${className}`}
       title={title || `${label} 접기 (도면/테이블 넓게 보기)`}
     >
-      <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 text-slate-800 group-hover:text-blue-600 border-y border-r border-l-0 border-slate-300 group-hover:border-blue-400 rounded-r-xl shadow-md group-hover:shadow-2xl transition-all duration-[120ms] ease-out py-3 w-[11px] group-hover:w-9 overflow-hidden relative">
+      <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 text-slate-800 group-hover:text-blue-600 border-y border-r border-l-0 border-slate-300 group-hover:border-blue-400 rounded-r-xl shadow-md group-hover:shadow-xl transition-all duration-[120ms] ease-out py-3 w-[11px] group-hover:w-8 overflow-hidden relative">
         {/* 평상시 살짝 보이는 라운드 엣지의 블루 핸들 인디케이터 바 */}
         <div className="absolute right-[3px] top-1/2 -translate-y-1/2 w-[3px] h-7 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity duration-[100ms]" />
 
         {/* 호버 시 우측으로 돌출되며 온전하게 표출되는 견출지 콘텐츠 */}
-        <div className="flex flex-col items-center justify-center space-y-1.5 w-9 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
+        <div className="flex flex-col items-center justify-center space-y-1.5 w-8 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
           <ChevronLeft className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
           <div className="flex flex-col items-center justify-center text-[10px] font-extrabold text-slate-800 group-hover:text-blue-600 leading-[1.15] tracking-tight">
             {label.split('').map((char, idx) => (

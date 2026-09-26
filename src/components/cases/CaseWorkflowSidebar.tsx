@@ -91,6 +91,16 @@ export default function CaseWorkflowSidebar({
 
   return (
     <aside className="w-full lg:w-80 shrink-0 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col transition-all duration-200 relative">
+      {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
+      {onToggleCollapse && (
+        <SidebarBookmarkTab
+          mode="collapse"
+          onClick={onToggleCollapse}
+          label="접기"
+          title="작업 파이프라인 접기 (도면/테이블 넓게 보기)"
+        />
+      )}
+
       {/* Sidebar Header */}
       <div className="p-3.5 border-b border-slate-200 bg-slate-50/80">
         <div className="flex items-center justify-between">

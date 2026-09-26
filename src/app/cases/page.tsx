@@ -1194,7 +1194,7 @@ export default function CasesPage() {
       )}
 
       {/* Main Two-Column Workflow Layout */}
-      <div className="flex flex-col lg:flex-row gap-4 items-start">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 items-start">
         {/* Left Column: Vertical Workflow Pipeline Sidebar (With Integrated Drag & Drop Zone & Collapsible) */}
         <CaseWorkflowSidebar
           selectedTab={selectedTab}

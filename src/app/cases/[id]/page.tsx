@@ -2600,10 +2600,17 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       )}
 
       {/* TAB 1: CAD File Upload & Viewer (PROMPT 03, 04, 05, 06, 18-R1, 18-R2) */}
-      <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${isSidebarOpen ? 'gap-4' : ''} items-start w-full relative` : "hidden"}>
+      <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${isSidebarOpen ? 'gap-4 lg:gap-8' : ''} items-start w-full relative` : "hidden"}>
           {/* Unified Upload & Files Left Panel (Collapsible) */}
           {isSidebarOpen ? (
             <div className="w-full lg:w-[340px] xl:w-[360px] shrink-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 animate-in fade-in slide-in-from-left-2 relative">
+              {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
+              <SidebarBookmarkTab
+                mode="collapse"
+                onClick={() => setIsSidebarOpen(false)}
+                label="접기"
+                title="도면 등록 패널 접기"
+              />
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
                   <Upload className="w-4 h-4 text-blue-600" />
