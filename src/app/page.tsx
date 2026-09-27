@@ -773,23 +773,20 @@ export default function HomePage() {
                   }}
                   className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '0'
-                      ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400/40 shadow-xs'
-                      : 'border-amber-200/80 bg-amber-50/50 hover:bg-amber-100/60 hover:border-amber-300'
+                      ? 'border-slate-500 bg-slate-100/80 ring-2 ring-slate-400/30 shadow-xs'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-amber-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                      <FileWarning className="w-3 h-3" />
+                    <span className="w-5 h-5 rounded-md bg-slate-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                      0
                     </span>
                     <div>
-                      <div className="font-extrabold text-amber-950 flex items-center gap-1">
-                        <span>도면 대기 (사전접수)</span>
-                        <span className="text-[9px] px-1.5 py-0.2 bg-amber-200/90 text-amber-900 rounded font-bold">보완필요</span>
-                      </div>
-                      <div className="text-[10px] text-amber-700">도면 미첨부 의뢰 관리</div>
+                      <div className="font-extrabold text-slate-900">도면 대기 (사전접수)</div>
+                      <div className="text-[10px] text-slate-400">도면 파일 미첨부 의뢰</div>
                     </div>
                   </div>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['0'] > 0 ? 'bg-amber-500 text-white shadow-2xs' : 'bg-slate-100 text-slate-400'}`}>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['0'] > 0 ? 'bg-slate-700 text-white shadow-2xs' : 'bg-slate-100 text-slate-400'}`}>
                     {pipelineCounts['0']}건
                   </span>
                 </button>
@@ -1074,13 +1071,13 @@ export default function HomePage() {
                   }}
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer shadow-xs ${
                     pipelineFilter === '0'
-                      ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
-                      : 'bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 border border-amber-400/40'
+                      ? 'bg-blue-400 text-slate-950 ring-2 ring-blue-300'
+                      : 'bg-white/10 text-blue-200 hover:bg-white/20 border border-white/20'
                   }`}
                   title="도면 미첨부로 분석 대기 중인 의뢰건만 필터링"
                 >
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                  <span>도면 보완 필요 <strong>{pipelineCounts['0']}건</strong></span>
+                  <FileText className="w-3.5 h-3.5 text-blue-300" />
+                  <span>도면 대기 <strong>{pipelineCounts['0']}건</strong></span>
                 </button>
               )}
               <Link
@@ -1117,10 +1114,10 @@ export default function HomePage() {
                 </span>
               )}
               {pipelineFilter !== 'ALL' && (
-                <span className="text-[11px] font-extrabold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs animate-in fade-in">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                <span className="text-[11px] font-extrabold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs animate-in fade-in">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
                   <span>
-                    {pipelineFilter === '0' && '도면 대기 (사전 접수 / 보완 필요) 필터링'}
+                    {pipelineFilter === '0' && '도면 대기 (사전접수) 필터링'}
                     {pipelineFilter === '1' && '1단계: 도면 접수 필터링'}
                     {pipelineFilter === '2' && '2단계: AI 형상·치수 파싱 필터링'}
                     {pipelineFilter === '3' && '3단계: 가상 BOM 추출 필터링'}
@@ -1134,7 +1131,7 @@ export default function HomePage() {
                       setPipelineFilter('ALL');
                       setCasePage(1);
                     }}
-                    className="ml-1 text-slate-500 hover:text-slate-900 bg-white/80 hover:bg-white px-1.5 py-0.2 rounded border border-amber-300 text-[10px] font-black cursor-pointer transition-colors"
+                    className="ml-1 text-slate-500 hover:text-slate-900 bg-white/80 hover:bg-white px-1.5 py-0.2 rounded border border-blue-200 text-[10px] font-black cursor-pointer transition-colors"
                     title="전체 단계 보기로 초기화"
                   >
                     × 해제
@@ -1272,8 +1269,8 @@ export default function HomePage() {
           <div className="p-8 text-center text-slate-500">
             {pipelineFilter !== 'ALL' ? (
               <>
-                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center justify-center mx-auto mb-3 shadow-2xs">
-                  <Filter className="w-6 h-6 text-amber-500" />
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200/80 flex items-center justify-center mx-auto mb-3 shadow-2xs">
+                  <Filter className="w-6 h-6 text-slate-500" />
                 </div>
                 <p className="text-sm font-extrabold text-slate-800">
                   선택하신 [{PIPELINE_STAGE_LABELS[pipelineFilter] || `${pipelineFilter}단계`}] 단계의 의뢰 건이 없습니다.
@@ -1312,9 +1309,9 @@ export default function HomePage() {
                     <button
                       type="button"
                       onClick={handleOpenUploadModal}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200 transition-all cursor-pointer shadow-2xs"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-all cursor-pointer shadow-2xs"
                     >
-                      <Plus className="w-3.5 h-3.5 stroke-[3] text-amber-700" />
+                      <Plus className="w-3.5 h-3.5 stroke-[3] text-blue-600" />
                       <span>신규 도면 견적 등록</span>
                     </button>
                   )}
