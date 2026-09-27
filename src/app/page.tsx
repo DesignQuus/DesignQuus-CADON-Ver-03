@@ -666,10 +666,18 @@ export default function HomePage() {
       )}
 
       {/* Main Split Layout: Left Control Panel + Right Main Work Table */}
-      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-3 lg:gap-4' : 'gap-0'}`}>
+      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-6 lg:gap-7' : 'gap-0'}`}>
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
           <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-3.5 flex flex-col transition-all sticky top-4 relative">
+            {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 접기 탭 복원 및 레이어 안전 클리어런스 확보 */}
+            <SidebarBookmarkTab
+              mode="collapse"
+              onClick={handleToggleSidebar}
+              label="접기"
+              title="관제탑 접기"
+            />
+
             {/* Sidebar Header with Unified Tab Style Collapse Button */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
