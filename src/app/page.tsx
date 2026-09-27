@@ -653,7 +653,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 w-full px-2.5 sm:px-3 py-3 relative">
-      {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
+      {/* 버티컬 북마크 견출 탭 (펼치기) */}
       {!isSidebarOpen && (
         <SidebarBookmarkTab
           mode="expand"
@@ -669,7 +669,7 @@ export default function HomePage() {
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
           <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 flex flex-col sticky top-4 relative z-20 h-[calc(100vh-5rem)]">
-            {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 접기 탭 복원 및 레이어 안전 클리어런스 확보 */}
+            {/* 버티컬 북마크 견출 탭 (접기) */}
             <SidebarBookmarkTab
               mode="collapse"
               onClick={handleToggleSidebar}

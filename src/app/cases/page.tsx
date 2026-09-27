@@ -1182,7 +1182,7 @@ export default function CasesPage() {
         className="hidden"
       />
 
-      {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
+      {/* 버티컬 북마크 견출 탭 (펼치기) */}
       {isSidebarCollapsed && (
         <SidebarBookmarkTab
           mode="expand"
