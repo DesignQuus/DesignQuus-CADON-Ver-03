@@ -665,11 +665,11 @@ export default function HomePage() {
         />
       )}
 
-      {/* Main Split Layout: Left Control Panel + Right Main Work Table */}
-      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-6 lg:gap-7' : 'gap-0'}`}>
+      {/* Main Split Layout: Left Control Panel + Right Main Work Table (Zero gap to eliminate whitespace) */}
+      <div className="flex items-start gap-0 transition-all duration-200">
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
-          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-3.5 flex flex-col transition-all sticky top-4 relative">
+          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-3.5 flex flex-col transition-all sticky top-4 relative z-20">
             {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 접기 탭 복원 및 레이어 안전 클리어런스 확보 */}
             <SidebarBookmarkTab
               mode="collapse"
@@ -1316,7 +1316,7 @@ export default function HomePage() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-100">
                 <tr>
-                  <th className="py-3 px-3 font-bold text-center w-12 text-slate-500">No.</th>
+                  <th className="py-3 pl-10 pr-2 font-bold text-center w-20 text-slate-500">No.</th>
                   <th className="py-3 px-3.5 font-bold">의뢰번호 / 명칭</th>
                   <th className="py-3 px-3.5 font-bold">고객사</th>
                   <th className="py-3 px-3.5 font-bold">견적 담당자</th>
@@ -1344,7 +1344,7 @@ export default function HomePage() {
                       }`}
                     >
                       {/* 0. No. 순번 */}
-                      <td className="py-3 px-3 text-center font-mono font-bold text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
+                      <td className="py-3 pl-10 pr-2 text-center font-mono font-bold text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
                         {String(globalIdx).padStart(2, '0')}
                       </td>
                       {/* 1. 의뢰번호 / 명칭 */}
@@ -1599,7 +1599,7 @@ export default function HomePage() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-100">
                 <tr>
-                  <th className="py-3 px-4 font-bold">견적번호 / 버전</th>
+                  <th className="py-3 pl-10 pr-4 font-bold">견적번호 / 버전</th>
                   <th className="py-3 px-4 font-bold">연동 케이스명</th>
                   <th className="py-3 px-4 font-bold">고객사</th>
                   <th className="py-3 px-4 font-bold text-center">품목 수</th>
@@ -1625,7 +1625,7 @@ export default function HomePage() {
                       key={q.id}
                       className="hover:bg-emerald-50/30 transition-colors"
                     >
-                      <td className="py-3 px-4">
+                      <td className="py-3 pl-10 pr-4">
                         <div className="flex items-center space-x-1.5">
                           <Link
                             href={`/cases/${q.quotation_case_id}`}
