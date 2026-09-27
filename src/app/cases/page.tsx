@@ -6,6 +6,7 @@ import Link from 'next/link';
 import CaseWorkflowSidebar, { WorkflowTab } from '@/components/cases/CaseWorkflowSidebar';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
+import RecentQuotesTable from '@/components/RecentQuotesTable';
 import { useRouter } from 'next/navigation';
 import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
 import {
@@ -138,6 +139,7 @@ function getRemainingTrashDays(deletedAt: string | null | undefined): number {
 
 export default function CasesPage() {
   const [cases, setCases] = useState<any[]>([]);
+  const [quotes, setQuotes] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [showModal, setShowModal] = useState(false);
@@ -391,6 +393,20 @@ export default function CasesPage() {
     }
   };
 
+  const fetchQuotes = async () => {
+    try {
+      const res = await apiFetch('/api/quotes');
+      if (res.ok) {
+        const data = await res.json();
+        const list = data.quotes || [];
+        setQuotes(list);
+        setClientCache('quotes', data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch quotes:', e);
+    }
+  };
+
   // Quick DWG Upload & Auto Case Creation Handler
   const handleQuickUploadFile = React.useCallback(async (file: File) => {
     const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
@@ -561,11 +577,13 @@ export default function CasesPage() {
       const cachedUser = getClientCache('user') || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('cadon_user') || 'null') : null);
       const cachedCompanies = getClientCache('companies')?.companies;
       const cachedOperators = getClientCache('operators')?.operators;
+      const cachedQuotes = getClientCache('quotes')?.quotes;
 
       if (cachedCases && Array.isArray(cachedCases)) setCases(cachedCases);
       if (cachedUser) setUser(cachedUser);
       if (cachedCompanies && Array.isArray(cachedCompanies)) setCompanies(cachedCompanies);
       if (cachedOperators && Array.isArray(cachedOperators)) setOperators(cachedOperators);
+      if (cachedQuotes && Array.isArray(cachedQuotes)) setQuotes(cachedQuotes);
     } catch {}
 
     // 비동기 요청들을 완전 병렬로 동시 실행
@@ -573,6 +591,7 @@ export default function CasesPage() {
       fetchCases(),
       fetchCompanies(),
       fetchOperators(),
+      fetchQuotes(),
       apiFetch('/api/auth/me')
         .then((res) => (res.ok ? res.json() : { user: null }))
         .then((data) => {
@@ -1385,20 +1404,6 @@ export default function CasesPage() {
           <div className="bg-white px-3 py-1.5 rounded border border-slate-200 shadow-xs flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
           {/* Status Tabs (Single Row, No-Wrap) */}
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={handleToggleSidebar}
-              className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 border flex items-center space-x-1 ${
-                isSidebarCollapsed
-                  ? 'bg-blue-50 text-blue-700 border-blue-300 shadow-2xs hover:bg-blue-100'
-                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-              }`}
-              title={isSidebarCollapsed ? '좌측 파이프라인 사이드바 펼치기' : '좌측 사이드바 접기 (테이블 100% 넓게 보기)'}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>{isSidebarCollapsed ? '열기' : '넓게보기'}</span>
-            </button>
-
             <button
               onClick={() => handleSelectTab('ALL')}
               className={`btn-hover-effect-tab px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer shrink-0 ${
@@ -2319,6 +2324,11 @@ export default function CasesPage() {
             </div>
           </div>
         )}
+        </div>
+
+        {/* 4-B. Recent Official Quotes Table (최근 발행된 견적서 및 엑셀 다운로드) */}
+        <div className="mt-2">
+          <RecentQuotesTable quotes={quotes} />
         </div>
       </div>
 
