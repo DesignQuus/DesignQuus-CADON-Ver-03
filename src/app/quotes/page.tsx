@@ -103,7 +103,7 @@ export default function QuotesListPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `공식견적서_${quoteNo}.xlsx`;
+      a.download = `견적서_${quoteNo}.xlsx`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -139,10 +139,10 @@ export default function QuotesListPage() {
                 <span>Quotation Management System</span>
               </div>
               <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-                공식 견적서 관리 대장
+                견적서 관리 대장
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                CAD 도면에서 추출된 BOM 및 공정별 단가를 바탕으로 산출된 공식 견적서를 조회하고 엑셀 패키지로 즉시 출력합니다.
+                CAD 도면에서 추출된 BOM 및 공정별 단가를 바탕으로 산출된 견적서를 조회하고 엑셀 패키지로 즉시 출력합니다.
               </p>
             </div>
 

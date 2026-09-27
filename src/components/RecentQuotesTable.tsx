@@ -68,7 +68,7 @@ export default function RecentQuotesTable({ quotes }: RecentQuotesTableProps) {
           </div>
           <div>
             <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-              <span>최근 발행된 공식 견적서</span>
+              <span>최근 발행된 견적서</span>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                 {quotes.length}건 보관
               </span>
@@ -88,7 +88,7 @@ export default function RecentQuotesTable({ quotes }: RecentQuotesTableProps) {
       {recentQuotes.length === 0 ? (
         <div className="p-8 text-center text-slate-500">
           <FileSpreadsheet className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-          <p className="text-sm font-semibold">발행된 공식 견적서가 아직 없습니다.</p>
+          <p className="text-sm font-semibold">발행된 견적서가 아직 없습니다.</p>
           <p className="text-xs text-slate-400 mt-1">도면 의뢰건에서 [최종 견적서 즉시 산출]을 실행해보세요.</p>
           <Link
             href="/cases"

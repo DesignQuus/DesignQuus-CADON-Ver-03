@@ -144,10 +144,10 @@ export default function Navigation() {
                       ? 'bg-blue-50 text-blue-700 font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
-                  title={user?.name ? `${user.name} 님의 담당 견적의뢰 관리` : '견적의뢰 관리'}
+                  title={user?.name ? `${user.name} 님의 담당 견적의뢰` : '견적의뢰'}
                 >
                   <FileText className="w-4 h-4 text-blue-600" />
-                  <span>견적의뢰 관리</span>
+                  <span>견적의뢰</span>
                   {user?.name && user.role !== 'SUPER_ADMIN' && (
                     <span
                       className={`ml-1 px-1.5 py-0.2 rounded-full text-[11px] font-black inline-flex items-center gap-0.5 tracking-tight transition-all ${
@@ -174,7 +174,7 @@ export default function Navigation() {
                   }`}
                 >
                   <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  <span>공식 견적서 관리</span>
+                  <span>견적서 관리</span>
                 </Link>
                 <Link
                   href="/admin/masters"

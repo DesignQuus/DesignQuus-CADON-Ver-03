@@ -983,7 +983,7 @@ export default function HomePage() {
                 >
                   <span className="flex items-center gap-1.5">
                     <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>공식 견적서대장</span>
+                    <span>견적서 관리 대장</span>
                   </span>
                   <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">
                     {quotes.length}건
@@ -1639,7 +1639,7 @@ export default function HomePage() {
             </div>
             <div>
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                <span>최근 발행된 공식 견적서</span>
+                <span>최근 발행된 견적서</span>
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                   {quotes.length}건 보관
                 </span>
@@ -1651,7 +1651,7 @@ export default function HomePage() {
             href="/quotes"
             className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
           >
-            <span>공식 견적서대장 전체보기</span>
+            <span>견적서대장 전체보기</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -1659,7 +1659,7 @@ export default function HomePage() {
         {recentQuotes.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             <FileSpreadsheet className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-            <p className="text-sm font-semibold">발행된 공식 견적서가 아직 없습니다.</p>
+            <p className="text-sm font-semibold">발행된 견적서가 아직 없습니다.</p>
             <p className="text-xs text-slate-400 mt-1">도면 의뢰건에서 [최종 견적서 즉시 산출]을 실행해보세요.</p>
             <Link
               href="/cases"

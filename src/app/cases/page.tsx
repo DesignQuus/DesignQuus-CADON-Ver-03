@@ -1322,7 +1322,7 @@ export default function CasesPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
                 <FileText className="w-4 h-4 text-blue-600" />
-                <span>견적의뢰 관리 대장</span>
+                <span>견적의뢰 대장</span>
               </h2>
               {user?.name && filterManager === user.userId ? (
                 <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs animate-in fade-in">
