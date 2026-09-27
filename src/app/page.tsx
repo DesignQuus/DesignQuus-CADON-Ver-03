@@ -665,7 +665,7 @@ export default function HomePage() {
       )}
 
       {/* Main Split Layout: Left Control Panel + Right Main Work Table */}
-      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-2' : 'gap-0'}`}>
+      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-1' : 'gap-0'}`}>
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
           <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 flex flex-col sticky top-4 relative z-20 h-[calc(100vh-5rem)]">
@@ -1035,7 +1035,7 @@ export default function HomePage() {
       )}
 
         {/* RIGHT MAIN WORKSPACE: Cases Table & Recent Quotes (Maximized Height, Zero Scroll!) */}
-        <div className="flex-1 min-w-0 space-y-3">
+        <div className="flex-1 min-w-0 space-y-1">
           {/* Top Slim Welcome Strip */}
           <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 rounded-2xl py-3.5 px-6 text-white shadow-md flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">

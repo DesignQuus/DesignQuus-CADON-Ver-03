@@ -1194,7 +1194,7 @@ export default function CasesPage() {
       )}
 
       {/* Main Two-Column Workflow Layout */}
-      <div className={`flex flex-col lg:flex-row items-start transition-all duration-200 ${isSidebarCollapsed ? 'gap-0' : 'gap-2'}`}>
+      <div className={`flex flex-col lg:flex-row items-start transition-all duration-200 ${isSidebarCollapsed ? 'gap-0' : 'gap-1'}`}>
         {/* Left Column: Vertical Workflow Pipeline Sidebar (With Integrated Drag & Drop Zone & Collapsible) */}
         <CaseWorkflowSidebar
           selectedTab={selectedTab}
@@ -1224,9 +1224,9 @@ export default function CasesPage() {
         />
 
         {/* Right Column: Main Workbench */}
-        <div className="flex-1 min-w-0 space-y-3 w-full">
+        <div className="flex-1 min-w-0 space-y-1 w-full">
           {/* Zone 2: 3-Step BOM Automation Guide & Key Metrics (Slim & Compact) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
             {/* Step 1 */}
             <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-blue-300 transition-colors flex items-center justify-between">
               <div className="flex items-center space-x-2 min-w-0">
