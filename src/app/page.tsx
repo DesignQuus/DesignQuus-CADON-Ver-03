@@ -36,7 +36,8 @@ import {
   Loader2,
   User,
   RotateCcw,
-  FileWarning
+  FileWarning,
+  Filter
 } from 'lucide-react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
@@ -53,6 +54,15 @@ interface UserProfile {
 }
 
 export type PipelineStage = '0' | '1' | '2' | '3' | '4' | '5';
+
+export const PIPELINE_STAGE_LABELS: Record<PipelineStage, string> = {
+  '0': '도면 대기 (사전접수)',
+  '1': '1단계: 도면 접수',
+  '2': '2단계: AI 형상·치수 파싱',
+  '3': '3단계: 가상 BOM 추출',
+  '4': '4단계: 마스터 단가 매칭',
+  '5': '5단계: 공식 견적서 발행'
+};
 
 interface QuotationCase {
   id: string;
@@ -1136,7 +1146,7 @@ export default function HomePage() {
               {pipelineFilter === '0'
                 ? '고객사로부터 의뢰는 접수되었으나 CAD 도면(DWG/DXF)이 아직 등록되지 않은 건입니다. 도면을 투입하여 실무 파이프라인을 가동하세요.'
                 : pipelineFilter !== 'ALL'
-                ? `상단 5단계 파이프라인에서 [${pipelineFilter}단계]를 선택하여 해당 진행 상태의 건만 집중 모니터링 중입니다.`
+                ? `상단 스마트 파이프라인에서 [${PIPELINE_STAGE_LABELS[pipelineFilter] || `${pipelineFilter}단계`}]를 선택하여 해당 진행 상태의 건만 집중 모니터링 중입니다.`
                 : caseFilter === 'MY'
                 ? `${user?.name || '담당자'} 담당자님이 진행 중인 활성 견적 건입니다. (총 ${myCasesCount}건)`
                 : `현재 시스템에서 진행 중인 전사 활성 견적 건입니다. (총 ${activeCases.length}건)`}
@@ -1260,48 +1270,103 @@ export default function HomePage() {
 
         {filteredCases.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
-            <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-            <p className="text-sm font-semibold">
-              {caseFilter === 'MY'
-                ? `${user?.name || '박세창'} 담당자님이 등록한 견적의뢰 건이 없습니다.`
-                : '등록된 견적의뢰가 없습니다.'}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              {caseFilter === 'MY'
-                ? '상단의 [+ 신규 도면 견적 등록] 버튼을 눌러 첫 번째 담당 견적을 시작해 보세요.'
-                : '도면 파일을 업로드하여 첫 번째 견적을 생성해 보세요.'}
-            </p>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
-              <button
-                type="button"
-                onClick={handleOpenUploadModal}
-                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shadow-md shadow-blue-600/20 cursor-pointer transition-all"
-              >
-                <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                <span>신규 도면 견적 등록</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenSampleModal}
-                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-all cursor-pointer shadow-2xs"
-                title="CAD 도면 파일이 없어도 표준 판금 샘플 도면으로 즉시 AI 견적 과정을 체험해보실 수 있습니다."
-              >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>표준 판금 샘플로 견적 체험하기</span>
-              </button>
-              {caseFilter === 'MY' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCaseFilter('ALL');
-                    setCasePage(1);
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 border border-slate-200 cursor-pointer"
-                >
-                  전체 의뢰 보기
-                </button>
-              )}
-            </div>
+            {pipelineFilter !== 'ALL' ? (
+              <>
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center justify-center mx-auto mb-3 shadow-2xs">
+                  <Filter className="w-6 h-6 text-amber-500" />
+                </div>
+                <p className="text-sm font-extrabold text-slate-800">
+                  선택하신 [{PIPELINE_STAGE_LABELS[pipelineFilter] || `${pipelineFilter}단계`}] 단계의 의뢰 건이 없습니다.
+                </p>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  {caseFilter === 'MY'
+                    ? '현재 내 담당 프로젝트 중 해당 파이프라인 단계에 머물러 있는 건이 없습니다. 필터를 해제하여 다른 진행 건을 확인하세요.'
+                    : '현재 시스템의 전사 활성 프로젝트 중 해당 파이프라인 단계에 머물러 있는 건이 없습니다.'}
+                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPipelineFilter('ALL');
+                      setCasePage(1);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shadow-sm cursor-pointer transition-all"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>필터 해제 (전체 단계 보기)</span>
+                  </button>
+                  {caseFilter === 'MY' && activeCases.length > myActiveCases.length && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCaseFilter('ALL');
+                        setCasePage(1);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 border border-slate-200 cursor-pointer"
+                    >
+                      <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                      <span>전사 현황에서 보기 ({activeCases.length}건)</span>
+                    </button>
+                  )}
+                  {pipelineFilter === '0' && (
+                    <button
+                      type="button"
+                      onClick={handleOpenUploadModal}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200 transition-all cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[3] text-amber-700" />
+                      <span>신규 도면 견적 등록</span>
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                <p className="text-sm font-semibold">
+                  {caseFilter === 'MY'
+                    ? `${user?.name || '담당자'} 담당자님이 진행 중인 활성 견적의뢰 건이 없습니다.`
+                    : '등록되어 진행 중인 견적의뢰가 없습니다.'}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {caseFilter === 'MY'
+                    ? '상단의 [+ 신규 도면 견적 등록] 버튼을 눌러 첫 번째 담당 견적을 시작해 보세요.'
+                    : '도면 파일을 업로드하여 첫 번째 견적을 생성해 보세요.'}
+                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleOpenUploadModal}
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shadow-md shadow-blue-600/20 cursor-pointer transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>신규 도면 견적 등록</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenSampleModal}
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-all cursor-pointer shadow-2xs"
+                    title="CAD 도면 파일이 없어도 표준 판금 샘플 도면으로 즉시 AI 견적 과정을 체험해보실 수 있습니다."
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>표준 판금 샘플로 견적 체험하기</span>
+                  </button>
+                  {caseFilter === 'MY' && activeCases.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCaseFilter('ALL');
+                        setPipelineFilter('ALL');
+                        setCasePage(1);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 border border-slate-200 cursor-pointer"
+                    >
+                      전사 의뢰 보기 ({activeCases.length}건)
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto overflow-y-visible pb-4">
