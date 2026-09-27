@@ -703,14 +703,14 @@ export default function MasterDataManagerPage() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                    <th className="p-3 w-12 text-center">No</th>
-                    <th className="p-3 w-36">마스터 코드</th>
-                    <th className="p-3">표준 품명</th>
-                    <th className="p-3 w-36">규격 (Spec)</th>
-                    <th className="p-3 w-28 text-center">재질</th>
-                    <th className="p-3 w-28 text-center">부품 유형</th>
-                    <th className="p-3 w-32 text-right">공인 기준단가</th>
-                    <th className="p-3 w-16 text-center">관리</th>
+                    <th className="py-2 px-3 w-12 text-center">No</th>
+                    <th className="py-2 px-3 w-36">마스터 코드</th>
+                    <th className="py-2 px-3">표준 품명</th>
+                    <th className="py-2 px-3 w-36">규격 (Spec)</th>
+                    <th className="py-2 px-3 w-28 text-center">재질</th>
+                    <th className="py-2 px-3 w-28 text-center">부품 유형</th>
+                    <th className="py-2 px-3 w-32 text-right">공인 기준단가</th>
+                    <th className="py-2 px-3 w-16 text-center">관리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
@@ -730,16 +730,16 @@ export default function MasterDataManagerPage() {
                   ) : (
                     items.map((it, idx) => (
                       <tr key={it.id || it.master_code || `master-item-${idx}`} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-3 text-center text-slate-400 font-mono">{idx + 1}</td>
-                        <td className="p-3 font-mono font-bold text-slate-900">{it.master_code}</td>
-                        <td className="p-3 font-medium text-slate-900">{it.standard_name}</td>
-                        <td className="p-3 font-mono text-slate-600">{it.specification || '-'}</td>
-                        <td className="p-3 text-center font-mono">
+                        <td className="py-1.5 px-3 text-center text-slate-400 font-mono">{idx + 1}</td>
+                        <td className="py-1.5 px-3 font-mono font-bold text-slate-900">{it.master_code}</td>
+                        <td className="py-1.5 px-3 font-medium text-slate-900">{it.standard_name}</td>
+                        <td className="py-1.5 px-3 font-mono text-slate-600">{it.specification || '-'}</td>
+                        <td className="py-1.5 px-3 text-center font-mono">
                           <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px]">
                             {it.material || 'SS400'}
                           </span>
                         </td>
-                        <td className="p-3 text-center">
+                        <td className="py-1.5 px-3 text-center">
                           <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                             it.category === 'MACHINING' ? 'bg-blue-100 text-blue-800' :
                             it.category === 'SHEET_METAL' ? 'bg-cyan-100 text-cyan-800' :
@@ -757,13 +757,13 @@ export default function MasterDataManagerPage() {
                              it.category === 'ASSEMBLY' ? '조립품' : (it.category || '미분류')}
                           </span>
                         </td>
-                        <td className="p-3 text-right font-mono font-bold text-blue-700 text-sm">
+                        <td className="py-1.5 px-3 text-right font-mono font-bold text-blue-700 text-xs">
                           {it.unit_price > 0 ? `₩${it.unit_price.toLocaleString()}` : '-'}
                         </td>
-                        <td className="p-3 text-center">
+                        <td className="py-1.5 px-3 text-center">
                           <button
                             onClick={() => handleDeleteItem(it.id, it.master_code)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
                             title="삭제"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
