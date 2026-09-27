@@ -578,26 +578,16 @@ export default function HomePage() {
 
   const myCasesCount = useMemo(() => {
     if (!user) return 0;
-    return cases.filter(
-      (c) => ((user.userId || user.id) && c.created_by_user_id === (user.userId || user.id)) || (user.name && c.created_by_name === user.name)
-    ).length;
-  }, [cases, user]);
+    return myActiveCases.length;
+  }, [myActiveCases]);
 
   const filteredCases = useMemo(() => {
-    let result = cases;
-    if (caseFilter === 'MY' && user) {
-      result = result.filter(
-        (c) => ((user.userId || user.id) && c.created_by_user_id === (user.userId || user.id)) || (user.name && c.created_by_name === user.name)
-      );
-    }
+    let result = caseFilter === 'MY' ? myActiveCases : activeCases;
     if (pipelineFilter !== 'ALL') {
-      result = result.filter((c) => {
-        if (!isCaseActive(c)) return false;
-        return getCasePipelineStage(c) === pipelineFilter;
-      });
+      result = result.filter((c) => getCasePipelineStage(c) === pipelineFilter);
     }
     return result;
-  }, [cases, caseFilter, pipelineFilter, user]);
+  }, [activeCases, myActiveCases, caseFilter, pipelineFilter]);
 
   const totalPages = useMemo(() => {
     return Math.max(1, Math.ceil(filteredCases.length / pageSize));
@@ -742,12 +732,12 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* 5-Step Pipeline Vertical Navigation */}
+            {/* Smart Pipeline Vertical Navigation */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs font-extrabold text-slate-800">
                 <span className="flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                  <span>5단계 견적 파이프라인</span>
+                  <span>스마트 견적 파이프라인</span>
                 </span>
                 {pipelineFilter !== 'ALL' && (
                   <button
@@ -1148,8 +1138,8 @@ export default function HomePage() {
                 : pipelineFilter !== 'ALL'
                 ? `상단 5단계 파이프라인에서 [${pipelineFilter}단계]를 선택하여 해당 진행 상태의 건만 집중 모니터링 중입니다.`
                 : caseFilter === 'MY'
-                ? `${user?.name || '담당자'} 담당자님이 등록·관리하는 견적 건입니다. (총 ${myCasesCount}건)`
-                : `최근 시스템에 등록되거나 갱신된 전사 견적 건입니다. (총 ${cases.length}건)`}
+                ? `${user?.name || '담당자'} 담당자님이 진행 중인 활성 견적 건입니다. (총 ${myCasesCount}건)`
+                : `현재 시스템에서 진행 중인 전사 활성 견적 건입니다. (총 ${activeCases.length}건)`}
             </p>
           </div>
 
@@ -1169,7 +1159,7 @@ export default function HomePage() {
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                전사 현황 ({cases.length})
+                전사 현황 ({activeCases.length})
               </button>
               <button
                 type="button"
@@ -1331,7 +1321,8 @@ export default function HomePage() {
               <tbody className="divide-y divide-slate-100">
                 {paginatedCases.map((c, idx) => {
                   const uid = user?.userId || user?.id; const isOwner = user && ((uid && c.created_by_user_id === uid) || (user.name && c.created_by_name === user.name));
-                  const isDeleted = c.is_deleted || !!c.deleted_at;
+                  const isDeleted = isCaseDeleted(c);
+                  const isArchived = isCaseArchived(c);
                   const companyDisplay = c.company_name === '1' ? '미등록 고객사' : (c.company_name || '고객사 미지정');
                   const globalIdx = (casePage - 1) * pageSize + idx + 1;
 
@@ -1340,7 +1331,7 @@ export default function HomePage() {
                       key={c.id}
                       onClick={() => !isDeleted && router.push(`/cases/${c.id}`)}
                       className={`relative transition-all duration-150 cursor-pointer group border-l-4 ${
-                        isDeleted
+                        isDeleted || isArchived
                           ? 'bg-slate-50/50 hover:bg-slate-100/80 border-l-transparent text-slate-500'
                           : 'bg-white hover:bg-slate-100/90 border-l-transparent hover:border-l-blue-600'
                       }`}
@@ -1456,6 +1447,15 @@ export default function HomePage() {
                                 : '보관 만료 임박'}
                             </span>
                           </div>
+                        ) : isArchived ? (
+                          <div className="flex flex-col items-center">
+                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                              보관완료
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium mt-0.5">
+                              보관함 격리
+                            </span>
+                          </div>
                         ) : c.quote_total_amount && Number(c.quote_total_amount) > 0 ? (
                           <div className="flex flex-col items-center">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
@@ -1521,6 +1521,17 @@ export default function HomePage() {
                             <RotateCcw className="w-3 h-3 text-slate-500" />
                             <span>복구</span>
                           </button>
+                        ) : isArchived ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="text-[11px] text-slate-400 font-medium">보관 상태</span>
+                            <Link
+                              href={`/cases/${c.id}`}
+                              className="p-1 text-slate-400 group-hover:text-blue-600 transition-colors"
+                              title="보관 상세 조회"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </Link>
+                          </div>
                         ) : c.drawings_count === 0 && (!c.files_count || c.files_count === 0) ? (
                           <div className="flex items-center justify-center gap-1.5">
                             <Link
