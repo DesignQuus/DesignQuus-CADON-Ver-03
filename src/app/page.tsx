@@ -669,7 +669,7 @@ export default function HomePage() {
       <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-2' : 'gap-0'}`}>
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
-          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-3.5 flex flex-col transition-all sticky top-4 relative z-20">
+          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 flex flex-col sticky top-4 relative z-20 h-[calc(100vh-5rem)]">
             {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 접기 탭 복원 및 레이어 안전 클리어런스 확보 */}
             <SidebarBookmarkTab
               mode="collapse"
@@ -679,7 +679,7 @@ export default function HomePage() {
             />
 
             {/* Sidebar Header with Unified Tab Style Collapse Button */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black shadow-2xs">
                   <Layers className="w-3.5 h-3.5" />
@@ -701,7 +701,9 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* Scope Switcher: 내 담당 vs 전사 관제 */}
+            {/* Scrollable Sidebar Body */}
+            <div className="overflow-y-auto space-y-3.5 flex-1 pr-1 pt-3.5">
+              {/* Scope Switcher: 내 담당 vs 전사 관제 */}
             <div className="space-y-1.5">
               <div className="text-[11px] font-bold text-slate-500 flex items-center justify-between">
                 <span>작업 관제 모드</span>
@@ -1029,8 +1031,9 @@ export default function HomePage() {
                 )}
               </div>
             </div>
-          </aside>
-        )}
+          </div>
+        </aside>
+      )}
 
         {/* RIGHT MAIN WORKSPACE: Cases Table & Recent Quotes (Maximized Height, Zero Scroll!) */}
         <div className="flex-1 min-w-0 space-y-3">

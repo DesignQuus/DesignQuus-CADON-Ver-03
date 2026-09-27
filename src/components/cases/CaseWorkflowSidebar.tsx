@@ -90,7 +90,7 @@ export default function CaseWorkflowSidebar({
   }
 
   return (
-    <aside className="w-full lg:w-80 shrink-0 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col transition-all duration-200 relative z-20">
+    <aside className="w-full lg:w-80 shrink-0 bg-white rounded-2xl border border-slate-200/90 shadow-xs flex flex-col sticky top-4 relative z-20 h-[calc(100vh-5rem)]">
       {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
       {onToggleCollapse && (
         <SidebarBookmarkTab
@@ -102,7 +102,7 @@ export default function CaseWorkflowSidebar({
       )}
 
       {/* Sidebar Header */}
-      <div className="p-3.5 border-b border-slate-200 bg-slate-50/80">
+      <div className="p-3.5 border-b border-slate-200 bg-slate-50/80 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Layers className="w-4 h-4 text-blue-600" />

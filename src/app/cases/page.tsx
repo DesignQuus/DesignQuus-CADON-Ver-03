@@ -1113,7 +1113,7 @@ export default function CasesPage() {
   };
 
   return (
-    <div className="space-y-3 w-full px-2.5 sm:px-3 py-3 pb-10">
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 w-full px-2.5 sm:px-3 py-3 relative">
       {/* Global Drag & Drop Overlay */}
       {globalDragging && (
         <div className="fixed inset-0 bg-blue-900/80 backdrop-blur-xs z-50 flex flex-col items-center justify-center text-white border-4 border-dashed border-blue-300 m-6 rounded-2xl animate-in fade-in">
