@@ -186,10 +186,10 @@ export default function Navigation() {
                       ? 'bg-blue-50 text-blue-700 font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
-                  title="자재·가공비·외주비 마스터 단가표 관리"
+                  title="자재·가공비·외주비 표준 단가 및 가공 임률 관리"
                 >
                   <Database className="w-4 h-4 text-amber-600" />
-                  <span>마스터 기준정보</span>
+                  <span>표준 단가·임률</span>
                 </Link>
                 {user?.role === 'TENANT_ADMIN' && (
                   <Link

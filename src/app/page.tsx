@@ -996,7 +996,7 @@ export default function HomePage() {
                 >
                   <span className="flex items-center gap-1.5">
                     <Database className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>마스터 기준정보 (단가표)</span>
+                    <span>표준 단가·임률 관리</span>
                   </span>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                 </Link>

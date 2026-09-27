@@ -554,7 +554,7 @@ export default function MasterDataManagerPage() {
               <span className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
                 <Database className="w-5 h-5" />
               </span>
-              <h1 className="text-lg font-bold text-slate-900">기준정보(마스터) 관리 센터</h1>
+              <h1 className="text-lg font-bold text-slate-900">표준 단가·임률 관리 센터</h1>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               사내 공인 표준 부품, 단가표, 소재 시세 및 가공 임률을 등록하고 관리합니다.
@@ -592,7 +592,7 @@ export default function MasterDataManagerPage() {
             {/* Top Stat Cards: 6대 실무 분류 */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
               <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-[11px] font-medium text-slate-500 block">전체 마스터</span>
+                <span className="text-[11px] font-medium text-slate-500 block">전체 표준 품목</span>
                 <span className="text-xl font-black text-slate-900 font-mono mt-0.5 block">{stats.total.toLocaleString()}개</span>
               </div>
               <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
