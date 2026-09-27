@@ -665,8 +665,8 @@ export default function HomePage() {
         />
       )}
 
-      {/* Main Split Layout: Left Control Panel + Right Main Work Table (Zero gap to eliminate whitespace) */}
-      <div className="flex items-start gap-0 transition-all duration-200">
+      {/* Main Split Layout: Left Control Panel + Right Main Work Table */}
+      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-2' : 'gap-0'}`}>
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
           <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 space-y-3.5 flex flex-col transition-all sticky top-4 relative z-20">
