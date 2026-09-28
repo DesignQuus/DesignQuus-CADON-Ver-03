@@ -1539,59 +1539,182 @@ export default function HomePage() {
                             </span>
                           </div>
                         ) : c.quote_total_amount && Number(c.quote_total_amount) > 0 ? (
-                          <div className="flex flex-col items-center">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              5/5 견적발행
-                            </span>
-                            <span className="text-[10px] text-emerald-600 font-bold mt-0.5">
-                              공식 견적서 채번
-                            </span>
+                          <div className="relative group/status flex flex-col items-center">
+                            <Link
+                              href="/quotes"
+                              className="flex flex-col items-center group cursor-pointer"
+                            >
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-extrabold bg-emerald-50 group-hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition-colors">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                5/5 견적발행
+                              </span>
+                              <span className="text-[10px] text-emerald-600 font-bold mt-0.5 group-hover:underline flex items-center gap-0.5">
+                                <span>공식 견적서 채번</span>
+                                <ChevronRight className="w-2.5 h-2.5" />
+                              </span>
+                            </Link>
+
+                            {/* 💡 호버 안내 카드 */}
+                            <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
+                                <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                  <span>📌</span> 다음 기능 안내
+                                </span>
+                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-emerald-100 text-emerald-800">
+                                  5단계 : 발행완료
+                                </span>
+                              </div>
+                              <div className="space-y-1 text-[11px] text-slate-600">
+                                <div>• 공식 견적서 채번 및 단가 확정 완료</div>
+                                <div className="text-slate-800 font-bold">👉 클릭 시 [견적서 관리 대장]으로 이동하여 공식 엑셀 다운로드 및 [변경비교]를 진행합니다.</div>
+                              </div>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-300"></div>
+                            </div>
                           </div>
                         ) : c.bom_items_count > 0 ? (
-                          <Link
-                            href={`/quotes/${c.id}/review`}
-                            className="flex flex-col items-center group cursor-pointer"
-                            title="BOM 104건 추출 완료! 클릭하여 AI 공학원가 산출 및 마스터 단가 검토·확정 화면으로 이동합니다."
-                          >
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 group-hover:bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs transition-colors">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                              4/5 단가검토 대기
-                            </span>
-                            <span className="text-[10px] text-amber-700 font-semibold mt-0.5 group-hover:underline flex items-center gap-0.5">
-                              <span>단가 확정 필요 ({c.bom_items_count}건)</span>
-                              <ChevronRight className="w-2.5 h-2.5" />
-                            </span>
-                          </Link>
+                          <div className="relative group/status flex flex-col items-center">
+                            <Link
+                              href={`/quotes/${c.id}/review`}
+                              className="flex flex-col items-center group cursor-pointer"
+                            >
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 group-hover:bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs transition-colors">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                4/5 단가검토 대기
+                              </span>
+                              <span className="text-[10px] text-amber-700 font-semibold mt-0.5 group-hover:underline flex items-center gap-0.5">
+                                <span>단가 확정 필요 ({c.bom_items_count}건)</span>
+                                <ChevronRight className="w-2.5 h-2.5" />
+                              </span>
+                            </Link>
+
+                            {/* 💡 마우스 호버 시 다음 단계 안내 카드 */}
+                            <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-72 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
+                                <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                  <span>📌</span> 다음 진행 단계 가이드
+                                </span>
+                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800">
+                                  4단계 : 단가검토
+                                </span>
+                              </div>
+                              <div className="space-y-1.5 text-[11px] text-slate-600">
+                                <div className="flex items-start gap-1.5">
+                                  <span className="text-emerald-600 font-bold">✔</span>
+                                  <span>도면 분석 완료: <strong>BOM {c.bom_items_count}개 품목</strong> 추출됨</span>
+                                </div>
+                                <div className="flex items-start gap-1.5">
+                                  <span className="text-blue-600 font-bold">👉</span>
+                                  <span className="text-slate-800 font-bold">클릭 시 [단가 검토 화면]으로 이동</span>
+                                </div>
+                                <div className="pl-3.5 text-[10px] text-slate-500 space-y-0.5 border-l-2 border-indigo-200 my-1">
+                                  <div>• <strong>[⚡ AI 공학원가 산출]</strong> 버튼으로 단가 자동 계산</div>
+                                  <div>• 사내 마스터 단가 대조 및 비도면 부대비용 추가</div>
+                                  <div>• <strong>[결재 상신]</strong> 누르면 5단계 견적서 즉시 발행</div>
+                                </div>
+                              </div>
+                              <div className="mt-2 pt-1.5 border-t border-slate-100 text-center">
+                                <span className="text-[10.5px] font-extrabold text-indigo-600">
+                                  클릭하여 단가 검토 및 산출 시작하기 →
+                                </span>
+                              </div>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-300"></div>
+                            </div>
+                          </div>
                         ) : c.drawings_count > 0 ? (
-                          <div className="flex flex-col items-center">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                              2/5 AI파싱
-                            </span>
-                            <span className="text-[10px] text-indigo-600 font-medium mt-0.5">
-                              도면 {c.drawings_count}매 추출
-                            </span>
+                          <div className="relative group/status flex flex-col items-center">
+                            <Link
+                              href={`/cases/${c.id}`}
+                              className="flex flex-col items-center group cursor-pointer"
+                            >
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-50 group-hover:bg-indigo-100 text-indigo-800 border border-indigo-200 shadow-2xs transition-colors">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                2/5 AI파싱
+                              </span>
+                              <span className="text-[10px] text-indigo-600 font-medium mt-0.5 group-hover:underline flex items-center gap-0.5">
+                                <span>도면 {c.drawings_count}매 추출</span>
+                                <ChevronRight className="w-2.5 h-2.5" />
+                              </span>
+                            </Link>
+
+                            <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
+                                <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                  <span>📌</span> 다음 기능 안내
+                                </span>
+                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-indigo-100 text-indigo-800">
+                                  2단계 : 파싱완료
+                                </span>
+                              </div>
+                              <div className="space-y-1 text-[11px] text-slate-600">
+                                <div>• 도면 {c.drawings_count}매 외곽선 및 도곽 감지 완료</div>
+                                <div className="text-slate-800 font-bold">👉 클릭 시 3단계 [가상 BOM 추출 및 풍선기호 검증] 화면으로 이동합니다.</div>
+                              </div>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-300"></div>
+                            </div>
                           </div>
                         ) : c.files_count && c.files_count > 0 ? (
-                          <div className="flex flex-col items-center">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                              1/5 도면접수
-                            </span>
-                            <span className="text-[10px] text-blue-600 font-medium mt-0.5">
-                              AI 분석 대기중
-                            </span>
+                          <div className="relative group/status flex flex-col items-center">
+                            <Link
+                              href={`/cases/${c.id}`}
+                              className="flex flex-col items-center group cursor-pointer"
+                            >
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 group-hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                1/5 도면접수
+                              </span>
+                              <span className="text-[10px] text-blue-600 font-medium mt-0.5 group-hover:underline flex items-center gap-0.5">
+                                <span>AI 분석 대기중</span>
+                                <ChevronRight className="w-2.5 h-2.5" />
+                              </span>
+                            </Link>
+
+                            <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
+                                <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                  <span>📌</span> 다음 기능 안내
+                                </span>
+                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-blue-100 text-blue-800">
+                                  1단계 : 접수완료
+                                </span>
+                              </div>
+                              <div className="space-y-1 text-[11px] text-slate-600">
+                                <div>• 도면 파일 업로드 완료</div>
+                                <div className="text-slate-800 font-bold">👉 클릭 시 2단계 [AI 도면 분석 및 파싱]을 즉시 시작합니다.</div>
+                              </div>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-300"></div>
+                            </div>
                           </div>
                         ) : (
-                          <div className="flex flex-col items-center">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                              사전접수 (도면대기)
-                            </span>
-                            <span className="text-[10px] text-amber-600 font-medium mt-0.5">
-                              도면 미첨부 상태
-                            </span>
+                          <div className="relative group/status flex flex-col items-center">
+                            <Link
+                              href={`/cases/${c.id}?step=1`}
+                              className="flex flex-col items-center group cursor-pointer"
+                            >
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 group-hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                사전접수 (도면대기)
+                              </span>
+                              <span className="text-[10px] text-amber-600 font-medium mt-0.5 group-hover:underline flex items-center gap-0.5">
+                                <span>도면 미첨부 상태</span>
+                                <ChevronRight className="w-2.5 h-2.5" />
+                              </span>
+                            </Link>
+
+                            <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
+                                <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                  <span>📌</span> 다음 기능 안내
+                                </span>
+                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800">
+                                  도면 등록 필요
+                                </span>
+                              </div>
+                              <div className="space-y-1 text-[11px] text-slate-600">
+                                <div>• 견적의뢰 기본 정보 등록 완료</div>
+                                <div className="text-slate-800 font-bold">👉 클릭 시 [DWG / DXF 도면 파일 업로드] 화면으로 이동합니다.</div>
+                              </div>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-300"></div>
+                            </div>
                           </div>
                         )}
                       </td>
