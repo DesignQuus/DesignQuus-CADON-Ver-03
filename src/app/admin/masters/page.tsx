@@ -7,7 +7,7 @@ import {
   Database, Plus, Upload, Search, Download, Trash2, CheckCircle2,
   RefreshCw, FileSpreadsheet, ArrowLeft, Sliders, DollarSign,
   AlertCircle, Layers, X, Scissors, Flame, Sparkles, Wrench, Percent, Factory, ShieldCheck,
-  Target, Calculator, TrendingUp, ArrowRight, CheckSquare, Square, Save
+  Target, Calculator, TrendingUp, ArrowRight, CheckSquare, Square, Save, ChevronDown, Tag
 } from 'lucide-react';
 
 const MATERIAL_NAMES: Record<string, string> = {
@@ -24,6 +24,15 @@ const MATERIAL_NAMES: Record<string, string> = {
   'BsBM': '쾌삭 황동 / 동합금',
   'MC-NYLON': 'MC 나일론 (엔지니어링 플라스틱)',
   'POM': '아세탈 (POM 폴리아세탈)'
+};
+
+const CATEGORY_STAT_KEYS: Record<string, 'machining' | 'sheetMetal' | 'casting' | 'commercial' | 'electrical' | 'assembly'> = {
+  MACHINING: 'machining',
+  SHEET_METAL: 'sheetMetal',
+  CASTING: 'casting',
+  COMMERCIAL: 'commercial',
+  ELECTRICAL: 'electrical',
+  ASSEMBLY: 'assembly'
 };
 
 // 💡 3단계 담당자 눈높이: 실시간 단가 영향도 시뮬레이션용 대표 5대 부품
@@ -118,6 +127,8 @@ export default function MasterDataManagerPage() {
   const [modifiedItems, setModifiedItems] = useState<Record<string, number>>({});
   const [isSavingBatch, setIsSavingBatch] = useState(false);
   const [bulkCustomPriceInput, setBulkCustomPriceInput] = useState('');
+  const [bulkCategory, setBulkCategory] = useState<string>('MACHINING');
+  const [isApplyingCategory, setIsApplyingCategory] = useState<boolean>(false);
 
   // New Item Modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -438,6 +449,102 @@ export default function MasterDataManagerPage() {
     );
     setModifiedItems(newMod);
     setBulkCustomPriceInput('');
+  };
+
+  // 3-1. 테이블 인라인 개별 부품 유형 변경 (방안 A: 1-클릭 즉시 변경 및 자동 DB 반영)
+  const handleInlineCategoryChange = async (id: string, newCategory: string) => {
+    const targetItem = items.find((it) => it.id === id);
+    if (!targetItem || targetItem.category === newCategory) return;
+    const oldCat = targetItem.category;
+
+    // 1. UI 및 상단 통계 즉시 갱신 (반응속도 0ms)
+    setStats((prev) => {
+      const updated = { ...prev };
+      const oldKey = CATEGORY_STAT_KEYS[oldCat];
+      const newKey = CATEGORY_STAT_KEYS[newCategory];
+      if (oldKey && updated[oldKey] > 0) updated[oldKey]--;
+      if (newKey) updated[newKey] = (updated[newKey] || 0) + 1;
+      return updated;
+    });
+
+    setItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, category: newCategory } : it))
+    );
+
+    // 2. DB 즉시 저장
+    try {
+      await apiFetch('/api/admin/masters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'batch_update_products',
+          items: [{ id, category: newCategory }]
+        })
+      });
+    } catch (err) {
+      console.error('부품 유형 변경 저장 실패:', err);
+    }
+  };
+
+  // 3-2. 하단 툴바: 선택 품목 부품 유형 일괄 변경 (방안 B: 다중 선택 일괄 적용)
+  const handleBulkApplyCategory = async () => {
+    if (selectedIds.length === 0) {
+      alert('유형을 변경할 품목을 먼저 선택해 주세요.');
+      return;
+    }
+
+    setIsApplyingCategory(true);
+    try {
+      const targetItems = items.filter((it) => selectedIds.includes(it.id));
+
+      // 상단 통계 갱신
+      setStats((prev) => {
+        const updated = { ...prev };
+        for (const it of targetItems) {
+          if (it.category !== bulkCategory) {
+            const oldKey = CATEGORY_STAT_KEYS[it.category];
+            const newKey = CATEGORY_STAT_KEYS[bulkCategory];
+            if (oldKey && updated[oldKey] > 0) updated[oldKey]--;
+            if (newKey) updated[newKey] = (updated[newKey] || 0) + 1;
+          }
+        }
+        return updated;
+      });
+
+      // 테이블 품목 상태 갱신
+      setItems((prev) =>
+        prev.map((it) => (selectedIds.includes(it.id) ? { ...it, category: bulkCategory } : it))
+      );
+
+      // DB 일괄 갱신 API 호출
+      const payload = selectedIds.map((id) => ({ id, category: bulkCategory }));
+      const res = await apiFetch('/api/admin/masters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'batch_update_products',
+          items: payload
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || '일괄 부품 유형 저장 실패');
+      }
+
+      const catLabel =
+        bulkCategory === 'MACHINING' ? '가공품' :
+        bulkCategory === 'SHEET_METAL' ? '판금/제관' :
+        bulkCategory === 'CASTING' ? '주조품' :
+        bulkCategory === 'COMMERCIAL' ? '규격철물' :
+        bulkCategory === 'ELECTRICAL' ? '전장/공압' : '조립품';
+
+      alert(`선택된 ${selectedIds.length}개 품목의 부품 유형이 [${catLabel}]으로 일괄 변경 및 저장되었습니다.`);
+    } catch (err: any) {
+      alert('부품 유형 일괄 변경 중 오류: ' + (err.message || ''));
+    } finally {
+      setIsApplyingCategory(false);
+    }
   };
 
   // 4. 선택 및 수정된 품목 일괄 DB 저장
@@ -958,23 +1065,31 @@ export default function MasterDataManagerPage() {
                             {it.material || 'SS400'}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-center">
-                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                            it.category === 'MACHINING' ? 'bg-blue-100 text-blue-800' :
-                            it.category === 'SHEET_METAL' ? 'bg-cyan-100 text-cyan-800' :
-                            it.category === 'CASTING' ? 'bg-orange-100 text-orange-800' :
-                            it.category === 'COMMERCIAL' ? 'bg-emerald-100 text-emerald-800' :
-                            it.category === 'ELECTRICAL' ? 'bg-purple-100 text-purple-800' :
-                            it.category === 'ASSEMBLY' ? 'bg-indigo-100 text-indigo-800' :
-                            'bg-slate-100 text-slate-700'
-                          }`}>
-                            {it.category === 'MACHINING' ? '가공품' :
-                             it.category === 'SHEET_METAL' ? '판금/제관' :
-                             it.category === 'CASTING' ? '주조품' :
-                             it.category === 'COMMERCIAL' ? '규격철물' :
-                             it.category === 'ELECTRICAL' ? '전장/공압' :
-                             it.category === 'ASSEMBLY' ? '조립품' : (it.category || '미분류')}
-                          </span>
+                        <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="relative inline-flex items-center">
+                            <select
+                              value={it.category || 'MACHINING'}
+                              onChange={(e) => handleInlineCategoryChange(it.id, e.target.value)}
+                              className={`appearance-none pl-2.5 pr-6 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all border outline-none shadow-2xs hover:brightness-95 ${
+                                it.category === 'MACHINING' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                                it.category === 'SHEET_METAL' ? 'bg-cyan-100 text-cyan-800 border-cyan-300' :
+                                it.category === 'CASTING' ? 'bg-orange-100 text-orange-800 border-orange-300' :
+                                it.category === 'COMMERCIAL' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                                it.category === 'ELECTRICAL' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                                it.category === 'ASSEMBLY' ? 'bg-indigo-100 text-indigo-800 border-indigo-300' :
+                                'bg-slate-100 text-slate-700 border-slate-300'
+                              }`}
+                              title="클릭하여 부품 유형 변경 (선택 시 즉시 저장)"
+                            >
+                              <option value="MACHINING" className="bg-white text-slate-800 font-medium">가공품</option>
+                              <option value="SHEET_METAL" className="bg-white text-slate-800 font-medium">판금/제관</option>
+                              <option value="CASTING" className="bg-white text-slate-800 font-medium">주조품</option>
+                              <option value="COMMERCIAL" className="bg-white text-slate-800 font-medium">규격철물</option>
+                              <option value="ELECTRICAL" className="bg-white text-slate-800 font-medium">전장/공압</option>
+                              <option value="ASSEMBLY" className="bg-white text-slate-800 font-medium">조립품</option>
+                            </select>
+                            <ChevronDown className="w-3 h-3 text-current opacity-60 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
                         </td>
                         {selectedIds.includes(it.id) ? (
                           <td className="py-1 px-3 text-right" onClick={(e) => e.stopPropagation()}>
@@ -1083,6 +1198,38 @@ export default function MasterDataManagerPage() {
                       적용
                     </button>
                   </div>
+                </div>
+
+                <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+
+                {/* 부품 유형 일괄 변경 컨트롤러 (방안 B) */}
+                <div className="flex items-center gap-1.5 text-xs bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1">
+                  <span className="text-[11px] text-slate-300 font-medium flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5 text-blue-400" />
+                    유형:
+                  </span>
+                  <select
+                    value={bulkCategory}
+                    onChange={(e) => setBulkCategory(e.target.value)}
+                    className="bg-slate-900 border border-slate-600 rounded-lg px-2 py-0.5 text-xs text-white outline-none cursor-pointer font-medium"
+                    title="선택된 품목들에 일괄 적용할 부품 유형 선택"
+                  >
+                    <option value="MACHINING">가공품</option>
+                    <option value="SHEET_METAL">판금/제관</option>
+                    <option value="CASTING">주조품</option>
+                    <option value="COMMERCIAL">규격철물</option>
+                    <option value="ELECTRICAL">전장/공압</option>
+                    <option value="ASSEMBLY">조립품</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleBulkApplyCategory}
+                    disabled={isApplyingCategory}
+                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10.5px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                    title={`선택된 ${selectedIds.length}개 품목의 부품 유형을 일괄 변경합니다.`}
+                  >
+                    {isApplyingCategory ? '적용 중...' : '유형 일괄 적용'}
+                  </button>
                 </div>
 
                 <div className="h-4 w-px bg-slate-700 hidden md:block" />
