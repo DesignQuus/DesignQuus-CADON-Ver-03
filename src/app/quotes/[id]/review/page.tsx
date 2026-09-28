@@ -16,6 +16,7 @@ import MasterRecommendationCard, { RecommendationItem } from '@/components/revie
 import MasterPriceReferenceDrawer from '@/components/review/MasterPriceReferenceDrawer';
 import ReviewCadViewer from '@/components/review/ReviewCadViewer';
 import PilotWelcomeModal from '@/components/review/PilotWelcomeModal';
+import BatchMasterRegisterModal from '@/components/review/BatchMasterRegisterModal';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
 import { parseRemark, stringifyRemark } from '@/lib/remark-cost-helper';
 import {
@@ -238,6 +239,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
   const [isMasterDrawerOpen, setIsMasterDrawerOpen] = useState<boolean>(false);
   const [isPilotModalOpen, setIsPilotModalOpen] = useState<boolean>(false);
+  const [isBatchMasterModalOpen, setIsBatchMasterModalOpen] = useState<boolean>(false);
 
   // 실제 CAD 도면 및 2D 벡터 오브젝트 상태
   const [files, setFiles] = useState<any[]>([]);
@@ -1155,6 +1157,28 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     );
 
     alert(`총 ${items.length}건의 도면 표제란/주석 노이즈가 격리실로 이동되었으며, 사내 노이즈 블랙리스트에 영구 학습되었습니다.`);
+  };
+
+  // ⭐ 사내 마스터 DB 일괄 등록 완료 핸들러
+  const handleBatchMasterSuccess = (updatedItems: { id: string; supplyPrice: number; unitCost: number; partNo: string; partName: string }[]) => {
+    const updatedIdMap = new Map(updatedItems.map((u) => [u.id, u]));
+    setLines((prev) =>
+      prev.map((l) => {
+        const match = updatedIdMap.get(l.id);
+        if (!match) return l;
+        return {
+          ...l,
+          supplyPrice: match.supplyPrice,
+          unitCost: match.unitCost > 0 ? match.unitCost : l.unitCost,
+          status: 'CONFIRMED' as const,
+          priceSource: 'MASTER_MATCH',
+          priceStatus: 'READY',
+          masterPrice: match.supplyPrice
+        };
+      })
+    );
+    setSelectedIds([]);
+    alert(`총 ${updatedItems.length}건의 품목이 사내 마스터 DB에 등록되었으며, 현재 견적 라인에 확정 반영되었습니다.`);
   };
 
   // 📝 사내 노이즈 블랙리스트 단건 추가 핸들러
@@ -2092,6 +2116,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             onUpdateLineInclusion={handleUpdateLineInclusion}
             onBatchUpdateInclusion={handleBatchUpdateInclusion}
             onAddNoiseBlacklist={handleAddNoiseBlacklist}
+            onOpenBatchMasterModal={() => setIsBatchMasterModalOpen(true)}
           />
         </div>
       </div>
@@ -2225,6 +2250,15 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       <PilotWelcomeModal
         isOpen={isPilotModalOpen}
         onOpenChange={setIsPilotModalOpen}
+      />
+
+      {/* 💎 7. 사내 마스터 DB 일괄 등록 및 기준 단가 설정 모달 */}
+      <BatchMasterRegisterModal
+        isOpen={isBatchMasterModalOpen}
+        onClose={() => setIsBatchMasterModalOpen(false)}
+        caseId={caseId}
+        selectedLines={lines.filter((l) => selectedIds.includes(l.id))}
+        onSuccess={handleBatchMasterSuccess}
       />
     </div>
   );

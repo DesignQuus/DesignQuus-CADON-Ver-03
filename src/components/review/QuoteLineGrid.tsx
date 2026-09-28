@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import {
   CheckCircle2, Clock, HelpCircle, ShieldAlert, AlertCircle,
   Package, Wrench, Ban, Check, ChevronDown, CheckSquare, Square,
-  Sparkles, ShieldCheck
+  Sparkles, ShieldCheck, Database
 } from 'lucide-react';
 
 export type InclusionType = 'INCLUDED' | 'CUSTOMER_SUPPLIED' | 'FASTENER_EXCLUDED' | 'EXCLUDED' | 'ANNOTATION_NOISE';
@@ -67,6 +67,7 @@ interface QuoteLineGridProps {
   onUpdateLineInclusion?: (lineId: string, inclusionType: InclusionType) => void;
   onBatchUpdateInclusion?: (lineIds: string[], inclusionType: InclusionType) => void;
   onAddNoiseBlacklist?: (keyword: string) => void;
+  onOpenBatchMasterModal?: (selectedIds: string[]) => void;
 }
 
 export default function QuoteLineGrid({
@@ -81,7 +82,8 @@ export default function QuoteLineGrid({
   onSelectAll,
   onUpdateLineInclusion,
   onBatchUpdateInclusion,
-  onAddNoiseBlacklist
+  onAddNoiseBlacklist,
+  onOpenBatchMasterModal
 }: QuoteLineGridProps) {
   // 열려있는 인라인 드롭다운 상태 관리
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
@@ -716,6 +718,16 @@ export default function QuoteLineGrid({
             >
               <Check className="w-3 h-3" /> 포함으로 복원
             </button>
+            {onOpenBatchMasterModal && (
+              <button
+                onClick={() => onOpenBatchMasterModal(selectedIds)}
+                className="px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md ring-1 ring-amber-400 ml-1.5"
+                title="선택된 품목들의 단가를 직접 검토/수정하고 사내 마스터 DB에 일괄 등록합니다."
+              >
+                <Database className="w-3.5 h-3.5 text-amber-100" />
+                <span>⭐ 마스터 DB 일괄 등록</span>
+              </button>
+            )}
             <button
               onClick={() => onSelectAll && onSelectAll(false)}
               className="ml-2 px-2 py-1 text-slate-400 hover:text-white text-[11px] cursor-pointer"
