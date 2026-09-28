@@ -179,6 +179,7 @@ export default function CadViewer({
   const [titleBlockSearch, setTitleBlockSearch] = useState<string>('');
   const [filterDuplicatesOnly, setFilterDuplicatesOnly] = useState<boolean>(false);
   const [highlightDrawingIds, setHighlightDrawingIds] = useState<string[]>([]);
+  const [dismissedDuplicateGroupKey, setDismissedDuplicateGroupKey] = useState<string | null>(null);
   const [reasonMenuDwgId, setReasonMenuDwgId] = useState<string | null>(null);
 
   // External CAD launch states
@@ -931,17 +932,23 @@ export default function CadViewer({
 
   // 💎 Active Duplicate Group in CAD View
   const activeDuplicateGroup = useMemo(() => {
+    let group: any[] | null = null;
     if (selectedDrawingIdx >= 0 && drawings[selectedDrawingIdx]) {
       const rawNo = (drawings[selectedDrawingIdx].drawing_no_raw || '').trim();
-      const group = duplicateMap.get(rawNo);
-      if (group && group.length > 1) return group;
+      const g = duplicateMap.get(rawNo);
+      if (g && g.length > 1) group = g;
     }
-    if (highlightDrawingIds.length > 0) {
+    if (!group && highlightDrawingIds.length > 0) {
       const matched = drawings.filter(d => highlightDrawingIds.includes(d.id));
-      if (matched.length > 1) return matched;
+      if (matched.length > 1) group = matched;
     }
-    return null;
-  }, [selectedDrawingIdx, drawings, duplicateMap, highlightDrawingIds]);
+    if (!group || group.length === 0) return null;
+    const rawKey = (group[0]?.drawing_no_raw || '').trim();
+    if (dismissedDuplicateGroupKey && (rawKey === dismissedDuplicateGroupKey || dismissedDuplicateGroupKey === '__DISMISSED__')) {
+      return null;
+    }
+    return group;
+  }, [selectedDrawingIdx, drawings, duplicateMap, highlightDrawingIds, dismissedDuplicateGroupKey]);
 
   // 💎 Tree Children Map (for quote cascading and descendant lookup)
   const treeChildrenMap = useMemo(() => {
@@ -1274,6 +1281,9 @@ export default function CadViewer({
     }
 
     const rawNo = (dwg.drawing_no_raw || '').trim();
+    if (rawNo && rawNo !== dismissedDuplicateGroupKey) {
+      setDismissedDuplicateGroupKey(null);
+    }
     const dupGroup = duplicateMap.get(rawNo);
     if (dupGroup && dupGroup.length > 1) {
       setHighlightDrawingIds(dupGroup.map(g => g.id));
@@ -1317,6 +1327,7 @@ export default function CadViewer({
   // 💎 Zoom to All Duplicate Instances of a Drawing (Fit Union Box)
   const handleZoomToAllDuplicates = (group: any[]) => {
     if (!group || group.length === 0) return;
+    setDismissedDuplicateGroupKey(null);
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     group.forEach(item => {
       try {
@@ -2088,6 +2099,7 @@ export default function CadViewer({
           onResetFocus={() => {
             setWebGlFocusBbox(null);
             setHighlightDrawingIds([]);
+            setDismissedDuplicateGroupKey(null);
           }}
           activeFileId={selectedFile?.id}
           reloadKey={`${selectedFile?.id || ''}_${drawings.length}`}
@@ -2141,11 +2153,15 @@ export default function CadViewer({
               </button>
 
               <button
-                onClick={() => {
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const key = (activeDuplicateGroup?.[0]?.drawing_no_raw || '').trim();
+                  setDismissedDuplicateGroupKey(key || '__DISMISSED__');
                   setHighlightDrawingIds([]);
                 }}
-                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer ml-1"
-                title="네비게이터 닫기"
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer ml-1 transition-colors"
+                title="동일 도면 네비게이터 닫기"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
