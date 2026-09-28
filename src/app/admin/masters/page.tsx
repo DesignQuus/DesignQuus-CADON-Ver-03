@@ -7,7 +7,7 @@ import {
   Database, Plus, Upload, Search, Download, Trash2, CheckCircle2,
   RefreshCw, FileSpreadsheet, ArrowLeft, Sliders, DollarSign,
   AlertCircle, Layers, X, Scissors, Flame, Sparkles, Wrench, Percent, Factory, ShieldCheck,
-  Target, Calculator, TrendingUp, ArrowRight, CheckSquare, Square
+  Target, Calculator, TrendingUp, ArrowRight, CheckSquare, Square, Save
 } from 'lucide-react';
 
 const MATERIAL_NAMES: Record<string, string> = {
@@ -115,6 +115,9 @@ export default function MasterDataManagerPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [modifiedItems, setModifiedItems] = useState<Record<string, number>>({});
+  const [isSavingBatch, setIsSavingBatch] = useState(false);
+  const [bulkCustomPriceInput, setBulkCustomPriceInput] = useState('');
 
   // New Item Modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -388,6 +391,116 @@ export default function MasterDataManagerPage() {
       alert('엑셀 다운로드 중 오류가 발생했습니다.');
     }
   };
+
+  // 1. 인라인 셀 단가 직접 타이핑 핸들러 (Excel/Notion 스프레드시트 방식)
+  const handleInlinePriceChange = (id: string, valStr: string) => {
+    const rawVal = parseInt(valStr.replace(/[^0-9]/g, ''), 10) || 0;
+    setModifiedItems((prev) => ({ ...prev, [id]: rawVal }));
+    setItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, unit_price: rawVal } : it))
+    );
+    if (!selectedIds.includes(id)) {
+      setSelectedIds((prev) => [...prev, id]);
+    }
+  };
+
+  // 2. 하단 툴바: 선택 품목 일괄 증감률 (+5%, +10%, -5%, -10% 등) 적용
+  const handleBulkRateAdjust = (ratePct: number) => {
+    if (selectedIds.length === 0) return;
+    const newMod: Record<string, number> = { ...modifiedItems };
+    setItems((prev) =>
+      prev.map((it) => {
+        if (!selectedIds.includes(it.id)) return it;
+        const currentPrice = it.unit_price || 0;
+        if (currentPrice <= 0) return it;
+        const adjusted = Math.round((currentPrice * (1 + ratePct / 100)) / 100) * 100;
+        newMod[it.id] = adjusted;
+        return { ...it, unit_price: adjusted };
+      })
+    );
+    setModifiedItems(newMod);
+  };
+
+  // 3. 하단 툴바: 선택 품목 직접 입력 단가 일괄 적용
+  const handleBulkApplyCustomPrice = () => {
+    const targetPrice = parseInt(bulkCustomPriceInput.replace(/[^0-9]/g, ''), 10);
+    if (isNaN(targetPrice) || targetPrice <= 0) {
+      alert('유효한 단가 금액을 입력해 주세요.');
+      return;
+    }
+    const newMod: Record<string, number> = { ...modifiedItems };
+    setItems((prev) =>
+      prev.map((it) => {
+        if (!selectedIds.includes(it.id)) return it;
+        newMod[it.id] = targetPrice;
+        return { ...it, unit_price: targetPrice };
+      })
+    );
+    setModifiedItems(newMod);
+    setBulkCustomPriceInput('');
+  };
+
+  // 4. 선택 및 수정된 품목 일괄 DB 저장
+  const handleSaveModifiedItems = async () => {
+    const targetIds = Array.from(new Set([...selectedIds, ...Object.keys(modifiedItems)]));
+    if (targetIds.length === 0) {
+      alert('저장할 품목이 선택되지 않았습니다.');
+      return;
+    }
+
+    const payloadItems = targetIds
+      .map((id) => {
+        const item = items.find((it) => it.id === id);
+        if (!item) return null;
+        return {
+          id: item.id,
+          unit_price: item.unit_price,
+          standard_name: item.standard_name,
+          specification: item.specification,
+          material: item.material,
+          category: item.category
+        };
+      })
+      .filter(Boolean);
+
+    setIsSavingBatch(true);
+    try {
+      const res = await apiFetch('/api/admin/masters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'batch_update_products',
+          items: payloadItems
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || '단가 갱신 실패');
+      }
+
+      alert(`총 ${payloadItems.length}건의 마스터 품목 단가가 성공적으로 DB에 일괄 저장되었습니다.`);
+      setModifiedItems({});
+    } catch (e: any) {
+      alert('단가 일괄 저장 중 오류: ' + (e.message || ''));
+    } finally {
+      setIsSavingBatch(false);
+    }
+  };
+
+  // 5. Ctrl + S 키보드 단축키 지원
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (selectedIds.length > 0 || Object.keys(modifiedItems).length > 0) {
+          handleSaveModifiedItems();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIds, modifiedItems, items]);
 
   // Excel Template Download Handler (.xlsx)
   const handleDownloadExcelTemplate = async () => {
@@ -863,9 +976,38 @@ export default function MasterDataManagerPage() {
                              it.category === 'ASSEMBLY' ? '조립품' : (it.category || '미분류')}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-right font-mono font-bold text-blue-700 text-xs">
-                          {it.unit_price > 0 ? `₩${it.unit_price.toLocaleString()}` : '-'}
-                        </td>
+                        {selectedIds.includes(it.id) ? (
+                          <td className="py-1 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.5 shadow-2xs ring-2 ring-blue-100">
+                              <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                              <input
+                                type="text"
+                                value={
+                                  it.unit_price > 0
+                                    ? it.unit_price.toLocaleString()
+                                    : ''
+                                }
+                                placeholder="0"
+                                onChange={(e) => handleInlinePriceChange(it.id, e.target.value)}
+                                className="w-24 text-right font-mono font-bold text-xs text-blue-700 outline-none bg-transparent"
+                              />
+                              {modifiedItems[it.id] !== undefined && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="수정됨 (저장 대기)" />
+                              )}
+                            </div>
+                          </td>
+                        ) : (
+                          <td
+                            className="py-2 px-3 text-right font-mono font-bold text-blue-700 text-xs hover:bg-blue-50/50 cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleSelect(it.id);
+                            }}
+                            title="클릭하여 단가 즉시 인라인 수정"
+                          >
+                            {it.unit_price > 0 ? `₩${it.unit_price.toLocaleString()}` : '-'}
+                          </td>
+                        )}
                         <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={(e) => {
@@ -885,41 +1027,110 @@ export default function MasterDataManagerPage() {
               </table>
             </div>
 
-            {/* 3. 플로팅 다중 선택 일괄 작업 바 */}
+            {/* 3. 플로팅 다중 선택 & 인라인 일괄 작업 툴바 */}
             {selectedIds.length > 0 && (
-              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-sm text-white rounded-2xl px-5 py-3 shadow-2xl border border-slate-700 flex items-center gap-4 z-50 animate-in slide-in-from-bottom-4">
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl px-5 py-3 shadow-2xl border border-slate-700 flex flex-wrap items-center gap-3 z-50 animate-in slide-in-from-bottom-4">
+                {/* 선택 카운터 뱃지 */}
                 <div className="flex items-center gap-2 text-xs">
                   <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-[11px]">
                     {selectedIds.length}
                   </span>
                   <span className="font-semibold">개 품목 선택됨</span>
+                  {Object.keys(modifiedItems).length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      {Object.keys(modifiedItems).length}건 수정됨
+                    </span>
+                  )}
                 </div>
 
-                <div className="h-4 w-px bg-slate-700" />
+                <div className="h-4 w-px bg-slate-700 hidden sm:block" />
 
+                {/* 단가 일괄 증감 컨트롤러 (원자재 시세 변동 반영) */}
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-[11px] text-slate-400 font-medium">일괄 증감:</span>
+                  {[
+                    { label: '+5%', rate: 5 },
+                    { label: '+10%', rate: 10 },
+                    { label: '-5%', rate: -5 },
+                    { label: '-10%', rate: -10 }
+                  ].map((btn) => (
+                    <button
+                      key={btn.label}
+                      type="button"
+                      onClick={() => handleBulkRateAdjust(btn.rate)}
+                      className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 font-mono text-[11px] font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+                      title={`선택된 ${selectedIds.length}개 품목의 단가를 ${btn.label} 일괄 조정합니다.`}
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
+
+                  {/* 직접 입력 일괄 변경 */}
+                  <div className="flex items-center gap-1 ml-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-0.5">
+                    <input
+                      type="text"
+                      value={bulkCustomPriceInput}
+                      onChange={(e) => setBulkCustomPriceInput(e.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="단가직접입력"
+                      className="w-20 text-[11px] font-mono font-bold text-white bg-transparent outline-none placeholder:text-slate-500 text-right"
+                    />
+                    <span className="text-[10px] text-slate-400">원</span>
+                    <button
+                      type="button"
+                      onClick={handleBulkApplyCustomPrice}
+                      className="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10.5px] font-bold transition-colors cursor-pointer"
+                    >
+                      적용
+                    </button>
+                  </div>
+                </div>
+
+                <div className="h-4 w-px bg-slate-700 hidden md:block" />
+
+                {/* 메인 저장 및 액션 버튼들 */}
                 <div className="flex items-center gap-2 text-xs">
                   <button
                     type="button"
+                    onClick={handleSaveModifiedItems}
+                    disabled={isSavingBatch}
+                    className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md disabled:opacity-50 ring-1 ring-emerald-400"
+                    title="선택 및 수정한 단가를 DB에 일괄 저장합니다. (단축키: Ctrl + S)"
+                  >
+                    {isSavingBatch ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5" />
+                    )}
+                    <span>선택 저장 (Ctrl+S)</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={handleBatchDelete}
-                    className="px-3.5 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-600 text-white font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-                    title="선택된 모든 마스터 품목을 삭제합니다."
+                    className="px-3 py-1.5 rounded-xl bg-rose-700/80 hover:bg-rose-600 text-white font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                    title="선택된 마스터 품목을 삭제합니다."
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>선택 일괄 삭제</span>
+                    <span>삭제</span>
                   </button>
+
                   <button
                     type="button"
                     onClick={handleExportSelectedExcel}
-                    className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-                    title="선택된 마스터 품목들을 엑셀(.xlsx) 파일로 내보냅니다."
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                    title="선택된 마스터 품목들을 엑셀 파일로 다운로드합니다."
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>선택 품목 엑셀 다운로드</span>
+                    <span>엑셀</span>
                   </button>
+
                   <button
                     type="button"
-                    onClick={() => setSelectedIds([])}
-                    className="ml-2 text-slate-400 hover:text-white text-xs cursor-pointer font-medium"
+                    onClick={() => {
+                      setSelectedIds([]);
+                      setModifiedItems({});
+                    }}
+                    className="ml-1 text-slate-400 hover:text-white text-xs cursor-pointer font-medium"
                   >
                     선택 해제
                   </button>

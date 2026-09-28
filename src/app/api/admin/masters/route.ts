@@ -281,6 +281,59 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    // 4. 마스터 품목 인라인/일괄 단가 및 정보 갱신 (Batch Update Products)
+    if (action === 'batch_update_products') {
+      const { items } = body;
+      if (!Array.isArray(items) || items.length === 0) {
+        return NextResponse.json({ error: '수정할 품목 데이터가 없습니다.' }, { status: 400 });
+      }
+
+      let updatedCount = 0;
+      for (const it of items) {
+        if (!it.id) continue;
+        const newPrice = Number(it.unit_price) || 0;
+
+        // price_masters 업데이트 또는 신규 삽입
+        const existingPrice = (await db.prepare(`
+          SELECT id FROM price_masters WHERE master_id = ? AND is_active = 1
+        `).get(it.id)) as any;
+
+        if (existingPrice) {
+          await db.prepare(`
+            UPDATE price_masters
+            SET unit_price = ?, created_at = ?
+            WHERE id = ?
+          `).run(newPrice, now, existingPrice.id);
+        } else if (newPrice > 0) {
+          const priceId = `pm_${Date.now()}_${updatedCount}_${Math.random().toString(36).slice(2, 5)}`;
+          await db.prepare(`
+            INSERT INTO price_masters (id, master_id, price_type, unit_price, currency, effective_from, is_active, created_at)
+            VALUES (?, ?, 'STANDARD', ?, 'KRW', ?, 1, ?)
+          `).run(priceId, it.id, newPrice, now.slice(0, 10), now);
+        }
+
+        if (it.standard_name || it.specification || it.material || it.category) {
+          await db.prepare(`
+            UPDATE product_masters
+            SET standard_name = COALESCE(?, standard_name),
+                specification = COALESCE(?, specification),
+                material = COALESCE(?, material),
+                category = COALESCE(?, category)
+            WHERE id = ?
+          `).run(it.standard_name || null, it.specification || null, it.material || null, it.category || null, it.id);
+        }
+
+        updatedCount++;
+      }
+
+      await recordActivity(req, session, {
+        activityType: 'ADMIN_ACTION',
+        details: `마스터 품목 인라인 단가 일괄 갱신 완료: 총 ${updatedCount}건`
+      });
+
+      return NextResponse.json({ success: true, count: updatedCount });
+    }
+
     return NextResponse.json({ error: '알 수 없는 요청 액션입니다.' }, { status: 400 });
   } catch (error: any) {
     console.error('Failed to post master data:', error);
