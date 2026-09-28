@@ -156,9 +156,12 @@ export function prefetchPageData(route: string): void {
         fetchWithCache('quotes', '/api/quotes');
       }
     } else if (route.startsWith('/admin/masters')) {
-      // 마스터 기준정보 프리페치
-      if (!isCacheFresh('masters_materials', 30000)) {
-        fetchWithCache('masters_materials', '/api/admin/masters/materials');
+      // 마스터 기준정보 및 임률 설정 프리페치
+      if (!isCacheFresh('masters_items_ALL', 20000)) {
+        fetchWithCache('masters_items_ALL', '/api/admin/masters?q=&category=ALL');
+      }
+      if (!isCacheFresh('masters_settings', 60000)) {
+        fetchWithCache('masters_settings', '/api/admin/masters?type=settings');
       }
     }
   } catch (e) {

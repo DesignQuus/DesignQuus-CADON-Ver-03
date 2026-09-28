@@ -16,14 +16,18 @@ export default function Navigation() {
 
   useEffect(() => {
     // 1. 빠른 캐시 우선 복원 (화면 깜빡임 방지)
+    let hasCachedUser = false;
     try {
       const cached = localStorage.getItem('cadon_user');
-      if (cached) setUser(JSON.parse(cached));
+      if (cached) {
+        setUser(JSON.parse(cached));
+        hasCachedUser = true;
+      }
     } catch {}
 
     const now = Date.now();
-    // 30초 내 동일 세션 재요청 차단 (중복 네트워크 방지)
-    if (now - lastFetchRef.current < 30000 && user) {
+    // 60초 내 동일 세션 재요청 차단 (탭 전환 시 불필요한 네트워크 병목 및 리렌더링 방지)
+    if (now - lastFetchRef.current < 60000 && (user || hasCachedUser)) {
       return;
     }
     lastFetchRef.current = now;
