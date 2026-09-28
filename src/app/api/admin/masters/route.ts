@@ -296,15 +296,25 @@ export async function DELETE(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
-  if (!id) {
+  const idsParam = searchParams.get('ids');
+  const ids = idsParam ? idsParam.split(',').filter(Boolean) : (id ? [id] : []);
+
+  if (ids.length === 0) {
     return NextResponse.json({ error: '삭제할 품목 ID가 필요합니다.' }, { status: 400 });
   }
 
   try {
-    await db.prepare('DELETE FROM price_masters WHERE master_id = ?').run(id);
-    await db.prepare('DELETE FROM product_masters WHERE id = ?').run(id);
+    for (const singleId of ids) {
+      await db.prepare('DELETE FROM price_masters WHERE master_id = ?').run(singleId);
+      await db.prepare('DELETE FROM product_masters WHERE id = ?').run(singleId);
+    }
 
-    return NextResponse.json({ success: true });
+    await recordActivity(req, session, {
+      activityType: 'ADMIN_ACTION',
+      details: `마스터 품목 ${ids.length}건 삭제 완료`
+    });
+
+    return NextResponse.json({ success: true, count: ids.length });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || '삭제 실패' }, { status: 500 });
   }

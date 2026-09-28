@@ -7,7 +7,7 @@ import {
   Database, Plus, Upload, Search, Download, Trash2, CheckCircle2,
   RefreshCw, FileSpreadsheet, ArrowLeft, Sliders, DollarSign,
   AlertCircle, Layers, X, Scissors, Flame, Sparkles, Wrench, Percent, Factory, ShieldCheck,
-  Target, Calculator, TrendingUp, ArrowRight
+  Target, Calculator, TrendingUp, ArrowRight, CheckSquare, Square
 } from 'lucide-react';
 
 const MATERIAL_NAMES: Record<string, string> = {
@@ -114,6 +114,7 @@ export default function MasterDataManagerPage() {
   const [items, setItems] = useState<MasterProduct[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // New Item Modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -308,6 +309,83 @@ export default function MasterDataManagerPage() {
       }
     } catch (e) {
       alert('삭제 중 오류 발생');
+    }
+  };
+
+  // 체크박스 다중 선택 핸들러
+  const allSelected = items.length > 0 && items.every((it) => selectedIds.includes(it.id));
+
+  const handleToggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(items.map((it) => it.id));
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  // 선택 품목 일괄 삭제
+  const handleBatchDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`선택한 ${selectedIds.length}개 마스터 품목을 정말로 일괄 삭제하시겠습니까?\n삭제된 기준 정보는 복구할 수 없습니다.`)) return;
+
+    try {
+      const res = await apiFetch(`/api/admin/masters?ids=${selectedIds.join(',')}`, { method: 'DELETE' });
+      if (res.ok) {
+        setItems((prev) => prev.filter((it) => !selectedIds.includes(it.id)));
+        alert(`선택한 ${selectedIds.length}개 마스터 품목이 일괄 삭제되었습니다.`);
+        setSelectedIds([]);
+      } else {
+        alert('일괄 삭제 중 오류가 발생했습니다.');
+      }
+    } catch (e) {
+      alert('일괄 삭제 처리 중 네트워크 오류가 발생했습니다.');
+    }
+  };
+
+  // 선택 품목 엑셀 다운로드
+  const handleExportSelectedExcel = async () => {
+    if (selectedIds.length === 0) return;
+    const selectedItems = items.filter((it) => selectedIds.includes(it.id));
+    try {
+      const XLSX = await import('xlsx');
+      const exportData = selectedItems.map((it, idx) => ({
+        'No': idx + 1,
+        '마스터코드': it.master_code,
+        '표준품명': it.standard_name,
+        '규격(Spec)': it.specification || '-',
+        '재질': it.material || 'SS400',
+        '부품유형': it.category === 'MACHINING' ? '가공품' :
+                    it.category === 'SHEET_METAL' ? '판금/제관' :
+                    it.category === 'CASTING' ? '주조품' :
+                    it.category === 'COMMERCIAL' ? '규격철물' :
+                    it.category === 'ELECTRICAL' ? '전장/공압' :
+                    it.category === 'ASSEMBLY' ? '조립품' : (it.category || '미분류'),
+        '공인기준단가(원)': it.unit_price || 0,
+        '단위': it.unit || 'EA'
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      ws['!cols'] = [
+        { wch: 6 },
+        { wch: 18 },
+        { wch: 28 },
+        { wch: 20 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 8 }
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '선택_마스터_단가목록');
+      XLSX.writeFile(wb, `CADON_선택마스터품목_${new Date().toISOString().substring(0, 10)}.xlsx`);
+    } catch (e) {
+      alert('엑셀 다운로드 중 오류가 발생했습니다.');
     }
   };
 
@@ -703,6 +781,16 @@ export default function MasterDataManagerPage() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                    <th className="py-2 px-3 w-10 text-center">
+                      <button
+                        type="button"
+                        onClick={handleToggleSelectAll}
+                        className="text-slate-500 hover:text-blue-600 transition-colors cursor-pointer flex items-center justify-center mx-auto"
+                        title={allSelected ? '전체 선택 해제' : '전체 선택'}
+                      >
+                        {allSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4" />}
+                      </button>
+                    </th>
                     <th className="py-2 px-3 w-12 text-center">No</th>
                     <th className="py-2 px-3 w-36">마스터 코드</th>
                     <th className="py-2 px-3">표준 품명</th>
@@ -716,20 +804,38 @@ export default function MasterDataManagerPage() {
                 <tbody className="divide-y divide-slate-100 font-sans">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                      <td colSpan={9} className="py-12 text-center text-slate-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-500" />
                         기준정보 데이터를 불러오는 중입니다...
                       </td>
                     </tr>
                   ) : items.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                      <td colSpan={9} className="py-12 text-center text-slate-400">
                         등록된 마스터 품목이 없습니다. 상단 [신규 품목 등록] 또는 [엑셀 일괄 업로드]를 진행해 주세요.
                       </td>
                     </tr>
                   ) : (
                     items.map((it, idx) => (
-                      <tr key={it.id || it.master_code || `master-item-${idx}`} className="hover:bg-slate-50 transition-colors">
+                      <tr
+                        key={it.id || it.master_code || `master-item-${idx}`}
+                        className={`hover:bg-slate-50 transition-colors ${
+                          selectedIds.includes(it.id) ? 'bg-blue-50/60' : ''
+                        }`}
+                      >
+                        <td className="py-1.5 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSelect(it.id)}
+                            className="text-slate-500 hover:text-blue-600 transition-colors cursor-pointer flex items-center justify-center mx-auto"
+                          >
+                            {selectedIds.includes(it.id) ? (
+                              <CheckSquare className="w-4 h-4 text-blue-600" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
                         <td className="py-1.5 px-3 text-center text-slate-400 font-mono">{idx + 1}</td>
                         <td className="py-1.5 px-3 font-mono font-bold text-slate-900">{it.master_code}</td>
                         <td className="py-1.5 px-3 font-medium text-slate-900">{it.standard_name}</td>
@@ -775,6 +881,48 @@ export default function MasterDataManagerPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* 3. 플로팅 다중 선택 일괄 작업 바 */}
+            {selectedIds.length > 0 && (
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-sm text-white rounded-2xl px-5 py-3 shadow-2xl border border-slate-700 flex items-center gap-4 z-50 animate-in slide-in-from-bottom-4">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-[11px]">
+                    {selectedIds.length}
+                  </span>
+                  <span className="font-semibold">개 품목 선택됨</span>
+                </div>
+
+                <div className="h-4 w-px bg-slate-700" />
+
+                <div className="flex items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={handleBatchDelete}
+                    className="px-3.5 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-600 text-white font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                    title="선택된 모든 마스터 품목을 삭제합니다."
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>선택 일괄 삭제</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportSelectedExcel}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                    title="선택된 마스터 품목들을 엑셀(.xlsx) 파일로 내보냅니다."
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>선택 품목 엑셀 다운로드</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds([])}
+                    className="ml-2 text-slate-400 hover:text-white text-xs cursor-pointer font-medium"
+                  >
+                    선택 해제
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           /* Tab 2: Settings (소재 시세 & 임률 설정) */
