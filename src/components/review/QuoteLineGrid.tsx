@@ -491,6 +491,19 @@ export default function QuoteLineGrid({
                                         ? `(${diffPctFromMaster > 0 ? `▲+${diffPctFromMaster}%` : `▼${diffPctFromMaster}%`})`
                                         : '(일치)'}
                                     </span>
+                                  ) : onOpenBatchMasterModal ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onOpenBatchMasterModal([row.id]);
+                                      }}
+                                      className="text-amber-800 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                                      title="이 부품을 사내 마스터 DB에 등록합니다."
+                                    >
+                                      <Database className="w-2.5 h-2.5 text-amber-600" />
+                                      <span>⭐ 마스터 등록</span>
+                                    </button>
                                   ) : (
                                     <span className="text-purple-600 font-medium" title="사내 마스터 프라이스 미등록 품목">
                                       마스터: 미등록

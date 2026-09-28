@@ -229,14 +229,16 @@ export default function BatchMasterRegisterModal({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-slate-800">
-                  사내 마스터 DB 일괄 등록 및 기준 단가 설정
+                  {selectedLines.length > 1 ? '사내 마스터 DB 일괄 등록 및 기준 단가 설정' : '사내 마스터 DB 등록 및 기준 단가 설정'}
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                   선택 {selectedLines.length}건
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                선택한 품목의 견적 단가를 사내 마스터 DB 및 기준 단가표에 일괄 적재하고, 현재 견적 라인에 즉시 확정 반영합니다.
+                {selectedLines.length > 1
+                  ? '선택한 품목들의 견적 단가를 사내 마스터 DB 및 기준 단가표에 일괄 적재하고, 현재 견적 라인에 즉시 확정 반영합니다.'
+                  : '본 품목의 견적 단가를 사내 마스터 DB 및 기준 단가표에 적재하고, 현재 견적 라인에 즉시 확정 반영합니다.'}
               </p>
             </div>
           </div>
@@ -494,7 +496,7 @@ export default function BatchMasterRegisterModal({
               ) : (
                 <>
                   <Database className="w-4 h-4" />
-                  <span>선택 {selectedItems.length}건 마스터 DB 일괄 등록 및 견적 반영</span>
+                  <span>{selectedItems.length > 1 ? `선택 ${selectedItems.length}건 마스터 DB 일괄 등록 및 견적 반영` : '마스터 DB 등록 및 견적 반영'}</span>
                 </>
               )}
             </button>

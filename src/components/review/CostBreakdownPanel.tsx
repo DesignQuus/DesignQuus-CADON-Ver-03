@@ -157,20 +157,27 @@ export default function CostBreakdownPanel({
     applyTargetMargin(current + delta);
   };
 
-  // 마스터 DB 영구 적재/갱신 핸들러
+  // 마스터 DB 1-클릭 영구 적재/갱신 핸들러
   const handleSaveToMaster = async () => {
     if (!caseId) {
       alert('견적건 ID가 유효하지 않습니다.');
       return;
     }
-    if (line.supplyPrice <= 0) {
-      alert('0원 이상의 유효한 공급단가를 입력해야 마스터 DB에 등록할 수 있습니다.');
-      return;
+
+    let targetPrice = line.supplyPrice;
+    if (targetPrice <= 0) {
+      if (line.unitCost > 0) {
+        // 단가가 0원이고 산출원가가 있는 경우, 사내 표준 15% 마진 단가 자동 적용
+        targetPrice = Math.round((line.unitCost / (1 - 0.15)) / 100) * 100;
+      } else {
+        alert('공급단가 또는 산출원가가 0원 이하인 품목은 마스터 DB에 등록할 수 없습니다. 단가를 먼저 입력해 주세요.');
+        return;
+      }
     }
 
     // 1. 이미 마스터 표준 단가와 일치하는 경우
     if (isPriceMasterMatched) {
-      alert(`현재 공급단가(₩${line.supplyPrice.toLocaleString()})는 이미 사내 표준 마스터 DB 단가와 완벽히 일치합니다.`);
+      alert(`현재 공급단가(₩${targetPrice.toLocaleString()})는 이미 사내 표준 마스터 DB 단가와 완벽히 일치합니다.`);
       return;
     }
 
@@ -181,7 +188,7 @@ export default function CostBreakdownPanel({
         `[사내 표준 마스터 단가 갱신 확인]\n\n` +
         `• 품목: [${line.partNo}] ${line.partName}\n` +
         `• 기존 마스터 단가: ₩${topMasterPrice!.toLocaleString()}\n` +
-        `• 새로 등록할 단가: ₩${line.supplyPrice.toLocaleString()} (${diffText})\n\n` +
+        `• 새로 등록할 단가: ₩${targetPrice.toLocaleString()} (${diffText})\n\n` +
         `기존 마스터 단가를 현재 단가로 갱신하시겠습니까?\n` +
         `(갱신 시 향후 신규 견적에 새 단가가 사내 표준으로 자동 반영됩니다.)`
       );
@@ -206,7 +213,7 @@ export default function CostBreakdownPanel({
           partType: line.partType,
           material: line.material,
           specification: line.specification || '',
-          unitPrice: line.supplyPrice,
+          unitPrice: targetPrice,
           unitCost: line.unitCost,
           remark: structuredRemark
         })
@@ -216,12 +223,16 @@ export default function CostBreakdownPanel({
       if (res.ok && json.success) {
         setMasterSaved(true);
         setTimeout(() => setMasterSaved(false), 4000);
-        // 단가 출처를 마스터 일치로 동기화
-        onUpdateLine({ priceSource: 'MASTER_MATCH' });
-        // 품목 상태도 확정으로 자동 연동
+        // 단가 출처를 마스터 일치 및 확정으로 동기화
+        onUpdateLine({
+          supplyPrice: targetPrice,
+          priceSource: 'MASTER_MATCH',
+          status: 'CONFIRMED'
+        });
         if (onConfirmLine && line.status !== 'CONFIRMED') {
           await onConfirmLine(line.id);
         }
+        alert(`[${line.partName}] 품목이 사내 마스터 DB 및 기준 단가(₩${targetPrice.toLocaleString()})로 1-클릭 등록되었습니다.`);
       } else {
         alert(json.error || '마스터 DB 저장 실패');
       }
@@ -301,25 +312,25 @@ export default function CostBreakdownPanel({
               <span>⭐ 마스터가(₩{topMasterPrice.toLocaleString()}) 적용</span>
             </button>
           ) : (
-            /* 🚀 마스터 DB 영구 적재 / 갱신 버튼 (공급단가가 0원 초과일 때만 유효) */
+            /* 🚀 마스터 DB 1-클릭 영구 적재 / 갱신 버튼 */
             <button
               onClick={handleSaveToMaster}
-              disabled={savingMaster || line.supplyPrice <= 0 || isPriceMasterMatched}
-              className={`px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-2xs ${
+              disabled={savingMaster || (line.supplyPrice <= 0 && line.unitCost <= 0) || isPriceMasterMatched}
+              className={`px-3 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-xs ${
                 masterSaved
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-emerald-600 text-white shadow-emerald-200'
                   : isPriceMasterMatched
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 opacity-90 cursor-default'
                   : isPriceMasterDiff && line.supplyPrice > 0
                   ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 ring-1 ring-amber-200 cursor-pointer'
-                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer'
+                  : 'bg-linear-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-amber-200 ring-1 ring-amber-400 cursor-pointer'
               }`}
               title={
                 isPriceMasterMatched
                   ? '현재 공급단가가 이미 사내 표준 마스터 DB 단가와 일치합니다.'
                   : isPriceMasterDiff && line.supplyPrice > 0
                   ? `기존 마스터 단가(₩${topMasterPrice?.toLocaleString()})를 현재 단가(₩${line.supplyPrice.toLocaleString()})로 갱신합니다.`
-                  : '이 품목과 확정 단가를 사내 표준 마스터 DB에 신규 등록하여 향후 견적 시 자동 추천되도록 학습시킵니다.'
+                  : '본 품목을 사내 표준 마스터 DB에 1-클릭으로 영구 등록합니다.'
               }
             >
               {savingMaster ? (
@@ -329,16 +340,18 @@ export default function CostBreakdownPanel({
               ) : isPriceMasterMatched ? (
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
               ) : (
-                <Database className="w-3.5 h-3.5 text-indigo-600" />
+                <Database className="w-3.5 h-3.5 text-amber-100" />
               )}
               <span>
                 {masterSaved
                   ? '마스터 등록 완료'
                   : isPriceMasterMatched
-                  ? `✓ 마스터 프라이스 일치 (₩${topMasterPrice?.toLocaleString()})`
+                  ? `✓ 마스터 일치 (₩${topMasterPrice?.toLocaleString()})`
                   : isPriceMasterDiff && line.supplyPrice > 0
-                  ? `기존 ₩${topMasterPrice?.toLocaleString()} ➔ ₩${line.supplyPrice.toLocaleString()} 프라이스 갱신`
-                  : '+ 마스터 프라이스 신규 등록'}
+                  ? `기존 ₩${topMasterPrice?.toLocaleString()} ➔ ₩${line.supplyPrice.toLocaleString()} 갱신`
+                  : line.supplyPrice > 0
+                  ? `⭐ 마스터 DB 등록 (₩${line.supplyPrice.toLocaleString()})`
+                  : `⭐ 마스터 DB 1-클릭 등록`}
               </span>
             </button>
           )}
