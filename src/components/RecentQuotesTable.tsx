@@ -4,7 +4,6 @@ import { apiFetch } from '@/lib/api';
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { Download, Clock, Plus, ChevronRight, FileSpreadsheet } from 'lucide-react';
-import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 
 interface QuoteItem {
   id: string;
@@ -147,19 +146,11 @@ export default function RecentQuotesTable({ quotes }: RecentQuotesTableProps) {
                         {q.quote_date || new Date(q.created_at).toLocaleDateString('ko-KR')}
                       </span>
                     </td>
-                    <td className="py-3 px-4 max-w-[200px]">
-                      <SmartTruncateTooltip
-                        text={q.case_name || '-'}
-                        className="font-semibold text-slate-800 text-xs"
-                        maxWidthClass="max-w-[190px]"
-                      />
+                    <td className="py-3 px-4 font-semibold text-slate-800 max-w-[200px] truncate">
+                      {q.case_name || '-'}
                     </td>
-                    <td className="py-3 px-4 max-w-[160px]">
-                      <SmartTruncateTooltip
-                        text={q.company_name || '미지정 고객사'}
-                        className="text-slate-600 font-medium text-xs"
-                        maxWidthClass="max-w-[150px]"
-                      />
+                    <td className="py-3 px-4 text-slate-600 font-medium">
+                      {q.company_name || '미지정 고객사'}
                     </td>
                     <td className="py-3 px-4 text-center font-semibold text-slate-700 font-mono">
                       {q.item_count || 0}개
