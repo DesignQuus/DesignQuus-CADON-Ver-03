@@ -20,7 +20,8 @@ import {
   TrendingUp,
   FileText,
   ChevronRight,
-  ArrowUpRight
+  ArrowUpRight,
+  Trash2
 } from 'lucide-react';
 
 interface QuoteItem {
@@ -112,6 +113,26 @@ export default function QuotesListPage() {
       alert(err.message || '엑셀 다운로드 중 오류가 발생했습니다.');
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  // 견적서 영구 삭제 핸들러
+  const handleDeleteQuote = async (quoteId: string, quoteNo: string) => {
+    if (!confirm(`견적서 [${quoteNo}]을(를) 정말 삭제하시겠습니까?\n삭제된 견적서는 복구할 수 없습니다.`)) {
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/quotes/${quoteId}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || '견적서 삭제 실패');
+      }
+      setQuotes((prev) => prev.filter((q) => q.id !== quoteId));
+      alert(`견적서 [${quoteNo}]이(가) 삭제되었습니다.`);
+    } catch (e: any) {
+      alert(e.message || '견적서 삭제 중 오류가 발생했습니다.');
     }
   };
 
@@ -422,6 +443,15 @@ export default function QuotesListPage() {
                           >
                             <ExternalLink className="w-4 h-4" />
                           </Link>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteQuote(q.id, q.quote_no)}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                            title="견적서 영구 삭제"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>

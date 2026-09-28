@@ -37,7 +37,8 @@ import {
   User,
   RotateCcw,
   FileWarning,
-  Filter
+  Filter,
+  Trash2
 } from 'lucide-react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
@@ -637,6 +638,25 @@ export default function HomePage() {
       alert('오류 발생: ' + e.message);
     } finally {
       setDownloadingQuoteId(null);
+    }
+  };
+
+  const handleDeleteQuote = async (quoteId: string, quoteNo: string) => {
+    if (!confirm(`견적서 [${quoteNo}]을(를) 정말 삭제하시겠습니까?\n삭제된 견적서는 복구할 수 없습니다.`)) {
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/quotes/${quoteId}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || '견적서 삭제 실패');
+      }
+      setQuotes((prev) => prev.filter((q) => q.id !== quoteId));
+      alert(`견적서 [${quoteNo}]이(가) 삭제되었습니다.`);
+    } catch (e: any) {
+      alert(e.message || '견적서 삭제 중 오류가 발생했습니다.');
     }
   };
 
@@ -1735,20 +1755,31 @@ export default function HomePage() {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadExcel(q.id, q.quote_no)}
-                          disabled={downloadingQuoteId === q.id}
-                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-                          title="한국 표준 견적서 양식 Excel (.xlsx) 즉시 다운로드"
-                        >
-                          {downloadingQuoteId === q.id ? (
-                            <Clock className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Download className="w-3.5 h-3.5" />
-                          )}
-                          <span>엑셀출력</span>
-                        </button>
+                        <div className="flex items-center justify-center space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadExcel(q.id, q.quote_no)}
+                            disabled={downloadingQuoteId === q.id}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                            title="한국 표준 견적서 양식 Excel (.xlsx) 즉시 다운로드"
+                          >
+                            {downloadingQuoteId === q.id ? (
+                              <Clock className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                            <span>엑셀출력</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteQuote(q.id, q.quote_no)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                            title="견적서 영구 삭제"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
