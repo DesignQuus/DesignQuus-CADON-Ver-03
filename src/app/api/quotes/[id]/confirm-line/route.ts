@@ -20,6 +20,7 @@ export async function POST(
       unitCost, 
       qtyTier, 
       lotQuantity, 
+      quantity,
       basis, 
       selectedMasterId,
       remark,
@@ -30,7 +31,7 @@ export async function POST(
     const now = new Date().toISOString();
 
     // 조치 1: 조립도 배제(0원)는 정상 확정 가능, 일반 부품의 공급단가 0원은 CONFIRMED 전환 차단
-    if (isConfirmed && (Number(unitPrice) || 0) <= 0) {
+    if (isConfirmed && unitPrice !== undefined && (Number(unitPrice) || 0) <= 0) {
       const isAssembly = partKey?.includes('ASSEMBLY') || (body.drawingType && String(body.drawingType).includes('ASSEMBLY'));
       if (!isAssembly) {
         return NextResponse.json({
@@ -45,22 +46,23 @@ export async function POST(
     if (lineId) {
       // quote_items 테이블 조회 및 업데이트
       try {
-        const qi = (await db.prepare('SELECT id, quantity, price_status, remark FROM quote_items WHERE id = ?').get(lineId)) as any;
+        const qi = (await db.prepare('SELECT id, quote_id, final_bom_item_id, unit_price, quantity, price_status, remark FROM quote_items WHERE id = ?').get(lineId)) as any;
         if (qi) {
           if (qi.price_status === 'CONFIRMED') {
             wasAlreadyConfirmed = true;
           }
-          const qty = Number(qi.quantity) || 1;
-          const amt = (Number(unitPrice) || 0) * qty;
+          const targetQty = quantity !== undefined ? Math.max(1, Number(quantity) || 1) : (Number(qi.quantity) || 1);
+          const targetPrice = unitPrice !== undefined ? Number(unitPrice) : (Number(qi.unit_price) || 0);
+          const amt = targetPrice * targetQty;
 
           // costDiff 또는 engineSuggestedPrice 병합
           let finalRemark = remark !== undefined ? remark : qi.remark;
           const parsedCurrent = parseRemark(finalRemark);
-          const resolvedCostDiff = costDiff || (engineSuggestedPrice && Number(unitPrice) > 0 ? {
+          const resolvedCostDiff = costDiff || (engineSuggestedPrice && targetPrice > 0 ? {
             engineSuggestedPrice: Math.round(Number(engineSuggestedPrice)),
-            confirmedPrice: Math.round(Number(unitPrice)),
-            delta: Math.round(Number(unitPrice) - Number(engineSuggestedPrice)),
-            deltaPercent: Number((((Number(unitPrice) - Number(engineSuggestedPrice)) / Number(engineSuggestedPrice)) * 100).toFixed(1)),
+            confirmedPrice: Math.round(targetPrice),
+            delta: Math.round(targetPrice - Number(engineSuggestedPrice)),
+            deltaPercent: Number((((targetPrice - Number(engineSuggestedPrice)) / Number(engineSuggestedPrice)) * 100).toFixed(1)),
             recordedAt: now
           } : parsedCurrent.costDiff);
 
@@ -68,12 +70,42 @@ export async function POST(
             finalRemark = stringifyRemark(parsedCurrent.text, parsedCurrent.extraCosts, resolvedCostDiff);
           }
 
+          const statusUpdate = isConfirmed !== undefined 
+            ? (isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW')
+            : qi.price_status;
+          const incUpdate = isConfirmed !== undefined ? (isConfirmed ? 1 : 0) : 1;
+
           await db.prepare(`
             UPDATE quote_items
-            SET unit_price = ?, amount = ?, price_status = ?, is_included = ?, price_source = 'MANUAL_REVIEW',
+            SET quantity = ?, unit_price = ?, amount = ?, price_status = ?, is_included = ?, price_source = COALESCE(?, price_source),
                 remark = COALESCE(?, remark)
             WHERE id = ?
-          `).run(unitPrice || 0, amt, isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW', isConfirmed ? 1 : 0, finalRemark || null, lineId);
+          `).run(targetQty, targetPrice, amt, statusUpdate, incUpdate, isConfirmed ? 'MANUAL_REVIEW' : null, finalRemark || null, lineId);
+
+          // final_bom_items 도 수량 동기화
+          if (qi.final_bom_item_id) {
+            try {
+              await db.prepare('UPDATE final_bom_items SET final_quantity = ? WHERE id = ?').run(targetQty, qi.final_bom_item_id);
+            } catch (fbErr) {
+              console.warn('final_bom_items quantity sync note:', fbErr);
+            }
+          }
+
+          // 견적서 헤더 합계 실시간 재계산
+          if (qi.quote_id) {
+            try {
+              await db.prepare(`
+                UPDATE quotes 
+                SET subtotal = (SELECT COALESCE(SUM(amount), 0) FROM quote_items WHERE quote_id = ? AND is_included = 1),
+                    tax_amount = ROUND((SELECT COALESCE(SUM(amount), 0) FROM quote_items WHERE quote_id = ? AND is_included = 1) * 0.1),
+                    total_amount = ROUND((SELECT COALESCE(SUM(amount), 0) FROM quote_items WHERE quote_id = ? AND is_included = 1) * 1.1),
+                    updated_at = ?
+                WHERE id = ?
+              `).run(qi.quote_id, qi.quote_id, qi.quote_id, now, qi.quote_id);
+            } catch (qErr) {
+              console.warn('quote totals update note:', qErr);
+            }
+          }
         }
       } catch (e) {
         console.warn('quote_items update note:', e);

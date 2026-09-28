@@ -17,6 +17,7 @@ import MasterPriceReferenceDrawer from '@/components/review/MasterPriceReference
 import ReviewCadViewer from '@/components/review/ReviewCadViewer';
 import PilotWelcomeModal from '@/components/review/PilotWelcomeModal';
 import BatchMasterRegisterModal from '@/components/review/BatchMasterRegisterModal';
+import AddNonDrawingItemModal, { NewNonDrawingItemPayload } from '@/components/review/AddNonDrawingItemModal';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
 import { parseRemark, stringifyRemark } from '@/lib/remark-cost-helper';
 import {
@@ -240,6 +241,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const [isMasterDrawerOpen, setIsMasterDrawerOpen] = useState<boolean>(false);
   const [isPilotModalOpen, setIsPilotModalOpen] = useState<boolean>(false);
   const [isBatchMasterModalOpen, setIsBatchMasterModalOpen] = useState<boolean>(false);
+  const [isAddNonDrawingModalOpen, setIsAddNonDrawingModalOpen] = useState<boolean>(false);
 
   // 실제 CAD 도면 및 2D 벡터 오브젝트 상태
   const [files, setFiles] = useState<any[]>([]);
@@ -923,6 +925,77 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const handleUpdateSelected = (updated: Partial<QuoteReviewLine>) => {
     if (!selectedLine) return;
     handleUpdateLinePrice(selectedLine.id, updated);
+  };
+
+  // ➕ 비도면 품목 직접 추가 핸들러
+  const handleAddItem = async (payload: NewNonDrawingItemPayload) => {
+    try {
+      const res = await apiFetch(`/api/quotes/${caseId}/add-item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || '품목 추가 실패');
+      }
+      const json = await res.json();
+      const created = json.item;
+      if (created) {
+        setLines((prev) => [
+          ...prev,
+          {
+            id: created.id,
+            itemNo: prev.length + 1,
+            partNo: created.partNo,
+            partName: created.partName,
+            partType: created.partType,
+            material: created.material,
+            quantity: created.quantity,
+            unitCost: created.unitCost,
+            supplyPrice: created.supplyPrice,
+            status: 'CONFIRMED' as const,
+            balloonNo: String(prev.length + 1),
+            specification: created.specification,
+            isAssembly: false,
+            isIncluded: true,
+            inclusionType: 'INCLUDED',
+            priceSource: created.priceSource || 'MANUAL_INPUT',
+            memo: created.remark
+          }
+        ]);
+        setSelectedIndex(lines.length);
+      }
+    } catch (e: any) {
+      alert(e.message || '비도면 품목 추가 중 오류가 발생했습니다.');
+    }
+  };
+
+  // ✏️ 품목 수량 인라인 수정 핸들러
+  const handleUpdateLineQuantity = async (lineId: string, quantity: number) => {
+    const qty = Math.max(1, Number(quantity) || 1);
+    setLines((prev) =>
+      prev.map((l) => (l.id === lineId ? { ...l, quantity: qty } : l))
+    );
+
+    const target = lines.find((l) => l.id === lineId);
+    if (!target) return;
+
+    try {
+      await apiFetch(`/api/quotes/${caseId}/confirm-line`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lineId: target.id,
+          quantity: qty,
+          unitPrice: target.supplyPrice,
+          unitCost: target.unitCost,
+          isConfirmed: target.status === 'CONFIRMED'
+        })
+      });
+    } catch (e) {
+      console.warn('Update line quantity sync error:', e);
+    }
   };
 
   // 🎯 다중 선택 체크 토글
@@ -2117,6 +2190,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             onBatchUpdateInclusion={handleBatchUpdateInclusion}
             onAddNoiseBlacklist={handleAddNoiseBlacklist}
             onOpenBatchMasterModal={() => setIsBatchMasterModalOpen(true)}
+            onOpenAddNonDrawingModal={() => setIsAddNonDrawingModalOpen(true)}
+            onUpdateLineQuantity={handleUpdateLineQuantity}
           />
         </div>
       </div>
@@ -2259,6 +2334,14 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         caseId={caseId}
         selectedLines={lines.filter((l) => selectedIds.includes(l.id))}
         onSuccess={handleBatchMasterSuccess}
+      />
+
+      {/* 💎 8. 비도면 품목 및 부대비용 직접 추가 모달 */}
+      <AddNonDrawingItemModal
+        isOpen={isAddNonDrawingModalOpen}
+        onClose={() => setIsAddNonDrawingModalOpen(false)}
+        onAddItem={handleAddItem}
+        caseId={caseId}
       />
     </div>
   );

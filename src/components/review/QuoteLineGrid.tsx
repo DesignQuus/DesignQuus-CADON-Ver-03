@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import {
   CheckCircle2, Clock, HelpCircle, ShieldAlert, AlertCircle,
   Package, Wrench, Ban, Check, ChevronDown, CheckSquare, Square,
-  Sparkles, ShieldCheck, Database
+  Sparkles, ShieldCheck, Database, Plus
 } from 'lucide-react';
 
 export type InclusionType = 'INCLUDED' | 'CUSTOMER_SUPPLIED' | 'FASTENER_EXCLUDED' | 'EXCLUDED' | 'ANNOTATION_NOISE';
@@ -68,6 +68,8 @@ interface QuoteLineGridProps {
   onBatchUpdateInclusion?: (lineIds: string[], inclusionType: InclusionType) => void;
   onAddNoiseBlacklist?: (keyword: string) => void;
   onOpenBatchMasterModal?: (selectedIds: string[]) => void;
+  onOpenAddNonDrawingModal?: () => void;
+  onUpdateLineQuantity?: (lineId: string, quantity: number) => void;
 }
 
 export default function QuoteLineGrid({
@@ -83,7 +85,9 @@ export default function QuoteLineGrid({
   onUpdateLineInclusion,
   onBatchUpdateInclusion,
   onAddNoiseBlacklist,
-  onOpenBatchMasterModal
+  onOpenBatchMasterModal,
+  onOpenAddNonDrawingModal,
+  onUpdateLineQuantity
 }: QuoteLineGridProps) {
   // 열려있는 인라인 드롭다운 상태 관리
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
@@ -184,24 +188,38 @@ export default function QuoteLineGrid({
           )}
         </div>
 
-        <select
-          value={filterType}
-          onChange={(e) => onFilterChange(e.target.value)}
-          className="text-xs px-2 py-1 border border-slate-200 rounded-md bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-        >
-          <option value="ALL">견적 대상 전체 ({quoteTargetLines.length}건)</option>
-          <option value="NEEDS_REVIEW">검토필요 항목</option>
-          <option value="UNCONFIRMED">미확정 항목</option>
-          <option value="SUPPLIED">고객 사급품 ({suppliedCount}건)</option>
-          <option value="NOISE">🧹 도면 주석/노이즈 격리실 ({noiseCount}건)</option>
-          <option value="MACHINING">가공품만</option>
-          <option value="SHEET_METAL">판금/제관만</option>
-          <option value="CASTING">주조품만</option>
-          <option value="COMMERCIAL">규격철물만</option>
-          <option value="ELECTRICAL">전장/공압만</option>
-          <option value="EXCLUDED">견적 제외/조립도 ({excludedCount}건)</option>
-          <option value="WITH_ASSEMBLY">전체 포함 ({lines.length}건)</option>
-        </select>
+        <div className="flex items-center gap-2">
+          {onOpenAddNonDrawingModal && (
+            <button
+              type="button"
+              onClick={onOpenAddNonDrawingModal}
+              className="px-2.5 py-1 text-xs font-bold rounded-md bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+              title="도면에 없는 부품, 사내 마스터 규격품, 부대비용(운송비/포장비 등) 직접 추가"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>비도면 품목 추가</span>
+            </button>
+          )}
+
+          <select
+            value={filterType}
+            onChange={(e) => onFilterChange(e.target.value)}
+            className="text-xs px-2 py-1 border border-slate-200 rounded-md bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+          >
+            <option value="ALL">견적 대상 전체 ({quoteTargetLines.length}건)</option>
+            <option value="NEEDS_REVIEW">검토필요 항목</option>
+            <option value="UNCONFIRMED">미확정 항목</option>
+            <option value="SUPPLIED">고객 사급품 ({suppliedCount}건)</option>
+            <option value="NOISE">🧹 도면 주석/노이즈 격리실 ({noiseCount}건)</option>
+            <option value="MACHINING">가공품만</option>
+            <option value="SHEET_METAL">판금/제관만</option>
+            <option value="CASTING">주조품만</option>
+            <option value="COMMERCIAL">규격철물만</option>
+            <option value="ELECTRICAL">전장/공압만</option>
+            <option value="EXCLUDED">견적 제외/조립도 ({excludedCount}건)</option>
+            <option value="WITH_ASSEMBLY">전체 포함 ({lines.length}건)</option>
+          </select>
+        </div>
       </div>
 
       {/* 2. 그리드 본문 */}
@@ -338,6 +356,11 @@ export default function QuoteLineGrid({
                         🧹 도면주석
                       </span>
                     )}
+                    {(row.priceSource === 'COST_PRESET' || row.priceSource === 'MANUAL_INPUT' || row.memo?.includes('비도면') || row.partNo?.startsWith('EXP-') || row.partNo?.startsWith('ETC-')) && (
+                      <span className="ml-1 px-1 py-0.2 text-[9px] rounded bg-indigo-50 text-indigo-700 font-bold border border-indigo-200" title="도면 외 직접 추가된 품목 또는 부대비용">
+                        {row.partNo?.startsWith('EXP-') ? '부대비용' : '비도면추가'}
+                      </span>
+                    )}
                   </td>
                   <td className="p-2 text-center">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
@@ -360,7 +383,23 @@ export default function QuoteLineGrid({
                     </span>
                   </td>
                   <td className="p-2 truncate">{row.material}</td>
-                  <td className="p-2 text-center font-mono">{row.quantity}</td>
+                  <td className="p-1 text-center font-mono" onClick={(e) => e.stopPropagation()}>
+                    {isNoise || isExcluded || row.isAssembly ? (
+                      <span className="text-slate-400 font-mono text-xs">{row.quantity}</span>
+                    ) : (
+                      <input
+                        type="number"
+                        min="1"
+                        value={row.quantity}
+                        onChange={(e) => {
+                          const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                          onUpdateLineQuantity?.(row.id, val);
+                        }}
+                        className="w-12 px-1 py-0.5 text-center font-mono font-bold bg-white hover:bg-slate-50 border border-slate-200 hover:border-blue-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded text-xs transition-colors"
+                        title="수량 직접 수정 (클릭 후 변경)"
+                      />
+                    )}
+                  </td>
                   <td className="p-2 text-right font-mono text-slate-500">
                     {isNoise ? (
                       <span className="text-amber-700 font-medium text-[10px]">노이즈제외</span>

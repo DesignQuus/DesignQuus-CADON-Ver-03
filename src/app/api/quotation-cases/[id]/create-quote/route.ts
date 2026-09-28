@@ -142,8 +142,26 @@ export async function POST(
         let priceSource = 'NOT_FOUND';
         let priceStatus = 'PRICE_NOT_FOUND';
 
+        // 0. Search previously confirmed price from existing quote_items of this quotation case
+        const prevConfirmed = (await db.prepare(`
+          SELECT qi.unit_price, qi.price_source, qi.price_status
+          FROM quote_items qi
+          JOIN quotes q ON qi.quote_id = q.id
+          WHERE q.quotation_case_id = ?
+            AND (qi.final_bom_item_id = ? OR (qi.drawing_no = ? AND qi.drawing_no != '') OR (qi.master_code = ? AND qi.master_code != '') OR qi.item_name = ?)
+            AND qi.unit_price > 0
+          ORDER BY q.created_at DESC, qi.rowid DESC
+          LIMIT 1
+        `).get(id, item.id, dwgNo, dwgNo, itemName)) as any;
+
+        if (prevConfirmed && prevConfirmed.unit_price > 0) {
+          unitPrice = prevConfirmed.unit_price;
+          priceSource = prevConfirmed.price_source || 'MANUAL_REVIEW';
+          priceStatus = 'READY';
+        }
+
         // 1. Search Price Master (SCD Type 2: 견적일 기준 유효기간 및 활성 상태 검증)
-        if (item.final_master_id) {
+        if (unitPrice === 0 && item.final_master_id) {
           const custPrice = (await db.prepare(`
             SELECT * FROM price_masters
             WHERE master_id = ? 
