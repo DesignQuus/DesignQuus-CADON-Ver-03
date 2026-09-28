@@ -1549,15 +1549,20 @@ export default function HomePage() {
                             </span>
                           </div>
                         ) : c.bom_items_count > 0 ? (
-                          <div className="flex flex-col items-center">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs">
+                          <Link
+                            href={`/quotes/${c.id}/review`}
+                            className="flex flex-col items-center group cursor-pointer"
+                            title="BOM 104건 추출 완료! 클릭하여 AI 공학원가 산출 및 마스터 단가 검토·확정 화면으로 이동합니다."
+                          >
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 group-hover:bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs transition-colors">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                              4/5 단가검토
+                              4/5 단가검토 대기
                             </span>
-                            <span className="text-[10px] text-amber-700 font-medium mt-0.5">
-                              BOM {c.bom_items_count}건 매칭중
+                            <span className="text-[10px] text-amber-700 font-semibold mt-0.5 group-hover:underline flex items-center gap-0.5">
+                              <span>단가 확정 필요 ({c.bom_items_count}건)</span>
+                              <ChevronRight className="w-2.5 h-2.5" />
                             </span>
-                          </div>
+                          </Link>
                         ) : c.drawings_count > 0 ? (
                           <div className="flex flex-col items-center">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
