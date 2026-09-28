@@ -211,7 +211,7 @@ export default function RevisionDiffPage({ params }: { params: Promise<{ id: str
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded border border-indigo-200">
-                3단계 : 리비전 Diff 비교 & 단가 계승
+                3단계 : 리비전 변경비교 & 단가 계승
               </span>
               <span className="text-xs text-slate-400 font-mono">{caseInfo?.case_no || caseId}</span>
             </div>

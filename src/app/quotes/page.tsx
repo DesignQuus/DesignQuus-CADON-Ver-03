@@ -402,9 +402,9 @@ export default function QuotesListPage() {
                           <Link
                             href={`/quotes/${q.quotation_case_id}/diff`}
                             className="px-2 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors flex items-center space-x-1"
-                            title="이전 리비전 대비 변경점 비교"
+                            title="이전 버전 대비 설계 및 단가 변경점 비교"
                           >
-                            <span>Diff비교</span>
+                            <span>변경비교</span>
                           </Link>
 
                           <Link
