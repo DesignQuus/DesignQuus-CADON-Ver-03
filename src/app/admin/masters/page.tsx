@@ -819,33 +819,33 @@ export default function MasterDataManagerPage() {
                     items.map((it, idx) => (
                       <tr
                         key={it.id || it.master_code || `master-item-${idx}`}
-                        className={`hover:bg-slate-50 transition-colors ${
-                          selectedIds.includes(it.id) ? 'bg-blue-50/60' : ''
+                        onClick={() => handleToggleSelect(it.id)}
+                        className={`transition-colors cursor-pointer select-none ${
+                          selectedIds.includes(it.id)
+                            ? 'bg-blue-50/80 hover:bg-blue-100/70 border-l-2 border-l-blue-600'
+                            : 'hover:bg-slate-50'
                         }`}
+                        title="클릭하여 품목을 선택/해제합니다."
                       >
-                        <td className="py-1.5 px-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleSelect(it.id)}
-                            className="text-slate-500 hover:text-blue-600 transition-colors cursor-pointer flex items-center justify-center mx-auto"
-                          >
+                        <td className="py-2 px-3 text-center">
+                          <div className="flex items-center justify-center">
                             {selectedIds.includes(it.id) ? (
                               <CheckSquare className="w-4 h-4 text-blue-600" />
                             ) : (
-                              <Square className="w-4 h-4" />
+                              <Square className="w-4 h-4 text-slate-300 hover:text-slate-500" />
                             )}
-                          </button>
+                          </div>
                         </td>
-                        <td className="py-1.5 px-3 text-center text-slate-400 font-mono">{idx + 1}</td>
-                        <td className="py-1.5 px-3 font-mono font-bold text-slate-900">{it.master_code}</td>
-                        <td className="py-1.5 px-3 font-medium text-slate-900">{it.standard_name}</td>
-                        <td className="py-1.5 px-3 font-mono text-slate-600">{it.specification || '-'}</td>
-                        <td className="py-1.5 px-3 text-center font-mono">
+                        <td className="py-2 px-3 text-center text-slate-400 font-mono">{idx + 1}</td>
+                        <td className="py-2 px-3 font-mono font-bold text-slate-900">{it.master_code}</td>
+                        <td className="py-2 px-3 font-medium text-slate-900">{it.standard_name}</td>
+                        <td className="py-2 px-3 font-mono text-slate-600">{it.specification || '-'}</td>
+                        <td className="py-2 px-3 text-center font-mono">
                           <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px]">
                             {it.material || 'SS400'}
                           </span>
                         </td>
-                        <td className="py-1.5 px-3 text-center">
+                        <td className="py-2 px-3 text-center">
                           <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                             it.category === 'MACHINING' ? 'bg-blue-100 text-blue-800' :
                             it.category === 'SHEET_METAL' ? 'bg-cyan-100 text-cyan-800' :
@@ -863,12 +863,15 @@ export default function MasterDataManagerPage() {
                              it.category === 'ASSEMBLY' ? '조립품' : (it.category || '미분류')}
                           </span>
                         </td>
-                        <td className="py-1.5 px-3 text-right font-mono font-bold text-blue-700 text-xs">
+                        <td className="py-2 px-3 text-right font-mono font-bold text-blue-700 text-xs">
                           {it.unit_price > 0 ? `₩${it.unit_price.toLocaleString()}` : '-'}
                         </td>
-                        <td className="py-1.5 px-3 text-center">
+                        <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={() => handleDeleteItem(it.id, it.master_code)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteItem(it.id, it.master_code);
+                            }}
                             className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
                             title="삭제"
                           >
