@@ -369,10 +369,6 @@ export default function HomePage() {
           if (!user) router.replace('/login');
           return;
         }
-        if (meData.user.role === 'SUPER_ADMIN') {
-          router.replace('/admin/companies');
-          return;
-        }
 
         const normalizedUser: UserProfile = {
           ...meData.user,

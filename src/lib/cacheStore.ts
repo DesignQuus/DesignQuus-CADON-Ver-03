@@ -163,6 +163,16 @@ export function prefetchPageData(route: string): void {
       if (!isCacheFresh('masters_settings', 60000)) {
         fetchWithCache('masters_settings', '/api/admin/masters?type=settings');
       }
+    } else if (route.startsWith('/admin/companies')) {
+      // 고객사 마스터 관리 프리페치
+      if (!isCacheFresh('companies', 30000)) {
+        fetchWithCache('companies', '/api/companies?include_stats=true&include_deleted=true');
+      }
+    } else if (route.startsWith('/admin/audit')) {
+      // 감사 로그 프리페치
+      if (!isCacheFresh('audit_logs', 15000)) {
+        fetchWithCache('audit_logs', '/api/admin/audit-logs?page=1&limit=30');
+      }
     }
   } catch (e) {
     // 백그라운드 프리페치 실패는 조용히 무시

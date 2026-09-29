@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-09-26T22:49:12.659Z
+ * Generated at: 2026-09-28T23:54:47.897Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -116,7 +116,7 @@ export const TABLES = {
   table14: {
     name: 'user_activity_logs',
     displayName: '사용자 감사 활동 로그',
-    rowCount: 279,
+    rowCount: 281,
     columnCount: 20,
     columns: ['id', '_version', 'user_id', 'user_name', 'user_login_id', 'user_role', 'activity_type', 'quotation_case_id', 'case_name', 'details', 'ip_address', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -179,14 +179,14 @@ export const TABLES = {
   table23: {
     name: 'quote_items',
     displayName: '견적서 명세 품목',
-    rowCount: 1003,
+    rowCount: 1001,
     columnCount: 28,
     columns: ['id', '_version', 'quote_id', 'final_bom_item_id', 'master_id', 'item_no', 'master_code', 'item_name', 'specification', 'material', 'quantity', 'unit', 'unit_price', 'amount', 'price_source', 'price_status', 'drawing_no', 'remark', 'is_included', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
   table24: {
     name: 'quotes',
     displayName: '견적서 마스터',
-    rowCount: 11,
+    rowCount: 9,
     columnCount: 31,
     columns: ['id', '_version', 'quotation_case_id', 'quote_no', 'quote_version', 'company_id', 'project_id', 'status', 'currency', 'subtotal', 'discount_type', 'discount_rate', 'discount_amount', 'tax_rate', 'tax_amount', 'total_amount', 'quote_date', 'is_locked', 'created_by_user_id', 'approved_by_user_id', 'approved_at', 'override_reason', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

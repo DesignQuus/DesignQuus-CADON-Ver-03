@@ -55,10 +55,12 @@ export default function LoginPage() {
       // Cache user and token in localStorage
       if (typeof window !== 'undefined') {
         try {
+          localStorage.removeItem('cadon_cached_cases');
           localStorage.setItem('cadon_user', JSON.stringify(data.user));
           if (data.token) {
             localStorage.setItem('cadon_token', data.token);
           }
+          window.dispatchEvent(new Event('cadon_auth_change'));
         } catch {}
 
         const params = new URLSearchParams(window.location.search);

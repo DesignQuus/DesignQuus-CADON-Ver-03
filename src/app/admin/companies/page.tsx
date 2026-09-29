@@ -92,7 +92,7 @@ export default function AdminCompaniesPage() {
       .then((data) => {
         if (data?.user) {
           setCurrentUser(data.user);
-          if (data.user.role === 'SUPER_ADMIN') {
+          if (['SUPER_ADMIN', 'TENANT_ADMIN'].includes(data.user.role)) {
             setIsAuthorized(true);
           } else {
             setIsAuthorized(false);
@@ -355,7 +355,7 @@ export default function AdminCompaniesPage() {
         </div>
         <h2 className="text-lg font-bold text-slate-900">접근 권한이 없습니다</h2>
         <p className="text-xs text-slate-500 max-w-sm text-center">
-          본 화면은 시스템 최고관리자(SUPER_ADMIN) 전용 화면입니다. 일반 견적 실무 담당자는 본사 견적의뢰 대시보드로 이동해 주세요.
+          본 화면은 시스템 최고관리자 및 총괄 관리자(ADMIN) 전용 화면입니다. 일반 견적 실무 담당자는 본사 견적의뢰 대시보드로 이동해 주세요.
         </p>
         <Link
           href="/cases"
@@ -375,7 +375,7 @@ export default function AdminCompaniesPage() {
         <div>
           <div className="flex items-center space-x-2 text-xs text-slate-500 mb-1.5 font-medium">
             <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-blue-800">
-              👑 시스템 최고관리자 포털
+              {currentUser?.role === 'SUPER_ADMIN' ? '👑 시스템 최고관리자 포털' : '🏢 본사 총괄 관리자 포털'}
             </span>
             <span>&gt;</span>
             <span className="text-blue-600 font-bold">거래처(고객사) 마스터</span>
