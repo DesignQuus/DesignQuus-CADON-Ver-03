@@ -341,8 +341,12 @@ export async function processCadFilePipeline(
     }
 
     // Auto-update Case Name from Title Block if current case name is temporary or from filename
-    const primaryDwg = structureResult.drawings.find((d: any) => d.title && d.title !== '-' && d.title !== 'Untitled');
-    const detectedTitle = primaryDwg?.title || structureResult.drawings.find((d: any) => d.drawing_title && d.drawing_title !== '-' && d.drawing_title !== 'Untitled')?.drawing_title;
+    const primaryDwg = structureResult.drawings.find((d: any) => 
+      (d.drawing_name_raw && d.drawing_name_raw !== '-' && d.drawing_name_raw !== d.drawing_no_raw) ||
+      (d.drawing_name_normalized && d.drawing_name_normalized !== '-' && d.drawing_name_normalized !== d.drawing_no_normalized) ||
+      (d.title && d.title !== '-' && d.title !== 'Untitled')
+    );
+    const detectedTitle = primaryDwg?.drawing_name_raw || primaryDwg?.drawing_name_normalized || primaryDwg?.title || primaryDwg?.drawing_title;
     if (detectedTitle && detectedTitle.trim().length > 1) {
       try {
         const caseRow = await db.prepare('SELECT case_name FROM quotation_cases WHERE id = ?').get(quotationCaseId);
