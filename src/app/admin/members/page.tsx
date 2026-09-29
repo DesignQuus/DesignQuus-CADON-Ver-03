@@ -426,14 +426,11 @@ export default function MembersManagementPage() {
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-900">
                 사내 임직원 계정 관리
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
-                  세창인터내쇼날 본사
-                </span>
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                세창인터내쇼날 사내 임직원(영업담당, 가공/설계 검토자, 관리자) 계정 및 소속 부서, 업무 권한 관리
+                사내 임직원(영업담당, 가공·설계 검토자, 관리자) 계정 및 소속 부서, 업무 권한 관리
               </p>
             </div>
           </div>
