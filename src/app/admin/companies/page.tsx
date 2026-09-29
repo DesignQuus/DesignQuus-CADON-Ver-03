@@ -365,7 +365,7 @@ export default function AdminCompaniesPage() {
             <span>SaaS 입점 회원사 총괄 관리</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            시스템 최고관리자는 견적 실무를 수행하지 않으며, 입점 회원사 등록·수정·서비스 정지/복원 및 대표 계정 발급을 전담합니다.
+            CADON-BOM AI 라이선스 구매 회원사의 독립 업무 환경 발급, 대표 계정 승인 및 서비스 정상 가동/일시정지를 총괄 관리하는 라이선스 관제 센터입니다.
           </p>
         </div>
 

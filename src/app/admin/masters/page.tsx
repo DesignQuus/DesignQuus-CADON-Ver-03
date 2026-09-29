@@ -1719,16 +1719,23 @@ export default function MasterDataManagerPage() {
                     </div>
                   </div>
 
-                  {/* 4. 후처리 / 열처리 */}
-                  <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                    <div className="flex items-center justify-between pb-1 border-b border-purple-50">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-purple-800">
+                  {/* 4. 후처리 / 열처리 (외주 2차 공정 세창 직영 통제) */}
+                  <div className="bg-white p-3 rounded-lg border border-purple-200 space-y-2.5">
+                    <div className="flex items-center justify-between pb-1 border-b border-purple-100">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900">
                         <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                        <span>4. 표면처리 & 열처리 (도장 / 아노다이징 / 열처리)</span>
+                        <span>4. 외주 2차 가공 공정비 (세창 직영 통제)</span>
                       </div>
-                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">기본 추정치</span>
+                      <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold border border-purple-200">
+                        세창 본사 협정 기준가 적용
+                      </span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+
+                    <div className="p-2 bg-purple-50/70 border border-purple-100 rounded-md text-[11px] text-purple-900 leading-relaxed">
+                      💡 <strong>외주 단가 통제:</strong> 열처리, 도금, 도장 등 2차 공정은 외주 공장에 단가 결정을 일임하지 않고, 세창인터내쇼날 본사에서 협약된 기준 단가표로 도면 분석 시 일괄 산출하여 원가 누수를 완벽히 방지합니다.
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-xs">
                       <div>
                         <span className="text-[11px] text-slate-500 block">분체도장 ㎡당 단가</span>
                         <div className="flex items-center space-x-1 mt-0.5">
@@ -1743,7 +1750,7 @@ export default function MasterDataManagerPage() {
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block">아노다이징 개당 기본료</span>
+                        <span className="text-[11px] text-slate-500 block">아노다이징 개당 단가</span>
                         <div className="flex items-center space-x-1 mt-0.5">
                           <span className="text-slate-400 font-mono text-[11px]">₩</span>
                           <input
@@ -1769,7 +1776,20 @@ export default function MasterDataManagerPage() {
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block text-purple-700 font-medium">외주 최소 로트 기본료 (소량보전)</span>
+                        <span className="text-[11px] text-slate-500 block">도금/착색 개당 단가</span>
+                        <div className="flex items-center space-x-1 mt-0.5">
+                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                          <input
+                            type="number"
+                            value={processRates['PLATING_PER_UNIT'] || 1200}
+                            onChange={(e) => setProcessRates({ ...processRates, 'PLATING_PER_UNIT': Number(e.target.value) })}
+                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-purple-500"
+                          />
+                          <span className="text-slate-500 text-[11px] shrink-0">원/개</span>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-500 block text-purple-700 font-medium">외주 최소 로트 기본료</span>
                         <div className="flex items-center space-x-1 mt-0.5">
                           <span className="text-slate-400 font-mono text-[11px]">₩</span>
                           <input

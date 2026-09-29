@@ -40,6 +40,7 @@ const DEFAULT_PROCESS_RATES: Record<string, number> = {
   'PAINTING_PER_SQM': 9000,           // 분체도장/우레탄도장 ㎡당 단가
   'ANODIZING_PER_UNIT': 1500,         // 알루미늄 아노다이징 개당 기본료
   'HEAT_TREATMENT_PER_KG': 1200,      // 열처리(Q/T, 고주파) kg당 단가
+  'PLATING_PER_UNIT': 1200,           // 도금(크롬/니켈/아연/착색) 개당 단가
   'TREATMENT_MIN_LOT_COST': 30000,    // 표면처리/열처리 외주 최소 로트 기본료 (건당)
 
   // 5. 조달 관리 & 조립 공수 & 물류
