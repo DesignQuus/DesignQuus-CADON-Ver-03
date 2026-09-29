@@ -666,40 +666,33 @@ export default function MembersManagementPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* 헤더 섹션 */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
-        <div>
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-xs">
-              <Users className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">
-                사내 임직원 계정 관리
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                사내 임직원(영업담당, 가공·설계 검토자, 관리자) 계정 및 소속 부서, 업무 권한 관리
-              </p>
-            </div>
+    <div className="p-6 max-w-7xl mx-auto space-y-3.5">
+      {/* 슬림 헤더 섹션 */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white px-5 py-3.5 rounded-xl border border-slate-200 shadow-xs">
+        <div className="flex items-center space-x-3">
+          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-2xs shrink-0">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 leading-tight">
+              사내 임직원 계정 관리
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              사내 임직원(영업담당, 가공·설계 검토자, 관리자) 계정 및 소속 부서, 업무 권한 관리
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center space-x-2 shrink-0 self-end sm:self-center">
           <button
-            onClick={fetchData}
+            type="button"
+            onClick={() => fetchData()}
             disabled={isLoading}
-            className="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center space-x-1.5 transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-indigo-600 flex items-center space-x-1.5 transition-colors cursor-pointer"
+            title="임직원 명부 새로고침"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-indigo-600" : "text-slate-400"}`} />
             <span>새로고침</span>
-          </button>
-          <button
-            onClick={() => handleOpenAddModal()}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>+ 사원 등록</span>
           </button>
         </div>
       </div>
@@ -718,10 +711,10 @@ export default function MembersManagementPage() {
         </div>
       )}
 
-      {/* 필터 및 검색 툴바 */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-4 justify-between items-center">
+      {/* 필터 및 검색 & 등록 통합 툴바 */}
+      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col xl:flex-row gap-3 justify-between items-center">
         {/* 탭 바 */}
-        <div className="flex items-center space-x-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+        <div className="flex items-center space-x-1 overflow-x-auto w-full xl:w-auto pb-1 xl:pb-0">
           {[
             { id: "all" as const, label: "전체 활성", count: tabCounts.all },
             { id: "SUPER_ADMIN" as const, label: "최고관리자", count: tabCounts.SUPER_ADMIN },
@@ -734,7 +727,7 @@ export default function MembersManagementPage() {
               <button
                 key={tab.id}
                 onClick={() => handleSelectTab(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${
                   isSelected
                     ? "bg-indigo-600 text-white shadow-2xs"
                     : "text-slate-600 hover:bg-slate-100"
@@ -757,8 +750,8 @@ export default function MembersManagementPage() {
           })}
         </div>
 
-        {/* 부서 선택 & 검색 */}
-        <div className="flex items-center space-x-2.5 w-full md:w-auto">
+        {/* 부서 선택 & 검색 & 사원 등록 통합 영역 */}
+        <div className="flex items-center space-x-2 w-full xl:w-auto justify-end">
           <div className="flex items-center space-x-1.5 shrink-0">
             <Building2 className="w-4 h-4 text-slate-400" />
             <select
@@ -782,23 +775,33 @@ export default function MembersManagementPage() {
                 setShowDeptModal(true);
               }}
               className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 flex items-center space-x-1 transition-colors cursor-pointer shrink-0"
-              title="사내 부서 신설, 명칭 수정, 삭제 관리"
+              title="사내 부서 신설, 명칭 수정, 순서 관리"
             >
               <Sliders className="w-3.5 h-3.5 text-indigo-600" />
               <span>부서 관리</span>
             </button>
           </div>
 
-          <div className="relative w-full md:w-64">
+          <div className="relative flex-1 sm:w-56 sm:flex-initial">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="이름, 아이디, 사번, 연락처 검색"
+              placeholder="이름, 아이디, 연락처 검색"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
             />
           </div>
+
+          <button
+            type="button"
+            onClick={() => handleOpenAddModal()}
+            className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-1.5 shadow-2xs transition-all cursor-pointer shrink-0 whitespace-nowrap"
+            title="신규 임직원 등록"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>+ 사원 등록</span>
+          </button>
         </div>
       </div>
 
@@ -840,7 +843,7 @@ export default function MembersManagementPage() {
               return (
                 <tr key={op.id} className={`hover:bg-slate-50/80 transition-colors ${isDeleted ? "bg-rose-50/30" : ""}`}>
                   <td className="px-4 py-3 font-mono font-bold text-slate-700">
-                    {op.employee_number || "-"}
+                    {op.employee_number || <span className="text-slate-300 font-normal">-</span>}
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-900">
                     <div className="flex items-center space-x-1.5">
@@ -872,11 +875,13 @@ export default function MembersManagementPage() {
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {op.phone ? (
-                      <span className="flex items-center space-x-1">
+                      <span className="flex items-center space-x-1 font-mono text-[11px]">
                         <Phone className="w-3 h-3 text-slate-400" />
                         <span>{op.phone}</span>
                       </span>
-                    ) : "-"}
+                    ) : (
+                      <span className="text-slate-300 font-mono">-</span>
+                    )}
                   </td>
                     <td className="px-4 py-3">
                       {isDeleted ? (
