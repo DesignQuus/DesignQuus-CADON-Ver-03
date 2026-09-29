@@ -87,7 +87,7 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
         "APPROVE", "SUB SCRIPE", "REF NO.", "CUSTOMER", "PROJECT NO.", "PROJECT NO",
         "A3", "A4", "A2", "A1", "A0", "STANDARD", "NAME MARKING", "POSITION TYPE",
         "DATE", "UNIT", "SIZE", "SHEET", "PROJECT NAME", "CLIENT", "DRAWN", "CHECKED", "APPROVED", "DESIGNED",
-        "PLOT DATE", "일자", "척도", "설계", "검도", "승인", "고객사", "발주처"
+        "PLOT DATE", "일자", "척도", "설계", "검도", "승인", "고객사", "발주처", "발주사", "수요처", "납품처", "BUYER", "ORDERER", "고객사명", "발주처명"
     }
 
     # 날짜(YYYY-MM-DD, YYMMDD-.. 등)는 도면번호 패턴과 겹치므로 명시적으로 배제
@@ -179,9 +179,15 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
             u = txt_val.replace(" ", "").upper()
             return any(k.upper() in u for k in SUPPLIER_KEYWORDS) or (company_global and txt_val == company_global)
 
-        # Extract Customer (Spatial proximity to CUSTOMER label)
+        # Extract Customer (Spatial proximity to CUSTOMER / 발주처 label)
         customer = None
-        cust_labels = [t for t in in_frame if t["text"].strip().upper() in ["CUSTOMER", "고객사", "발주처", "CLIENT"]]
+        CUST_LABEL_KEYS = {
+            "CUSTOMER", "고객사", "발주처", "발주사", "CLIENT", "수요처", "납품처", "BUYER", "ORDERER", "고객사명", "발주처명"
+        }
+        cust_labels = [
+            t for t in in_frame 
+            if t["text"].strip().upper().replace(" ", "").replace(":", "").replace(";", "") in CUST_LABEL_KEYS
+        ]
         if cust_labels:
             cl = cust_labels[0]
             c_cands = [
@@ -189,11 +195,7 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                 if t != cl
                 and -35 * usc <= (t["y"] - cl["y"]) <= 10 * usc
                 and abs(t["x"] - cl["x"]) <= 120 * usc
-                and t["text"].strip().upper() not in [
-                    "CUSTOMER", "DATE", "SCALE", "REV.", "REV", "DESIGN", "CHECK", "APPROVE", 
-                    "PROJECT NO.", "PROJECT NO", "PROJECT NAME", "DWG NO.", "DWG NO", "TITLE",
-                    "고객사", "발주처", "설계", "검도", "승인", "도번", "품명", "일자", "척도", "PAGE"
-                ]
+                and t["text"].strip().upper().replace(" ", "").replace(":", "") not in LABEL_BLACKLIST
                 and not is_supplier_like(t["text"].strip())
             ]
             if c_cands:

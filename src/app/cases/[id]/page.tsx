@@ -2262,7 +2262,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               <Building2 className="w-3.5 h-3.5 text-slate-400" />
               {qc.company_id === 'comp_unassigned' || qc.company_name === '고객사 미지정' ? (
                 <span className="inline-flex items-center gap-1.5 font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
-                  ⚠️ 고객사 미지정
+                  ⚠️ 발주처 미지정
                   <button
                     onClick={handleOpenCompanyModal}
                     className="text-[11px] text-blue-700 hover:text-blue-900 underline font-bold cursor-pointer"
@@ -2271,12 +2271,13 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                   </button>
                 </span>
               ) : (
-                <span className="font-semibold text-slate-700 flex items-center gap-1">
-                  {qc.company_name}
+                <span className="font-semibold text-slate-700 flex items-center gap-1.5 bg-slate-100/90 px-2 py-0.5 rounded border border-slate-200">
+                  <span className="text-[11px] font-medium text-slate-500">발주처:</span>
+                  <span className="font-bold text-slate-900">{qc.company_name}</span>
                   <button
                     onClick={handleOpenCompanyModal}
-                    className="text-[10px] text-slate-400 hover:text-blue-600 font-normal cursor-pointer ml-1"
-                    title="고객사명 수정"
+                    className="text-[10px] text-slate-400 hover:text-blue-600 font-normal cursor-pointer ml-0.5"
+                    title="발주처(고객사) 수정"
                   >
                     <Pencil className="w-3 h-3 inline" />
                   </button>
