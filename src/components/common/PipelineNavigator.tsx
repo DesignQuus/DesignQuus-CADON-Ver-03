@@ -99,7 +99,7 @@ export default function PipelineNavigator({
         {steps.map((item, idx) => {
           const Icon = item.icon;
           const isActive = currentStep === item.step;
-          const isDone = currentStep > item.step;
+          const isDone = currentStep > item.step && !(item.step === 1 && isZeroDrawing);
 
           const buttonContent = (
             <>

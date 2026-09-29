@@ -7,7 +7,7 @@ import {
   CheckCircle2, FileText, X, Search, ShieldCheck, Archive, Download,
   PanelLeftClose, PanelLeftOpen, FileSpreadsheet, ChevronDown, ChevronRight,
   Maximize2, Sparkles, Filter, Check, Settings, Play, RefreshCw, AlertCircle, AlertTriangle,
-  FolderOpen, Copy, MessageSquare, Ruler
+  FolderOpen, Copy, MessageSquare, Ruler, Upload, FileCode2
 } from 'lucide-react';
 import WebGlCadViewer from './WebGlCadViewer';
 
@@ -1765,8 +1765,8 @@ export default function CadViewer({
                 {selectedFile.original_file_name}
               </span>
               <span className="px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 border border-blue-800/60 font-mono text-[10px]">
-                {selectedFile.file_type === 'DWG' || selectedFile.original_file_name.endsWith('.dwg')
-                  ? 'DWG (DXF 렌더링)'
+                {selectedFile.file_type === 'DWG' || selectedFile.original_file_name?.endsWith('.dwg')
+                  ? (drawings.length > 0 ? 'DWG (DXF 렌더링)' : 'DWG (분석 대기)')
                   : (selectedFile.file_type || 'CAD')}
               </span>
               {selectedDrawingIdx >= 0 && drawings[selectedDrawingIdx] && (
@@ -2087,24 +2087,86 @@ export default function CadViewer({
       {/* 1. CAD VIEW MODE: WebGL High-Performance GPU CAD Engine (Three.js 60 FPS) */}
       {/* ========================================================================= */}
       <div className={viewMode === 'CAD' ? 'flex-1 w-full my-2.5 relative' : 'hidden'}>
-        <WebGlCadViewer
-          caseId={caseId || ''}
-          focusBbox={webGlFocusBbox}
-          drawings={drawings}
-          bomAreas={bomAreas}
-          showOverlays={showOverlays}
-          showTexts={showTexts}
-          selectedDrawingIdx={selectedDrawingIdx}
-          highlightDrawingIds={highlightDrawingIds}
-          onResetFocus={() => {
-            setWebGlFocusBbox(null);
-            setHighlightDrawingIds([]);
-            setDismissedDuplicateGroupKey(null);
-          }}
-          activeFileId={selectedFile?.id}
-          reloadKey={`${selectedFile?.id || ''}_${drawings.length}`}
-          onBomUpdated={onBomUpdated}
-        />
+        {drawings.length === 0 ? (
+          <div className="w-full h-full min-h-[550px] bg-slate-950 rounded-2xl border border-slate-800/80 flex flex-col items-center justify-center p-8 text-center select-none relative overflow-hidden">
+            {/* Background CAD Grid Texture */}
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b18_1px,transparent_1px),linear-gradient(to_bottom,#1e293b18_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
+
+            <div className="relative z-10 max-w-md mx-auto flex flex-col items-center">
+              <div className="w-16 h-16 rounded-2xl bg-blue-950/70 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-4 shadow-xl">
+                <FileCode2 className="w-8 h-8" />
+              </div>
+
+              {selectedFile ? (
+                <>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-950 border border-blue-800/60 text-blue-300 text-xs font-mono font-medium mb-3">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    <span className="truncate max-w-[280px]">{selectedFile.original_file_name}</span>
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-2">도면 파일이 접수되었습니다</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed mb-6">
+                    {isAnalyzing
+                      ? 'AI가 도면의 외곽선, 도곽, 부품 형상 및 BOM을 정밀 분석 중입니다. 잠시만 기다려주세요.'
+                      : 'AI 도면 분석을 시작하시면 2D CAD 벡터 가속 뷰어와 표제란 부품 BOM이 자동으로 전개됩니다.'}
+                  </p>
+                  {isAnalyzing ? (
+                    <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-900/60 border border-blue-500/40 text-blue-200 rounded-xl text-xs font-bold shadow-lg">
+                      <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
+                      <span>AI 도면 파싱 진행 중...</span>
+                    </div>
+                  ) : onStartAnalysis ? (
+                    <button
+                      type="button"
+                      onClick={() => onStartAnalysis(selectedFile.id)}
+                      className="btn-hover-effect px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all flex items-center space-x-2 cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      <span>⚡ AI 도면 파싱 및 분석 시작</span>
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <h3 className="text-base font-bold text-white mb-2">등록된 CAD 도면이 없습니다</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed mb-6">
+                    좌측 파일 등록 패널에서 DWG 또는 DXF 도면 파일을 업로드하시면 AI 벡터 파싱 엔진이 도곽과 BOM을 자동으로 전개합니다.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isSidebarOpen) onToggleSidebar?.();
+                      const el = document.getElementById('file-upload');
+                      if (el) el.click();
+                    }}
+                    className="btn-hover-effect px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-lg transition-all flex items-center space-x-2 cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>도면 파일 첨부 및 등록하기</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <WebGlCadViewer
+            caseId={caseId || ''}
+            focusBbox={webGlFocusBbox}
+            drawings={drawings}
+            bomAreas={bomAreas}
+            showOverlays={showOverlays}
+            showTexts={showTexts}
+            selectedDrawingIdx={selectedDrawingIdx}
+            highlightDrawingIds={highlightDrawingIds}
+            onResetFocus={() => {
+              setWebGlFocusBbox(null);
+              setHighlightDrawingIds([]);
+              setDismissedDuplicateGroupKey(null);
+            }}
+            activeFileId={selectedFile?.id}
+            reloadKey={`${selectedFile?.id || ''}_${drawings.length}`}
+            onBomUpdated={onBomUpdated}
+          />
+        )}
 
         {/* 🧭 Duplicate Drawings Quick Navigator Floating Bar */}
         {activeDuplicateGroup && activeDuplicateGroup.length > 1 && (

@@ -49,7 +49,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const [externalFocusIdx, setExternalFocusIdx] = useState<number | null>(null);
   
   // 🎯 5단계 통합 스마트 파이프라인 단계 관리 (1: 도면접수, 2: AI도면파싱, 3: 가상BOM, 4: 단가매칭, 5: 견적발행)
-  const [workflowStep, setWorkflowStep] = useState<1 | 2 | 3 | 4 | 5>(2);
+  const [workflowStep, setWorkflowStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   // URL step 쿼리 파라미터 연동 (?step=1, ?step=2, ?step=3)
   useEffect(() => {
@@ -446,9 +446,16 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       if (res.ok) {
         const json = await res.json();
         setData(json);
-        if (!json.files || json.files.length === 0) {
-          setIsSidebarOpen(true);
-          setWorkflowStep(1);
+        const drawingsCount = json.drawings?.length || 0;
+        const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+        const explicitStep = sp ? sp.get('step') : null;
+        if (!explicitStep) {
+          if (drawingsCount === 0) {
+            setIsSidebarOpen(true);
+            setWorkflowStep(1);
+          } else {
+            setWorkflowStep(2);
+          }
         }
         if (json.normalizedItems?.length > 0) {
           if (!selectedNormItem) {
@@ -1979,7 +1986,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* ⚠️ Company Unassigned / Logo Detected Notice Banner */}
-      {(qc?.company_id === 'comp_unassigned' || qc?.company_name === '고객사 미지정') && (
+      {(qc?.company_id === 'comp_unassigned' || qc?.company_name === '고객사 미지정') && drawings.length > 0 && (
         <div className="no-print print:hidden p-4 bg-amber-500/10 border-2 border-amber-500/60 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-amber-900 shadow-xs animate-in fade-in">
           <div className="flex items-start space-x-3.5">
             <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0 text-amber-700 mt-0.5">
@@ -2349,16 +2356,21 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                   {drawings.filter((d: any) => d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY').length}장
                 </div>
               </div>
-              <div className="text-center px-2 border-r border-slate-200" title={`도면 123장 + 도면 없는 규격/구매품 ${Math.max(0, normalizedItems.length - drawings.length)}개`}>
+              <div className="text-center px-2 border-r border-slate-200" title={`도면 ${drawings.length}장 + 도면 없는 규격/구매품 ${Math.max(0, normalizedItems.length - drawings.length)}개`}>
                 <div className="text-[10px] text-slate-500 font-medium">정규화 BOM</div>
                 <div className="text-sm font-bold text-slate-800 font-mono">
                   {normalizedItems.length || drawings.length}개
                 </div>
               </div>
-              <div className="text-center px-2" title="실제 2단계 단가 검토 및 견적 대상 (가공품 107 + 규격품 2)">
+              <div className="text-center px-2" title="실제 2단계 단가 검토 및 견적 대상">
                 <div className="text-[10px] text-indigo-700 font-bold">견적 대상</div>
                 <div className="text-sm font-bold text-blue-700 font-mono">
-                  {normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length || (drawings.length - 16)}종
+                  {(() => {
+                    const incCount = normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length;
+                    if (incCount > 0) return incCount;
+                    if (drawings.length > 16) return drawings.length - 16;
+                    return drawings.length > 0 ? drawings.length : 0;
+                  })()}종
                 </div>
               </div>
             </div>
@@ -2533,7 +2545,12 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             if (s === 1) setIsSidebarOpen(true);
           }}
           stats={{
-            unconfirmedCount: normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length || (drawings.length - 16),
+            unconfirmedCount: (() => {
+              const incCount = normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length;
+              if (incCount > 0) return incCount;
+              if (drawings.length > 16) return drawings.length - 16;
+              return drawings.length > 0 ? drawings.length : 0;
+            })(),
             hasRevisionDiff: false
           }}
           caseInfo={{
@@ -2555,7 +2572,13 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 <span>1단계: 좌측 패널에서 고객사로부터 접수된 도면 파일(DWG, DXF)을 등록하고 관리하세요. 완료 후 상단 <strong>[2. AI 도면 파싱]</strong>을 클릭하세요.</span>
               )}
               {workflowStep === 2 && (
-                <span>2단계: AI가 파싱한 86개 시트의 2D CAD 벡터 도면 형상, 치수, 도곽을 검토하세요. 검토 후 상단 <strong>[3. 가상 BOM 추출]</strong>을 클릭하세요. (WebGL 60FPS 무랙 가동)</span>
+                <span>
+                  {drawings.length > 0 ? (
+                    <>2단계: AI가 파싱한 {drawings.length}개 시트의 2D CAD 벡터 도면 형상, 치수, 도곽을 검토하세요. 검토 후 상단 <strong>[3. 가상 BOM 추출]</strong>을 클릭하세요. (WebGL 60FPS 무랙 가동)</>
+                  ) : (
+                    <>2단계: AI 도면 파싱 대기 중입니다. 좌측 패널에서 도면 파일(DWG, DXF)을 등록하고 AI 분석을 시작하세요.</>
+                  )}
+                </span>
               )}
               {workflowStep === 3 && (
                 <span>3단계: 도면 표제란 기반 가상 BOM 부품 목록과 수량을 검토하세요. 검토 완료 후 상단 <strong>[4. 마스터 단가 매칭]</strong>을 클릭하여 3분할 통합 단가 계산을 진행하세요.</span>
