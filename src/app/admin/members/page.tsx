@@ -1311,17 +1311,8 @@ export default function MembersManagementPage() {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-2">
                           <span className="font-semibold text-slate-800 text-sm">{dept.name}</span>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
-                              dept.memberCount > 0
-                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                                : "bg-slate-50 text-slate-500 border-slate-200"
-                            }`}
-                          >
-                            {dept.memberCount}명 소속
-                          </span>
                         </div>
                       )}
 
@@ -1341,13 +1332,8 @@ export default function MembersManagementPage() {
                           <button
                             type="button"
                             onClick={() => handleDeleteDept(dept.name, dept.memberCount)}
-                            disabled={dept.memberCount > 0}
-                            className={`p-1.5 rounded-md transition ${
-                              dept.memberCount > 0
-                                ? "text-slate-300 cursor-not-allowed opacity-50"
-                                : "text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                            }`}
-                            title={dept.memberCount > 0 ? "소속 사원이 있어 삭제할 수 없습니다" : "부서 삭제"}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md cursor-pointer transition"
+                            title="부서 삭제"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
