@@ -6,7 +6,7 @@ import {
   ShieldCheck, Users, Search, Plus, Edit, Trash2, Key, 
   RefreshCw, AlertTriangle, UserCheck, UserPlus, Phone, 
   ShieldAlert, Building2, RotateCcw, CheckCircle, XCircle, X,
-  Sliders, Check, FolderPlus, ChevronUp, ChevronDown
+  Sliders, Check, FolderPlus, ChevronUp, ChevronDown, GripVertical
 } from "lucide-react";
 import { getTenantStorageKey } from "@/lib/tenant-client";
 import { formatPhoneNumber } from "@/lib/formatters";
@@ -88,6 +88,8 @@ export default function MembersManagementPage() {
   const [deptModalSuccess, setDeptModalSuccess] = useState("");
   const [reorderSaving, setReorderSaving] = useState(false);
   const [reorderSaved, setReorderSaved] = useState(false);
+  const [draggedDeptIndex, setDraggedDeptIndex] = useState<number | null>(null);
+  const [dragOverDeptIndex, setDragOverDeptIndex] = useState<number | null>(null);
   const reorderTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // 모달 상태
@@ -306,18 +308,10 @@ export default function MembersManagementPage() {
     }
   };
 
-  // 부서 표시 순서 이동 (REORDER) - 0ms 즉각 반응 & 디바운스 백그라운드 자동 저장
-  const handleMoveDept = (index: number, direction: 'UP' | 'DOWN') => {
-    const targetIndex = direction === 'UP' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= departments.length) return;
-
-    // 1. 즉시 로컬 상태 갱신 (0ms 지연, 초고속 렌더링)
-    const newDepts = [...departments];
-    const [moved] = newDepts.splice(index, 1);
-    newDepts.splice(targetIndex, 0, moved);
+  // 부서 순서 일괄 저장 (디바운스 백그라운드 자동 저장)
+  const saveNewDeptOrder = (newDepts: Array<{ name: string; memberCount: number }>) => {
     setDepartments(newDepts);
 
-    // 2. 디바운스 백그라운드 저장 (빠르게 연타해도 씹히지 않고 마지막 순서만 서버에 안전 저장)
     if (reorderTimeoutRef.current) {
       clearTimeout(reorderTimeoutRef.current);
     }
@@ -351,6 +345,54 @@ export default function MembersManagementPage() {
         setReorderSaving(false);
       }
     }, 350);
+  };
+
+  // 1) 버튼 클릭 이동 (▲, ▼) - 0ms 즉각 반응 & 디바운스
+  const handleMoveDept = (index: number, direction: 'UP' | 'DOWN') => {
+    const targetIndex = direction === 'UP' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= departments.length) return;
+
+    const newDepts = [...departments];
+    const [moved] = newDepts.splice(index, 1);
+    newDepts.splice(targetIndex, 0, moved);
+    saveNewDeptOrder(newDepts);
+  };
+
+  // 2) 마우스 드래그 앤 드롭 이동 (Drag & Drop)
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedDeptIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverDeptIndex !== index) {
+      setDragOverDeptIndex(index);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedDeptIndex(null);
+    setDragOverDeptIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedDeptIndex === null || draggedDeptIndex === targetIndex) {
+      setDraggedDeptIndex(null);
+      setDragOverDeptIndex(null);
+      return;
+    }
+
+    const newDepts = [...departments];
+    const [moved] = newDepts.splice(draggedDeptIndex, 1);
+    newDepts.splice(targetIndex, 0, moved);
+
+    setDraggedDeptIndex(null);
+    setDragOverDeptIndex(null);
+    saveNewDeptOrder(newDepts);
   };
 
   // 필터링된 임직원 목록
@@ -1241,7 +1283,7 @@ export default function MembersManagementPage() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-800">회사 부서 관리</h3>
-                  <p className="text-xs text-slate-500">부서를 추가하거나 명칭을 변경/삭제할 수 있습니다.</p>
+                  <p className="text-xs text-slate-500">부서 추가/삭제 및 마우스 드래그(⋮⋮)나 화살표(▲/▼)로 순서를 변경할 수 있습니다.</p>
                 </div>
               </div>
               <button
@@ -1302,11 +1344,24 @@ export default function MembersManagementPage() {
                   const isEditing = editingDeptName === dept.name;
                   const isFirst = idx === 0;
                   const isLast = idx === departments.length - 1;
+                  const isDragging = draggedDeptIndex === idx;
+                  const isDragOver = dragOverDeptIndex === idx && draggedDeptIndex !== idx;
 
                   return (
                     <div
                       key={dept.name}
-                      className="p-3 flex items-center justify-between hover:bg-slate-50/60 transition group"
+                      draggable={!isEditing}
+                      onDragStart={(e) => handleDragStart(e, idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDragEnd={handleDragEnd}
+                      onDrop={(e) => handleDrop(e, idx)}
+                      className={`p-3 flex items-center justify-between transition-all select-none group ${
+                        isDragging
+                          ? "opacity-30 bg-indigo-50 border-2 border-dashed border-indigo-400 rounded-lg scale-[0.99]"
+                          : isDragOver
+                          ? "bg-indigo-50/80 border-t-2 border-indigo-500 shadow-xs"
+                          : "hover:bg-slate-50/80"
+                      }`}
                     >
                       {isEditing ? (
                         <div className="flex-1 flex items-center space-x-2 mr-2">
@@ -1342,7 +1397,15 @@ export default function MembersManagementPage() {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center space-x-2.5">
+                        <div className="flex items-center space-x-2">
+                          {/* 드래그 핸들 (⋮⋮) */}
+                          <div
+                            className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-500 hover:!text-indigo-600 p-0.5 rounded transition shrink-0"
+                            title="마우스로 끌어서 원하는 위치로 이동"
+                          >
+                            <GripVertical className="w-4 h-4" />
+                          </div>
+
                           <span className="w-5 text-center text-xs font-mono font-bold text-slate-400">
                             {idx + 1}
                           </span>
@@ -1359,7 +1422,7 @@ export default function MembersManagementPage() {
                               disabled={isFirst}
                               onClick={() => handleMoveDept(idx, 'UP')}
                               className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 cursor-pointer disabled:cursor-not-allowed transition"
-                              title="위로 이동"
+                              title="위로 1칸 이동"
                             >
                               <ChevronUp className="w-4 h-4" />
                             </button>
@@ -1368,7 +1431,7 @@ export default function MembersManagementPage() {
                               disabled={isLast}
                               onClick={() => handleMoveDept(idx, 'DOWN')}
                               className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 cursor-pointer disabled:cursor-not-allowed transition"
-                              title="아래로 이동"
+                              title="아래로 1칸 이동"
                             >
                               <ChevronDown className="w-4 h-4" />
                             </button>
