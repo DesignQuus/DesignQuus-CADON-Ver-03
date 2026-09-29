@@ -5,7 +5,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { 
   ShieldCheck, Users, Search, Plus, Edit, Trash2, Key, 
   RefreshCw, AlertTriangle, UserCheck, UserPlus, Phone, 
-  ShieldAlert, Building2, RotateCcw, CheckCircle, XCircle, X
+  ShieldAlert, Building2, RotateCcw, CheckCircle, XCircle, X,
+  Sliders, Check, FolderPlus
 } from "lucide-react";
 import { getTenantStorageKey } from "@/lib/tenant-client";
 
@@ -42,11 +43,12 @@ const ROLE_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export const getOperatorDeptAndTitle = (op: Operator) => {
-  const validDepts = ["시스템운영본부", "견적영업부", "가공기술부", "설계품질부", "경영지원부"];
   // 1. DB에 저장된 실제 부서 정보 확인 (department, tenant_id, company_id)
-  const assignedDept = [op.department, op.tenant_id, op.company_id].find(
-    (d) => d && validDepts.includes(d)
-  );
+  const isCandidate = (val?: string | null) =>
+    val && typeof val === 'string' && val.trim() !== '' &&
+    !val.startsWith('comp_') && !val.startsWith('tenant-') && !val.startsWith('usr_');
+
+  const assignedDept = [op.department, op.tenant_id, op.company_id].find(isCandidate);
 
   let dept = assignedDept;
   if (!dept) {
@@ -85,7 +87,9 @@ export const getOperatorDeptAndTitle = (op: Operator) => {
     return { dept, title: "총괄관리자", icon: Building2, color: "text-indigo-600" };
   }
 
-  return { dept, title: "실무담당", icon: Building2, color: "text-blue-600" };
+  // 신설된 커스텀 부서인 경우
+  const roleTitle = op.role === "SUPER_ADMIN" ? "최고관리자" : op.role === "REVIEWER" ? "검토담당" : "실무담당";
+  return { dept, title: roleTitle, icon: Building2, color: "text-emerald-600" };
 };
 
 export default function MembersManagementPage() {
@@ -103,10 +107,28 @@ export default function MembersManagementPage() {
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // 부서 관리 상태
+  const [departments, setDepartments] = useState<Array<{ name: string; memberCount: number }>>([
+    { name: "시스템운영본부", memberCount: 1 },
+    { name: "견적영업부", memberCount: 1 },
+    { name: "가공기술부", memberCount: 1 },
+    { name: "설계품질부", memberCount: 1 },
+    { name: "경영지원부", memberCount: 0 }
+  ]);
+  const [showDeptModal, setShowDeptModal] = useState(false);
+  const [newDeptInput, setNewDeptInput] = useState("");
+  const [editingDeptName, setEditingDeptName] = useState<string | null>(null);
+  const [editingDeptVal, setEditingDeptVal] = useState("");
+  const [deptModalLoading, setDeptModalLoading] = useState(false);
+  const [deptModalError, setDeptModalError] = useState("");
+  const [deptModalSuccess, setDeptModalSuccess] = useState("");
+
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingOperator, setEditingOperator] = useState<Operator | null>(null);
+  const [isCustomDeptAdd, setIsCustomDeptAdd] = useState(false);
+  const [isCustomDeptEdit, setIsCustomDeptEdit] = useState(false);
 
   // 입력 폼 상태
   const [formLoginId, setFormLoginId] = useState("");
@@ -205,11 +227,117 @@ export default function MembersManagementPage() {
     }
   };
 
+  const fetchDepartments = async () => {
+    try {
+      const res = await apiFetch("/api/admin/departments");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.departments && Array.isArray(data.departments)) {
+          setDepartments(data.departments);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch departments:", e);
+    }
+  };
+
   useEffect(() => {
     if (isAuthorized) {
       fetchData();
+      fetchDepartments();
     }
   }, [isAuthorized]);
+
+  // 새 부서 추가
+  const handleAddDept = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const name = newDeptInput.trim();
+    if (!name) return;
+    setDeptModalLoading(true);
+    setDeptModalError("");
+    try {
+      const res = await apiFetch("/api/admin/departments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ADD", name })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setDeptModalError(data.error || "부서 추가에 실패했습니다.");
+      } else {
+        setNewDeptInput("");
+        setDeptModalSuccess(`'${name}' 부서가 추가되었습니다.`);
+        setTimeout(() => setDeptModalSuccess(""), 3000);
+        await fetchDepartments();
+      }
+    } catch (err: any) {
+      setDeptModalError(err.message || "통신 오류");
+    } finally {
+      setDeptModalLoading(false);
+    }
+  };
+
+  // 부서명 변경 (RENAME)
+  const handleRenameDept = async (oldName: string) => {
+    const newName = editingDeptVal.trim();
+    if (!newName || newName === oldName) {
+      setEditingDeptName(null);
+      return;
+    }
+    setDeptModalLoading(true);
+    setDeptModalError("");
+    try {
+      const res = await apiFetch("/api/admin/departments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "RENAME", oldName, newName })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setDeptModalError(data.error || "부서명 변경에 실패했습니다.");
+      } else {
+        setEditingDeptName(null);
+        setDeptModalSuccess(`'${oldName}' 부서명이 '${newName}'(으)로 변경되었습니다.`);
+        setTimeout(() => setDeptModalSuccess(""), 3000);
+        await Promise.all([fetchDepartments(), fetchData()]);
+      }
+    } catch (err: any) {
+      setDeptModalError(err.message || "통신 오류");
+    } finally {
+      setDeptModalLoading(false);
+    }
+  };
+
+  // 부서 삭제 (DELETE)
+  const handleDeleteDept = async (deptName: string, memberCount: number) => {
+    if (memberCount > 0) {
+      alert(`'${deptName}' 부서에 소속된 사원이 ${memberCount}명 있습니다. 먼저 사원의 소속 부서를 변경해 주세요.`);
+      return;
+    }
+    if (!confirm(`'${deptName}' 부서를 삭제하시겠습니까?`)) return;
+
+    setDeptModalLoading(true);
+    setDeptModalError("");
+    try {
+      const res = await apiFetch("/api/admin/departments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "DELETE", name: deptName })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setDeptModalError(data.error || "부서 삭제에 실패했습니다.");
+      } else {
+        setDeptModalSuccess(`'${deptName}' 부서가 삭제되었습니다.`);
+        setTimeout(() => setDeptModalSuccess(""), 3000);
+        await fetchDepartments();
+      }
+    } catch (err: any) {
+      setDeptModalError(err.message || "통신 오류");
+    } finally {
+      setDeptModalLoading(false);
+    }
+  };
 
   // 필터링된 임직원 목록
   const filteredOperators = useMemo(() => {
@@ -262,7 +390,9 @@ export default function MembersManagementPage() {
     setFormRole("SALES_USER");
     setFormEmployeeNumber("");
     setFormPhone("");
-    setFormTenantId(targetDept || (selectedDeptFilter !== "ALL" ? selectedDeptFilter : "견적영업부"));
+    const defaultDept = targetDept || (selectedDeptFilter !== "ALL" ? selectedDeptFilter : (departments[0]?.name || "견적영업부"));
+    setFormTenantId(defaultDept);
+    setIsCustomDeptAdd(false);
     setFormError("");
     setShowAddModal(true);
   };
@@ -273,6 +403,7 @@ export default function MembersManagementPage() {
     setFormError("");
     setIsSubmitting(true);
     try {
+      const trimmedDept = formTenantId.trim();
       const res = await apiFetch("/api/operators", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,7 +414,7 @@ export default function MembersManagementPage() {
           role: formRole,
           employee_number: formEmployeeNumber.trim(),
           phone: formPhone.trim(),
-          tenant_id: formTenantId
+          tenant_id: trimmedDept
         })
       });
       const data = await res.json();
@@ -294,6 +425,16 @@ export default function MembersManagementPage() {
         setSuccessMsg("신규 임직원 계정이 성공적으로 등록되었습니다.");
         setTimeout(() => setSuccessMsg(""), 4000);
         fetchData();
+        // 신규 부서인 경우 부서 목록에도 자동 등록
+        if (trimmedDept && !departments.some(d => d.name === trimmedDept)) {
+          apiFetch("/api/admin/departments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "ADD", name: trimmedDept })
+          }).then(() => fetchDepartments()).catch(() => {});
+        } else {
+          fetchDepartments();
+        }
       }
     } catch (err: any) {
       setFormError(err.message || "통신 중 오류가 발생했습니다.");
@@ -311,6 +452,7 @@ export default function MembersManagementPage() {
     setFormPhone(op.phone || "");
     const info = getOperatorDeptAndTitle(op);
     setFormTenantId(info.dept);
+    setIsCustomDeptEdit(false);
     setFormPassword("");
     setFormError("");
     setShowEditModal(true);
@@ -323,6 +465,7 @@ export default function MembersManagementPage() {
     setFormError("");
     setIsSubmitting(true);
     try {
+      const trimmedDept = formTenantId.trim();
       const res = await apiFetch("/api/operators", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -332,7 +475,7 @@ export default function MembersManagementPage() {
           role: formRole,
           employee_number: formEmployeeNumber,
           phone: formPhone,
-          tenant_id: formTenantId,
+          tenant_id: trimmedDept,
           password: formPassword || undefined
         })
       });
@@ -344,6 +487,16 @@ export default function MembersManagementPage() {
         setSuccessMsg("임직원 정보가 수정되었습니다.");
         setTimeout(() => setSuccessMsg(""), 4000);
         fetchData();
+        // 신규 부서인 경우 부서 목록에도 자동 등록
+        if (trimmedDept && !departments.some(d => d.name === trimmedDept)) {
+          apiFetch("/api/admin/departments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "ADD", name: trimmedDept })
+          }).then(() => fetchDepartments()).catch(() => {});
+        } else {
+          fetchDepartments();
+        }
       }
     } catch (err: any) {
       setFormError(err.message || "통신 중 오류가 발생했습니다.");
@@ -532,7 +685,7 @@ export default function MembersManagementPage() {
         </div>
 
         {/* 부서 선택 & 검색 */}
-        <div className="flex items-center space-x-3 w-full md:w-auto">
+        <div className="flex items-center space-x-2.5 w-full md:w-auto">
           <div className="flex items-center space-x-1.5 shrink-0">
             <Building2 className="w-4 h-4 text-slate-400" />
             <select
@@ -541,12 +694,26 @@ export default function MembersManagementPage() {
               className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               <option value="ALL">전체 부서</option>
-              <option value="견적영업부">견적영업부</option>
-              <option value="가공기술부">가공기술부</option>
-              <option value="설계품질부">설계품질부</option>
-              <option value="경영지원부">경영지원부</option>
-              <option value="시스템운영본부">시스템운영본부</option>
+              {departments.map((d) => (
+                <option key={d.name} value={d.name}>
+                  {d.name} {d.memberCount > 0 ? `(${d.memberCount}명)` : ""}
+                </option>
+              ))}
             </select>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDeptModalError("");
+                setDeptModalSuccess("");
+                setShowDeptModal(true);
+              }}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 flex items-center space-x-1 transition-colors cursor-pointer shrink-0"
+              title="사내 부서 신설, 명칭 수정, 삭제 관리"
+            >
+              <Sliders className="w-3.5 h-3.5 text-indigo-600" />
+              <span>부서 관리</span>
+            </button>
           </div>
 
           <div className="relative w-full md:w-64">
@@ -785,18 +952,41 @@ export default function MembersManagementPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">소속 부서 *</label>
-                  <select
-                    value={formTenantId}
-                    onChange={(e) => setFormTenantId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
-                  >
-                    <option value="견적영업부">견적영업부</option>
-                    <option value="가공기술부">가공기술부</option>
-                    <option value="설계품질부">설계품질부</option>
-                    <option value="경영지원부">경영지원부</option>
-                    <option value="시스템운영본부">시스템운영본부</option>
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">소속 부서 *</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomDeptAdd(!isCustomDeptAdd)}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
+                    >
+                      {isCustomDeptAdd ? "목록에서 선택" : "+ 직접 입력"}
+                    </button>
+                  </div>
+                  {isCustomDeptAdd ? (
+                    <input
+                      type="text"
+                      value={formTenantId}
+                      onChange={(e) => setFormTenantId(e.target.value)}
+                      placeholder="신규 부서명 (예: 생산관리부)"
+                      className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium text-sm bg-indigo-50/20"
+                      autoFocus
+                    />
+                  ) : (
+                    <select
+                      value={formTenantId}
+                      onChange={(e) => setFormTenantId(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
+                    >
+                      {departments.map((d) => (
+                        <option key={d.name} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))}
+                      {formTenantId && !departments.some((d) => d.name === formTenantId) && (
+                        <option value={formTenantId}>{formTenantId}</option>
+                      )}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">업무 권한 등급 *</label>
@@ -903,18 +1093,41 @@ export default function MembersManagementPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">소속 부서</label>
-                  <select
-                    value={formTenantId}
-                    onChange={(e) => setFormTenantId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
-                  >
-                    <option value="견적영업부">견적영업부</option>
-                    <option value="가공기술부">가공기술부</option>
-                    <option value="설계품질부">설계품질부</option>
-                    <option value="경영지원부">경영지원부</option>
-                    <option value="시스템운영본부">시스템운영본부</option>
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">소속 부서</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomDeptEdit(!isCustomDeptEdit)}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
+                    >
+                      {isCustomDeptEdit ? "목록에서 선택" : "+ 직접 입력"}
+                    </button>
+                  </div>
+                  {isCustomDeptEdit ? (
+                    <input
+                      type="text"
+                      value={formTenantId}
+                      onChange={(e) => setFormTenantId(e.target.value)}
+                      placeholder="신규 부서명 입력"
+                      className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium text-sm bg-indigo-50/20"
+                      autoFocus
+                    />
+                  ) : (
+                    <select
+                      value={formTenantId}
+                      onChange={(e) => setFormTenantId(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
+                    >
+                      {departments.map((d) => (
+                        <option key={d.name} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))}
+                      {formTenantId && !departments.some((d) => d.name === formTenantId) && (
+                        <option value={formTenantId}>{formTenantId}</option>
+                      )}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">업무 권한 등급</label>
@@ -961,6 +1174,181 @@ export default function MembersManagementPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 부서 관리 모달 */}
+      {showDeptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-150 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">회사 부서 관리</h3>
+                  <p className="text-xs text-slate-500">부서를 추가하거나 명칭을 변경/삭제할 수 있습니다.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDeptModal(false);
+                  setDeptModalError("");
+                  setDeptModalSuccess("");
+                  setEditingDeptName(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 성공 / 에러 알림 */}
+            {deptModalSuccess && (
+              <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg flex items-center space-x-1.5">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                <span>{deptModalSuccess}</span>
+              </div>
+            )}
+            {deptModalError && (
+              <div className="mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg flex items-center space-x-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{deptModalError}</span>
+              </div>
+            )}
+
+            {/* 신규 부서 등록 폼 */}
+            <form onSubmit={handleAddDept} className="mt-4 flex space-x-2">
+              <input
+                type="text"
+                value={newDeptInput}
+                onChange={(e) => setNewDeptInput(e.target.value)}
+                placeholder="새 부서명 (예: 생산관리부, 품질보증팀)"
+                className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                disabled={deptModalLoading}
+              />
+              <button
+                type="submit"
+                disabled={deptModalLoading || !newDeptInput.trim()}
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold flex items-center space-x-1 shrink-0 cursor-pointer transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>부서 추가</span>
+              </button>
+            </form>
+
+            {/* 부서 목록 */}
+            <div className="mt-4 flex-1 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-xl">
+              {departments.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-sm">
+                  등록된 부서가 없습니다.
+                </div>
+              ) : (
+                departments.map((dept) => {
+                  const isEditing = editingDeptName === dept.name;
+                  return (
+                    <div
+                      key={dept.name}
+                      className="p-3 flex items-center justify-between hover:bg-slate-50/60 transition group"
+                    >
+                      {isEditing ? (
+                        <div className="flex-1 flex items-center space-x-2 mr-2">
+                          <input
+                            type="text"
+                            value={editingDeptVal}
+                            onChange={(e) => setEditingDeptVal(e.target.value)}
+                            className="flex-1 px-2.5 py-1.5 border border-indigo-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleRenameDept(dept.name);
+                              } else if (e.key === "Escape") {
+                                setEditingDeptName(null);
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRenameDept(dept.name)}
+                            disabled={deptModalLoading}
+                            className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold cursor-pointer shrink-0"
+                          >
+                            저장
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingDeptName(null)}
+                            className="px-2.5 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-md text-xs cursor-pointer shrink-0"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-3">
+                          <span className="font-semibold text-slate-800 text-sm">{dept.name}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
+                              dept.memberCount > 0
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                : "bg-slate-50 text-slate-500 border-slate-200"
+                            }`}
+                          >
+                            {dept.memberCount}명 소속
+                          </span>
+                        </div>
+                      )}
+
+                      {!isEditing && (
+                        <div className="flex items-center space-x-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingDeptName(dept.name);
+                              setEditingDeptVal(dept.name);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md cursor-pointer transition"
+                            title="부서명 변경"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDept(dept.name, dept.memberCount)}
+                            disabled={dept.memberCount > 0}
+                            className={`p-1.5 rounded-md transition ${
+                              dept.memberCount > 0
+                                ? "text-slate-300 cursor-not-allowed opacity-50"
+                                : "text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                            }`}
+                            title={dept.memberCount > 0 ? "소속 사원이 있어 삭제할 수 없습니다" : "부서 삭제"}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeptModal(false);
+                  setDeptModalError("");
+                  setDeptModalSuccess("");
+                  setEditingDeptName(null);
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-lg cursor-pointer transition"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
