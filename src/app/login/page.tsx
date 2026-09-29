@@ -162,7 +162,7 @@ export default function LoginPage() {
                 onFocus={() => setIsReadOnly(false)}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="비밀번호를 입력하세요"
+                placeholder="비밀번호를 입력하세요 (기본: 1234 또는 Cadon1234!@)"
                 className="w-full pl-10 pr-11 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
               />
               <button
