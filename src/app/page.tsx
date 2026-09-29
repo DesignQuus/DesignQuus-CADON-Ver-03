@@ -157,7 +157,7 @@ export default function HomePage() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 순수 외부 발주 고객사 목록 (견적 주체인 '세창인터내쇼날' 자사/테넌트 제외)
+  // 순수 외부 발주 고객사 목록 (견적 주체인 '세창인터내쇼날' 본사 제외)
   const customerCompanies = useMemo(() => {
     return companies.filter(
       (c) =>
@@ -504,7 +504,7 @@ export default function HomePage() {
         };
       case 'TENANT_ADMIN':
         return {
-          label: '회원사 대표관리자 (TENANT ADMIN)',
+          label: '총괄 관리자 (ADMIN)',
           bg: 'bg-blue-50 border-blue-200 text-blue-700',
           dot: 'bg-blue-500'
         };

@@ -223,7 +223,7 @@ export default function MembersManagementPage() {
   const handleCompanySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formCompName.trim()) {
-      setCompanyModalError("회원사(회사)명을 입력해주세요.");
+      setCompanyModalError("고객사(회사)명을 입력해주세요.");
       return;
     }
     if (createAdminWithCompany) {
@@ -248,7 +248,7 @@ export default function MembersManagementPage() {
       });
       const data = await res.json();
       if (!data.success) {
-        setCompanyModalError(data.error || "회원사 등록에 실패했습니다.");
+        setCompanyModalError(data.error || "고객사 등록에 실패했습니다.");
         return;
       }
 
@@ -276,7 +276,7 @@ export default function MembersManagementPage() {
       }
 
       setShowCompanyModal(false);
-      setSuccessMsg(`새로운 회원사 '${formCompName}'가 등록되었습니다.${createAdminWithCompany ? " (대표 계정 포함)" : ""}`);
+      setSuccessMsg(`새로운 고객사 '${formCompName}'가 등록되었습니다.${createAdminWithCompany ? " (대표 계정 포함)" : ""}`);
       setTimeout(() => setSuccessMsg(""), 4000);
       if (newCompId) {
         setSelectedTenantFilter(newCompId);
@@ -450,7 +450,7 @@ export default function MembersManagementPage() {
           <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
             {currentUser ? (
               <>
-                현재 로그인된 계정(<strong>{currentUser.name}</strong> / {currentUser.role})은 일반 사원 권한으로, 회원사 및 임직원 관리 권한이 없습니다.<br />
+                현재 로그인된 계정(<strong>{currentUser.name}</strong> / {currentUser.role})은 일반 실무 권한으로, 사원 및 계정 관리 권한이 없습니다.<br />
                 최고관리자(<strong>admin</strong>) 계정으로 다시 로그인해 주세요.
               </>
             ) : (
@@ -487,12 +487,12 @@ export default function MembersManagementPage() {
               <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 {currentUser?.role === "SUPER_ADMIN" ? "전체 임직원 통합 관리" : "소속 사원 계정 관리"}
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
-                  {currentUser?.role === "SUPER_ADMIN" ? "운영자 센터" : "회원사 전용"}
+                  {currentUser?.role === "SUPER_ADMIN" ? "시스템 관제" : "사내 사원 관리"}
                 </span>
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
                 {currentUser?.role === "SUPER_ADMIN"
-                  ? "계층형 권한 통제, 사원번호 중복 방지, 회원사 데이터 격리 관리"
+                  ? "사내 사원 및 고객사 담당자 계정, 사원번호 중복 방지, 계층형 권한 통제 관리"
                   : "우리 회사 소속 사원(영업담당, 도면검토자 등)을 등록하고 계정 및 권한을 관리합니다."}
               </p>
             </div>
@@ -512,10 +512,10 @@ export default function MembersManagementPage() {
             <button
               onClick={handleOpenCompanyModal}
               className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
-              title="새로운 고객사/가공사 회원사 등록"
+              title="새로운 발주 고객사 등록"
             >
               <Building2 className="w-4 h-4 text-emerald-400" />
-              <span>신규 회원사 등록</span>
+              <span>신규 고객사 등록</span>
             </button>
           )}
           <button
@@ -549,11 +549,11 @@ export default function MembersManagementPage() {
           {(currentUser?.role === "SUPER_ADMIN" ? [
             { id: "all", label: "전체 활성" },
             { id: "SUPER_ADMIN", label: "최고관리자" },
-            { id: "TENANT_ADMIN", label: "회원사 대표" },
+            { id: "TENANT_ADMIN", label: "총괄 관리자" },
             { id: "SALES_USER", label: "영업담당" },
             { id: "REVIEWER", label: "검토자" },
             { id: "deleted", label: "비활성/정지" },
-            { id: "tenants", label: "🏢 회원사 대장" },
+            { id: "tenants", label: "🏢 고객사/거래처 대장" },
           ] : [
             { id: "all", label: "재직 사원 명부" },
             { id: "deleted", label: "비활성/정지 계정" },
@@ -577,7 +577,7 @@ export default function MembersManagementPage() {
           ))}
         </div>
 
-        {/* 회원사 선택 & 검색 */}
+        {/* 소속사 선택 & 검색 */}
         <div className="flex items-center space-x-3 w-full md:w-auto">
           {currentUser?.role === "SUPER_ADMIN" && (
             <div className="flex items-center space-x-1.5 shrink-0">
@@ -587,7 +587,7 @@ export default function MembersManagementPage() {
                 onChange={(e) => handleSelectTenant(e.target.value)}
                 className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
-                <option value="ALL">전체 회원사</option>
+                <option value="ALL">전체 소속사</option>
                 {companies.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.company_name} ({c.company_code})
@@ -610,17 +610,17 @@ export default function MembersManagementPage() {
         </div>
       </div>
 
-      {/* 1. 회원사 대장 탭 렌더링 */}
+      {/* 1. 고객사/거래처 대장 탭 렌더링 */}
       {activeTab === "tenants" ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-3">회사 식별코드</th>
-                <th className="px-4 py-3">회원사명</th>
+                <th className="px-4 py-3">회사명</th>
                 <th className="px-4 py-3">구분</th>
                 <th className="px-4 py-3">소속 임직원 수</th>
-                <th className="px-4 py-3">회원사 시스템 ID</th>
+                <th className="px-4 py-3">회사 시스템 ID</th>
                 <th className="px-4 py-3">등록일시</th>
                 <th className="px-4 py-3 text-right">관리 액션</th>
               </tr>
@@ -668,14 +668,14 @@ export default function MembersManagementPage() {
                           setActiveTab("all");
                         }}
                         className="px-2.5 py-1 rounded-md text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer"
-                        title="이 회원사 소속 사원 목록 조회"
+                        title="이 회사의 소속 사원 목록 조회"
                       >
                         소속 사원 조회
                       </button>
                       <button
                         onClick={() => handleOpenAddModal(comp.id)}
                         className="px-2.5 py-1 rounded-md text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-2xs transition-colors cursor-pointer"
-                        title="이 회원사에 새 임직원 추가"
+                        title="이 회사에 새 담당자 추가"
                       >
                         + 사원 등록
                       </button>
@@ -695,7 +695,7 @@ export default function MembersManagementPage() {
                 <th className="px-4 py-3">사원번호</th>
                 <th className="px-4 py-3">성명 (아이디)</th>
                 <th className="px-4 py-3">권한 등급</th>
-                <th className="px-4 py-3">소속 회원사</th>
+                <th className="px-4 py-3">소속 회사</th>
                 <th className="px-4 py-3">연락처</th>
                 <th className="px-4 py-3">상태</th>
                 <th className="px-4 py-3 text-right">관리 액션</th>
@@ -716,18 +716,18 @@ export default function MembersManagementPage() {
                       <div className="max-w-md mx-auto space-y-3">
                         <Building2 className="w-8 h-8 text-indigo-400 mx-auto" />
                         <div className="text-sm font-bold text-slate-800">
-                          '{companies.find(c => c.id === selectedTenantFilter)?.company_name || selectedTenantFilter}' 회원사에 등록된 임직원이 아직 없습니다.
+                          '{companies.find(c => c.id === selectedTenantFilter)?.company_name || selectedTenantFilter}'에 등록된 임직원이 아직 없습니다.
                         </div>
                         <p className="text-xs text-slate-500 leading-relaxed">
-                          회원사 마스터는 정상 등록되었으나 소속 사원이 아직 배속되지 않았습니다.<br />
-                          아래 버튼을 눌러 회원사 대표 또는 사원을 등록해 보세요.
+                          회사 정보는 정상 등록되었으나 소속 사원이 아직 배속되지 않았습니다.<br />
+                          아래 버튼을 눌러 담당자 또는 사원을 등록해 보세요.
                         </p>
                         <button
                           onClick={() => handleOpenAddModal(selectedTenantFilter)}
                           className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors inline-flex items-center space-x-1.5 cursor-pointer"
                         >
                           <UserPlus className="w-4 h-4" />
-                          <span>이 회원사에 첫 임직원(대표/사원) 등록하기</span>
+                          <span>이 회사에 첫 임직원(담당자) 등록하기</span>
                         </button>
                       </div>
                     ) : (
@@ -944,13 +944,13 @@ export default function MembersManagementPage() {
               {currentUser?.role === "SUPER_ADMIN" && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="font-semibold text-slate-700">소속 회원사 *</label>
+                    <label className="font-semibold text-slate-700">소속 회사 *</label>
                     <button
                       type="button"
                       onClick={() => handleOpenCompanyModal()}
                       className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer"
                     >
-                      + 신규 회원사 등록
+                      + 신규 고객사 등록
                     </button>
                   </div>
                   <select
@@ -1058,7 +1058,7 @@ export default function MembersManagementPage() {
 
               {currentUser?.role === "SUPER_ADMIN" && (
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">소속 회원사</label>
+                  <label className="block font-semibold text-slate-700 mb-1">소속 회사</label>
                   <select
                     value={formTenantId}
                     onChange={(e) => setFormTenantId(e.target.value)}
@@ -1107,13 +1107,13 @@ export default function MembersManagementPage() {
         </div>
       )}
 
-      {/* 회원사 신규 등록 모달 */}
+      {/* 고객사 신규 등록 모달 */}
       {showCompanyModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
               <Building2 className="w-5 h-5 text-emerald-600" />
-              <span>신규 회원사 등록</span>
+              <span>신규 고객사 등록</span>
             </h2>
 
             {companyModalError && (
@@ -1124,13 +1124,13 @@ export default function MembersManagementPage() {
 
             <form onSubmit={handleCompanySubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">회원사명(회사명) *</label>
+                <label className="block font-semibold text-slate-700 mb-1">고객사(회사)명 *</label>
                 <input
                   type="text"
                   required
                   value={formCompName}
                   onChange={(e) => setFormCompName(e.target.value)}
-                  placeholder="예: (주)한국정밀, 대한엔지니어링 등"
+                  placeholder="예: 삼성전자(주), 대한엔지니어링 등"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -1160,7 +1160,7 @@ export default function MembersManagementPage() {
                 </select>
               </div>
 
-              {/* 회원사 대표 관리자 계정 동시 생성 옵션 */}
+              {/* 고객사 대표 관리자 계정 동시 생성 옵션 */}
               <div className="pt-2 border-t border-slate-100">
                 <label className="flex items-center space-x-2 cursor-pointer select-none">
                   <input
@@ -1170,11 +1170,11 @@ export default function MembersManagementPage() {
                     className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
                   />
                   <span className="font-semibold text-slate-800">
-                    회원사 대표 관리자(TENANT_ADMIN) 계정 동시 생성
+                    고객사 대표 계정(ADMIN) 동시 생성
                   </span>
                 </label>
                 <p className="text-[11px] text-slate-500 mt-0.5 ml-6">
-                  체크 시 회원사 생성과 동시에 회원사를 관리할 대표 관리자 계정을 즉시 생성합니다.
+                  체크 시 고객사 생성과 동시에 해당 회사를 관리할 대표 계정을 즉시 생성합니다.
                 </p>
 
                 {createAdminWithCompany && (
@@ -1255,7 +1255,7 @@ export default function MembersManagementPage() {
                   disabled={isSubmittingCompany}
                   className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs cursor-pointer"
                 >
-                  {isSubmittingCompany ? "등록 중..." : "회원사 등록 완료"}
+                  {isSubmittingCompany ? "등록 중..." : "고객사 등록 완료"}
                 </button>
               </div>
             </form>

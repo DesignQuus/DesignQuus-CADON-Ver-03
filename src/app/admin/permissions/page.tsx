@@ -220,7 +220,7 @@ export default function AdminPermissionsPage() {
         </div>
         <h2 className="text-xl font-extrabold text-slate-900 mb-2">접근 권한이 없습니다</h2>
         <p className="text-sm text-slate-500 max-w-md mb-6 leading-relaxed">
-          승인권한 설정 및 결재 관리 페이지는 최고관리자 또는 회원사 대표 관리자만 접근할 수 있는 보호된 관리 메뉴입니다.
+          승인권한 설정 및 결재 관리 페이지는 최고관리자 또는 사내 총괄 관리자만 접근할 수 있는 보호된 관리 메뉴입니다.
         </p>
         <Link
           href="/"

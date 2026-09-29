@@ -177,10 +177,10 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Tenant / Member Company Login Note */}
+          {/* Company Login Note */}
           <div className="px-3.5 py-2.5 bg-slate-50/90 rounded-xl border border-slate-200 flex items-center space-x-2.5 text-[11px] text-slate-600">
             <Building className="w-4 h-4 text-slate-400 shrink-0" />
-            <span>회원사 및 본사 임직원은 발급받은 계정으로 로그인하시면 전용 모드로 접속됩니다.</span>
+            <span>세창인터내쇼날 임직원 및 등록된 고객사 담당자는 발급받은 계정으로 로그인해 주세요.</span>
           </div>
 
           <button

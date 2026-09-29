@@ -219,7 +219,7 @@ export default function CasesPage() {
   const batchFileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  // 순수 외부 발주 고객사 목록 (견적 주체인 '세창인터내쇼날' 자사/테넌트 제외)
+  // 순수 외부 발주 고객사 목록 (견적 주체인 '세창인터내쇼날' 본사 제외)
   const customerCompanies = useMemo(() => {
     return companies.filter(
       (c) =>
@@ -1528,13 +1528,13 @@ export default function CasesPage() {
               </button>
             )}
 
-            {/* 2. 회사 대표(TENANT_ADMIN) 또는 시스템 총괄(SUPER_ADMIN) 드롭다운 */}
+            {/* 2. 사내 총괄(TENANT_ADMIN) 또는 시스템 총괄(SUPER_ADMIN) 드롭다운 */}
             {user && ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user.role) && (
               <select
                 value={filterManager}
                 onChange={e => setFilterManager(e.target.value)}
                 className="px-2 py-1 bg-white border border-slate-300 rounded text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-500 max-w-[130px] shrink-0"
-                title="회원사 대표 전용: 사내 전체 담당자별 견적 조회"
+                title="총괄 관리자 전용: 사내 전체 담당자별 견적 조회"
               >
                 <option value="ALL">👤 모든 담당자 ({uniqueManagers.length})</option>
                 {uniqueManagers.map(m => (
