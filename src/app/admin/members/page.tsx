@@ -34,9 +34,9 @@ interface Company {
 
 const ROLE_LABELS: Record<string, { label: string; color: string }> = {
   SUPER_ADMIN: { label: "시스템 최고관리자", color: "bg-purple-100 text-purple-800 border-purple-200" },
-  TENANT_ADMIN: { label: "대표 관리자", color: "bg-indigo-100 text-indigo-800 border-indigo-200" },
-  SALES_USER: { label: "일반 사원 (실무)", color: "bg-blue-100 text-blue-800 border-blue-200" },
-  REVIEWER: { label: "일반 사원 (실무)", color: "bg-blue-100 text-blue-800 border-blue-200" },
+  TENANT_ADMIN: { label: "총괄 관리자", color: "bg-indigo-100 text-indigo-800 border-indigo-200" },
+  SALES_USER: { label: "영업담당 (실무)", color: "bg-blue-100 text-blue-800 border-blue-200" },
+  REVIEWER: { label: "가공·설계 검토 (실무)", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
   GUEST: { label: "조회 전용", color: "bg-slate-100 text-slate-800 border-slate-200" },
 };
 
@@ -76,28 +76,14 @@ export default function MembersManagementPage() {
   const [successMsg, setSuccessMsg] = useState("");
 
   // 필터 및 검색 상태
-  const [activeTab, setActiveTab] = useState<"all" | "SUPER_ADMIN" | "TENANT_ADMIN" | "SALES_USER" | "REVIEWER" | "deleted">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "SUPER_ADMIN" | "SALES_USER" | "REVIEWER" | "deleted">("all");
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showCompanyModal, setShowCompanyModal] = useState(false);
   const [editingOperator, setEditingOperator] = useState<Operator | null>(null);
-
-  // 회사/테넌트 등록 폼 상태
-  const [formCompName, setFormCompName] = useState("");
-  const [formCompCode, setFormCompCode] = useState("");
-  const [formCompType, setFormCompType] = useState<"CUSTOMER" | "PARTNER" | "INTERNAL">("CUSTOMER");
-  const [createAdminWithCompany, setCreateAdminWithCompany] = useState(true);
-  const [compAdminLoginId, setCompAdminLoginId] = useState("");
-  const [compAdminPassword, setCompAdminPassword] = useState("");
-  const [compAdminName, setCompAdminName] = useState("");
-  const [compAdminEmpNum, setCompAdminEmpNum] = useState("");
-  const [compAdminPhone, setCompAdminPhone] = useState("");
-  const [isSubmittingCompany, setIsSubmittingCompany] = useState(false);
-  const [companyModalError, setCompanyModalError] = useState("");
 
   // 입력 폼 상태
   const [formLoginId, setFormLoginId] = useState("");
@@ -233,87 +219,17 @@ export default function MembersManagementPage() {
     });
   }, [operators, activeTab, selectedDeptFilter, searchQuery]);
 
-  // 테넌트(회사) 등록 모달 열기
-  const handleOpenCompanyModal = () => {
-    setFormCompName("");
-    setFormCompCode(`COMP-${Math.floor(1000 + Math.random() * 9000)}`);
-    setFormCompType("CUSTOMER");
-    setCreateAdminWithCompany(true);
-    setCompAdminName("대표 관리자");
-    setCompAdminLoginId("");
-    setCompAdminPassword("Password123!");
-    setCompAdminEmpNum(`CEO-${Math.floor(100 + Math.random() * 900)}`);
-    setCompAdminPhone("");
-    setCompanyModalError("");
-    setShowCompanyModal(true);
-  };
-
-  // 테넌트(회사) 등록 처리
-  const handleCompanySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formCompName.trim()) {
-      setCompanyModalError("고객사(회사)명을 입력해주세요.");
-      return;
-    }
-    if (createAdminWithCompany) {
-      if (!compAdminLoginId.trim() || !compAdminPassword.trim() || !compAdminName.trim()) {
-        setCompanyModalError("대표 관리자 아이디, 비밀번호, 성명을 입력해주세요.");
-        return;
-      }
-    }
-
-    setCompanyModalError("");
-    setIsSubmittingCompany(true);
-    try {
-      // 1. 회사 생성
-      const res = await apiFetch("/api/companies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company_name: formCompName.trim(),
-          company_code: formCompCode.trim(),
-          company_type: formCompType
-        })
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setCompanyModalError(data.error || "고객사 등록에 실패했습니다.");
-        return;
-      }
-
-      const newCompId = data.company?.id;
-
-      // 2. 대표 계정 동시 생성 옵션 처리
-      if (createAdminWithCompany && newCompId) {
-        const opRes = await apiFetch("/api/operators", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            login_id: compAdminLoginId.trim(),
-            password: compAdminPassword.trim(),
-            name: compAdminName.trim(),
-            role: "TENANT_ADMIN",
-            employee_number: compAdminEmpNum.trim() || `EMP-${Date.now().toString().slice(-4)}`,
-            phone: compAdminPhone.trim(),
-            tenant_id: newCompId
-          })
-        });
-        const opData = await opRes.json();
-        if (!opData.success) {
-          console.warn("Company created but failed to create admin:", opData.error);
-        }
-      }
-
-      setShowCompanyModal(false);
-      setSuccessMsg(`새로운 고객사 '${formCompName}'가 등록되었습니다.${createAdminWithCompany ? " (대표 계정 포함)" : ""}`);
-      setTimeout(() => setSuccessMsg(""), 4000);
-      fetchData();
-    } catch (err: any) {
-      setCompanyModalError(err.message || "통신 중 오류가 발생했습니다.");
-    } finally {
-      setIsSubmittingCompany(false);
-    }
-  };
+  // 탭별 인원수 집계
+  const tabCounts = useMemo(() => {
+    const active = operators.filter((o) => !o.deleted_at && !o.is_deleted);
+    return {
+      all: active.length,
+      SUPER_ADMIN: active.filter((o) => o.role === "SUPER_ADMIN").length,
+      SALES_USER: active.filter((o) => o.role === "SALES_USER").length,
+      REVIEWER: active.filter((o) => o.role === "REVIEWER").length,
+      deleted: operators.filter((o) => o.deleted_at || o.is_deleted).length,
+    };
+  }, [operators]);
 
   // 등록 모달 열기
   const handleOpenAddModal = (targetDept?: string) => {
@@ -559,32 +475,40 @@ export default function MembersManagementPage() {
       {/* 필터 및 검색 툴바 */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-4 justify-between items-center">
         {/* 탭 바 */}
-        <div className="flex items-center space-x-1 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+        <div className="flex items-center space-x-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
           {[
-            { id: "all", label: "전체 활성" },
-            { id: "SUPER_ADMIN", label: "최고관리자" },
-            { id: "TENANT_ADMIN", label: "대표 관리자" },
-            { id: "SALES_USER", label: "영업담당" },
-            { id: "REVIEWER", label: "검토자" },
-            { id: "deleted", label: "비활성/정지" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleSelectTab(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                activeTab === tab.id
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {tab.label}
-              {tab.id === "deleted" && (
-                <span className="ml-1.5 px-1.5 py-0.2 bg-rose-100 text-rose-700 rounded-full text-[10px] font-bold">
-                  {operators.filter((o) => o.deleted_at || o.is_deleted).length}
+            { id: "all" as const, label: "전체 활성", count: tabCounts.all },
+            { id: "SUPER_ADMIN" as const, label: "최고관리자", count: tabCounts.SUPER_ADMIN },
+            { id: "SALES_USER" as const, label: "영업 실무", count: tabCounts.SALES_USER },
+            { id: "REVIEWER" as const, label: "가공·설계 검토", count: tabCounts.REVIEWER },
+            { id: "deleted" as const, label: "비활성/정지", count: tabCounts.deleted },
+          ].map((tab) => {
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => handleSelectTab(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center space-x-1.5 ${
+                  isSelected
+                    ? "bg-indigo-600 text-white shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    isSelected
+                      ? "bg-indigo-700 text-white"
+                      : tab.id === "deleted"
+                      ? tab.count > 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-400"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {tab.count}
                 </span>
-              )}
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
 
         {/* 부서 선택 & 검색 */}
@@ -839,19 +763,33 @@ export default function MembersManagementPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">소속 부서</label>
-                <select
-                  value={formTenantId}
-                  onChange={(e) => setFormTenantId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
-                >
-                  <option value="견적영업부">견적영업부</option>
-                  <option value="가공기술부">가공기술부</option>
-                  <option value="설계품질부">설계품질부</option>
-                  <option value="경영지원부">경영지원부</option>
-                  <option value="시스템운영본부">시스템운영본부</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">소속 부서 *</label>
+                  <select
+                    value={formTenantId}
+                    onChange={(e) => setFormTenantId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
+                  >
+                    <option value="견적영업부">견적영업부</option>
+                    <option value="가공기술부">가공기술부</option>
+                    <option value="설계품질부">설계품질부</option>
+                    <option value="경영지원부">경영지원부</option>
+                    <option value="시스템운영본부">시스템운영본부</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">업무 권한 등급 *</label>
+                  <select
+                    value={formRole}
+                    onChange={(e) => setFormRole(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
+                  >
+                    <option value="SALES_USER">영업담당 (실무)</option>
+                    <option value="REVIEWER">가공·설계 검토 (실무)</option>
+                    <option value="SUPER_ADMIN">시스템 최고관리자</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
@@ -943,19 +881,34 @@ export default function MembersManagementPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">소속 부서</label>
-                <select
-                  value={formTenantId}
-                  onChange={(e) => setFormTenantId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
-                >
-                  <option value="견적영업부">견적영업부</option>
-                  <option value="가공기술부">가공기술부</option>
-                  <option value="설계품질부">설계품질부</option>
-                  <option value="경영지원부">경영지원부</option>
-                  <option value="시스템운영본부">시스템운영본부</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">소속 부서</label>
+                  <select
+                    value={formTenantId}
+                    onChange={(e) => setFormTenantId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
+                  >
+                    <option value="견적영업부">견적영업부</option>
+                    <option value="가공기술부">가공기술부</option>
+                    <option value="설계품질부">설계품질부</option>
+                    <option value="경영지원부">경영지원부</option>
+                    <option value="시스템운영본부">시스템운영본부</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">업무 권한 등급</label>
+                  <select
+                    disabled={editingOperator.login_id === "admin"}
+                    value={formRole}
+                    onChange={(e) => setFormRole(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    <option value="SALES_USER">영업담당 (실무)</option>
+                    <option value="REVIEWER">가공·설계 검토 (실무)</option>
+                    <option value="SUPER_ADMIN">시스템 최고관리자</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -992,161 +945,6 @@ export default function MembersManagementPage() {
         </div>
       )}
 
-      {/* 고객사 신규 등록 모달 */}
-      {showCompanyModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
-              <Building2 className="w-5 h-5 text-emerald-600" />
-              <span>신규 고객사 등록</span>
-            </h2>
-
-            {companyModalError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs">
-                {companyModalError}
-              </div>
-            )}
-
-            <form onSubmit={handleCompanySubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">고객사(회사)명 *</label>
-                <input
-                  type="text"
-                  required
-                  value={formCompName}
-                  onChange={(e) => setFormCompName(e.target.value)}
-                  placeholder="예: 삼성전자(주), 대한엔지니어링 등"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">회사 식별 코드 *</label>
-                <input
-                  type="text"
-                  required
-                  value={formCompCode}
-                  onChange={(e) => setFormCompCode(e.target.value)}
-                  placeholder="예: COMP_001, CUST-1001"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">회사 구분 *</label>
-                <select
-                  value={formCompType}
-                  onChange={(e) => setFormCompType(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="CUSTOMER">고객사 (발주처)</option>
-                  <option value="PARTNER">외주 가공/협력사</option>
-                  <option value="INTERNAL">본사/사내 사업부</option>
-                </select>
-              </div>
-
-              {/* 고객사 대표 관리자 계정 동시 생성 옵션 */}
-              <div className="pt-2 border-t border-slate-100">
-                <label className="flex items-center space-x-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={createAdminWithCompany}
-                    onChange={(e) => setCreateAdminWithCompany(e.target.checked)}
-                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
-                  />
-                  <span className="font-semibold text-slate-800">
-                    고객사 대표 계정(ADMIN) 동시 생성
-                  </span>
-                </label>
-                <p className="text-[11px] text-slate-500 mt-0.5 ml-6">
-                  체크 시 고객사 생성과 동시에 해당 회사를 관리할 대표 계정을 즉시 생성합니다.
-                </p>
-
-                {createAdminWithCompany && (
-                  <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block font-semibold text-slate-700 mb-0.5">대표자 성명 *</label>
-                        <input
-                          type="text"
-                          required={createAdminWithCompany}
-                          value={compAdminName}
-                          onChange={(e) => setCompAdminName(e.target.value)}
-                          placeholder="예: 대표자 성명"
-                          className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-semibold text-slate-700 mb-0.5">대표 사번</label>
-                        <input
-                          type="text"
-                          value={compAdminEmpNum}
-                          onChange={(e) => setCompAdminEmpNum(e.target.value)}
-                          placeholder="예: CEO-001"
-                          className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block font-semibold text-slate-700 mb-0.5">로그인 아이디 *</label>
-                        <input
-                          type="text"
-                          required={createAdminWithCompany}
-                          value={compAdminLoginId}
-                          onChange={(e) => setCompAdminLoginId(e.target.value)}
-                          placeholder="예: sechang_admin"
-                          className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-semibold text-slate-700 mb-0.5">초기 비밀번호 *</label>
-                        <input
-                          type="password"
-                          required={createAdminWithCompany}
-                          value={compAdminPassword}
-                          onChange={(e) => setCompAdminPassword(e.target.value)}
-                          placeholder="최소 6자 이상"
-                          className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-0.5">연락처</label>
-                      <input
-                        type="text"
-                        value={compAdminPhone}
-                        onChange={(e) => setCompAdminPhone(e.target.value)}
-                        placeholder="010-0000-0000"
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowCompanyModal(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingCompany}
-                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs cursor-pointer"
-                >
-                  {isSubmittingCompany ? "등록 중..." : "고객사 등록 완료"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
