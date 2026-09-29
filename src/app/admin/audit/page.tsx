@@ -2,6 +2,7 @@
 
 import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState } from 'react';
+import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import {
   ShieldCheck,
   Search,
@@ -305,43 +306,89 @@ export default function AuditLogsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-                  <th className="py-3 px-4 w-36">일시 (Timestamp)</th>
-                  <th className="py-3 px-4 w-32">담당자</th>
-                  <th className="py-3 px-3 w-28 text-center">작업 유형</th>
-                  <th className="py-3 px-4 w-52">대상 프로젝트 / 케이스</th>
-                  <th className="py-3 px-4">상세 작업 내역</th>
-                  <th className="py-3 px-3 w-28 text-center">접속 IP</th>
+                <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-bold">
+                  <th className="py-2.5 px-3.5 w-44">일시 (Timestamp)</th>
+                  <th className="py-2.5 px-3.5 w-36">담당자</th>
+                  <th className="py-2.5 px-3 w-28 text-center">작업 유형</th>
+                  <th className="py-2.5 px-3.5 w-72">대상 프로젝트 / 케이스</th>
+                  <th className="py-2.5 px-3.5 min-w-[340px]">상세 작업 내역</th>
+                  <th className="py-2.5 px-3.5 w-24 text-center">접속 IP</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {logs.map((log) => {
+                {logs.map((log, idx) => {
                   const dt = new Date(log.created_at);
                   const formattedDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}:${String(dt.getSeconds()).padStart(2, '0')}`;
+                  const isLatestRow = page === 1 && idx === 0;
 
                   return (
-                    <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3 px-4 font-mono text-slate-500 whitespace-nowrap">
-                        {formattedDate}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900 flex items-center space-x-1">
-                          <User className="w-3 h-3 text-slate-400" />
-                          <span>{log.user_name}</span>
+                    <tr
+                      key={log.id}
+                      className={`transition-colors hover:bg-blue-50/50 ${
+                        isLatestRow ? 'bg-blue-50/30' : ''
+                      }`}
+                    >
+                      {/* 1. 일시 (Timestamp) */}
+                      <td className="py-2.5 px-3.5 whitespace-nowrap">
+                        <div className="flex items-center space-x-1.5">
+                          {isLatestRow && (
+                            <span className="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-blue-600 text-white animate-pulse shrink-0">
+                              최신
+                            </span>
+                          )}
+                          <span className="font-mono text-slate-600 text-[11.5px] font-medium">
+                            {formattedDate}
+                          </span>
                         </div>
-                        <div className="text-[10.5px] font-mono text-slate-400">{log.user_login_id}</div>
                       </td>
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
+
+                      {/* 2. 담당자 */}
+                      <td className="py-2.5 px-3.5 whitespace-nowrap">
+                        <div className="font-bold text-slate-900 flex items-center space-x-1 text-xs">
+                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate max-w-[120px]">{log.user_name}</span>
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-400 pl-4.5">{log.user_login_id}</div>
+                      </td>
+
+                      {/* 3. 작업 유형 */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         {getActionBadge(log.activity_type)}
                       </td>
-                      <td className="py-3 px-4 font-medium text-slate-800">
-                        {log.case_name || (log.quotation_case_id ? `ID: ${log.quotation_case_id}` : '-')}
+
+                      {/* 4. 대상 프로젝트 / 케이스 (1행 말줄임 및 인라인 툴팁) */}
+                      <td className="py-2.5 px-3.5 max-w-[288px]">
+                        {log.case_name || log.quotation_case_id ? (
+                          <SmartTruncateTooltip
+                            text={log.case_name || `ID: ${log.quotation_case_id}`}
+                            className="font-semibold text-slate-800 text-xs block"
+                            maxWidthClass="max-w-[260px]"
+                            showCopy={true}
+                          />
+                        ) : (
+                          <span className="text-slate-300 font-mono text-xs pl-1">-</span>
+                        )}
                       </td>
-                      <td className="py-3 px-4 font-mono text-slate-900 break-all leading-relaxed">
-                        {log.details}
+
+                      {/* 5. 상세 작업 내역 (1행 말줄임 및 고딕 폰트 적용) */}
+                      <td className="py-2.5 px-3.5 min-w-[340px]">
+                        {log.details ? (
+                          <SmartTruncateTooltip
+                            text={log.details}
+                            className="text-slate-700 font-normal text-xs block font-sans"
+                            maxWidthClass="max-w-[550px] 2xl:max-w-[800px]"
+                            showCopy={true}
+                          />
+                        ) : (
+                          <span className="text-slate-300 text-xs">-</span>
+                        )}
                       </td>
-                      <td className="py-3 px-3 text-center font-mono text-slate-400 whitespace-nowrap">
-                        {log.ip_address || '127.0.0.1'}
+
+                      {/* 6. 접속 IP */}
+                      <td className="py-2.5 px-3.5 text-center font-mono text-slate-400 text-[11px] whitespace-nowrap">
+                        <span className="px-1.5 py-0.5 bg-slate-50 border border-slate-200/80 rounded text-slate-600">
+                          {log.ip_address || '127.0.0.1'}
+                        </span>
                       </td>
                     </tr>
                   );
