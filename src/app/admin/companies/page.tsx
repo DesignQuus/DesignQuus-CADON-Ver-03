@@ -11,17 +11,18 @@ import {
   Search,
   Plus,
   Edit,
-  Trash2,
   RefreshCw,
   AlertTriangle,
   CheckCircle,
-  RotateCcw,
+  PauseCircle,
+  PlayCircle,
   ShieldCheck,
-  ArrowRight,
-  ShieldAlert,
-  TrendingUp,
+  Briefcase,
   KeyRound,
-  X
+  X,
+  Factory,
+  ShieldAlert,
+  ArrowRight
 } from 'lucide-react';
 
 interface Company {
@@ -63,7 +64,7 @@ export default function AdminCompaniesPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
 
-  // 신규 회원사 폼 상태
+  // 신규 고객사 폼 상태
   const [formName, setFormName] = useState('');
   const [createAdmin, setCreateAdmin] = useState(true);
   const [adminLoginId, setAdminLoginId] = useState('');
@@ -72,7 +73,7 @@ export default function AdminCompaniesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
 
-  // 회원사 수정 폼 상태
+  // 고객사 수정 폼 상태
   const [editName, setEditName] = useState('');
   const [resetPassword, setResetPassword] = useState(false);
   const [newAdminPassword, setNewAdminPassword] = useState('Cadon2026!@');
@@ -114,7 +115,7 @@ export default function AdminCompaniesPage() {
       if (data.success) {
         setCompanies(data.companies || []);
       } else {
-        setErrorMsg(data.error || '회원사 목록을 불러오지 못했습니다.');
+        setErrorMsg(data.error || '고객사 목록을 불러오지 못했습니다.');
       }
     } catch (err: any) {
       setErrorMsg(err.message || '네트워크 오류가 발생했습니다.');
@@ -129,19 +130,28 @@ export default function AdminCompaniesPage() {
     }
   }, [isAuthorized]);
 
-  // 3. 통계 계산
-  const stats = useMemo(() => {
-    const total = companies.length;
-    const active = companies.filter((c) => c.is_active === 1 && !c.deleted_at).length;
-    const suspended = total - active;
-    const totalMembers = companies.reduce((acc, c) => acc + (c.memberCount || 0), 0);
-    const totalCases = companies.reduce((acc, c) => acc + (c.caseCount || 0), 0);
-    return { total, active, suspended, totalMembers, totalCases };
+  // 본사(세창인터내쇼날) 및 발주 고객사 분리
+  const sechangCompany = useMemo(() => {
+    return companies.find((c) => c.company_name?.includes('세창') || c.company_type === 'TENANT') || null;
   }, [companies]);
 
-  // 4. 필터링된 회사 목록
-  const filteredCompanies = useMemo(() => {
-    return companies.filter((c) => {
+  const clientCompanies = useMemo(() => {
+    return companies.filter((c) => !c.company_name?.includes('세창') && c.company_type !== 'TENANT');
+  }, [companies]);
+
+  // 3. 고객사 통계 계산 (발주처 기준)
+  const stats = useMemo(() => {
+    const total = clientCompanies.length;
+    const active = clientCompanies.filter((c) => c.is_active === 1 && !c.deleted_at).length;
+    const suspended = total - active;
+    const totalMembers = clientCompanies.reduce((acc, c) => acc + (c.memberCount || 0), 0);
+    const totalCases = clientCompanies.reduce((acc, c) => acc + (c.caseCount || 0), 0);
+    return { total, active, suspended, totalMembers, totalCases };
+  }, [clientCompanies]);
+
+  // 4. 필터링된 고객사 목록
+  const filteredClients = useMemo(() => {
+    return clientCompanies.filter((c) => {
       // 상태 필터
       const isActive = c.is_active === 1 && !c.deleted_at;
       if (statusFilter === 'ACTIVE' && !isActive) return false;
@@ -157,7 +167,7 @@ export default function AdminCompaniesPage() {
       }
       return true;
     });
-  }, [companies, statusFilter, searchQuery]);
+  }, [clientCompanies, statusFilter, searchQuery]);
 
   // 신규 등록 모달 열기
   const handleOpenAddModal = () => {
@@ -165,27 +175,36 @@ export default function AdminCompaniesPage() {
     setCreateAdmin(true);
     setAdminLoginId('');
     setAdminPassword('Cadon1234!@');
-    setAdminName('대표 관리자');
+    setAdminName('구매/견적 담당자');
     setModalError('');
     setShowAddModal(true);
   };
 
-  // 신규 등록 제출
+  // 신규 고객사 등록 제출
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
-      setModalError('회원사(회사)명을 입력해주세요.');
+      setModalError('고객사(회사)명을 입력해주세요.');
       return;
     }
     if (createAdmin) {
-      if (!adminLoginId.trim() || !adminPassword.trim() || !adminName.trim()) {
-        setModalError('대표 관리자 아이디, 비밀번호, 성명을 입력해주세요.');
+      if (!adminLoginId.trim()) {
+        setModalError('고객사 담당자 로그인 아이디를 입력해주세요.');
+        return;
+      }
+      if (!adminPassword.trim()) {
+        setModalError('초기 비밀번호를 입력해주세요.');
+        return;
+      }
+      if (!adminName.trim()) {
+        setModalError('담당자 성명을 입력해주세요.');
         return;
       }
     }
 
     setIsSubmitting(true);
     setModalError('');
+
     try {
       const res = await apiFetch('/api/companies', {
         method: 'POST',
@@ -201,12 +220,12 @@ export default function AdminCompaniesPage() {
       });
       const data = await res.json();
       if (!data.success) {
-        setModalError(data.error || '회원사 등록에 실패했습니다.');
+        setModalError(data.error || '고객사 등록에 실패했습니다.');
         return;
       }
 
       setShowAddModal(false);
-      setSuccessMsg(`새로운 회원사 '${formName}'가 성공적으로 등록되었습니다.${createAdmin ? ' (대표 관리자 계정 동시 발급 완료)' : ''}`);
+      setSuccessMsg(`새로운 발주 고객사 '${formName}'가 성공적으로 등록되었습니다.${createAdmin ? ' (견적 담당자 계정 등록 완료)' : ''}`);
       setTimeout(() => setSuccessMsg(''), 5000);
       fetchCompanies();
     } catch (err: any) {
@@ -216,7 +235,7 @@ export default function AdminCompaniesPage() {
     }
   };
 
-  // 회원사 관리/수정 모달 열기
+  // 고객사 관리/수정 모달 열기
   const handleOpenEditModal = (c: Company) => {
     setSelectedCompany(c);
     setEditName(c.company_name);
@@ -226,16 +245,16 @@ export default function AdminCompaniesPage() {
     setShowEditModal(true);
   };
 
-  // 회원사 수정 제출
+  // 고객사 수정 제출
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCompany) return;
     if (!editName.trim()) {
-      setModalError('회원사명을 입력해주세요.');
+      setModalError('고객사명을 입력해주세요.');
       return;
     }
     if (resetPassword && !newAdminPassword.trim()) {
-      setModalError('새 대표 관리자 임시 비밀번호를 입력해주세요.');
+      setModalError('새 담당자 임시 비밀번호를 입력해주세요.');
       return;
     }
 
@@ -248,21 +267,21 @@ export default function AdminCompaniesPage() {
         body: JSON.stringify({
           id: selectedCompany.id,
           company_name: editName.trim(),
-          company_type: 'CUSTOMER',
+          company_type: selectedCompany.company_type || 'CUSTOMER',
           is_active: selectedCompany.is_active,
           reset_admin_password: resetPassword ? newAdminPassword.trim() : undefined
         })
       });
       const data = await res.json();
       if (!data.success) {
-        setModalError(data.error || '회원사 정보 수정에 실패했습니다.');
+        setModalError(data.error || '고객사 정보 수정에 실패했습니다.');
         return;
       }
 
       setShowEditModal(false);
-      let successText = `회원사 '${editName}' 정보가 성공적으로 수정되었습니다.`;
+      let successText = `고객사 '${editName}' 정보가 성공적으로 수정되었습니다.`;
       if (resetPassword) {
-        successText += ' (대표 관리자 임시 비밀번호가 재설정되었습니다.)';
+        successText += ' (담당자 임시 비밀번호가 재설정되었습니다.)';
       }
       setSuccessMsg(successText);
       setTimeout(() => setSuccessMsg(''), 5000);
@@ -274,9 +293,9 @@ export default function AdminCompaniesPage() {
     }
   };
 
-  // 서비스 정지 (소프트 삭제)
+  // 거래 상태 중단 (비활성화)
   const handleSuspendCompany = async (c: Company) => {
-    const confirmText = `정말로 회원사 '${c.company_name}'의 서비스를 정지(비활성화)하시겠습니까?\n\n- 소속 임직원의 로그인이 차단됩니다.\n- 언제든 다시 복원하실 수 있습니다.`;
+    const confirmText = `정말로 고객사 '${c.company_name}'와의 거래 상태를 '거래 중단'으로 변경하시겠습니까?\n\n- 해당 고객사 담당자의 신규 견적 접수가 일시 중단됩니다.\n- 기존 도면 및 견적 데이터는 안전하게 보존되며 언제든 거래 재개가 가능합니다.`;
     if (!window.confirm(confirmText)) return;
 
     try {
@@ -285,10 +304,10 @@ export default function AdminCompaniesPage() {
       });
       const data = await res.json();
       if (!data.success) {
-        alert(data.error || '회원사 정지에 실패했습니다.');
+        alert(data.error || '거래 상태 변경에 실패했습니다.');
         return;
       }
-      setSuccessMsg(`회원사 '${c.company_name}' 서비스가 정지되었습니다.`);
+      setSuccessMsg(`고객사 '${c.company_name}'와의 거래 상태가 '거래 중단'으로 변경되었습니다.`);
       setTimeout(() => setSuccessMsg(''), 4000);
       fetchCompanies();
     } catch (err: any) {
@@ -296,9 +315,9 @@ export default function AdminCompaniesPage() {
     }
   };
 
-  // 서비스 복원
+  // 거래 재개 (정상 거래 복원)
   const handleRestoreCompany = async (c: Company) => {
-    if (!window.confirm(`회원사 '${c.company_name}'의 서비스를 정상 가동 상태로 복원하시겠습니까?`)) return;
+    if (!window.confirm(`고객사 '${c.company_name}'와의 거래를 정상 거래 상태로 재개하시겠습니까?`)) return;
 
     try {
       const res = await apiFetch('/api/companies', {
@@ -308,10 +327,10 @@ export default function AdminCompaniesPage() {
       });
       const data = await res.json();
       if (!data.success) {
-        alert(data.error || '회원사 복원에 실패했습니다.');
+        alert(data.error || '거래 재개 처리에 실패했습니다.');
         return;
       }
-      setSuccessMsg(`회원사 '${c.company_name}'가 정상 가동 상태로 복원되었습니다.`);
+      setSuccessMsg(`고객사 '${c.company_name}'와의 거래가 정상 재개되었습니다.`);
       setTimeout(() => setSuccessMsg(''), 4000);
       fetchCompanies();
     } catch (err: any) {
@@ -323,26 +342,27 @@ export default function AdminCompaniesPage() {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-3">
         <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
-        <p className="text-sm text-slate-500 font-medium">운영자 권한을 확인하는 중입니다...</p>
+        <span className="text-sm font-semibold text-slate-500">최고관리자 권한 및 고객사 대장을 확인하고 있습니다...</span>
       </div>
     );
   }
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mb-4 shadow-xs">
-          <ShieldAlert className="w-7 h-7" />
+      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-4 px-4">
+        <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center">
+          <ShieldAlert className="w-8 h-8" />
         </div>
-        <h2 className="text-xl font-bold text-slate-900 mb-2">접근 권한이 없습니다</h2>
-        <p className="text-sm text-slate-500 max-w-md mb-6">
-          회원사 관리 센터는 플랫폼 최고관리자(SUPER_ADMIN) 전용 메뉴입니다.
+        <h2 className="text-lg font-bold text-slate-900">접근 권한이 없습니다</h2>
+        <p className="text-xs text-slate-500 max-w-sm text-center">
+          본 화면은 시스템 최고관리자(SUPER_ADMIN) 전용 화면입니다. 일반 견적 실무 담당자는 본사 견적의뢰 대시보드로 이동해 주세요.
         </p>
         <Link
           href="/cases"
-          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+          className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-1.5"
         >
-          메인 대시보드로 돌아가기
+          <span>견적의뢰 관리 화면으로 이동</span>
+          <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
     );
@@ -354,18 +374,18 @@ export default function AdminCompaniesPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
         <div>
           <div className="flex items-center space-x-2 text-xs text-slate-500 mb-1.5 font-medium">
-            <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-indigo-100 text-indigo-800">
-              👑 최고관리자 전용 포털
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-blue-800">
+              👑 시스템 최고관리자 포털
             </span>
             <span>&gt;</span>
-            <span className="text-indigo-600 font-bold">회원사 관제 센터</span>
+            <span className="text-blue-600 font-bold">거래처(고객사) 마스터</span>
           </div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center space-x-2.5">
-            <Building2 className="w-7 h-7 text-indigo-600" />
-            <span>SaaS 입점 회원사 총괄 관리</span>
+            <Briefcase className="w-7 h-7 text-blue-600" />
+            <span>고객사 및 발주처 마스터 관리</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            CADON-BOM AI 라이선스 구매 회원사의 독립 업무 환경 발급, 대표 계정 승인 및 서비스 정상 가동/일시정지를 총괄 관리하는 라이선스 관제 센터입니다.
+            세창인터내쇼날에 가공·제작 도면 견적을 의뢰하는 고객사(삼성전자, 보그워너 등)와 바이어 견적 담당자를 등록·관리하는 거래처 마스터 관리 센터입니다.
           </p>
         </div>
 
@@ -383,7 +403,7 @@ export default function AdminCompaniesPage() {
             className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white flex items-center space-x-1.5 shadow-sm transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>신규 회원사 등록</span>
+            <span>신규 고객사 등록</span>
           </button>
         </div>
       </div>
@@ -402,13 +422,54 @@ export default function AdminCompaniesPage() {
         </div>
       )}
 
-      {/* 2. SaaS KPI 요약 카드 */}
+      {/* 2. 본사(세창인터내쇼날) 운영 주체 프로필 카드 */}
+      {sechangCompany && (
+        <div className="bg-gradient-to-r from-slate-900 to-blue-950 text-white p-5 rounded-2xl border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-12 h-12 rounded-xl bg-blue-600/30 border border-blue-400/30 flex items-center justify-center text-blue-400 font-bold shrink-0">
+              <Factory className="w-6 h-6 text-blue-300" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                  제조·견적 총괄 본사 (당사)
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+                  시스템 정상 가동
+                </span>
+              </div>
+              <h2 className="text-lg font-black text-white mt-0.5 tracking-tight">
+                {sechangCompany.company_name}
+              </h2>
+              <p className="text-xs text-slate-300">
+                세창인터내쇼날 사내 통합 견적 및 2차 외주가공 단가 통제 엔진이 활성화되어 있습니다.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-4 border-t md:border-t-0 md:border-l border-slate-700/80 pt-3 md:pt-0 md:pl-5 shrink-0 text-xs">
+            <div>
+              <div className="text-slate-400 text-[11px]">본사 실무 담당자</div>
+              <div className="font-bold text-white text-sm">{sechangCompany.memberCount || 3}명 (김세창 외)</div>
+            </div>
+            <button
+              onClick={() => handleOpenEditModal(sechangCompany)}
+              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              본사 정보 관리
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. 발주 고객사 요약 KPI 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1">총 등록 회원사</div>
-            <div className="text-2xl font-black text-slate-900">{stats.total}개</div>
-            <div className="text-[11px] text-slate-400 mt-1">누적 가입 회원사</div>
+            <div className="text-xs font-semibold text-slate-500 mb-1">총 등록 고객사</div>
+            <div className="text-2xl font-black text-slate-900">{stats.total}개사</div>
+            <div className="text-[11px] text-slate-400 mt-1">도면 발주 거래처</div>
           </div>
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold">
             <Building2 className="w-6 h-6" />
@@ -417,10 +478,10 @@ export default function AdminCompaniesPage() {
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1">정상 가동 중</div>
-            <div className="text-2xl font-black text-emerald-600">{stats.active}개</div>
+            <div className="text-xs font-semibold text-slate-500 mb-1">정상 거래 중</div>
+            <div className="text-2xl font-black text-emerald-600">{stats.active}개사</div>
             <div className="text-[11px] text-slate-400 mt-1">
-              정지/보류: <span className="text-rose-500 font-bold">{stats.suspended}</span>개
+              거래 중단/휴면: <span className="text-rose-500 font-bold">{stats.suspended}</span>개
             </div>
           </div>
           <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-bold">
@@ -430,9 +491,9 @@ export default function AdminCompaniesPage() {
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1">전체 소속 임직원</div>
+            <div className="text-xs font-semibold text-slate-500 mb-1">고객사 견적 담당자</div>
             <div className="text-2xl font-black text-indigo-600">{stats.totalMembers}명</div>
-            <div className="text-[11px] text-slate-400 mt-1">활성 사용자 총합</div>
+            <div className="text-[11px] text-slate-400 mt-1">바이어 계정 총합</div>
           </div>
           <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold">
             <Users className="w-6 h-6" />
@@ -441,21 +502,17 @@ export default function AdminCompaniesPage() {
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1">회원사 서비스 가동률</div>
-            <div className="text-2xl font-black text-blue-600">
-              {stats.total > 0 ? Math.round((stats.active / stats.total) * 100) : 0}%
-            </div>
-            <div className="text-[11px] text-slate-400 mt-1">
-              정상 계약 및 가동 비율
-            </div>
+            <div className="text-xs font-semibold text-slate-500 mb-1">견적의뢰 접수 총계</div>
+            <div className="text-2xl font-black text-purple-600">{stats.totalCases}건</div>
+            <div className="text-[11px] text-slate-400 mt-1">고객사 발주 프로젝트</div>
           </div>
-          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold">
-            <TrendingUp className="w-6 h-6" />
+          <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center font-bold">
+            <FileText className="w-6 h-6" />
           </div>
         </div>
       </div>
 
-      {/* 3. 검색 및 필터 툴바 */}
+      {/* 4. 검색 및 상태 필터 툴바 */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row gap-3 justify-between items-center">
         <div className="flex items-center space-x-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
           {/* 상태 필터 탭 */}
@@ -466,7 +523,7 @@ export default function AdminCompaniesPage() {
                 statusFilter === 'ACTIVE' ? 'bg-white text-blue-700 shadow-2xs font-bold' : 'hover:text-slate-900'
               }`}
             >
-              정상 가동 ({stats.active})
+              정상 거래 ({stats.active})
             </button>
             <button
               onClick={() => setStatusFilter('SUSPENDED')}
@@ -474,7 +531,7 @@ export default function AdminCompaniesPage() {
                 statusFilter === 'SUSPENDED' ? 'bg-white text-rose-700 shadow-2xs font-bold' : 'hover:text-slate-900'
               }`}
             >
-              정지/보류 ({stats.suspended})
+              거래 중단 ({stats.suspended})
             </button>
             <button
               onClick={() => setStatusFilter('ALL')}
@@ -492,7 +549,7 @@ export default function AdminCompaniesPage() {
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
-            placeholder="회원사명, 식별코드, ID 검색"
+            placeholder="고객사명, 식별코드 검색"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -500,18 +557,26 @@ export default function AdminCompaniesPage() {
         </div>
       </div>
 
-      {/* 4. 회원사 대장 메인 테이블 */}
+      {/* 5. 발주 고객사 대장 메인 테이블 */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-slate-200/80 bg-slate-50/50 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <span className="text-xs font-bold text-slate-800">발주 고객사 대장</span>
+            <span className="text-[11px] text-slate-400">({filteredClients.length}개사)</span>
+          </div>
+          <span className="text-[11px] text-slate-500">세창인터내쇼날 발주 의뢰 고객사 목록</span>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-3.5">회원사명</th>
-                <th className="px-4 py-3.5">상태</th>
-                <th className="px-4 py-3.5 text-center">소속 사원 수</th>
-                <th className="px-4 py-3.5 text-center">견적의뢰 건수</th>
+                <th className="px-4 py-3.5">고객사(발주처)명</th>
+                <th className="px-4 py-3.5">거래 상태</th>
+                <th className="px-4 py-3.5 text-center">고객사 담당자 수</th>
+                <th className="px-4 py-3.5 text-center">견적의뢰 접수</th>
                 <th className="px-4 py-3.5">등록일</th>
-                <th className="px-4 py-3.5 text-right">운영 액션</th>
+                <th className="px-4 py-3.5 text-right">관리 액션</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -519,28 +584,28 @@ export default function AdminCompaniesPage() {
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
-                    <span>회원사 목록 및 실시간 지표를 불러오는 중입니다...</span>
+                    <span>고객사 목록 및 실시간 지표를 불러오는 중입니다...</span>
                   </td>
                 </tr>
-              ) : filteredCompanies.length === 0 ? (
+              ) : filteredClients.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-16 text-center text-slate-400">
                     <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                    <p className="text-sm font-bold text-slate-700 mb-1">등록된 회원사가 없거나 검색 결과가 없습니다.</p>
+                    <p className="text-sm font-bold text-slate-700 mb-1">등록된 고객사가 없거나 검색 결과가 없습니다.</p>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
-                      새로운 고객사를 등록하여 전용 업무 환경과 대표 관리자 계정을 발급해 보세요.
+                      새로운 발주 고객사를 등록하여 도면 견적 접수와 담당 바이어를 관리해 보세요.
                     </p>
                     <button
                       onClick={handleOpenAddModal}
                       className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors inline-flex items-center space-x-1.5 cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>신규 회원사 등록하기</span>
+                      <span>신규 고객사 등록하기</span>
                     </button>
                   </td>
                 </tr>
               ) : (
-                filteredCompanies.map((comp) => {
+                filteredClients.map((comp) => {
                   const isActive = comp.is_active === 1 && !comp.deleted_at;
 
                   return (
@@ -550,43 +615,49 @@ export default function AdminCompaniesPage() {
                     >
                       {/* 회사명 */}
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 font-bold shrink-0">
-                            <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0">
+                            <Building2 className="w-3.5 h-3.5" />
                           </div>
                           <div>
-                            <div className="font-bold text-slate-900">{comp.company_name}</div>
+                            <div className="font-bold text-slate-900 flex items-center space-x-1.5">
+                              <span>{comp.company_name}</span>
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                발주 고객사
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono">{comp.company_code || comp.id}</div>
                           </div>
                         </div>
                       </td>
 
-                      {/* 상태 배지 */}
+                      {/* 거래 상태 배지 */}
                       <td className="px-4 py-3.5">
                         {isActive ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
-                            정상 가동
+                            정상 거래
                           </span>
                         ) : (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5"></span>
-                            서비스 정지
+                            거래 중단
                           </span>
                         )}
                       </td>
 
-                      {/* 소속 사원수 */}
+                      {/* 고객사 담당자 수 */}
                       <td className="px-4 py-3.5 text-center">
                         <span
                           className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200/80"
-                          title="소속 임직원 수 (회원사 대표관리자가 직접 등록/관리)"
+                          title="해당 고객사의 견적/발주 담당 바이어 수"
                         >
                           <Users className="w-3 h-3 text-slate-400" />
                           <span>{comp.memberCount || 0}명</span>
                         </span>
                       </td>
 
-                      {/* 견적의뢰 건수 */}
+                      {/* 견적의뢰 접수 건수 */}
                       <td className="px-4 py-3.5 text-center">
                         <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200/60">
                           <FileText className="w-3 h-3" />
@@ -604,29 +675,29 @@ export default function AdminCompaniesPage() {
                         <button
                           onClick={() => handleOpenEditModal(comp)}
                           className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 transition-colors inline-flex items-center space-x-1 cursor-pointer"
-                          title="회원사명 변경 및 대표 관리자 계정/비밀번호 관리"
+                          title="고객사명 변경 및 담당 바이어 계정 관리"
                         >
                           <Edit className="w-3 h-3" />
-                          <span>정보 관리</span>
+                          <span>고객사 정보</span>
                         </button>
 
                         {isActive ? (
                           <button
                             onClick={() => handleSuspendCompany(comp)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors inline-flex items-center space-x-1 cursor-pointer"
-                            title="서비스 일시 정지 (로그인 차단)"
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors inline-flex items-center space-x-1 cursor-pointer"
+                            title="해당 고객사와의 거래 일시 중단"
                           >
-                            <Trash2 className="w-3 h-3" />
-                            <span>정지</span>
+                            <PauseCircle className="w-3 h-3 text-rose-600" />
+                            <span>거래중단</span>
                           </button>
                         ) : (
                           <button
                             onClick={() => handleRestoreCompany(comp)}
                             className="px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors inline-flex items-center space-x-1 cursor-pointer"
-                            title="정상 가동 복원"
+                            title="정상 거래 재개"
                           >
-                            <RotateCcw className="w-3 h-3" />
-                            <span>복원</span>
+                            <PlayCircle className="w-3 h-3 text-emerald-600" />
+                            <span>거래재개</span>
                           </button>
                         )}
                       </td>
@@ -639,7 +710,7 @@ export default function AdminCompaniesPage() {
         </div>
       </div>
 
-      {/* [모달 1] 신규 회원사 등록 모달 */}
+      {/* [모달 1] 신규 고객사 등록 모달 */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-xl max-w-lg w-full p-6 sm:p-7 space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
@@ -649,8 +720,8 @@ export default function AdminCompaniesPage() {
                   <Building2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">신규 회원사 등록</h2>
-                  <p className="text-xs text-slate-400">신규 회원사 등록 및 전용 데이터베이스 영역 생성</p>
+                  <h2 className="text-base font-bold text-slate-900">신규 발주 고객사 등록</h2>
+                  <p className="text-xs text-slate-400">세창인터내쇼날에 견적을 의뢰할 신규 고객사 및 담당 바이어 등록</p>
                 </div>
               </div>
               <button
@@ -671,23 +742,22 @@ export default function AdminCompaniesPage() {
             <form onSubmit={handleAddSubmit} className="space-y-4 text-xs">
               <div className="space-y-3">
                 <div className="font-bold text-slate-800 text-sm flex items-center space-x-1.5 text-blue-600">
-                  <span>1. 회원사 기본 정보</span>
+                  <span>1. 고객사 기본 정보</span>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">회원사명 (회사명) *</label>
+                  <label className="block font-bold text-slate-700 mb-1">고객사명 (상호명) *</label>
                   <input
                     type="text"
                     required
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    placeholder="예: (주)한국정밀가공, 에이비씨테크"
+                    placeholder="예: 삼성전자(주), (주)보그워너, 엠브이텍"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-medium"
                   />
                 </div>
-
               </div>
 
-              {/* 대표 관리자 계정 동시 발급 옵션 */}
+              {/* 고객사 견적 담당자 계정 등록 옵션 */}
               <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
                 <label className="flex items-center space-x-2.5 cursor-pointer select-none">
                   <input
@@ -697,7 +767,7 @@ export default function AdminCompaniesPage() {
                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
                   <span className="font-bold text-slate-900 text-xs">
-                    이 회원사의 대표 관리자(TENANT_ADMIN) 계정도 함께 발급
+                    이 고객사의 발주/견적 담당자(바이어) 계정도 함께 등록
                   </span>
                 </label>
 
@@ -705,13 +775,13 @@ export default function AdminCompaniesPage() {
                   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
                     <div className="grid grid-cols-3 gap-2.5">
                       <div>
-                        <label className="block font-semibold text-slate-700 mb-1">대표자 성명 *</label>
+                        <label className="block font-semibold text-slate-700 mb-1">담당자 성명 *</label>
                         <input
                           type="text"
                           required={createAdmin}
                           value={adminName}
                           onChange={(e) => setAdminName(e.target.value)}
-                          placeholder="예: 홍길동 대표"
+                          placeholder="예: 김구매 과장"
                           className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium"
                         />
                       </div>
@@ -722,7 +792,7 @@ export default function AdminCompaniesPage() {
                           required={createAdmin}
                           value={adminLoginId}
                           onChange={(e) => setAdminLoginId(e.target.value)}
-                          placeholder="예: ceo_korea"
+                          placeholder="예: samsung_buyer"
                           className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono font-medium"
                         />
                       </div>
@@ -755,7 +825,7 @@ export default function AdminCompaniesPage() {
                   disabled={isSubmitting}
                   className="px-5 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
                 >
-                  {isSubmitting ? '등록 처리 중...' : '회원사 생성 완료'}
+                  {isSubmitting ? '등록 처리 중...' : '고객사 등록 완료'}
                 </button>
               </div>
             </form>
@@ -763,7 +833,7 @@ export default function AdminCompaniesPage() {
         </div>
       )}
 
-      {/* [모달 2] 회원사 정보 및 마스터 계정 관리 모달 */}
+      {/* [모달 2] 고객사 정보 관리 모달 */}
       {showEditModal && selectedCompany && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200">
@@ -773,8 +843,12 @@ export default function AdminCompaniesPage() {
                   <Building2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">회원사 정보 관리</h2>
-                  <p className="text-xs text-slate-400">상호명 변경 및 대표 관리자(마스터) 계정 관제</p>
+                  <h2 className="text-base font-bold text-slate-900">
+                    {selectedCompany.id === sechangCompany?.id ? '본사 정보 관리' : '고객사 정보 관리'}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    {selectedCompany.id === sechangCompany?.id ? '세창인터내쇼날 본사 상호명 및 계정 관리' : '고객사 상호명 및 담당자 계정 관리'}
+                  </p>
                 </div>
               </div>
               <button
@@ -792,28 +866,30 @@ export default function AdminCompaniesPage() {
             )}
 
             <form onSubmit={handleEditSubmit} className="space-y-4 text-xs">
-              {/* 1. 회원사명 입력 */}
+              {/* 1. 회사명 입력 */}
               <div>
-                <label className="block font-bold text-slate-700 mb-1">회원사명 *</label>
+                <label className="block font-bold text-slate-700 mb-1">
+                  {selectedCompany.id === sechangCompany?.id ? '본사 상호명 *' : '고객사명 *'}
+                </label>
                 <input
                   type="text"
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  placeholder="회원사(회사)명을 입력하세요"
+                  placeholder="회사명을 입력하세요"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-slate-900"
                 />
               </div>
 
-              {/* 2. 대표 관리자(마스터) 계정 관제 카드 */}
+              {/* 2. 담당자(마스터) 계정 관제 카드 */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-1.5 font-bold text-slate-800">
-                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                    <span>대표 관리자 (마스터 계정)</span>
+                    <ShieldCheck className="w-4 h-4 text-blue-600" />
+                    <span>{selectedCompany.id === sechangCompany?.id ? '본사 대표 계정' : '고객사 대표 담당자 계정'}</span>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
-                    TENANT_ADMIN
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                    {selectedCompany.tenantAdmin?.login_id || 'ACCOUNT'}
                   </span>
                 </div>
 
@@ -826,7 +902,7 @@ export default function AdminCompaniesPage() {
                       </div>
                       <div>
                         <span className="text-slate-400 text-[11px] block">로그인 아이디</span>
-                        <strong className="text-indigo-600 font-mono font-bold">{selectedCompany.tenantAdmin.login_id}</strong>
+                        <strong className="text-blue-600 font-mono font-bold">{selectedCompany.tenantAdmin.login_id}</strong>
                       </div>
                     </div>
 
@@ -841,7 +917,7 @@ export default function AdminCompaniesPage() {
                         />
                         <span className="font-bold text-slate-700 text-xs flex items-center space-x-1">
                           <KeyRound className="w-3.5 h-3.5 text-amber-500" />
-                          <span>대표 관리자 비밀번호 초기화 (재설정)</span>
+                          <span>담당자 비밀번호 초기화 (재설정)</span>
                         </span>
                       </label>
 
@@ -856,7 +932,7 @@ export default function AdminCompaniesPage() {
                             className="w-full px-3 py-2 bg-white border border-amber-300 focus:ring-2 focus:ring-amber-400/20 rounded-xl text-xs font-mono font-bold text-slate-900"
                           />
                           <p className="text-[11px] text-slate-400 mt-1">
-                            * 저장 시 대표 관리자에게 안내할 새 임시 비밀번호로 즉시 갱신됩니다.
+                            * 저장 시 안내할 새 임시 비밀번호로 즉시 갱신됩니다.
                           </p>
                         </div>
                       )}
@@ -864,25 +940,25 @@ export default function AdminCompaniesPage() {
                   </div>
                 ) : (
                   <div className="p-3 bg-white rounded-xl border border-slate-200 text-slate-500 text-xs">
-                    이 회원사는 아직 발급된 대표 관리자(마스터) 계정이 없습니다.
+                    등록된 대표 담당자 계정이 없습니다. (필요 시 신규 계정을 발급할 수 있습니다.)
                   </div>
                 )}
               </div>
 
-              {/* 3. 회원사 현황 요약 칩 */}
+              {/* 3. 현황 요약 칩 */}
               <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
                   <span className="text-[10px] text-slate-400 block">소속 사원수</span>
                   <strong className="text-slate-800 font-bold">{selectedCompany.memberCount || 0}명</strong>
                 </div>
                 <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">견적 건수</span>
+                  <span className="text-[10px] text-slate-400 block">견적 접수</span>
                   <strong className="text-purple-700 font-bold">{selectedCompany.caseCount || 0}건</strong>
                 </div>
                 <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">가동 상태</span>
+                  <span className="text-[10px] text-slate-400 block">거래 상태</span>
                   <strong className={selectedCompany.is_active === 1 && !selectedCompany.deleted_at ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
-                    {selectedCompany.is_active === 1 && !selectedCompany.deleted_at ? '정상 가동' : '일시 정지'}
+                    {selectedCompany.is_active === 1 && !selectedCompany.deleted_at ? '정상 거래' : '거래 중단'}
                   </strong>
                 </div>
               </div>

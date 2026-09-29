@@ -71,7 +71,7 @@ export default function Navigation() {
             href={user?.role === 'SUPER_ADMIN' ? '/admin/companies' : '/'}
             prefetch={true}
             className="flex items-center space-x-2"
-            title={user?.role === 'SUPER_ADMIN' ? '최고관리자 회원사 관리 센터로 이동' : 'CADON 홈 대시보드로 이동'}
+            title={user?.role === 'SUPER_ADMIN' ? '고객사(발주처) 마스터 관리 센터로 이동' : 'CADON 홈 대시보드로 이동'}
           >
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white shadow-sm font-bold ${
               user?.role === 'SUPER_ADMIN' ? 'bg-indigo-600' : 'bg-blue-600'
@@ -83,14 +83,14 @@ export default function Navigation() {
                 CADON-BOM <span className={user?.role === 'SUPER_ADMIN' ? 'text-indigo-600 font-extrabold' : 'text-blue-600 font-extrabold'}>AI</span>
               </span>
               <span className="text-[11px] text-slate-500 font-semibold tracking-wider uppercase block">
-                {user?.role === 'SUPER_ADMIN' ? '👑 SaaS 운영자 센터' : 'BOM 견적 시스템'}
+                {user?.role === 'SUPER_ADMIN' ? '👑 시스템 총괄 관제' : 'BOM 견적 시스템'}
               </span>
             </div>
           </Link>
 
           <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-slate-200">
             {user?.role === 'SUPER_ADMIN' ? (
-              /* 최고관리자(SaaS 운영자) 전용 메뉴 */
+              /* 최고관리자 전용 메뉴 */
               <>
                 <Link
                   href="/admin/companies"
@@ -104,7 +104,7 @@ export default function Navigation() {
                   }`}
                 >
                   <Building2 className="w-4 h-4 text-blue-600" />
-                  <span>회원사 관리 센터</span>
+                  <span>고객사(발주처) 관리</span>
                 </Link>
                 <Link
                   href="/admin/audit"
@@ -118,7 +118,7 @@ export default function Navigation() {
                   }`}
                 >
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>플랫폼 보안/감사 로그</span>
+                  <span>시스템 감사 로그</span>
                 </Link>
               </>
             ) : (

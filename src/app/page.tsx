@@ -1029,7 +1029,7 @@ export default function HomePage() {
                     >
                       <span className="flex items-center gap-1.5">
                         <Building2 className="w-3.5 h-3.5 text-blue-600" />
-                        <span>회원사 관리 센터</span>
+                        <span>고객사(발주처) 관리 센터</span>
                       </span>
                       <ChevronRight className="w-3.5 h-3.5 text-blue-400" />
                     </Link>
