@@ -40,6 +40,31 @@ const ROLE_LABELS: Record<string, { label: string; color: string }> = {
   GUEST: { label: "조회 전용", color: "bg-slate-100 text-slate-800 border-slate-200" },
 };
 
+export const getOperatorDeptAndTitle = (op: Operator) => {
+  if (op.login_id === "admin") {
+    return { dept: "시스템운영본부", title: "최고관리자", icon: ShieldCheck, color: "text-purple-600" };
+  }
+  if (op.login_id === "001" || op.name.includes("김세창")) {
+    return { dept: "견적영업부", title: "부장", icon: Building2, color: "text-blue-600" };
+  }
+  if (op.login_id === "002" || op.name.includes("이세창")) {
+    return { dept: "가공기술부", title: "과장", icon: Building2, color: "text-blue-600" };
+  }
+  if (op.login_id === "003" || op.name.includes("박세창")) {
+    return { dept: "설계품질부", title: "대리", icon: Building2, color: "text-blue-600" };
+  }
+  if (op.role === "SUPER_ADMIN") {
+    return { dept: "시스템운영본부", title: "최고관리자", icon: ShieldCheck, color: "text-purple-600" };
+  }
+  if (op.role === "TENANT_ADMIN") {
+    return { dept: "경영지원부", title: "총괄관리자", icon: Building2, color: "text-indigo-600" };
+  }
+  if (op.role === "REVIEWER") {
+    return { dept: "설계품질부", title: "검토담당", icon: Building2, color: "text-emerald-600" };
+  }
+  return { dept: "견적영업부", title: "영업담당", icon: Building2, color: "text-blue-600" };
+};
+
 export default function MembersManagementPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -51,8 +76,8 @@ export default function MembersManagementPage() {
   const [successMsg, setSuccessMsg] = useState("");
 
   // 필터 및 검색 상태
-  const [activeTab, setActiveTab] = useState<"all" | "SUPER_ADMIN" | "TENANT_ADMIN" | "SALES_USER" | "REVIEWER" | "deleted" | "tenants">("all");
-  const [selectedTenantFilter, setSelectedTenantFilter] = useState<string>("ALL");
+  const [activeTab, setActiveTab] = useState<"all" | "SUPER_ADMIN" | "TENANT_ADMIN" | "SALES_USER" | "REVIEWER" | "deleted">("all");
+  const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
   // 모달 상태
@@ -88,21 +113,21 @@ export default function MembersManagementPage() {
   // 로컬 스토리지 필터 상태 복원
   useEffect(() => {
     try {
-      const savedTenant = localStorage.getItem(getTenantStorageKey("admin_members_tenant"));
-      if (savedTenant) setSelectedTenantFilter(savedTenant);
-      const savedTab = localStorage.getItem(getTenantStorageKey("admin_members_tab"));
+      const savedDept = localStorage.getItem("admin_members_dept");
+      if (savedDept) setSelectedDeptFilter(savedDept);
+      const savedTab = localStorage.getItem("admin_members_tab");
       if (savedTab) setActiveTab(savedTab as any);
     } catch {}
   }, []);
 
-  const handleSelectTenant = (val: string) => {
-    setSelectedTenantFilter(val);
-    try { localStorage.setItem(getTenantStorageKey("admin_members_tenant"), val); } catch {}
+  const handleSelectDept = (val: string) => {
+    setSelectedDeptFilter(val);
+    try { localStorage.setItem("admin_members_dept", val); } catch {}
   };
 
   const handleSelectTab = (tab: any) => {
     setActiveTab(tab);
-    try { localStorage.setItem(getTenantStorageKey("admin_members_tab"), tab); } catch {}
+    try { localStorage.setItem("admin_members_tab", tab); } catch {}
   };
 
   // 인증 확인
@@ -140,15 +165,13 @@ export default function MembersManagementPage() {
       });
   }, []);
 
-  // 회사 목록 및 운영자 목록 불러오기
+  // 운영자 목록 불러오기
   const fetchData = async () => {
     setIsLoading(true);
     setErrorMsg("");
     try {
       // 1. 운영자 목록
-      const opUrl = selectedTenantFilter !== "ALL" 
-        ? `/api/operators?tenant_id=${encodeURIComponent(selectedTenantFilter)}&include_deleted=true`
-        : `/api/operators?include_deleted=true`;
+      const opUrl = `/api/operators?include_deleted=true`;
       
       const [opRes, compRes] = await Promise.all([
         fetch(opUrl),
@@ -177,7 +200,7 @@ export default function MembersManagementPage() {
     if (isAuthorized) {
       fetchData();
     }
-  }, [isAuthorized, selectedTenantFilter]);
+  }, [isAuthorized]);
 
   // 필터링된 임직원 목록
   const filteredOperators = useMemo(() => {
@@ -190,7 +213,13 @@ export default function MembersManagementPage() {
         if (activeTab !== "all" && op.role !== activeTab) return false;
       }
 
-      // 2. 검색어 필터
+      // 2. 부서 필터
+      if (selectedDeptFilter !== "ALL") {
+        const info = getOperatorDeptAndTitle(op);
+        if (info.dept !== selectedDeptFilter) return false;
+      }
+
+      // 3. 검색어 필터
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = op.name?.toLowerCase().includes(q);
@@ -202,7 +231,7 @@ export default function MembersManagementPage() {
 
       return true;
     });
-  }, [operators, activeTab, searchQuery]);
+  }, [operators, activeTab, selectedDeptFilter, searchQuery]);
 
   // 테넌트(회사) 등록 모달 열기
   const handleOpenCompanyModal = () => {
@@ -278,9 +307,6 @@ export default function MembersManagementPage() {
       setShowCompanyModal(false);
       setSuccessMsg(`새로운 고객사 '${formCompName}'가 등록되었습니다.${createAdminWithCompany ? " (대표 계정 포함)" : ""}`);
       setTimeout(() => setSuccessMsg(""), 4000);
-      if (newCompId) {
-        setSelectedTenantFilter(newCompId);
-      }
       fetchData();
     } catch (err: any) {
       setCompanyModalError(err.message || "통신 중 오류가 발생했습니다.");
@@ -289,16 +315,15 @@ export default function MembersManagementPage() {
     }
   };
 
-  // 등록 모달 열기 (특정 테넌트 지정 가능)
-  const handleOpenAddModal = (targetTenantId?: string) => {
+  // 등록 모달 열기
+  const handleOpenAddModal = (targetDept?: string) => {
     setFormLoginId("");
     setFormPassword("");
     setFormName("");
     setFormRole("SALES_USER");
     setFormEmployeeNumber("");
     setFormPhone("");
-    const fallbackTenant = currentUser?.tenant_id || currentUser?.company_id || (companies[0]?.id || "");
-    setFormTenantId(targetTenantId || (selectedTenantFilter !== "ALL" ? selectedTenantFilter : fallbackTenant));
+    setFormTenantId(targetDept || (selectedDeptFilter !== "ALL" ? selectedDeptFilter : "견적영업부"));
     setFormError("");
     setShowAddModal(true);
   };
@@ -345,7 +370,8 @@ export default function MembersManagementPage() {
     setFormRole(op.role);
     setFormEmployeeNumber(op.employee_number || "");
     setFormPhone(op.phone || "");
-    setFormTenantId(op.tenant_id || op.company_id || "");
+    const info = getOperatorDeptAndTitle(op);
+    setFormTenantId(info.dept);
     setFormPassword("");
     setFormError("");
     setShowEditModal(true);
@@ -485,15 +511,13 @@ export default function MembersManagementPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                {currentUser?.role === "SUPER_ADMIN" ? "전체 임직원 통합 관리" : "소속 사원 계정 관리"}
+                사내 임직원 계정 관리
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
-                  {currentUser?.role === "SUPER_ADMIN" ? "시스템 관제" : "사내 사원 관리"}
+                  세창인터내쇼날 본사
                 </span>
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                {currentUser?.role === "SUPER_ADMIN"
-                  ? "사내 사원 및 고객사 담당자 계정, 사원번호 중복 방지, 계층형 권한 통제 관리"
-                  : "우리 회사 소속 사원(영업담당, 도면검토자 등)을 등록하고 계정 및 권한을 관리합니다."}
+                세창인터내쇼날 사내 임직원(영업담당, 가공/설계 검토자, 관리자) 계정 및 소속 부서, 업무 권한 관리
               </p>
             </div>
           </div>
@@ -508,16 +532,6 @@ export default function MembersManagementPage() {
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
             <span>새로고침</span>
           </button>
-          {currentUser?.role === "SUPER_ADMIN" && (
-            <button
-              onClick={handleOpenCompanyModal}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
-              title="새로운 발주 고객사 등록"
-            >
-              <Building2 className="w-4 h-4 text-emerald-400" />
-              <span>신규 고객사 등록</span>
-            </button>
-          )}
           <button
             onClick={() => handleOpenAddModal()}
             className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
@@ -546,18 +560,14 @@ export default function MembersManagementPage() {
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-4 justify-between items-center">
         {/* 탭 바 */}
         <div className="flex items-center space-x-1 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
-          {(currentUser?.role === "SUPER_ADMIN" ? [
+          {[
             { id: "all", label: "전체 활성" },
             { id: "SUPER_ADMIN", label: "최고관리자" },
-            { id: "TENANT_ADMIN", label: "총괄 관리자" },
+            { id: "TENANT_ADMIN", label: "대표 관리자" },
             { id: "SALES_USER", label: "영업담당" },
             { id: "REVIEWER", label: "검토자" },
             { id: "deleted", label: "비활성/정지" },
-            { id: "tenants", label: "🏢 고객사/거래처 대장" },
-          ] : [
-            { id: "all", label: "재직 사원 명부" },
-            { id: "deleted", label: "비활성/정지 계정" },
-          ]).map((tab) => (
+          ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => handleSelectTab(tab.id)}
@@ -577,25 +587,23 @@ export default function MembersManagementPage() {
           ))}
         </div>
 
-        {/* 소속사 선택 & 검색 */}
+        {/* 부서 선택 & 검색 */}
         <div className="flex items-center space-x-3 w-full md:w-auto">
-          {currentUser?.role === "SUPER_ADMIN" && (
-            <div className="flex items-center space-x-1.5 shrink-0">
-              <Building2 className="w-4 h-4 text-slate-400" />
-              <select
-                value={selectedTenantFilter}
-                onChange={(e) => handleSelectTenant(e.target.value)}
-                className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              >
-                <option value="ALL">전체 소속사</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.company_name} ({c.company_code})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="flex items-center space-x-1.5 shrink-0">
+            <Building2 className="w-4 h-4 text-slate-400" />
+            <select
+              value={selectedDeptFilter}
+              onChange={(e) => setSelectedDeptFilter(e.target.value)}
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="ALL">전체 부서</option>
+              <option value="견적영업부">견적영업부</option>
+              <option value="가공기술부">가공기술부</option>
+              <option value="설계품질부">설계품질부</option>
+              <option value="경영지원부">경영지원부</option>
+              <option value="시스템운영본부">시스템운영본부</option>
+            </select>
+          </div>
 
           <div className="relative w-full md:w-64">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -610,193 +618,84 @@ export default function MembersManagementPage() {
         </div>
       </div>
 
-      {/* 1. 고객사/거래처 대장 탭 렌더링 */}
-      {activeTab === "tenants" ? (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
+      {/* 사내 임직원 명부 테이블 */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
+            <tr>
+              <th className="px-4 py-3">사원번호</th>
+              <th className="px-4 py-3">성명 (아이디)</th>
+              <th className="px-4 py-3">권한 등급</th>
+              <th className="px-4 py-3">소속 부서 / 직책</th>
+              <th className="px-4 py-3">연락처</th>
+              <th className="px-4 py-3">상태</th>
+              <th className="px-4 py-3 text-right">관리 액션</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {isLoading ? (
               <tr>
-                <th className="px-4 py-3">회사 식별코드</th>
-                <th className="px-4 py-3">회사명</th>
-                <th className="px-4 py-3">구분</th>
-                <th className="px-4 py-3">소속 임직원 수</th>
-                <th className="px-4 py-3">회사 시스템 ID</th>
-                <th className="px-4 py-3">등록일시</th>
-                <th className="px-4 py-3 text-right">관리 액션</th>
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500" />
+                  <span>데이터를 불러오는 중입니다...</span>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {companies.map((comp) => {
-                const count = operators.filter(o => !o.deleted_at && (o.tenant_id === comp.id || o.company_id === comp.id)).length;
-                const isSelected = selectedTenantFilter === comp.id;
-                return (
-                  <tr key={comp.id} className={`hover:bg-slate-50/80 transition-colors ${isSelected ? "bg-indigo-50/40" : ""}`}>
-                    <td className="px-4 py-3 font-mono font-bold text-slate-800">
-                      {comp.company_code}
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-slate-900">
-                      <div className="flex items-center space-x-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-indigo-500" />
-                        <span>{comp.company_name}</span>
-                        {isSelected && (
-                          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 font-bold">
-                            현재 필터 선택됨
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700">
-                        {comp.company_type || "CUSTOMER"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-                        {count}명
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-slate-500">
-                      {comp.id}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">
-                      {comp.created_at ? new Date(comp.created_at).toLocaleDateString() : "-"}
-                    </td>
-                    <td className="px-4 py-3 text-right space-x-1.5">
-                      <button
-                        onClick={() => {
-                          setSelectedTenantFilter(comp.id);
-                          setActiveTab("all");
-                        }}
-                        className="px-2.5 py-1 rounded-md text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer"
-                        title="이 회사의 소속 사원 목록 조회"
-                      >
-                        소속 사원 조회
-                      </button>
-                      <button
-                        onClick={() => handleOpenAddModal(comp.id)}
-                        className="px-2.5 py-1 rounded-md text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-2xs transition-colors cursor-pointer"
-                        title="이 회사에 새 담당자 추가"
-                      >
-                        + 사원 등록
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        /* 2. 임직원 대장 테이블 */
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
+            ) : filteredOperators.length === 0 ? (
               <tr>
-                <th className="px-4 py-3">사원번호</th>
-                <th className="px-4 py-3">성명 (아이디)</th>
-                <th className="px-4 py-3">권한 등급</th>
-                <th className="px-4 py-3">소속 회사</th>
-                <th className="px-4 py-3">연락처</th>
-                <th className="px-4 py-3">상태</th>
-                <th className="px-4 py-3 text-right">관리 액션</th>
+                <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                  등록된 임직원 계정이 없거나 검색 결과가 없습니다.
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500" />
-                    <span>데이터를 불러오는 중입니다...</span>
-                  </td>
-                </tr>
-              ) : filteredOperators.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
-                    {selectedTenantFilter !== "ALL" ? (
-                      <div className="max-w-md mx-auto space-y-3">
-                        <Building2 className="w-8 h-8 text-indigo-400 mx-auto" />
-                        <div className="text-sm font-bold text-slate-800">
-                          '{companies.find(c => c.id === selectedTenantFilter)?.company_name || selectedTenantFilter}'에 등록된 임직원이 아직 없습니다.
-                        </div>
-                        <p className="text-xs text-slate-500 leading-relaxed">
-                          회사 정보는 정상 등록되었으나 소속 사원이 아직 배속되지 않았습니다.<br />
-                          아래 버튼을 눌러 담당자 또는 사원을 등록해 보세요.
-                        </p>
-                        <button
-                          onClick={() => handleOpenAddModal(selectedTenantFilter)}
-                          className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors inline-flex items-center space-x-1.5 cursor-pointer"
-                        >
-                          <UserPlus className="w-4 h-4" />
-                          <span>이 회사에 첫 임직원(담당자) 등록하기</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-slate-400">등록된 임직원 계정이 없거나 검색 결과가 없습니다.</span>
-                    )}
-                  </td>
-                </tr>
-              ) : (
-              filteredOperators.map((op) => {
-                const roleMeta = ROLE_LABELS[op.role] || { label: op.role, color: "bg-slate-100 text-slate-800" };
-                const isDeleted = Boolean(op.deleted_at || op.is_deleted);
-                const isSuperAdmin = op.login_id === "admin";
-                const isSelf = op.id === currentUser?.id || op.login_id === currentUser?.loginId;
+            ) : (
+            filteredOperators.map((op) => {
+              const roleMeta = ROLE_LABELS[op.role] || { label: op.role, color: "bg-slate-100 text-slate-800" };
+              const isDeleted = Boolean(op.deleted_at || op.is_deleted);
+              const isSuperAdmin = op.login_id === "admin";
+              const isSelf = op.id === currentUser?.id || op.login_id === currentUser?.loginId;
 
-                return (
-                  <tr key={op.id} className={`hover:bg-slate-50/80 transition-colors ${isDeleted ? "bg-rose-50/30" : ""}`}>
-                    <td className="px-4 py-3 font-mono font-bold text-slate-700">
-                      {op.employee_number || "-"}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-900">
-                      <div className="flex items-center space-x-1.5">
-                        <span>{op.name}</span>
-                        <span className="text-slate-400 font-mono text-[11px]">({op.login_id})</span>
-                        {isSelf && (
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-bold">
-                            본인
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${roleMeta.color}`}>
-                        {roleMeta.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {(() => {
-                        const targetId = op.tenant_id || op.company_id || "comp_unassigned";
-                        const comp = companies.find((c) => c.id === targetId);
-                        if (comp) {
-                          return (
-                            <div className="flex items-center space-x-1.5">
-                              <Building2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                              <span className="font-semibold text-slate-800">{comp.company_name}</span>
-                              <span className="text-[10px] text-slate-400 font-mono">({comp.company_code})</span>
-                            </div>
-                          );
-                        }
-                        if (targetId === "tenant-cadon") {
-                          return (
-                            <div className="flex items-center space-x-1.5">
-                              <ShieldAlert className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                              <span className="font-semibold text-purple-800">시스템 본사 (CADON)</span>
-                            </div>
-                          );
-                        }
-                        return (
-                          <span className="text-slate-400 text-xs">미지정 회원사</span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {op.phone ? (
-                        <span className="flex items-center space-x-1">
-                          <Phone className="w-3 h-3 text-slate-400" />
-                          <span>{op.phone}</span>
+              return (
+                <tr key={op.id} className={`hover:bg-slate-50/80 transition-colors ${isDeleted ? "bg-rose-50/30" : ""}`}>
+                  <td className="px-4 py-3 font-mono font-bold text-slate-700">
+                    {op.employee_number || "-"}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-slate-900">
+                    <div className="flex items-center space-x-1.5">
+                      <span>{op.name}</span>
+                      <span className="text-slate-400 font-mono text-[11px]">({op.login_id})</span>
+                      {isSelf && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-bold">
+                          본인
                         </span>
-                      ) : "-"}
-                    </td>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${roleMeta.color}`}>
+                      {roleMeta.label}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {(() => {
+                      const info = getOperatorDeptAndTitle(op);
+                      const Icon = info.icon;
+                      return (
+                        <div className="flex items-center space-x-1.5">
+                          <Icon className={`w-3.5 h-3.5 ${info.color} shrink-0`} />
+                          <span className="font-semibold text-slate-800">{info.dept}</span>
+                          <span className="text-slate-300 text-xs">/</span>
+                          <span className="text-slate-600 font-medium text-xs">{info.title}</span>
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {op.phone ? (
+                      <span className="flex items-center space-x-1">
+                        <Phone className="w-3 h-3 text-slate-400" />
+                        <span>{op.phone}</span>
+                      </span>
+                    ) : "-"}
+                  </td>
                     <td className="px-4 py-3">
                       {isDeleted ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">
@@ -846,7 +745,6 @@ export default function MembersManagementPage() {
           </tbody>
         </table>
       </div>
-      )}
 
       {/* 신규 등록 모달 */}
       {showAddModal && (
@@ -941,31 +839,20 @@ export default function MembersManagementPage() {
                 </div>
               </div>
 
-              {currentUser?.role === "SUPER_ADMIN" && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-semibold text-slate-700">소속 회사 *</label>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenCompanyModal()}
-                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer"
-                    >
-                      + 신규 고객사 등록
-                    </button>
-                  </div>
-                  <select
-                    value={formTenantId}
-                    onChange={(e) => setFormTenantId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                  >
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.company_name} ({c.id})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">소속 부서</label>
+                <select
+                  value={formTenantId}
+                  onChange={(e) => setFormTenantId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
+                >
+                  <option value="견적영업부">견적영업부</option>
+                  <option value="가공기술부">가공기술부</option>
+                  <option value="설계품질부">설계품질부</option>
+                  <option value="경영지원부">경영지원부</option>
+                  <option value="시스템운영본부">시스템운영본부</option>
+                </select>
+              </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
                 <button
@@ -1056,22 +943,20 @@ export default function MembersManagementPage() {
                 </div>
               </div>
 
-              {currentUser?.role === "SUPER_ADMIN" && (
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">소속 회사</label>
-                  <select
-                    value={formTenantId}
-                    onChange={(e) => setFormTenantId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                  >
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.company_name} ({c.id})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">소속 부서</label>
+                <select
+                  value={formTenantId}
+                  onChange={(e) => setFormTenantId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
+                >
+                  <option value="견적영업부">견적영업부</option>
+                  <option value="가공기술부">가공기술부</option>
+                  <option value="설계품질부">설계품질부</option>
+                  <option value="경영지원부">경영지원부</option>
+                  <option value="시스템운영본부">시스템운영본부</option>
+                </select>
+              </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">새 비밀번호 (미입력 시 기존 유지)</label>
