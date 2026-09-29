@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Building2, Check, ChevronsUpDown, PlusCircle, Sparkles, X, Search } from 'lucide-react';
+import { Building2, Check, ChevronsUpDown, PlusCircle, Sparkles, X, Zap } from 'lucide-react';
 
 export interface CustomerCompanyItem {
   id: string;
@@ -15,7 +15,15 @@ export interface CustomerSelectionValue {
   companyId: string | null;
   companyName: string;
   isNew: boolean;
+  isAutoDetect?: boolean;
 }
+
+export const AUTO_DETECT_CUSTOMER: CustomerSelectionValue = {
+  companyId: 'comp_unassigned',
+  companyName: '도면 표제란(Title Block) 자동 판독',
+  isNew: false,
+  isAutoDetect: true,
+};
 
 interface CustomerSelectComboboxProps {
   companies: CustomerCompanyItem[];
@@ -24,6 +32,7 @@ interface CustomerSelectComboboxProps {
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
+  allowAutoDetect?: boolean;
 }
 
 // 초성 분리 헬퍼
@@ -63,6 +72,7 @@ export default function CustomerSelectCombobox({
   placeholder = '발주 고객사 검색 또는 신규 고객사명 입력...',
   disabled = false,
   required = true,
+  allowAutoDetect = true,
 }: CustomerSelectComboboxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -76,7 +86,6 @@ export default function CustomerSelectCombobox({
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
-        // 입력창 내용을 현재 선택된 값으로 복원
         setSearchTerm('');
       }
     }
@@ -100,15 +109,13 @@ export default function CustomerSelectCombobox({
 
   const canShowNewOption = searchTerm.trim().length > 0 && !hasExactMatch;
 
-  // 하이라이트 인덱스 범위 조정
-  const totalOptionsCount = filteredCompanies.length + (canShowNewOption ? 1 : 0);
-
   // 기존 고객사 선택
   const handleSelectExisting = (comp: CustomerCompanyItem) => {
     onChange({
       companyId: comp.id,
       companyName: comp.company_name,
       isNew: false,
+      isAutoDetect: false,
     });
     setSearchTerm('');
     setIsOpen(false);
@@ -122,7 +129,15 @@ export default function CustomerSelectCombobox({
       companyId: null,
       companyName: trimmed,
       isNew: true,
+      isAutoDetect: false,
     });
+    setSearchTerm('');
+    setIsOpen(false);
+  };
+
+  // AI 자동 감지 선택
+  const handleSelectAutoDetect = () => {
+    onChange(AUTO_DETECT_CUSTOMER);
     setSearchTerm('');
     setIsOpen(false);
   };
@@ -137,29 +152,13 @@ export default function CustomerSelectCombobox({
       return;
     }
 
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightIndex((prev) => (prev + 1) % Math.max(1, totalOptionsCount));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightIndex((prev) => (prev - 1 + totalOptionsCount) % Math.max(1, totalOptionsCount));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (canShowNewOption && highlightIndex === 0) {
-        handleSelectNew(searchTerm);
-      } else {
-        const compIndex = canShowNewOption ? highlightIndex - 1 : highlightIndex;
-        if (filteredCompanies[compIndex]) {
-          handleSelectExisting(filteredCompanies[compIndex]);
-        } else if (searchTerm.trim()) {
-          handleSelectNew(searchTerm);
-        }
-      }
-    } else if (e.key === 'Escape') {
+    if (e.key === 'Escape') {
       setIsOpen(false);
       setSearchTerm('');
     }
   };
+
+  const isCurrentAuto = value.isAutoDetect || value.companyId === 'comp_unassigned' || value.companyName.includes('자동');
 
   // 입력창 표시 텍스트: 열려 있고 타이핑 중이면 searchTerm, 아니면 value.companyName
   const displayValue = isOpen ? searchTerm : (value.companyName || '');
@@ -169,7 +168,9 @@ export default function CustomerSelectCombobox({
       {/* 입력 컨트롤 바 */}
       <div className="relative flex items-center">
         <div className="absolute left-3 text-slate-400 pointer-events-none flex items-center">
-          {value.isNew ? (
+          {isCurrentAuto ? (
+            <Zap className="w-4 h-4 text-indigo-500 animate-pulse" />
+          ) : value.isNew ? (
             <Sparkles className="w-4 h-4 text-amber-500" />
           ) : (
             <Building2 className="w-4 h-4 text-blue-500" />
@@ -189,13 +190,15 @@ export default function CustomerSelectCombobox({
           }}
           onFocus={() => {
             setIsOpen(true);
-            setSearchTerm(value.companyName || '');
+            setSearchTerm(isCurrentAuto ? '' : (value.companyName || ''));
             setHighlightIndex(0);
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className={`w-full pl-9 pr-24 py-2.5 rounded-xl border text-xs font-semibold transition-all focus:outline-none ${
-            value.isNew
+          className={`w-full pl-9 pr-28 py-2.5 rounded-xl border text-xs font-semibold transition-all focus:outline-none ${
+            isCurrentAuto
+              ? 'border-indigo-400 bg-indigo-50/30 text-indigo-950 focus:ring-2 focus:ring-indigo-500/20'
+              : value.isNew
               ? 'border-blue-400 bg-blue-50/20 text-slate-900 focus:ring-2 focus:ring-blue-500/20'
               : 'border-slate-300 bg-white text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
           }`}
@@ -206,12 +209,19 @@ export default function CustomerSelectCombobox({
           {value.companyName && !isOpen && (
             <span
               className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold shrink-0 flex items-center gap-1 ${
-                value.isNew
+                isCurrentAuto
+                  ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                  : value.isNew
                   ? 'bg-blue-100 text-blue-700 border border-blue-200'
                   : 'bg-slate-100 text-slate-700 border border-slate-200'
               }`}
             >
-              {value.isNew ? (
+              {isCurrentAuto ? (
+                <>
+                  <Zap className="w-3 h-3 text-indigo-600" />
+                  <span>AI 자동 감지</span>
+                </>
+              ) : value.isNew ? (
                 <>
                   <Sparkles className="w-3 h-3 text-blue-600" />
                   <span>신규 등록</span>
@@ -230,12 +240,16 @@ export default function CustomerSelectCombobox({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onChange({ companyId: null, companyName: '', isNew: false });
+                if (allowAutoDetect) {
+                  onChange(AUTO_DETECT_CUSTOMER);
+                } else {
+                  onChange({ companyId: null, companyName: '', isNew: false });
+                }
                 setSearchTerm('');
                 inputRef.current?.focus();
               }}
               className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              title="지우기"
+              title="초기화"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -249,7 +263,7 @@ export default function CustomerSelectCombobox({
                 setSearchTerm('');
               } else {
                 setIsOpen(true);
-                setSearchTerm(value.companyName || '');
+                setSearchTerm(isCurrentAuto ? '' : (value.companyName || ''));
                 inputRef.current?.focus();
               }
             }}
@@ -263,10 +277,15 @@ export default function CustomerSelectCombobox({
       {/* 상태 안내 문구 */}
       <div className="flex items-center justify-between text-[11px] mt-1 px-1 text-slate-500">
         <div>
-          {value.isNew ? (
+          {isCurrentAuto ? (
+            <span className="text-indigo-600 font-medium flex items-center gap-1">
+              <Zap className="w-3 h-3 text-indigo-600 inline" />
+              CAD 도면 분석 시 표제란(Title Block)을 판독하여 발주 고객사가 자동 바인딩됩니다.
+            </span>
+          ) : value.isNew ? (
             <span className="text-blue-600 font-medium flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-blue-600 inline" />
-              <strong>{value.companyName}</strong> 고객사는 견적 접수 시 사내 고객사 대장에 자동 등록됩니다.
+              <strong>{value.companyName}</strong> 고객사는 사내 고객사 대장에 자동 등록됩니다.
             </span>
           ) : value.companyName ? (
             <span className="text-slate-600">
@@ -274,11 +293,11 @@ export default function CustomerSelectCombobox({
             </span>
           ) : (
             <span className="text-slate-400">
-              고객사명을 검색하거나 새 회사명을 입력하면 즉시 등록됩니다.
+              고객사명을 검색하거나 비워두면 도면 표제란에서 자동 추출됩니다.
             </span>
           )}
         </div>
-        <span className="text-[10px] text-slate-400 shrink-0">초성 검색 지원 (예: ㅂㄱ, ㅇㅂㅌ)</span>
+        <span className="text-[10px] text-slate-400 shrink-0">초성 검색 지원</span>
       </div>
 
       {/* 드롭다운 목록 (플로팅) */}
@@ -287,53 +306,72 @@ export default function CustomerSelectCombobox({
           {/* 드롭다운 상단 검색 팁/헤더 */}
           <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 text-[10.5px] font-semibold text-slate-400 flex items-center justify-between">
             <span>고객사 목록 ({filteredCompanies.length}개 검색됨)</span>
-            <span>방향키 이동 / Enter 선택</span>
+            <span>클릭하여 선택</span>
           </div>
 
           <div className="overflow-y-auto divide-y divide-slate-100">
+            {/* 0. AI 도면 표제란 자동 판독 (기본 권장 옵션) */}
+            {allowAutoDetect && !searchTerm.trim() && (
+              <div
+                onClick={handleSelectAutoDetect}
+                className={`p-2.5 flex items-center justify-between cursor-pointer transition-all ${
+                  isCurrentAuto
+                    ? 'bg-indigo-50 border-l-4 border-indigo-600 text-indigo-950 font-bold'
+                    : 'bg-indigo-50/40 hover:bg-indigo-100/50 text-indigo-900'
+                }`}
+              >
+                <div className="flex items-center space-x-2 truncate pr-2">
+                  <Zap className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <div className="text-left">
+                    <p className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                      <span>⚡ [AI 자동 판독] 도면 표제란(Title Block) 자동 인식</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-200 text-indigo-800 font-semibold">
+                        권장
+                      </span>
+                    </p>
+                    <p className="text-[10px] text-indigo-600 font-normal mt-0.5">
+                      도면을 분석하여 표제란의 고객사(발주처)를 자동으로 추출 및 매칭합니다.
+                    </p>
+                  </div>
+                </div>
+                {isCurrentAuto && (
+                  <span className="flex items-center text-indigo-600 text-[11px] font-bold shrink-0">
+                    <Check className="w-3.5 h-3.5 mr-1" />
+                    선택됨
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* 1. 신규 고객사 즉시 등록 옵션 (검색어와 완전히 일치하는 항목이 없을 때 최상단 표시) */}
             {canShowNewOption && (
               <div
                 onClick={() => handleSelectNew(searchTerm)}
-                onMouseEnter={() => setHighlightIndex(0)}
-                className={`p-2.5 flex items-center justify-between cursor-pointer transition-all ${
-                  highlightIndex === 0
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-blue-50/80 hover:bg-blue-100/70 text-blue-900'
-                }`}
+                className="p-2.5 flex items-center justify-between cursor-pointer transition-all bg-blue-50/80 hover:bg-blue-100/70 text-blue-900"
               >
                 <div className="flex items-center space-x-2 truncate pr-2">
-                  <PlusCircle className={`w-4 h-4 shrink-0 ${highlightIndex === 0 ? 'text-white' : 'text-blue-600'}`} />
+                  <PlusCircle className="w-4 h-4 text-blue-600 shrink-0" />
                   <span className="text-xs truncate">
                     신규 발주 고객사 등록: <strong className="font-bold underline underline-offset-2">"{searchTerm.trim()}"</strong>
                   </span>
                 </div>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${
-                    highlightIndex === 0 ? 'bg-white text-blue-700' : 'bg-blue-200 text-blue-800'
-                  }`}
-                >
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 bg-blue-200 text-blue-800">
                   원클릭 등록
                 </span>
               </div>
             )}
 
             {/* 2. 필터링된 기존 등록 고객사 목록 */}
-            {filteredCompanies.map((c, idx) => {
-              const itemIndex = canShowNewOption ? idx + 1 : idx;
-              const isHighlighted = highlightIndex === itemIndex;
-              const isSelected = value.companyId === c.id || (!value.isNew && value.companyName === c.company_name);
+            {filteredCompanies.map((c) => {
+              const isSelected = !isCurrentAuto && (value.companyId === c.id || (!value.isNew && value.companyName === c.company_name));
 
               return (
                 <div
                   key={c.id}
                   onClick={() => handleSelectExisting(c)}
-                  onMouseEnter={() => setHighlightIndex(itemIndex)}
                   className={`px-3.5 py-2.5 flex items-center justify-between cursor-pointer text-xs transition-colors ${
-                    isHighlighted
-                      ? 'bg-slate-100 text-slate-900'
-                      : isSelected
-                      ? 'bg-blue-50/50 text-blue-900 font-semibold'
+                    isSelected
+                      ? 'bg-blue-50/70 text-blue-900 font-semibold'
                       : 'hover:bg-slate-50 text-slate-700'
                   }`}
                 >
@@ -360,7 +398,7 @@ export default function CustomerSelectCombobox({
             {/* 3. 검색 결과 없음 메시지 */}
             {filteredCompanies.length === 0 && !canShowNewOption && (
               <div className="p-4 text-center text-xs text-slate-400">
-                등록된 고객사가 없습니다.
+                일치하는 고객사가 없습니다. (비워둘 경우 표제란에서 자동 감지됩니다)
               </div>
             )}
           </div>

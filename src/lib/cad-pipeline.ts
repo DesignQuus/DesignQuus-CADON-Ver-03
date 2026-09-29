@@ -339,6 +339,23 @@ export async function processCadFilePipeline(
         console.warn('Auto customer link warning:', custErr);
       }
     }
+
+    // Auto-update Case Name from Title Block if current case name is temporary or from filename
+    const primaryDwg = structureResult.drawings.find((d: any) => d.title && d.title !== '-' && d.title !== 'Untitled');
+    const detectedTitle = primaryDwg?.title || structureResult.drawings.find((d: any) => d.drawing_title && d.drawing_title !== '-' && d.drawing_title !== 'Untitled')?.drawing_title;
+    if (detectedTitle && detectedTitle.trim().length > 1) {
+      try {
+        const caseRow = await db.prepare('SELECT case_name FROM quotation_cases WHERE id = ?').get(quotationCaseId);
+        const curName = (caseRow?.case_name || '').trim();
+        const isTemporary = !curName || curName.includes('.dwg') || curName.includes('.dxf') || curName.includes('가공 견적') || curName.startsWith('24') || curName.startsWith('25') || curName.startsWith('26');
+        if (isTemporary) {
+          const newCaseName = `[${detectedTitle.trim()}] 가공 견적`;
+          await db.prepare('UPDATE quotation_cases SET case_name = ?, updated_at = ? WHERE id = ?').run(newCaseName, now, quotationCaseId);
+        }
+      } catch (titleErr) {
+        console.warn('Auto case name update warning:', titleErr);
+      }
+    }
   }
 
   if (structureResult.relationships && structureResult.relationships.length > 0) {

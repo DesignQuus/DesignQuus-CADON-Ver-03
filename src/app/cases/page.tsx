@@ -5,7 +5,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import CaseWorkflowSidebar, { WorkflowTab } from '@/components/cases/CaseWorkflowSidebar';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
-import CustomerSelectCombobox, { CustomerSelectionValue } from '@/components/common/CustomerSelectCombobox';
+import CustomerSelectCombobox, { CustomerSelectionValue, AUTO_DETECT_CUSTOMER } from '@/components/common/CustomerSelectCombobox';
 import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
 import { useRouter } from 'next/navigation';
 import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
@@ -207,11 +207,7 @@ export default function CasesPage() {
   const [isSubmittingModal, setIsSubmittingModal] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isModalDragging, setIsModalDragging] = useState(false);
-  const [customerSelection, setCustomerSelection] = useState<CustomerSelectionValue>({
-    companyId: 'comp_1790030182693',
-    companyName: '엠브이텍',
-    isNew: false
-  });
+  const [customerSelection, setCustomerSelection] = useState<CustomerSelectionValue>(AUTO_DETECT_CUSTOMER);
   const modalFileInputRef = useRef<HTMLInputElement>(null);
 
   // Drag & Drop Quick Upload States (Local & Global)
@@ -237,23 +233,37 @@ export default function CasesPage() {
 
   const handleOpenUploadModal = () => {
     setNewCaseName('');
-    const defaultCust = customerCompanies[0] || { id: 'comp_1790030182693', company_name: '엠브이텍' };
-    setSelectedCompanyId(defaultCust.id);
-    setCustomerSelection({
-      companyId: defaultCust.id,
-      companyName: defaultCust.company_name,
-      isNew: false
-    });
+    setSelectedCompanyId('comp_unassigned');
+    setCustomerSelection(AUTO_DETECT_CUSTOMER);
     setSelectedFile(null);
     setSubmitError(null);
     setIsUploadModalOpen(true);
   };
 
+  const handleModalFileChange = (file: File) => {
+    setSelectedFile(file);
+    setSubmitError(null);
+    const baseName = file.name.replace(/\.[^/.]+$/, '').trim();
+    if (!newCaseName || newCaseName.includes('가공 견적')) {
+      setNewCaseName(`${baseName} 가공 견적`);
+    }
+  };
+
   const handleCreateCaseFromModal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCaseName.trim()) {
-      setSubmitError('견적의뢰 건명을 입력해 주세요.');
+
+    if (!selectedFile) {
+      setSubmitError('분석할 CAD 도면 파일(.dwg, .dxf)을 첨부해 주세요.');
       return;
+    }
+
+    let finalCaseName = newCaseName.trim();
+    if (!finalCaseName) {
+      if (selectedFile) {
+        finalCaseName = `${selectedFile.name.replace(/\.[^/.]+$/, '').trim()} 가공 견적`;
+      } else {
+        finalCaseName = `신규 도면 견적 (${new Date().toISOString().slice(2, 10)})`;
+      }
     }
 
     setIsSubmittingModal(true);
@@ -261,45 +271,37 @@ export default function CasesPage() {
 
     let targetCompId = customerSelection.companyId;
 
-    // 신규 고객사 직접 입력이거나 신규 등록 플래그인 경우
-    if (customerSelection.isNew || !targetCompId) {
+    // AI 자동 판독이거나 미지정인 경우
+    if (customerSelection.isAutoDetect || !targetCompId || customerSelection.companyName.includes('자동')) {
+      targetCompId = 'comp_unassigned';
+    } else if (customerSelection.isNew) {
       const trimmedCustom = customerSelection.companyName.trim();
-      if (!trimmedCustom) {
-        setSubmitError('신규 발주 고객사명을 입력해 주세요.');
-        setIsSubmittingModal(false);
-        return;
-      }
-
-      // 기존 목록에 대소문자/공백 무시 일치하는 회사가 있는지 확인
-      const existingMatch = customerCompanies.find(
-        (c) => (c.company_name || '').trim().toLowerCase() === trimmedCustom.toLowerCase()
-      );
-
-      if (existingMatch) {
-        targetCompId = existingMatch.id;
-      } else {
-        try {
-          const compRes = await apiFetch('/api/companies', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ companyName: trimmedCustom })
-          });
-          const compData = await compRes.json();
-          if (!compRes.ok || !compData.company?.id) {
-            throw new Error(compData.error || '고객사 등록에 실패했습니다.');
+      if (trimmedCustom) {
+        const existingMatch = customerCompanies.find(
+          (c) => (c.company_name || '').trim().toLowerCase() === trimmedCustom.toLowerCase()
+        );
+        if (existingMatch) {
+          targetCompId = existingMatch.id;
+        } else {
+          try {
+            const compRes = await apiFetch('/api/companies', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ companyName: trimmedCustom })
+            });
+            const compData = await compRes.json();
+            if (compRes.ok && compData.company?.id) {
+              targetCompId = compData.company.id;
+              if (!companies.some((c) => c.id === targetCompId)) {
+                setCompanies((prev) => [{ id: targetCompId, company_name: trimmedCustom, company_type: 'CUSTOMER' } as any, ...prev]);
+              }
+            }
+          } catch (cErr: any) {
+            console.warn('신규 고객사 등록 경고:', cErr);
+            targetCompId = 'comp_unassigned';
           }
-          targetCompId = compData.company.id;
-          if (!companies.some((c) => c.id === targetCompId)) {
-            setCompanies((prev) => [{ id: targetCompId, company_name: trimmedCustom, company_type: 'CUSTOMER' } as any, ...prev]);
-          }
-        } catch (cErr: any) {
-          setSubmitError(cErr.message || '신규 고객사 등록 중 오류가 발생했습니다.');
-          setIsSubmittingModal(false);
-          return;
         }
       }
-    } else if (!targetCompId) {
-      targetCompId = customerCompanies[0]?.id || 'comp_1790030182693';
     }
 
     try {
@@ -308,8 +310,8 @@ export default function CasesPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          caseName: newCaseName.trim(),
-          companyId: targetCompId,
+          caseName: finalCaseName,
+          companyId: targetCompId || 'comp_unassigned',
           projectId: 'proj_unassigned',
         })
       });
@@ -2605,12 +2607,10 @@ export default function CasesPage() {
                 <div>
                   <h3 className="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
                     <span>신규 도면 견적 등록</span>
-                    <span className="text-[10px] font-bold bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">FAST</span>
+                    <span className="text-[10px] font-bold bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">AI FAST</span>
                   </h3>
                   <p className="text-xs text-slate-300 mt-0.5">
-                    {selectedFile
-                      ? 'DWG 도면을 등록하여 AI 가상 BOM 추출 및 원가 산출을 시작합니다.'
-                      : '신규 견적의뢰 건을 등록합니다. (도면은 등록 후 언제든 추가 첨부 가능)'}
+                    DWG / DXF 도면을 등록하면 AI가 표제란을 판독하여 건명·발주 고객사·가상 BOM을 원스톱 전개합니다.
                   </p>
                 </div>
               </div>
@@ -2623,7 +2623,7 @@ export default function CasesPage() {
               </button>
             </div>
 
-            {/* Modal Body */}
+            {/* Modal Body: Drawing-First AI Workflow */}
             <form onSubmit={handleCreateCaseFromModal} className="p-6 space-y-4 overflow-y-auto">
               {submitError && (
                 <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
@@ -2632,51 +2632,22 @@ export default function CasesPage() {
                 </div>
               )}
 
-              {/* 1. 건명 */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  견적의뢰 건명 <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newCaseName}
-                  onChange={(e) => setNewCaseName(e.target.value)}
-                  placeholder="예: 240314 컨베이어 라인 도면 견적"
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                />
-              </div>
-
-              {/* 2. 발주 고객사 스마트 검색 & 즉시 등록 콤보박스 */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  발주 고객사 (의뢰처) <span className="text-rose-500">*</span>
-                </label>
-                <CustomerSelectCombobox
-                  companies={customerCompanies}
-                  value={customerSelection}
-                  onChange={(val) => {
-                    setCustomerSelection(val);
-                    if (val.companyId) {
-                      setSelectedCompanyId(val.companyId);
-                    }
-                  }}
-                  placeholder="발주 고객사 검색 (초성 검색 가능) 또는 새 상호명 직접 입력..."
-                />
-              </div>
-
-              {/* 3. DWG 도면 파일 업로드 (드래그 앤 드롭) */}
+              {/* 1. 최우선 메인: CAD 도면 파일 업로드 (드래그 앤 드롭 영역) */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-700">
-                    CAD 도면 파일 첨부 <span className="text-slate-400 font-normal">(선택)</span>
+                  <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                    <FileCode2 className="w-4 h-4 text-blue-600" />
+                    <span>CAD 도면 파일 첨부</span>
+                    <span className="text-rose-500">*</span>
                   </label>
-                  {!selectedFile && (
-                    <span className="text-[11px] text-slate-400">
-                      * 도면 없이 건 먼저 등록 가능
+                  {selectedFile && (
+                    <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>도면 파일 첨부 완료</span>
                     </span>
                   )}
                 </div>
+
                 <div
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -2687,63 +2658,120 @@ export default function CasesPage() {
                     e.preventDefault();
                     setIsModalDragging(false);
                     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                      setSelectedFile(e.dataTransfer.files[0]);
+                      handleModalFileChange(e.dataTransfer.files[0]);
                     }
                   }}
                   onClick={() => modalFileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+                  className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
                     isModalDragging
-                      ? 'border-blue-500 bg-blue-50/60'
+                      ? 'border-blue-500 bg-blue-50/70 scale-[1.01]'
                       : selectedFile
-                      ? 'border-emerald-400 bg-emerald-50/40'
-                      : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
+                      ? 'border-emerald-500 bg-emerald-50/30'
+                      : 'border-blue-300 hover:border-blue-500 bg-blue-50/10 hover:bg-blue-50/30 shadow-xs'
                   }`}
                 >
                   <input
                     ref={modalFileInputRef}
                     type="file"
-                    accept=".dwg,.dxf,.pdf,.zip"
+                    accept=".dwg,.dxf,.zip"
                     className="hidden"
                     onChange={(e) => {
                       if (e.target.files && e.target.files[0]) {
-                        setSelectedFile(e.target.files[0]);
+                        handleModalFileChange(e.target.files[0]);
                       }
                     }}
                   />
                   {selectedFile ? (
-                    <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-emerald-200">
-                      <div className="flex items-center space-x-2.5 min-w-0">
-                        <FileCode2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                        <div className="text-left min-w-0">
-                          <p className="text-xs font-bold text-slate-800 truncate">{selectedFile.name}</p>
-                          <p className="text-[10px] text-slate-500">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between bg-white p-3.5 rounded-xl border border-emerald-300 shadow-2xs">
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                            <FileCode2 className="w-6 h-6 text-emerald-600" />
+                          </div>
+                          <div className="text-left min-w-0">
+                            <p className="text-xs font-bold text-slate-800 truncate">{selectedFile.name}</p>
+                            <p className="text-[11px] text-slate-500">
+                              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB • CAD 원본 도면
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedFile(null);
+                            setNewCaseName('');
+                          }}
+                          className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="다른 파일로 변경"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-indigo-50/80 border border-indigo-200 text-left flex items-start gap-2">
+                        <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                        <div className="text-[11px] text-indigo-900 leading-tight">
+                          <strong>표제란 자동 판독 준비 완료:</strong> 등록 즉시 AI가 도면 표제란을 스캔하여 <strong>발주 고객사</strong>와 <strong>품명</strong>을 자동 확정합니다.
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedFile(null);
-                        }}
-                        className="text-slate-400 hover:text-rose-500 p-1 rounded cursor-pointer"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
                     </div>
                   ) : (
-                    <div>
-                      <UploadCloud className="w-8 h-8 text-blue-500 mx-auto mb-2 opacity-80" />
-                      <p className="text-xs font-bold text-slate-700">
-                        클릭하거나 DWG / DXF 도면 파일을 끌어다 놓으세요
+                    <div className="py-2">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-100/70 text-blue-600 flex items-center justify-center mx-auto mb-3">
+                        <UploadCloud className="w-7 h-7" />
+                      </div>
+                      <p className="text-sm font-extrabold text-slate-800">
+                        DWG / DXF 도면 파일을 끌어다 놓으세요
                       </p>
-                      <p className="text-[10.5px] text-slate-400 mt-1">
-                        지원 형식: .dwg, .dxf, .pdf (최대 200MB)
+                      <p className="text-xs text-slate-500 mt-1">
+                        클릭하여 파일 선택 (최대 200MB)
                       </p>
-                      <div className="mt-2 inline-block px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10.5px] text-slate-500">
-                        도면 없이 건을 먼저 생성한 후 상세 화면에서 언제든 도면을 등록할 수 있습니다.
+                      <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-700">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                        <span>도면 표제란(Title Block) 기반 100% 자동 채번</span>
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* 2. 스마트 사전 채번 정보 (선택적 확인/수정 영역) */}
+              <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
+                <div className="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                  <span>자동 채번 사전 확인 (필요 시 수정 가능)</span>
+                  <span className="text-[10px] text-slate-400">비워두면 도면 분석 후 자동 반영됩니다</span>
+                </div>
+
+                {/* 견적의뢰 건명 */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    견적의뢰 건명 <span className="text-slate-400 font-normal">(도면 파일명 기반 자동 채번)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newCaseName}
+                    onChange={(e) => setNewCaseName(e.target.value)}
+                    placeholder="도면 첨부 시 파일명으로 자동 입력됩니다"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 bg-white"
+                  />
+                </div>
+
+                {/* 발주 고객사 (의뢰처) */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    발주 고객사 (의뢰처) <span className="text-slate-400 font-normal">(도면 표제란 자동 판독 권장)</span>
+                  </label>
+                  <CustomerSelectCombobox
+                    companies={customerCompanies}
+                    value={customerSelection}
+                    onChange={(val) => {
+                      setCustomerSelection(val);
+                      if (val.companyId) {
+                        setSelectedCompanyId(val.companyId);
+                      }
+                    }}
+                    placeholder="도면 표제란에서 자동 감지 (또는 특정 고객사 지정)..."
+                  />
                 </div>
               </div>
 
@@ -2753,50 +2781,28 @@ export default function CasesPage() {
                   type="button"
                   disabled={isSubmittingModal}
                   onClick={() => setIsUploadModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmittingModal}
-                  className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50 ${
+                  disabled={isSubmittingModal || !selectedFile}
+                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                     selectedFile
-                      ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'
-                      : 'bg-slate-800 hover:bg-slate-700 shadow-slate-800/30'
+                      ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30 ring-2 ring-blue-500/20'
+                      : 'bg-slate-400'
                   }`}
                 >
                   {isSubmittingModal ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>
-                        {selectedFile
-                          ? ['.dwg', '.dxf'].some(ext => selectedFile.name.toLowerCase().endsWith(ext))
-                            ? '도면 업로드 및 분석 시작 중...'
-                            : '파일 업로드 및 등록 중...'
-                          : '신규 견적 건 등록 중...'}
-                      </span>
+                      <span>도면 분석 파이프라인 가동 중...</span>
                     </>
                   ) : (
                     <>
-                      {selectedFile ? (
-                        ['.dwg', '.dxf'].some(ext => selectedFile.name.toLowerCase().endsWith(ext)) ? (
-                          <>
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>등록 및 도면 분석 시작</span>
-                          </>
-                        ) : (
-                          <>
-                            <UploadCloud className="w-3.5 h-3.5" />
-                            <span>등록 및 도면 첨부</span>
-                          </>
-                        )
-                      ) : (
-                        <>
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>신규 견적 건 등록</span>
-                        </>
-                      )}
+                      <Sparkles className="w-4 h-4" />
+                      <span>⚡ 도면 분석 및 견적 등록 시작</span>
                     </>
                   )}
                 </button>
