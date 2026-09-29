@@ -122,7 +122,7 @@ export async function POST(req: Request) {
         (u: any) => !u.deleted_at && u.employee_number === finalEmployeeNumber && (u.tenant_id === tenantId || u.company_id === tenantId)
       );
       if (isEmpNumDuplicate) {
-        return NextResponse.json({ success: false, error: '해당 회사/테넌트에 이미 존재하는 사원번호입니다.' }, { status: 400 });
+        return NextResponse.json({ success: false, error: '해당 회원사에 이미 존재하는 사원번호입니다.' }, { status: 400 });
       }
     }
 
@@ -196,7 +196,7 @@ export async function PUT(req: Request) {
           const suspendedOwner = tenantOwners[0];
           return NextResponse.json({
             success: false,
-            error: `소속 회사/테넌트의 대표 관리자(${suspendedOwner.name}) 계정이 정지 상태입니다. 대표 관리자부터 먼저 복원해 주세요.`
+            error: `소속 회원사의 대표 관리자(${suspendedOwner.name}) 계정이 정지 상태입니다. 대표 관리자부터 먼저 복원해 주세요.`
           }, { status: 400 });
         }
       }
@@ -231,7 +231,7 @@ export async function PUT(req: Request) {
         (u: any) => !u.deleted_at && String(u.id) !== String(id) && u.employee_number === finalEmpNumber && (u.tenant_id === finalTenant || u.company_id === finalTenant)
       );
       if (isDupEmp) {
-        return NextResponse.json({ success: false, error: '해당 회사/테넌트에 이미 존재하는 사원번호입니다.' }, { status: 400 });
+        return NextResponse.json({ success: false, error: '해당 회원사에 이미 존재하는 사원번호입니다.' }, { status: 400 });
       }
     }
 

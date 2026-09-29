@@ -362,7 +362,7 @@ export default function AdminCompaniesPage() {
           </div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center space-x-2.5">
             <Building2 className="w-7 h-7 text-indigo-600" />
-            <span>SaaS 입점 회원사(테넌트) 총괄 관리</span>
+            <span>SaaS 입점 회원사 총괄 관리</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             시스템 최고관리자는 견적 실무를 수행하지 않으며, 입점 회원사 등록·수정·서비스 정지/복원 및 대표 계정 발급을 전담합니다.
@@ -408,7 +408,7 @@ export default function AdminCompaniesPage() {
           <div>
             <div className="text-xs font-semibold text-slate-500 mb-1">총 등록 회원사</div>
             <div className="text-2xl font-black text-slate-900">{stats.total}개</div>
-            <div className="text-[11px] text-slate-400 mt-1">누적 가입 테넌트</div>
+            <div className="text-[11px] text-slate-400 mt-1">누적 가입 회원사</div>
           </div>
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold">
             <Building2 className="w-6 h-6" />
@@ -528,7 +528,7 @@ export default function AdminCompaniesPage() {
                     <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                     <p className="text-sm font-bold text-slate-700 mb-1">등록된 회원사가 없거나 검색 결과가 없습니다.</p>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
-                      새로운 고객사를 등록하여 전용 테넌트 환경과 대표 관리자 계정을 발급해 보세요.
+                      새로운 고객사를 등록하여 전용 업무 환경과 대표 관리자 계정을 발급해 보세요.
                     </p>
                     <button
                       onClick={handleOpenAddModal}
@@ -650,7 +650,7 @@ export default function AdminCompaniesPage() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-slate-900">신규 회원사 등록</h2>
-                  <p className="text-xs text-slate-400">신규 테넌트 발급 및 전용 데이터베이스 영역 생성</p>
+                  <p className="text-xs text-slate-400">신규 회원사 등록 및 전용 데이터베이스 영역 생성</p>
                 </div>
               </div>
               <button
