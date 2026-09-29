@@ -49,11 +49,14 @@ export async function GET(req: Request) {
       scopedUsers = scopedUsers.filter((u: any) => !u.deleted_at);
     }
 
-    // 3. 보안을 위해 password_hash 제거
+    // 3. 보안을 위해 password_hash 제거 및 부서 필드 정규화
+    const DEPARTMENTS = ['시스템운영본부', '견적영업부', '가공기술부', '설계품질부', '경영지원부'];
     const safeUsers = scopedUsers.map((u: any) => {
       const { password_hash, ...rest } = u;
+      const dept = DEPARTMENTS.find((d) => d === u.tenant_id || d === u.company_id) || null;
       return {
         ...rest,
+        department: dept,
         // 호환 필드
         username: u.login_id,
         login_id: u.login_id,
@@ -130,13 +133,16 @@ export async function POST(req: Request) {
     const dateStr = new Date().toISOString();
     const newUserId = `usr_${Date.now()}`;
 
+    const isDept = ['시스템운영본부', '견적영업부', '가공기술부', '설계품질부', '경영지원부'].includes(tenantId || '');
+    const companyIdToUse = isDept ? 'comp_1789386587951' : (tenantId || 'comp_1789386587951');
+
     await insertRows('users', [{
       id: newUserId,
       login_id: loginId,
       password_hash: passwordHash,
       name,
       role,
-      company_id: tenantId,
+      company_id: companyIdToUse,
       tenant_id: tenantId,
       employee_number: finalEmployeeNumber,
       phone,
@@ -248,7 +254,12 @@ export async function PUT(req: Request) {
     if (tenant_id !== undefined || company_id !== undefined) {
       const assignedTenant = (tenant_id || company_id || '').trim() || null;
       updates.tenant_id = assignedTenant;
-      updates.company_id = assignedTenant;
+      const isDept = ['시스템운영본부', '견적영업부', '가공기술부', '설계품질부', '경영지원부'].includes(assignedTenant || '');
+      if (!isDept) {
+        updates.company_id = assignedTenant;
+      } else if (!targetUser.company_id || targetUser.company_id === 'comp_unassigned') {
+        updates.company_id = 'comp_1789386587951';
+      }
     }
 
     // 비밀번호 변경

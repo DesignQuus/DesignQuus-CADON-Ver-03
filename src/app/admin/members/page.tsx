@@ -19,6 +19,7 @@ interface Operator {
   phone: string | null;
   tenant_id: string | null;
   company_id: string | null;
+  department?: string | null;
   created_at: string | null;
   deleted_at: string | null;
   is_deleted?: boolean;
@@ -41,28 +42,50 @@ const ROLE_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export const getOperatorDeptAndTitle = (op: Operator) => {
-  if (op.login_id === "admin") {
-    return { dept: "시스템운영본부", title: "최고관리자", icon: ShieldCheck, color: "text-purple-600" };
+  const validDepts = ["시스템운영본부", "견적영업부", "가공기술부", "설계품질부", "경영지원부"];
+  // 1. DB에 저장된 실제 부서 정보 확인 (department, tenant_id, company_id)
+  const assignedDept = [op.department, op.tenant_id, op.company_id].find(
+    (d) => d && validDepts.includes(d)
+  );
+
+  let dept = assignedDept;
+  if (!dept) {
+    if (op.login_id === "admin" || op.role === "SUPER_ADMIN") {
+      dept = "시스템운영본부";
+    } else if (op.login_id === "001" || op.name?.includes("김세창")) {
+      dept = "견적영업부";
+    } else if (op.login_id === "002" || op.name?.includes("이세창")) {
+      dept = "가공기술부";
+    } else if (op.login_id === "003" || op.name?.includes("박세창")) {
+      dept = "설계품질부";
+    } else if (op.role === "REVIEWER") {
+      dept = "설계품질부";
+    } else {
+      dept = "견적영업부";
+    }
   }
-  if (op.login_id === "001" || op.name.includes("김세창")) {
-    return { dept: "견적영업부", title: "부장", icon: Building2, color: "text-blue-600" };
+
+  // 2. 부서별 직책 및 아이콘 매핑
+  if (dept === "시스템운영본부") {
+    return { dept, title: "최고관리자", icon: ShieldCheck, color: "text-purple-600" };
   }
-  if (op.login_id === "002" || op.name.includes("이세창")) {
-    return { dept: "가공기술부", title: "과장", icon: Building2, color: "text-blue-600" };
+  if (dept === "견적영업부") {
+    const title = (op.login_id === "001" || op.name?.includes("김세창")) ? "부장" : "영업담당";
+    return { dept, title, icon: Building2, color: "text-blue-600" };
   }
-  if (op.login_id === "003" || op.name.includes("박세창")) {
-    return { dept: "설계품질부", title: "대리", icon: Building2, color: "text-blue-600" };
+  if (dept === "가공기술부") {
+    const title = (op.login_id === "002" || op.name?.includes("이세창")) ? "과장" : "가공검토";
+    return { dept, title, icon: Building2, color: "text-blue-600" };
   }
-  if (op.role === "SUPER_ADMIN") {
-    return { dept: "시스템운영본부", title: "최고관리자", icon: ShieldCheck, color: "text-purple-600" };
+  if (dept === "설계품질부") {
+    const title = (op.login_id === "003" || op.name?.includes("박세창")) ? "대리" : "설계검토";
+    return { dept, title, icon: Building2, color: "text-blue-600" };
   }
-  if (op.role === "TENANT_ADMIN") {
-    return { dept: "경영지원부", title: "총괄관리자", icon: Building2, color: "text-indigo-600" };
+  if (dept === "경영지원부") {
+    return { dept, title: "총괄관리자", icon: Building2, color: "text-indigo-600" };
   }
-  if (op.role === "REVIEWER") {
-    return { dept: "설계품질부", title: "검토담당", icon: Building2, color: "text-emerald-600" };
-  }
-  return { dept: "견적영업부", title: "영업담당", icon: Building2, color: "text-blue-600" };
+
+  return { dept, title: "실무담당", icon: Building2, color: "text-blue-600" };
 };
 
 export default function MembersManagementPage() {
