@@ -954,13 +954,25 @@ export default function MembersManagementPage() {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block font-semibold text-slate-700">소속 부서 *</label>
-                    <button
-                      type="button"
-                      onClick={() => setIsCustomDeptAdd(!isCustomDeptAdd)}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
-                    >
-                      {isCustomDeptAdd ? "목록에서 선택" : "+ 직접 입력"}
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowDeptModal(true)}
+                        className="text-xs font-medium text-slate-500 hover:text-indigo-600 flex items-center space-x-1 transition cursor-pointer"
+                        title="부서 목록 관리 및 불필요한 부서 삭제"
+                      >
+                        <Building2 className="w-3 h-3" />
+                        <span>부서 관리·삭제</span>
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomDeptAdd(!isCustomDeptAdd)}
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
+                      >
+                        {isCustomDeptAdd ? "목록에서 선택" : "+ 직접 입력"}
+                      </button>
+                    </div>
                   </div>
                   {isCustomDeptAdd ? (
                     <input
@@ -1095,13 +1107,25 @@ export default function MembersManagementPage() {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block font-semibold text-slate-700">소속 부서</label>
-                    <button
-                      type="button"
-                      onClick={() => setIsCustomDeptEdit(!isCustomDeptEdit)}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
-                    >
-                      {isCustomDeptEdit ? "목록에서 선택" : "+ 직접 입력"}
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowDeptModal(true)}
+                        className="text-xs font-medium text-slate-500 hover:text-indigo-600 flex items-center space-x-1 transition cursor-pointer"
+                        title="부서 목록 관리 및 불필요한 부서 삭제"
+                      >
+                        <Building2 className="w-3 h-3" />
+                        <span>부서 관리·삭제</span>
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomDeptEdit(!isCustomDeptEdit)}
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
+                      >
+                        {isCustomDeptEdit ? "목록에서 선택" : "+ 직접 입력"}
+                      </button>
+                    </div>
                   </div>
                   {isCustomDeptEdit ? (
                     <input
@@ -1180,7 +1204,7 @@ export default function MembersManagementPage() {
 
       {/* 부서 관리 모달 */}
       {showDeptModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-150 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-150 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center space-x-2">
