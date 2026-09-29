@@ -270,8 +270,8 @@ export async function POST(req: NextRequest) {
  */
 export async function PUT(req: NextRequest) {
   const session = await getSession();
-  if (!session || session.role !== 'SUPER_ADMIN') {
-    return NextResponse.json({ success: false, error: '최고관리자 권한이 필요합니다.' }, { status: 403 });
+  if (!session || (!['SUPER_ADMIN', 'TENANT_ADMIN'].includes(session.role))) {
+    return NextResponse.json({ success: false, error: '관리자 권한이 필요합니다.' }, { status: 403 });
   }
 
   try {

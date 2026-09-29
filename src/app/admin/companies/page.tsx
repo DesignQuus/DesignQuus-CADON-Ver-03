@@ -66,17 +66,13 @@ export default function AdminCompaniesPage() {
 
   // 신규 고객사 폼 상태
   const [formName, setFormName] = useState('');
-  const [createAdmin, setCreateAdmin] = useState(true);
-  const [adminLoginId, setAdminLoginId] = useState('');
-  const [adminPassword, setAdminPassword] = useState('Cadon1234!@');
-  const [adminName, setAdminName] = useState('');
+  const [formCode, setFormCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
 
   // 고객사 수정 폼 상태
   const [editName, setEditName] = useState('');
-  const [resetPassword, setResetPassword] = useState(false);
-  const [newAdminPassword, setNewAdminPassword] = useState('Cadon2026!@');
+  const [editCode, setEditCode] = useState('');
 
   // 1. 인증 확인 (SUPER_ADMIN 전용)
   useEffect(() => {
@@ -144,9 +140,8 @@ export default function AdminCompaniesPage() {
     const total = clientCompanies.length;
     const active = clientCompanies.filter((c) => c.is_active === 1 && !c.deleted_at).length;
     const suspended = total - active;
-    const totalMembers = clientCompanies.reduce((acc, c) => acc + (c.memberCount || 0), 0);
     const totalCases = clientCompanies.reduce((acc, c) => acc + (c.caseCount || 0), 0);
-    return { total, active, suspended, totalMembers, totalCases };
+    return { total, active, suspended, totalCases };
   }, [clientCompanies]);
 
   // 4. 필터링된 고객사 목록
@@ -172,10 +167,7 @@ export default function AdminCompaniesPage() {
   // 신규 등록 모달 열기
   const handleOpenAddModal = () => {
     setFormName('');
-    setCreateAdmin(true);
-    setAdminLoginId('');
-    setAdminPassword('Cadon1234!@');
-    setAdminName('구매/견적 담당자');
+    setFormCode('');
     setModalError('');
     setShowAddModal(true);
   };
@@ -187,20 +179,6 @@ export default function AdminCompaniesPage() {
       setModalError('고객사(회사)명을 입력해주세요.');
       return;
     }
-    if (createAdmin) {
-      if (!adminLoginId.trim()) {
-        setModalError('고객사 담당자 로그인 아이디를 입력해주세요.');
-        return;
-      }
-      if (!adminPassword.trim()) {
-        setModalError('초기 비밀번호를 입력해주세요.');
-        return;
-      }
-      if (!adminName.trim()) {
-        setModalError('담당자 성명을 입력해주세요.');
-        return;
-      }
-    }
 
     setIsSubmitting(true);
     setModalError('');
@@ -211,11 +189,8 @@ export default function AdminCompaniesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           company_name: formName.trim(),
-          company_type: 'CUSTOMER',
-          createAdminWithCompany: createAdmin,
-          adminLoginId: adminLoginId.trim(),
-          adminPassword: adminPassword.trim(),
-          adminName: adminName.trim()
+          company_code: formCode.trim() || undefined,
+          company_type: 'CUSTOMER'
         })
       });
       const data = await res.json();
@@ -225,7 +200,7 @@ export default function AdminCompaniesPage() {
       }
 
       setShowAddModal(false);
-      setSuccessMsg(`새로운 발주 고객사 '${formName}'가 성공적으로 등록되었습니다.${createAdmin ? ' (견적 담당자 계정 등록 완료)' : ''}`);
+      setSuccessMsg(`새로운 발주 고객사 '${formName}'가 성공적으로 등록되었습니다.`);
       setTimeout(() => setSuccessMsg(''), 5000);
       fetchCompanies();
     } catch (err: any) {
@@ -239,8 +214,7 @@ export default function AdminCompaniesPage() {
   const handleOpenEditModal = (c: Company) => {
     setSelectedCompany(c);
     setEditName(c.company_name);
-    setResetPassword(false);
-    setNewAdminPassword('Cadon2026!@');
+    setEditCode(c.company_code || '');
     setModalError('');
     setShowEditModal(true);
   };
@@ -253,10 +227,6 @@ export default function AdminCompaniesPage() {
       setModalError('고객사명을 입력해주세요.');
       return;
     }
-    if (resetPassword && !newAdminPassword.trim()) {
-      setModalError('새 담당자 임시 비밀번호를 입력해주세요.');
-      return;
-    }
 
     setIsSubmitting(true);
     setModalError('');
@@ -267,9 +237,9 @@ export default function AdminCompaniesPage() {
         body: JSON.stringify({
           id: selectedCompany.id,
           company_name: editName.trim(),
+          company_code: editCode.trim() || selectedCompany.company_code,
           company_type: selectedCompany.company_type || 'CUSTOMER',
-          is_active: selectedCompany.is_active,
-          reset_admin_password: resetPassword ? newAdminPassword.trim() : undefined
+          is_active: selectedCompany.is_active
         })
       });
       const data = await res.json();
@@ -279,15 +249,11 @@ export default function AdminCompaniesPage() {
       }
 
       setShowEditModal(false);
-      let successText = `고객사 '${editName}' 정보가 성공적으로 수정되었습니다.`;
-      if (resetPassword) {
-        successText += ' (담당자 임시 비밀번호가 재설정되었습니다.)';
-      }
-      setSuccessMsg(successText);
-      setTimeout(() => setSuccessMsg(''), 5000);
+      setSuccessMsg(`고객사 '${editName}' 정보가 성공적으로 변경되었습니다.`);
+      setTimeout(() => setSuccessMsg(''), 4000);
       fetchCompanies();
     } catch (err: any) {
-      setModalError(err.message || '통신 중 오류가 발생했습니다.');
+      setModalError(err.message || '통신 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -491,23 +457,26 @@ export default function AdminCompaniesPage() {
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-500 mb-1">고객사 견적 담당자</div>
-            <div className="text-2xl font-black text-indigo-600">{stats.totalMembers}명</div>
-            <div className="text-[11px] text-slate-400 mt-1">바이어 계정 총합</div>
-          </div>
-          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold">
-            <Users className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-          <div>
             <div className="text-xs font-semibold text-slate-500 mb-1">견적의뢰 접수 총계</div>
             <div className="text-2xl font-black text-purple-600">{stats.totalCases}건</div>
             <div className="text-[11px] text-slate-400 mt-1">고객사 발주 프로젝트</div>
           </div>
           <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center font-bold">
             <FileText className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+          <div>
+            <div className="text-xs font-semibold text-slate-500 mb-1">견적 총괄 본사</div>
+            <div className="text-base font-black text-slate-900 truncate">세창인터내쇼날(주)</div>
+            <div className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>사내 원가·견적 관제</span>
+            </div>
+          </div>
+          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold">
+            <Factory className="w-6 h-6" />
           </div>
         </div>
       </div>
@@ -572,8 +541,8 @@ export default function AdminCompaniesPage() {
             <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-3.5">고객사(발주처)명</th>
-                <th className="px-4 py-3.5">거래 상태</th>
-                <th className="px-4 py-3.5 text-center">고객사 담당자 수</th>
+                <th className="px-4 py-3.5 text-center">식별 코드</th>
+                <th className="px-4 py-3.5 text-center">거래 상태</th>
                 <th className="px-4 py-3.5 text-center">견적의뢰 접수</th>
                 <th className="px-4 py-3.5">등록일</th>
                 <th className="px-4 py-3.5 text-right">관리 액션</th>
@@ -593,7 +562,7 @@ export default function AdminCompaniesPage() {
                     <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                     <p className="text-sm font-bold text-slate-700 mb-1">등록된 고객사가 없거나 검색 결과가 없습니다.</p>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
-                      새로운 발주 고객사를 등록하여 도면 견적 접수와 담당 바이어를 관리해 보세요.
+                      새로운 발주 고객사를 등록하여 도면 견적 접수 대장을 관리해 보세요.
                     </p>
                     <button
                       onClick={handleOpenAddModal}
@@ -626,13 +595,19 @@ export default function AdminCompaniesPage() {
                                 발주 고객사
                               </span>
                             </div>
-                            <div className="text-[11px] text-slate-400 font-mono">{comp.company_code || comp.id}</div>
                           </div>
                         </div>
                       </td>
 
+                      {/* 고객사 식별코드 */}
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-[11px] font-bold">
+                          {comp.company_code || comp.id}
+                        </span>
+                      </td>
+
                       {/* 거래 상태 배지 */}
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-3.5 text-center">
                         {isActive ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
@@ -644,17 +619,6 @@ export default function AdminCompaniesPage() {
                             거래 중단
                           </span>
                         )}
-                      </td>
-
-                      {/* 고객사 담당자 수 */}
-                      <td className="px-4 py-3.5 text-center">
-                        <span
-                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200/80"
-                          title="해당 고객사의 견적/발주 담당 바이어 수"
-                        >
-                          <Users className="w-3 h-3 text-slate-400" />
-                          <span>{comp.memberCount || 0}명</span>
-                        </span>
                       </td>
 
                       {/* 견적의뢰 접수 건수 */}
@@ -675,7 +639,7 @@ export default function AdminCompaniesPage() {
                         <button
                           onClick={() => handleOpenEditModal(comp)}
                           className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 transition-colors inline-flex items-center space-x-1 cursor-pointer"
-                          title="고객사명 변경 및 담당 바이어 계정 관리"
+                          title="고객사명 및 식별코드 관리"
                         >
                           <Edit className="w-3 h-3" />
                           <span>고객사 정보</span>
@@ -713,7 +677,7 @@ export default function AdminCompaniesPage() {
       {/* [모달 1] 신규 고객사 등록 모달 */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-xl max-w-lg w-full p-6 sm:p-7 space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-xl max-w-md w-full p-6 sm:p-7 space-y-4 border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2.5">
                 <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
@@ -721,7 +685,7 @@ export default function AdminCompaniesPage() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-slate-900">신규 발주 고객사 등록</h2>
-                  <p className="text-xs text-slate-400">세창인터내쇼날에 견적을 의뢰할 신규 고객사 및 담당 바이어 등록</p>
+                  <p className="text-xs text-slate-400">세창인터내쇼날에 가공·제작 도면 견적을 의뢰할 신규 발주처</p>
                 </div>
               </div>
               <button
@@ -741,9 +705,6 @@ export default function AdminCompaniesPage() {
 
             <form onSubmit={handleAddSubmit} className="space-y-4 text-xs">
               <div className="space-y-3">
-                <div className="font-bold text-slate-800 text-sm flex items-center space-x-1.5 text-blue-600">
-                  <span>1. 고객사 기본 정보</span>
-                </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">고객사명 (상호명) *</label>
                   <input
@@ -752,64 +713,30 @@ export default function AdminCompaniesPage() {
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     placeholder="예: 삼성전자(주), (주)보그워너, 엠브이텍"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-medium"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-bold text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">고객사 식별코드 (선택)</label>
+                  <input
+                    type="text"
+                    value={formCode}
+                    onChange={(e) => setFormCode(e.target.value)}
+                    placeholder="비워둘 경우 CUST-XXXX 자동 채번"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-mono"
                   />
                 </div>
               </div>
 
-              {/* 고객사 견적 담당자 계정 등록 옵션 */}
-              <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
-                <label className="flex items-center space-x-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={createAdmin}
-                    onChange={(e) => setCreateAdmin(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                  />
-                  <span className="font-bold text-slate-900 text-xs">
-                    이 고객사의 발주/견적 담당자(바이어) 계정도 함께 등록
-                  </span>
-                </label>
-
-                {createAdmin && (
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                    <div className="grid grid-cols-3 gap-2.5">
-                      <div>
-                        <label className="block font-semibold text-slate-700 mb-1">담당자 성명 *</label>
-                        <input
-                          type="text"
-                          required={createAdmin}
-                          value={adminName}
-                          onChange={(e) => setAdminName(e.target.value)}
-                          placeholder="예: 김구매 과장"
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-semibold text-slate-700 mb-1">로그인 아이디 *</label>
-                        <input
-                          type="text"
-                          required={createAdmin}
-                          value={adminLoginId}
-                          onChange={(e) => setAdminLoginId(e.target.value)}
-                          placeholder="예: samsung_buyer"
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono font-medium"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-semibold text-slate-700 mb-1">초기 비밀번호 *</label>
-                        <input
-                          type="text"
-                          required={createAdmin}
-                          value={adminPassword}
-                          onChange={(e) => setAdminPassword(e.target.value)}
-                          placeholder="비밀번호 입력"
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-[11px] text-blue-700 space-y-1">
+                <div className="font-bold flex items-center space-x-1.5">
+                  <CheckCircle className="w-3.5 h-3.5 text-blue-600" />
+                  <span>세창 사내 전사 견적 관리 대장 연동</span>
+                </div>
+                <p className="text-slate-600 pl-5">
+                  등록된 고객사는 메인 대시보드 및 신규 도면 견적 접수 시 발주처로 즉시 선택할 수 있습니다.
+                </p>
               </div>
 
               <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
@@ -847,7 +774,7 @@ export default function AdminCompaniesPage() {
                     {selectedCompany.id === sechangCompany?.id ? '본사 정보 관리' : '고객사 정보 관리'}
                   </h2>
                   <p className="text-xs text-slate-400">
-                    {selectedCompany.id === sechangCompany?.id ? '세창인터내쇼날 본사 상호명 및 계정 관리' : '고객사 상호명 및 담당자 계정 관리'}
+                    {selectedCompany.id === sechangCompany?.id ? '세창인터내쇼날 본사 상호명 및 식별코드 관리' : '발주 고객사 상호명 및 식별코드 관리'}
                   </p>
                 </div>
               </div>
@@ -881,81 +808,27 @@ export default function AdminCompaniesPage() {
                 />
               </div>
 
-              {/* 2. 담당자(마스터) 계정 관제 카드 */}
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-1.5 font-bold text-slate-800">
-                    <ShieldCheck className="w-4 h-4 text-blue-600" />
-                    <span>{selectedCompany.id === sechangCompany?.id ? '본사 대표 계정' : '고객사 대표 담당자 계정'}</span>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
-                    {selectedCompany.tenantAdmin?.login_id || 'ACCOUNT'}
-                  </span>
-                </div>
-
-                {selectedCompany.tenantAdmin ? (
-                  <div className="space-y-2.5">
-                    <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-xl border border-slate-200/80">
-                      <div>
-                        <span className="text-slate-400 text-[11px] block">성명</span>
-                        <strong className="text-slate-800 font-semibold">{selectedCompany.tenantAdmin.name || '미등록'}</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 text-[11px] block">로그인 아이디</span>
-                        <strong className="text-blue-600 font-mono font-bold">{selectedCompany.tenantAdmin.login_id}</strong>
-                      </div>
-                    </div>
-
-                    {/* 비밀번호 재설정 체크박스 */}
-                    <div className="pt-1">
-                      <label className="flex items-center space-x-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={resetPassword}
-                          onChange={(e) => setResetPassword(e.target.checked)}
-                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        />
-                        <span className="font-bold text-slate-700 text-xs flex items-center space-x-1">
-                          <KeyRound className="w-3.5 h-3.5 text-amber-500" />
-                          <span>담당자 비밀번호 초기화 (재설정)</span>
-                        </span>
-                      </label>
-
-                      {resetPassword && (
-                        <div className="mt-2 pl-6">
-                          <input
-                            type="text"
-                            required={resetPassword}
-                            value={newAdminPassword}
-                            onChange={(e) => setNewAdminPassword(e.target.value)}
-                            placeholder="새 임시 비밀번호 입력"
-                            className="w-full px-3 py-2 bg-white border border-amber-300 focus:ring-2 focus:ring-amber-400/20 rounded-xl text-xs font-mono font-bold text-slate-900"
-                          />
-                          <p className="text-[11px] text-slate-400 mt-1">
-                            * 저장 시 안내할 새 임시 비밀번호로 즉시 갱신됩니다.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 text-slate-500 text-xs">
-                    등록된 대표 담당자 계정이 없습니다. (필요 시 신규 계정을 발급할 수 있습니다.)
-                  </div>
-                )}
+              {/* 2. 식별코드 입력 */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  식별코드
+                </label>
+                <input
+                  type="text"
+                  value={editCode}
+                  onChange={(e) => setEditCode(e.target.value)}
+                  placeholder="식별코드 입력"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono text-slate-800"
+                />
               </div>
 
               {/* 3. 현황 요약 칩 */}
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">소속 사원수</span>
-                  <strong className="text-slate-800 font-bold">{selectedCompany.memberCount || 0}명</strong>
-                </div>
-                <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 block">견적 접수</span>
+              <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-[10px] text-slate-400 block">견적의뢰 접수</span>
                   <strong className="text-purple-700 font-bold">{selectedCompany.caseCount || 0}건</strong>
                 </div>
-                <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                   <span className="text-[10px] text-slate-400 block">거래 상태</span>
                   <strong className={selectedCompany.is_active === 1 && !selectedCompany.deleted_at ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
                     {selectedCompany.is_active === 1 && !selectedCompany.deleted_at ? '정상 거래' : '거래 중단'}
