@@ -9,6 +9,7 @@ import {
   Sliders, Check, FolderPlus
 } from "lucide-react";
 import { getTenantStorageKey } from "@/lib/tenant-client";
+import { formatPhoneNumber } from "@/lib/formatters";
 
 interface Operator {
   id: string;
@@ -412,7 +413,7 @@ export default function MembersManagementPage() {
     setFormName(op.name);
     setFormRole(op.role);
     setFormEmployeeNumber(op.employee_number || "");
-    setFormPhone(op.phone || "");
+    setFormPhone(formatPhoneNumber(op.phone || ""));
     const info = getOperatorDeptAndTitle(op);
     setFormTenantId(info.dept);
     setIsCustomDeptEdit(false);
@@ -904,9 +905,10 @@ export default function MembersManagementPage() {
                     type="text"
                     autoComplete="off"
                     value={formPhone}
-                    onChange={(e) => setFormPhone(e.target.value)}
+                    onChange={(e) => setFormPhone(formatPhoneNumber(e.target.value))}
+                    maxLength={13}
                     placeholder="010-0000-0000"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium font-mono"
                   />
                 </div>
               </div>
@@ -1064,9 +1066,10 @@ export default function MembersManagementPage() {
                     autoComplete="tel"
                     name="edit_operator_phone"
                     value={formPhone}
-                    onChange={(e) => setFormPhone(e.target.value)}
+                    onChange={(e) => setFormPhone(formatPhoneNumber(e.target.value))}
+                    maxLength={13}
                     placeholder="010-0000-0000"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                   />
                 </div>
               </div>

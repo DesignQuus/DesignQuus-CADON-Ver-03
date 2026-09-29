@@ -39,4 +39,14 @@ See `.agents/rules/egdesk-dev-context.md` for full details.
 4. **Spacious Viewport & HUD Clearance Principle (뷰포트 여백 원칙)**:
    - 오버뷰 여백 18%(`margin = 1.18`) 및 상단 클리어런스(`topPadding = spanY * 0.08`)를 통해 상단 플로팅 HUD 뱃지에 도면 상단부가 가려지지 않고 온전히 시야에 들어오도록 보장합니다.
 
+## 표준 입력 규칙: 전화번호/휴대폰 번호 자릿수 자동 하이픈('-') 포매팅 (Phone Auto-Hyphenation Rule)
+- **절대 원칙**: 시스템 내 모든 전화번호, 휴대폰 번호, 연락처 입력 필드(사원 등록, 정보 수정, 고객사 연락처, 견적 담당자 등)에서는 사용자가 숫자를 입력할 때 자릿수에 맞춰 자동으로 하이픈(`-`)이 삽입되어야 합니다.
+- **포맷 유틸리티**: `src/lib/formatters.ts` 내 `formatPhoneNumber(val: string): string` 표준 함수 사용.
+- **지원 규격**:
+  - 휴대폰 번호: `010-XXXX-XXXX` (11자리), `011-XXX-XXXX` (10자리)
+  - 일반 지역번호: 서울 `02-XXXX-XXXX` / `02-XXX-XXXX`, 경기/지방 `031-XXX-XXXX` / `031-XXXX-XXXX`
+  - 전국 대표번호: `1588-XXXX`, `1544-XXXX`, `1600-XXXX` 등 (8자리)
+  - 최대 길이 제한: 숫자 11자리 기준 하이픈 포함 최대 13자(`maxLength={13}`).
+
+
 
