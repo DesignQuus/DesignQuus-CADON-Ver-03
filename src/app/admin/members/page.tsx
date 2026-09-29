@@ -67,29 +67,13 @@ export const getOperatorDeptAndTitle = (op: Operator) => {
     }
   }
 
-  // 2. 부서별 직책 및 아이콘 매핑
-  if (dept === "시스템운영본부") {
-    return { dept, title: "최고관리자", icon: ShieldCheck, color: "text-purple-600" };
-  }
-  if (dept === "견적영업부") {
-    const title = (op.login_id === "001" || op.name?.includes("김세창")) ? "부장" : "영업담당";
-    return { dept, title, icon: Building2, color: "text-blue-600" };
-  }
-  if (dept === "가공기술부") {
-    const title = (op.login_id === "002" || op.name?.includes("이세창")) ? "과장" : "가공검토";
-    return { dept, title, icon: Building2, color: "text-blue-600" };
-  }
-  if (dept === "설계품질부") {
-    const title = (op.login_id === "003" || op.name?.includes("박세창")) ? "대리" : "설계검토";
-    return { dept, title, icon: Building2, color: "text-blue-600" };
-  }
-  if (dept === "경영지원부") {
-    return { dept, title: "총괄관리자", icon: Building2, color: "text-indigo-600" };
-  }
-
-  // 신설된 커스텀 부서인 경우
-  const roleTitle = op.role === "SUPER_ADMIN" ? "최고관리자" : op.role === "REVIEWER" ? "검토담당" : "실무담당";
-  return { dept, title: roleTitle, icon: Building2, color: "text-emerald-600" };
+  // 2. 부서별 아이콘 및 테마 색상 매핑
+  const isSuperAdmin = op.role === "SUPER_ADMIN" || dept === "시스템운영본부";
+  return {
+    dept,
+    icon: isSuperAdmin ? ShieldCheck : Building2,
+    color: isSuperAdmin ? "text-purple-600" : "text-indigo-600"
+  };
 };
 
 export default function MembersManagementPage() {
@@ -696,7 +680,7 @@ export default function MembersManagementPage() {
               <option value="ALL">전체 부서</option>
               {departments.map((d) => (
                 <option key={d.name} value={d.name}>
-                  {d.name} {d.memberCount > 0 ? `(${d.memberCount}명)` : ""}
+                  {d.name}
                 </option>
               ))}
             </select>
@@ -737,7 +721,7 @@ export default function MembersManagementPage() {
               <th className="px-4 py-3">사원번호</th>
               <th className="px-4 py-3">성명 (아이디)</th>
               <th className="px-4 py-3">권한 등급</th>
-              <th className="px-4 py-3">소속 부서 / 직책</th>
+              <th className="px-4 py-3">소속 부서</th>
               <th className="px-4 py-3">연락처</th>
               <th className="px-4 py-3">상태</th>
               <th className="px-4 py-3 text-right">관리 액션</th>
@@ -793,8 +777,6 @@ export default function MembersManagementPage() {
                         <div className="flex items-center space-x-1.5">
                           <Icon className={`w-3.5 h-3.5 ${info.color} shrink-0`} />
                           <span className="font-semibold text-slate-800">{info.dept}</span>
-                          <span className="text-slate-300 text-xs">/</span>
-                          <span className="text-slate-600 font-medium text-xs">{info.title}</span>
                         </div>
                       );
                     })()}
@@ -860,7 +842,7 @@ export default function MembersManagementPage() {
       {/* 신규 등록 모달 */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
                 <UserPlus className="w-5 h-5 text-indigo-600" />
@@ -921,7 +903,7 @@ export default function MembersManagementPage() {
                   value={formPassword}
                   onChange={(e) => setFormPassword(e.target.value)}
                   placeholder="초기 비밀번호 입력"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm font-sans placeholder:font-sans"
                 />
               </div>
 
@@ -953,26 +935,14 @@ export default function MembersManagementPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block font-semibold text-slate-700">소속 부서 *</label>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowDeptModal(true)}
-                        className="text-xs font-medium text-slate-500 hover:text-indigo-600 flex items-center space-x-1 transition cursor-pointer"
-                        title="부서 목록 관리 및 불필요한 부서 삭제"
-                      >
-                        <Building2 className="w-3 h-3" />
-                        <span>부서 관리·삭제</span>
-                      </button>
-                      <span className="text-slate-300">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomDeptAdd(!isCustomDeptAdd)}
-                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
-                      >
-                        {isCustomDeptAdd ? "목록에서 선택" : "+ 직접 입력"}
-                      </button>
-                    </div>
+                    <label className="block font-semibold text-slate-700 whitespace-nowrap">소속 부서 *</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomDeptAdd(!isCustomDeptAdd)}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition whitespace-nowrap cursor-pointer"
+                    >
+                      {isCustomDeptAdd ? "목록에서 선택" : "+ 직접 입력"}
+                    </button>
                   </div>
                   {isCustomDeptAdd ? (
                     <input
@@ -984,20 +954,39 @@ export default function MembersManagementPage() {
                       autoFocus
                     />
                   ) : (
-                    <select
-                      value={formTenantId}
-                      onChange={(e) => setFormTenantId(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
-                    >
-                      {departments.map((d) => (
-                        <option key={d.name} value={d.name}>
-                          {d.name}
+                    <div className="flex items-center space-x-1.5">
+                      <select
+                        value={formTenantId}
+                        onChange={(e) => {
+                          if (e.target.value === "__MANAGE__") {
+                            setShowDeptModal(true);
+                          } else {
+                            setFormTenantId(e.target.value);
+                          }
+                        }}
+                        className="flex-1 min-w-0 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
+                      >
+                        {departments.map((d) => (
+                          <option key={d.name} value={d.name}>
+                            {d.name}
+                          </option>
+                        ))}
+                        {formTenantId && !departments.some((d) => d.name === formTenantId) && (
+                          <option value={formTenantId}>{formTenantId}</option>
+                        )}
+                        <option value="__MANAGE__" className="text-indigo-600 font-semibold bg-indigo-50/80">
+                          ⚙ 부서 목록 관리·삭제...
                         </option>
-                      ))}
-                      {formTenantId && !departments.some((d) => d.name === formTenantId) && (
-                        <option value={formTenantId}>{formTenantId}</option>
-                      )}
-                    </select>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowDeptModal(true)}
+                        className="p-2 border border-slate-200 hover:border-indigo-300 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer shrink-0"
+                        title="부서 목록 관리 및 삭제"
+                      >
+                        <Building2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
                 <div>
@@ -1038,7 +1027,7 @@ export default function MembersManagementPage() {
       {/* 수정 모달 */}
       {showEditModal && editingOperator && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
                 <Edit className="w-5 h-5 text-indigo-600" />
@@ -1106,26 +1095,14 @@ export default function MembersManagementPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block font-semibold text-slate-700">소속 부서</label>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowDeptModal(true)}
-                        className="text-xs font-medium text-slate-500 hover:text-indigo-600 flex items-center space-x-1 transition cursor-pointer"
-                        title="부서 목록 관리 및 불필요한 부서 삭제"
-                      >
-                        <Building2 className="w-3 h-3" />
-                        <span>부서 관리·삭제</span>
-                      </button>
-                      <span className="text-slate-300">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomDeptEdit(!isCustomDeptEdit)}
-                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
-                      >
-                        {isCustomDeptEdit ? "목록에서 선택" : "+ 직접 입력"}
-                      </button>
-                    </div>
+                    <label className="block font-semibold text-slate-700 whitespace-nowrap">소속 부서</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomDeptEdit(!isCustomDeptEdit)}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition whitespace-nowrap cursor-pointer"
+                    >
+                      {isCustomDeptEdit ? "목록에서 선택" : "+ 직접 입력"}
+                    </button>
                   </div>
                   {isCustomDeptEdit ? (
                     <input
@@ -1137,20 +1114,39 @@ export default function MembersManagementPage() {
                       autoFocus
                     />
                   ) : (
-                    <select
-                      value={formTenantId}
-                      onChange={(e) => setFormTenantId(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
-                    >
-                      {departments.map((d) => (
-                        <option key={d.name} value={d.name}>
-                          {d.name}
+                    <div className="flex items-center space-x-1.5">
+                      <select
+                        value={formTenantId}
+                        onChange={(e) => {
+                          if (e.target.value === "__MANAGE__") {
+                            setShowDeptModal(true);
+                          } else {
+                            setFormTenantId(e.target.value);
+                          }
+                        }}
+                        className="flex-1 min-w-0 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-sm font-medium"
+                      >
+                        {departments.map((d) => (
+                          <option key={d.name} value={d.name}>
+                            {d.name}
+                          </option>
+                        ))}
+                        {formTenantId && !departments.some((d) => d.name === formTenantId) && (
+                          <option value={formTenantId}>{formTenantId}</option>
+                        )}
+                        <option value="__MANAGE__" className="text-indigo-600 font-semibold bg-indigo-50/80">
+                          ⚙ 부서 목록 관리·삭제...
                         </option>
-                      ))}
-                      {formTenantId && !departments.some((d) => d.name === formTenantId) && (
-                        <option value={formTenantId}>{formTenantId}</option>
-                      )}
-                    </select>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowDeptModal(true)}
+                        className="p-2 border border-slate-200 hover:border-indigo-300 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer shrink-0"
+                        title="부서 목록 관리 및 삭제"
+                      >
+                        <Building2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
                 <div>
@@ -1177,7 +1173,7 @@ export default function MembersManagementPage() {
                   value={formPassword}
                   onChange={(e) => setFormPassword(e.target.value)}
                   placeholder="변경할 경우에만 입력"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm font-sans placeholder:font-sans"
                 />
               </div>
 
