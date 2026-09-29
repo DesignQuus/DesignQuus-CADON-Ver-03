@@ -119,14 +119,14 @@ export default function Navigation() {
             </div>
           </Link>
 
-          <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-slate-200">
+          <nav className="hidden md:flex items-center space-x-0.5 lg:space-x-1 pl-3 lg:pl-4 border-l border-slate-200 overflow-x-auto no-scrollbar">
             {/* 1. 대시보드 */}
             <Link
               href="/"
               prefetch={true}
               onMouseEnter={() => prefetchPageData('/')}
               onTouchStart={() => prefetchPageData('/')}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 pathname === '/'
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -142,7 +142,7 @@ export default function Navigation() {
               prefetch={true}
               onMouseEnter={() => prefetchPageData('/cases')}
               onTouchStart={() => prefetchPageData('/cases')}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 (pathname === '/cases' || pathname.startsWith('/cases/'))
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -172,7 +172,7 @@ export default function Navigation() {
               prefetch={true}
               onMouseEnter={() => prefetchPageData('/quotes')}
               onTouchStart={() => prefetchPageData('/quotes')}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 pathname.startsWith('/quotes')
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -184,7 +184,7 @@ export default function Navigation() {
 
             {/* 기준정보 및 관리자 전용 메뉴 구분선 */}
             {isAnyAdmin && (
-              <div className="h-4 w-px bg-slate-200 mx-1.5 self-center" />
+              <div className="h-4 w-px bg-slate-200 mx-1 lg:mx-1.5 self-center shrink-0" />
             )}
 
             {/* 4. 고객사(발주처) 관리 (관리자 권한) */}
@@ -194,7 +194,7 @@ export default function Navigation() {
                 prefetch={true}
                 onMouseEnter={() => prefetchPageData('/admin/companies')}
                 onTouchStart={() => prefetchPageData('/admin/companies')}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   pathname.startsWith('/admin/companies')
                     ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -211,7 +211,7 @@ export default function Navigation() {
               prefetch={true}
               onMouseEnter={() => prefetchPageData('/admin/masters')}
               onTouchStart={() => prefetchPageData('/admin/masters')}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 pathname.startsWith('/admin/masters')
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -227,7 +227,7 @@ export default function Navigation() {
               <Link
                 href="/admin/members"
                 prefetch={true}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   pathname.startsWith('/admin/members')
                     ? 'bg-blue-50 text-blue-700 font-bold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -243,7 +243,7 @@ export default function Navigation() {
               <Link
                 href="/admin/permissions"
                 prefetch={true}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   pathname.startsWith('/admin/permissions')
                     ? 'bg-blue-50 text-blue-700 font-bold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -266,7 +266,7 @@ export default function Navigation() {
                 prefetch={true}
                 onMouseEnter={() => prefetchPageData('/admin/audit')}
                 onTouchStart={() => prefetchPageData('/admin/audit')}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   pathname.startsWith('/admin/audit')
                     ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
