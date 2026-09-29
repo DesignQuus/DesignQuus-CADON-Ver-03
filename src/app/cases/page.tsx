@@ -19,6 +19,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Clock,
+  Check,
   CheckCircle2,
   UploadCloud,
   FileCode2,

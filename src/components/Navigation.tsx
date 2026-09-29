@@ -99,10 +99,10 @@ export default function Navigation() {
       <div className="w-full px-2.5 sm:px-3 h-16 flex items-center justify-between">
         <div className="flex items-center space-x-4 sm:space-x-6">
           <Link
-            href={isSuperAdmin ? '/admin/companies' : '/'}
+            href="/"
             prefetch={true}
             className="flex items-center space-x-2"
-            title={isSuperAdmin ? '고객사(발주처) 마스터 관리 센터로 이동' : 'CADON 홈 대시보드로 이동'}
+            title="CADON 홈 대시보드로 이동"
           >
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white shadow-sm font-bold ${
               isSuperAdmin ? 'bg-indigo-600' : 'bg-blue-600'
@@ -120,41 +120,7 @@ export default function Navigation() {
           </Link>
 
           <nav className="hidden md:flex items-center space-x-1 pl-4 border-l border-slate-200">
-            {/* 1. 최고관리자 전용: 고객사 관리 & 감사 로그 */}
-            {isSuperAdmin && (
-              <>
-                <Link
-                  href="/admin/companies"
-                  prefetch={true}
-                  onMouseEnter={() => prefetchPageData('/admin/companies')}
-                  onTouchStart={() => prefetchPageData('/admin/companies')}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
-                    pathname.startsWith('/admin/companies')
-                      ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <Building2 className="w-4 h-4 text-blue-600" />
-                  <span>고객사(발주처) 관리</span>
-                </Link>
-                <Link
-                  href="/admin/audit"
-                  prefetch={true}
-                  onMouseEnter={() => prefetchPageData('/admin/audit')}
-                  onTouchStart={() => prefetchPageData('/admin/audit')}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
-                    pathname.startsWith('/admin/audit')
-                      ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>시스템 감사 로그</span>
-                </Link>
-              </>
-            )}
-
-            {/* 2. 대시보드 */}
+            {/* 1. 대시보드 */}
             <Link
               href="/"
               prefetch={true}
@@ -170,7 +136,7 @@ export default function Navigation() {
               <span>대시보드</span>
             </Link>
 
-            {/* 3. 견적의뢰 */}
+            {/* 2. 견적의뢰 */}
             <Link
               href="/cases"
               prefetch={true}
@@ -200,7 +166,7 @@ export default function Navigation() {
               )}
             </Link>
 
-            {/* 4. 견적서 관리 */}
+            {/* 3. 견적서 관리 */}
             <Link
               href="/quotes"
               prefetch={true}
@@ -216,8 +182,13 @@ export default function Navigation() {
               <span>견적서 관리</span>
             </Link>
 
-            {/* 5. 본사 총괄 관리자(TENANT_ADMIN): 고객사 관리 */}
-            {isTenantAdmin && (
+            {/* 기준정보 및 관리자 전용 메뉴 구분선 */}
+            {isAnyAdmin && (
+              <div className="h-4 w-px bg-slate-200 mx-1.5 self-center" />
+            )}
+
+            {/* 4. 고객사(발주처) 관리 (관리자 권한) */}
+            {isAnyAdmin && (
               <Link
                 href="/admin/companies"
                 prefetch={true}
@@ -234,7 +205,7 @@ export default function Navigation() {
               </Link>
             )}
 
-            {/* 6. 표준 단가·임률 */}
+            {/* 5. 표준 단가·임률 */}
             <Link
               href="/admin/masters"
               prefetch={true}
@@ -251,8 +222,8 @@ export default function Navigation() {
               <span>표준 단가·임률</span>
             </Link>
 
-            {/* 7. 본사 총괄 관리자: 사원 관리 */}
-            {isTenantAdmin && (
+            {/* 6. 사원 관리 */}
+            {(isTenantAdmin || isSuperAdmin) && (
               <Link
                 href="/admin/members"
                 prefetch={true}
@@ -267,7 +238,7 @@ export default function Navigation() {
               </Link>
             )}
 
-            {/* 8. 승인권한 설정 */}
+            {/* 7. 승인권한 설정 */}
             {isAnyAdmin && (
               <Link
                 href="/admin/permissions"
@@ -285,6 +256,24 @@ export default function Navigation() {
                     {pendingCount}
                   </span>
                 )}
+              </Link>
+            )}
+
+            {/* 8. 시스템 감사 로그 (최고관리자) */}
+            {isSuperAdmin && (
+              <Link
+                href="/admin/audit"
+                prefetch={true}
+                onMouseEnter={() => prefetchPageData('/admin/audit')}
+                onTouchStart={() => prefetchPageData('/admin/audit')}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-1.5 ${
+                  pathname.startsWith('/admin/audit')
+                    ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>시스템 감사 로그</span>
               </Link>
             )}
           </nav>
