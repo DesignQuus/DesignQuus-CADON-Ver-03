@@ -165,9 +165,9 @@ export default function MembersManagementPage() {
       });
   }, []);
 
-  // 운영자 목록 불러오기
-  const fetchData = async () => {
-    setIsLoading(true);
+  // 운영자 목록 불러오기 (isSilent: true일 경우 화면 언마운트 및 스크롤 튐 없이 조용히 백그라운드 갱신)
+  const fetchData = async (isSilent = false) => {
+    if (!isSilent) setIsLoading(true);
     setErrorMsg("");
     try {
       // 1. 운영자 목록
@@ -192,7 +192,7 @@ export default function MembersManagementPage() {
     } catch (err: any) {
       setErrorMsg(err.message || "데이터 통신 중 오류가 발생했습니다.");
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
   };
 
@@ -480,7 +480,7 @@ export default function MembersManagementPage() {
         setShowAddModal(false);
         setSuccessMsg("신규 임직원 계정이 성공적으로 등록되었습니다.");
         setTimeout(() => setSuccessMsg(""), 4000);
-        fetchData();
+        fetchData(true);
         // 신규 부서인 경우 부서 목록에도 자동 등록
         if (trimmedDept && !departments.some(d => d.name === trimmedDept)) {
           apiFetch("/api/admin/departments", {
@@ -520,17 +520,34 @@ export default function MembersManagementPage() {
     if (!editingOperator) return;
     setFormError("");
     setIsSubmitting(true);
+    const savedScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
     try {
       const trimmedDept = formTenantId.trim();
+
+      // 1. 즉각적인 낙관적 업데이트 (화면 깜빡임 / 스크롤 이동 0ms 원천 차단)
+      const updatedOp = {
+        name: formName.trim(),
+        role: formRole,
+        employee_number: formEmployeeNumber.trim() || null,
+        phone: formPhone.trim() || null,
+        tenant_id: trimmedDept,
+        department: trimmedDept
+      };
+      setOperators(prev => prev.map(op => (op.id === editingOperator.id ? { ...op, ...updatedOp } : op)));
+      setShowEditModal(false);
+      setSuccessMsg("임직원 정보가 수정되었습니다.");
+      setTimeout(() => setSuccessMsg(""), 3000);
+
+      // 2. 백엔드 통신
       const res = await apiFetch("/api/operators", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editingOperator.id,
-          name: formName,
+          name: formName.trim(),
           role: formRole,
-          employee_number: formEmployeeNumber,
-          phone: formPhone,
+          employee_number: formEmployeeNumber.trim(),
+          phone: formPhone.trim(),
           tenant_id: trimmedDept,
           password: formPassword || undefined
         })
@@ -538,11 +555,12 @@ export default function MembersManagementPage() {
       const data = await res.json();
       if (!data.success) {
         setFormError(data.error || "수정에 실패했습니다.");
+        await fetchData(true); // 실패 시 롤백
       } else {
-        setShowEditModal(false);
-        setSuccessMsg("임직원 정보가 수정되었습니다.");
-        setTimeout(() => setSuccessMsg(""), 4000);
-        fetchData();
+        await fetchData(true); // 조용한 백그라운드 동기화 (화면 언마운트 없음)
+        if (typeof window !== 'undefined' && window.scrollY !== savedScrollY) {
+          window.scrollTo({ top: savedScrollY, behavior: 'instant' as ScrollBehavior });
+        }
         // 신규 부서인 경우 부서 목록에도 자동 등록
         if (trimmedDept && !departments.some(d => d.name === trimmedDept)) {
           apiFetch("/api/admin/departments", {
@@ -550,12 +568,11 @@ export default function MembersManagementPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "ADD", name: trimmedDept })
           }).then(() => fetchDepartments()).catch(() => {});
-        } else {
-          fetchDepartments();
         }
       }
     } catch (err: any) {
       setFormError(err.message || "통신 중 오류가 발생했습니다.");
+      await fetchData(true);
     } finally {
       setIsSubmitting(false);
     }
@@ -572,7 +589,7 @@ export default function MembersManagementPage() {
       } else {
         setSuccessMsg(`'${op.name}' 계정이 비활성화되었습니다.`);
         setTimeout(() => setSuccessMsg(""), 4000);
-        fetchData();
+        fetchData(true);
       }
     } catch (err: any) {
       alert(err.message || "삭제 중 오류가 발생했습니다.");
@@ -597,7 +614,7 @@ export default function MembersManagementPage() {
       } else {
         setSuccessMsg(`'${op.name}' 계정이 성공적으로 복원되었습니다.`);
         setTimeout(() => setSuccessMsg(""), 4000);
-        fetchData();
+        fetchData(true);
       }
     } catch (err: any) {
       alert(err.message || "복원 중 오류가 발생했습니다.");
@@ -687,17 +704,17 @@ export default function MembersManagementPage() {
         </div>
       </div>
 
-      {/* 성공/에러 배너 */}
+      {/* 플로팅 토스트 알림 (레이아웃 시프트 및 화면 밀림 원천 방지) */}
       {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm flex items-center space-x-2">
+        <div className="fixed top-6 right-6 z-[80] p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm flex items-center space-x-2 shadow-lg animate-in fade-in slide-in-from-top-2 duration-200">
           <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{successMsg}</span>
+          <span className="font-semibold">{successMsg}</span>
         </div>
       )}
       {errorMsg && (
-        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-sm flex items-center space-x-2">
+        <div className="fixed top-6 right-6 z-[80] p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-sm flex items-center space-x-2 shadow-lg animate-in fade-in slide-in-from-top-2 duration-200">
           <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{errorMsg}</span>
+          <span className="font-semibold">{errorMsg}</span>
         </div>
       )}
 
