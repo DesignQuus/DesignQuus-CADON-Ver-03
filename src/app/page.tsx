@@ -41,6 +41,7 @@ import {
   Trash2
 } from 'lucide-react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
+import CustomerSelectCombobox, { CustomerSelectionValue } from '@/components/common/CustomerSelectCombobox';
 import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
 
 interface UserProfile {
@@ -170,30 +171,39 @@ export default function HomePage() {
   }, [companies]);
 
   const [isSampleMode, setIsSampleMode] = useState(false);
-  const [isNewCompanyInput, setIsNewCompanyInput] = useState(false);
-  const [newCustomCompanyName, setNewCustomCompanyName] = useState('');
+  const [customerSelection, setCustomerSelection] = useState<CustomerSelectionValue>({
+    companyId: 'comp_1790030182693',
+    companyName: '엠브이텍',
+    isNew: false
+  });
 
   const handleOpenUploadModal = () => {
     setNewCaseName('');
-    const defaultCust = customerCompanies[0]?.id || 'comp_1790030182693';
-    setSelectedCompanyId(defaultCust);
+    const defaultCust = customerCompanies[0] || { id: 'comp_1790030182693', company_name: '엠브이텍' };
+    setSelectedCompanyId(defaultCust.id);
+    setCustomerSelection({
+      companyId: defaultCust.id,
+      companyName: defaultCust.company_name,
+      isNew: false
+    });
     setSelectedFile(null);
     setSubmitError(null);
     setIsSampleMode(false);
-    setIsNewCompanyInput(false);
-    setNewCustomCompanyName('');
     setIsUploadModalOpen(true);
   };
 
   const handleOpenSampleModal = () => {
     setNewCaseName('[체험용] 판금 모터 브라켓 가공 견적 (샘플)');
-    const defaultCust = customerCompanies[0]?.id || 'comp_1790030182693';
-    setSelectedCompanyId(defaultCust);
+    const defaultCust = customerCompanies[0] || { id: 'comp_1790030182693', company_name: '엠브이텍' };
+    setSelectedCompanyId(defaultCust.id);
+    setCustomerSelection({
+      companyId: defaultCust.id,
+      companyName: defaultCust.company_name,
+      isNew: false
+    });
     setSelectedFile(null);
     setSubmitError(null);
     setIsSampleMode(true);
-    setIsNewCompanyInput(false);
-    setNewCustomCompanyName('');
     setIsUploadModalOpen(true);
   };
 
@@ -207,35 +217,44 @@ export default function HomePage() {
     setIsSubmitting(true);
     setSubmitError(null);
 
-    let targetCompId = selectedCompanyId;
+    let targetCompId = customerSelection.companyId;
 
-    // 신규 고객사 직접 입력 처리
-    if (isNewCompanyInput || selectedCompanyId === '__NEW__') {
-      const trimmedCustom = newCustomCompanyName.trim();
+    // 신규 고객사 직접 입력이거나 신규 등록 플래그인 경우
+    if (customerSelection.isNew || !targetCompId) {
+      const trimmedCustom = customerSelection.companyName.trim();
       if (!trimmedCustom) {
         setSubmitError('신규 발주 고객사명을 입력해 주세요.');
         setIsSubmitting(false);
         return;
       }
 
-      try {
-        const compRes = await apiFetch('/api/companies', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ companyName: trimmedCustom })
-        });
-        const compData = await compRes.json();
-        if (!compRes.ok || !compData.company?.id) {
-          throw new Error(compData.error || '고객사 등록에 실패했습니다.');
+      // 기존 목록에 대소문자/공백 무시 일치하는 회사가 있는지 확인
+      const existingMatch = customerCompanies.find(
+        (c) => (c.company_name || '').trim().toLowerCase() === trimmedCustom.toLowerCase()
+      );
+
+      if (existingMatch) {
+        targetCompId = existingMatch.id;
+      } else {
+        try {
+          const compRes = await apiFetch('/api/companies', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companyName: trimmedCustom })
+          });
+          const compData = await compRes.json();
+          if (!compRes.ok || !compData.company?.id) {
+            throw new Error(compData.error || '고객사 등록에 실패했습니다.');
+          }
+          targetCompId = compData.company.id;
+          if (!companies.some((c) => c.id === targetCompId)) {
+            setCompanies((prev) => [{ id: targetCompId, company_name: trimmedCustom, company_type: 'CUSTOMER' } as any, ...prev]);
+          }
+        } catch (cErr: any) {
+          setSubmitError(cErr.message || '신규 고객사 등록 중 오류가 발생했습니다.');
+          setIsSubmitting(false);
+          return;
         }
-        targetCompId = compData.company.id;
-        if (!companies.some((c) => c.id === targetCompId)) {
-          setCompanies((prev) => [{ id: targetCompId, company_name: trimmedCustom, company_type: 'CUSTOMER' } as any, ...prev]);
-        }
-      } catch (cErr: any) {
-        setSubmitError(cErr.message || '신규 고객사 등록 중 오류가 발생했습니다.');
-        setIsSubmitting(false);
-        return;
       }
     } else if (!targetCompId) {
       targetCompId = customerCompanies[0]?.id || 'comp_1790030182693';
@@ -2046,80 +2065,22 @@ export default function HomePage() {
                 />
               </div>
 
-              {/* 2. 고객사 선택 또는 직접 입력 */}
+              {/* 2. 발주 고객사 스마트 검색 & 즉시 등록 콤보박스 */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-700">
-                    발주 고객사 (의뢰처) <span className="text-rose-500">*</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsNewCompanyInput(!isNewCompanyInput);
-                      if (!isNewCompanyInput) {
-                        setNewCustomCompanyName('');
-                      }
-                    }}
-                    className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer flex items-center gap-1"
-                  >
-                    {isNewCompanyInput ? (
-                      <span>🏢 기존 목록에서 선택</span>
-                    ) : (
-                      <span>➕ 신규 고객사 직접 입력</span>
-                    )}
-                  </button>
-                </div>
-
-                {isNewCompanyInput ? (
-                  <div className="space-y-1.5">
-                    <input
-                      type="text"
-                      required
-                      value={newCustomCompanyName}
-                      onChange={(e) => setNewCustomCompanyName(e.target.value)}
-                      placeholder="신규 고객사명 입력 (예: (주)한국기계, 현대위아)"
-                      className="w-full px-3.5 py-2.5 rounded-lg border border-blue-400 bg-blue-50/20 text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all"
-                      autoFocus
-                    />
-                    <p className="text-[10.5px] text-blue-600 font-medium">
-                      * 입력하신 신규 고객사는 시스템에 자동 등록되어 향후에도 바로 선택하실 수 있습니다.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <select
-                      value={selectedCompanyId}
-                      onChange={(e) => {
-                        if (e.target.value === '__NEW__') {
-                          setIsNewCompanyInput(true);
-                        } else {
-                          setSelectedCompanyId(e.target.value);
-                        }
-                      }}
-                      className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer"
-                    >
-                      {customerCompanies.length > 0 ? (
-                        customerCompanies.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            🏢 {c.company_name}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="comp_1790030182693">🏢 엠브이텍</option>
-                          <option value="comp_ag_borgwarner">🏢 A&G/보그워너</option>
-                        </>
-                      )}
-                      <option value="__NEW__" className="text-blue-600 font-bold">
-                        ➕ [직접 입력] 목록에 없는 새 고객사 입력...
-                      </option>
-                    </select>
-                  </div>
-                )}
-                <div className="flex items-center justify-between text-[10.5px] text-slate-400 mt-1">
-                  <span>견적 주체: 세창인터내쇼날(주)</span>
-                  <span>{isNewCompanyInput ? '새 고객사 등록 모드' : '목록 외 회사도 직접 입력 가능'}</span>
-                </div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  발주 고객사 (의뢰처) <span className="text-rose-500">*</span>
+                </label>
+                <CustomerSelectCombobox
+                  companies={customerCompanies}
+                  value={customerSelection}
+                  onChange={(val) => {
+                    setCustomerSelection(val);
+                    if (val.companyId) {
+                      setSelectedCompanyId(val.companyId);
+                    }
+                  }}
+                  placeholder="발주 고객사 검색 (초성 검색 가능) 또는 새 상호명 직접 입력..."
+                />
               </div>
 
               {/* 3. DWG 도면 파일 업로드 (드래그 앤 드롭) */}
