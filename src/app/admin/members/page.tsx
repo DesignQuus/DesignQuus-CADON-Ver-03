@@ -50,22 +50,7 @@ export const getOperatorDeptAndTitle = (op: Operator) => {
 
   const assignedDept = [op.department, op.tenant_id, op.company_id].find(isCandidate);
 
-  let dept = assignedDept;
-  if (!dept) {
-    if (op.login_id === "admin" || op.role === "SUPER_ADMIN") {
-      dept = "시스템운영본부";
-    } else if (op.login_id === "001" || op.name?.includes("김세창")) {
-      dept = "견적영업부";
-    } else if (op.login_id === "002" || op.name?.includes("이세창")) {
-      dept = "가공기술부";
-    } else if (op.login_id === "003" || op.name?.includes("박세창")) {
-      dept = "설계품질부";
-    } else if (op.role === "REVIEWER") {
-      dept = "설계품질부";
-    } else {
-      dept = "견적영업부";
-    }
-  }
+  const dept = assignedDept || (op.login_id === "admin" || op.role === "SUPER_ADMIN" ? "시스템운영본부" : "미지정");
 
   // 2. 부서별 아이콘 및 테마 색상 매핑
   const isSuperAdmin = op.role === "SUPER_ADMIN" || dept === "시스템운영본부";
@@ -91,14 +76,8 @@ export default function MembersManagementPage() {
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 부서 관리 상태
-  const [departments, setDepartments] = useState<Array<{ name: string; memberCount: number }>>([
-    { name: "시스템운영본부", memberCount: 1 },
-    { name: "견적영업부", memberCount: 1 },
-    { name: "가공기술부", memberCount: 1 },
-    { name: "설계품질부", memberCount: 1 },
-    { name: "경영지원부", memberCount: 0 }
-  ]);
+  // 부서 관리 상태 (DB 실시간 연동)
+  const [departments, setDepartments] = useState<Array<{ name: string; memberCount: number }>>([]);
   const [showDeptModal, setShowDeptModal] = useState(false);
   const [newDeptInput, setNewDeptInput] = useState("");
   const [editingDeptName, setEditingDeptName] = useState<string | null>(null);
@@ -374,7 +353,7 @@ export default function MembersManagementPage() {
     setFormRole("SALES_USER");
     setFormEmployeeNumber("");
     setFormPhone("");
-    const defaultDept = targetDept || (selectedDeptFilter !== "ALL" ? selectedDeptFilter : (departments[0]?.name || "견적영업부"));
+    const defaultDept = targetDept || (selectedDeptFilter !== "ALL" ? selectedDeptFilter : (departments[0]?.name || ""));
     setFormTenantId(defaultDept);
     setIsCustomDeptAdd(false);
     setFormError("");
