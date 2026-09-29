@@ -6,7 +6,7 @@ import {
   ShieldCheck, Users, Search, Plus, Edit, Trash2, Key, 
   RefreshCw, AlertTriangle, UserCheck, UserPlus, Phone, 
   ShieldAlert, Building2, RotateCcw, CheckCircle, XCircle, X,
-  Sliders, Check, FolderPlus
+  Sliders, Check, FolderPlus, ChevronUp, ChevronDown
 } from "lucide-react";
 import { getTenantStorageKey } from "@/lib/tenant-client";
 import { formatPhoneNumber } from "@/lib/formatters";
@@ -298,6 +298,44 @@ export default function MembersManagementPage() {
       }
     } catch (err: any) {
       setDeptModalError(err.message || "통신 오류");
+    } finally {
+      setDeptModalLoading(false);
+    }
+  };
+
+  // 부서 표시 순서 이동 (REORDER)
+  const handleMoveDept = async (index: number, direction: 'UP' | 'DOWN') => {
+    const targetIndex = direction === 'UP' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= departments.length) return;
+
+    const newDepts = [...departments];
+    const [moved] = newDepts.splice(index, 1);
+    newDepts.splice(targetIndex, 0, moved);
+
+    // 즉각적인 UI 반영 (Optimistic Update)
+    setDepartments(newDepts);
+    setDeptModalLoading(true);
+    setDeptModalError("");
+    try {
+      const res = await apiFetch("/api/admin/departments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "REORDER",
+          newOrder: newDepts.map((d) => d.name)
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setDeptModalError(data.error || "부서 순서 저장에 실패했습니다.");
+        await fetchDepartments();
+      } else {
+        setDeptModalSuccess("부서 순서가 저장되었습니다.");
+        setTimeout(() => setDeptModalSuccess(""), 2000);
+      }
+    } catch (err: any) {
+      setDeptModalError(err.message || "통신 오류");
+      await fetchDepartments();
     } finally {
       setDeptModalLoading(false);
     }
@@ -1248,8 +1286,11 @@ export default function MembersManagementPage() {
                   등록된 부서가 없습니다.
                 </div>
               ) : (
-                departments.map((dept) => {
+                departments.map((dept, idx) => {
                   const isEditing = editingDeptName === dept.name;
+                  const isFirst = idx === 0;
+                  const isLast = idx === departments.length - 1;
+
                   return (
                     <div
                       key={dept.name}
@@ -1289,13 +1330,38 @@ export default function MembersManagementPage() {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2.5">
+                          <span className="w-5 text-center text-xs font-mono font-bold text-slate-400">
+                            {idx + 1}
+                          </span>
                           <span className="font-semibold text-slate-800 text-sm">{dept.name}</span>
                         </div>
                       )}
 
                       {!isEditing && (
                         <div className="flex items-center space-x-1">
+                          {/* 순서 이동 화살표 (▲, ▼) */}
+                          <div className="flex items-center space-x-0.5 mr-1 border-r border-slate-200 pr-1.5">
+                            <button
+                              type="button"
+                              disabled={isFirst || deptModalLoading}
+                              onClick={() => handleMoveDept(idx, 'UP')}
+                              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 cursor-pointer disabled:cursor-not-allowed transition"
+                              title="위로 이동"
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isLast || deptModalLoading}
+                              onClick={() => handleMoveDept(idx, 'DOWN')}
+                              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 cursor-pointer disabled:cursor-not-allowed transition"
+                              title="아래로 이동"
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                          </div>
+
                           <button
                             type="button"
                             onClick={() => {

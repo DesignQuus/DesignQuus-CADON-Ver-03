@@ -206,6 +206,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: `'${target}' 부서가 삭제되었습니다.`, departments });
     }
 
+    if (action === 'REORDER') {
+      const { newOrder } = body;
+      if (!Array.isArray(newOrder) || newOrder.length === 0) {
+        return NextResponse.json({ success: false, error: '유효한 부서 순서 목록이 아닙니다.' }, { status: 400 });
+      }
+
+      const validNames = newOrder.map((s: any) => String(s).trim()).filter(Boolean);
+      const uniqueNames = Array.from(new Set(validNames));
+
+      for (const d of departments) {
+        if (!uniqueNames.includes(d)) {
+          uniqueNames.push(d);
+        }
+      }
+
+      departments = uniqueNames;
+      await saveDepartments(departments, session.loginId);
+
+      await recordActivity(req, session, {
+        activityType: 'ROLE_UPDATE',
+        details: '부서 표시 순서 변경 완료'
+      });
+
+      return NextResponse.json({ success: true, message: '부서 순서가 저장되었습니다.', departments });
+    }
+
     return NextResponse.json({ success: false, error: '유효하지 않은 액션입니다.' }, { status: 400 });
   } catch (error: any) {
     console.error('POST /api/admin/departments error:', error);
