@@ -86,6 +86,9 @@ export default function MembersManagementPage() {
   const [deptModalLoading, setDeptModalLoading] = useState(false);
   const [deptModalError, setDeptModalError] = useState("");
   const [deptModalSuccess, setDeptModalSuccess] = useState("");
+  const [reorderSaving, setReorderSaving] = useState(false);
+  const [reorderSaved, setReorderSaved] = useState(false);
+  const reorderTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
@@ -303,42 +306,51 @@ export default function MembersManagementPage() {
     }
   };
 
-  // 부서 표시 순서 이동 (REORDER)
-  const handleMoveDept = async (index: number, direction: 'UP' | 'DOWN') => {
+  // 부서 표시 순서 이동 (REORDER) - 0ms 즉각 반응 & 디바운스 백그라운드 자동 저장
+  const handleMoveDept = (index: number, direction: 'UP' | 'DOWN') => {
     const targetIndex = direction === 'UP' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= departments.length) return;
 
+    // 1. 즉시 로컬 상태 갱신 (0ms 지연, 초고속 렌더링)
     const newDepts = [...departments];
     const [moved] = newDepts.splice(index, 1);
     newDepts.splice(targetIndex, 0, moved);
-
-    // 즉각적인 UI 반영 (Optimistic Update)
     setDepartments(newDepts);
-    setDeptModalLoading(true);
-    setDeptModalError("");
-    try {
-      const res = await apiFetch("/api/admin/departments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "REORDER",
-          newOrder: newDepts.map((d) => d.name)
-        })
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setDeptModalError(data.error || "부서 순서 저장에 실패했습니다.");
-        await fetchDepartments();
-      } else {
-        setDeptModalSuccess("부서 순서가 저장되었습니다.");
-        setTimeout(() => setDeptModalSuccess(""), 2000);
-      }
-    } catch (err: any) {
-      setDeptModalError(err.message || "통신 오류");
-      await fetchDepartments();
-    } finally {
-      setDeptModalLoading(false);
+
+    // 2. 디바운스 백그라운드 저장 (빠르게 연타해도 씹히지 않고 마지막 순서만 서버에 안전 저장)
+    if (reorderTimeoutRef.current) {
+      clearTimeout(reorderTimeoutRef.current);
     }
+
+    setReorderSaving(true);
+    setReorderSaved(false);
+
+    reorderTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await apiFetch("/api/admin/departments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "REORDER",
+            newOrder: newDepts.map((d) => d.name)
+          })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          setDeptModalError(data.error || "부서 순서 저장에 실패했습니다.");
+          await fetchDepartments();
+        } else {
+          setReorderSaving(false);
+          setReorderSaved(true);
+          setTimeout(() => setReorderSaved(false), 2000);
+        }
+      } catch (err: any) {
+        setDeptModalError(err.message || "통신 오류");
+        await fetchDepartments();
+      } finally {
+        setReorderSaving(false);
+      }
+    }, 350);
   };
 
   // 필터링된 임직원 목록
@@ -1221,8 +1233,8 @@ export default function MembersManagementPage() {
       {/* 부서 관리 모달 */}
       {showDeptModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-150 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 flex flex-col h-[600px] max-h-[90vh]">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center space-x-2">
                 <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
                   <Building2 className="w-5 h-5" />
@@ -1245,22 +1257,22 @@ export default function MembersManagementPage() {
               </button>
             </div>
 
-            {/* 성공 / 에러 알림 */}
+            {/* 성공 / 에러 알림 (신규 등록 / 수정 / 삭제 전용) */}
             {deptModalSuccess && (
-              <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg flex items-center space-x-1.5">
+              <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg flex items-center space-x-1.5 shrink-0">
                 <CheckCircle className="w-4 h-4 shrink-0" />
                 <span>{deptModalSuccess}</span>
               </div>
             )}
             {deptModalError && (
-              <div className="mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg flex items-center space-x-1.5">
+              <div className="mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg flex items-center space-x-1.5 shrink-0">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 <span>{deptModalError}</span>
               </div>
             )}
 
             {/* 신규 부서 등록 폼 */}
-            <form onSubmit={handleAddDept} className="mt-4 flex space-x-2">
+            <form onSubmit={handleAddDept} className="mt-4 flex space-x-2 shrink-0">
               <input
                 type="text"
                 value={newDeptInput}
@@ -1280,7 +1292,7 @@ export default function MembersManagementPage() {
             </form>
 
             {/* 부서 목록 */}
-            <div className="mt-4 flex-1 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-xl">
+            <div className="mt-4 flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-xl">
               {departments.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-sm">
                   등록된 부서가 없습니다.
@@ -1340,11 +1352,11 @@ export default function MembersManagementPage() {
 
                       {!isEditing && (
                         <div className="flex items-center space-x-1">
-                          {/* 순서 이동 화살표 (▲, ▼) */}
+                          {/* 순서 이동 화살표 (▲, ▼) - 0ms 즉각 반응 및 연속 클릭 가능 */}
                           <div className="flex items-center space-x-0.5 mr-1 border-r border-slate-200 pr-1.5">
                             <button
                               type="button"
-                              disabled={isFirst || deptModalLoading}
+                              disabled={isFirst}
                               onClick={() => handleMoveDept(idx, 'UP')}
                               className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 cursor-pointer disabled:cursor-not-allowed transition"
                               title="위로 이동"
@@ -1353,7 +1365,7 @@ export default function MembersManagementPage() {
                             </button>
                             <button
                               type="button"
-                              disabled={isLast || deptModalLoading}
+                              disabled={isLast}
                               onClick={() => handleMoveDept(idx, 'DOWN')}
                               className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 cursor-pointer disabled:cursor-not-allowed transition"
                               title="아래로 이동"
@@ -1389,7 +1401,21 @@ export default function MembersManagementPage() {
               )}
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between shrink-0">
+              <div className="text-xs text-slate-400 flex items-center space-x-1.5 h-6">
+                {reorderSaving && (
+                  <span className="text-indigo-600 flex items-center space-x-1 font-medium">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>순서 변경 저장 중...</span>
+                  </span>
+                )}
+                {!reorderSaving && reorderSaved && (
+                  <span className="text-emerald-600 flex items-center space-x-1 font-medium">
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>순서 자동 저장 완료</span>
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
