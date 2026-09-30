@@ -2031,23 +2031,6 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="space-y-2 px-3 sm:px-4 py-1.5">
-      {/* ⚠️ Company Unassigned / Logo Detected Notice Banner */}
-      {(qc?.company_id === 'comp_unassigned' || qc?.company_name === '고객사 미지정') && drawings.length > 0 && (
-        <div className="no-print print:hidden px-3.5 py-2 bg-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-amber-900 shadow-2xs">
-          <div className="flex items-center space-x-2 text-xs">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="font-bold">⚠️ 도면 표제란 회사명 미검출:</span>
-            <span className="text-amber-800 text-[11px]">고객사를 직접 지정하거나, 미지정 상태로 계속 진행할 수 있습니다.</span>
-          </div>
-          <button
-            onClick={handleOpenCompanyModal}
-            className="btn-hover-effect px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center space-x-1 cursor-pointer shrink-0 self-end sm:self-auto"
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            <span>고객사 지정 / 선택</span>
-          </button>
-        </div>
-      )}
 
       {/* 📦 Archived Case Notice Banner */}
       {qc?.lifecycle_status === 'ARCHIVED' && (
@@ -2167,31 +2150,33 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
           <span className="text-slate-300 hidden sm:inline">|</span>
 
-          {/* 발주처 (고객사) */}
+          {/* 발주처 (고객사) - 인라인 컴팩트 통합 */}
           <div className="flex items-center space-x-1 shrink-0">
-            <Building2 className="w-3 h-3 text-slate-400" />
+            <Building2 className="w-3.5 h-3.5 text-slate-400" />
             {qc.company_id === 'comp_unassigned' || qc.company_name === '고객사 미지정' ? (
-              <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300 text-[11px]">
-                ⚠️ 미지정
-                <button
-                  onClick={handleOpenCompanyModal}
-                  className="text-[10px] text-blue-700 hover:text-blue-900 underline font-bold cursor-pointer"
-                >
-                  [지정]
-                </button>
-              </span>
+              <button
+                type="button"
+                onClick={handleOpenCompanyModal}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 hover:border-amber-400 transition-colors cursor-pointer shadow-2xs group"
+                title="견적의뢰 고객사를 선택하거나 새로 등록합니다"
+              >
+                <span>발주처:</span>
+                <span className="text-amber-900 font-extrabold underline decoration-amber-400">고객사 지정</span>
+                <ChevronDown className="w-3 h-3 text-amber-600 group-hover:translate-y-0.5 transition-transform" />
+              </button>
             ) : (
-              <span className="font-semibold text-slate-700 flex items-center gap-1 bg-slate-100/90 px-1.5 py-0.2 rounded border border-slate-200 text-[11px]">
+              <button
+                type="button"
+                onClick={handleOpenCompanyModal}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-slate-700 bg-slate-100/90 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 hover:border-blue-300 transition-colors cursor-pointer group"
+                title="발주처(고객사) 변경 또는 수정"
+              >
                 <span className="text-slate-500 font-normal">발주처:</span>
-                <span className="font-bold text-slate-900 max-w-[110px] truncate" title={qc.company_name}>{qc.company_name}</span>
-                <button
-                  onClick={handleOpenCompanyModal}
-                  className="text-slate-400 hover:text-blue-600 cursor-pointer ml-0.5"
-                  title="발주처(고객사) 수정"
-                >
-                  <Pencil className="w-2.5 h-2.5 inline" />
-                </button>
-              </span>
+                <span className="font-bold text-slate-900 group-hover:text-blue-700 max-w-[130px] truncate" title={qc.company_name}>
+                  {qc.company_name}
+                </span>
+                <Pencil className="w-2.5 h-2.5 text-slate-400 group-hover:text-blue-600 ml-0.5" />
+              </button>
             )}
           </div>
 
@@ -6061,14 +6046,18 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                   ✨ 도면 파일명/모델 기반 추천 키워드:
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {['(주)현대엘리베이터', '오티스엘리베이터코리아', '티케이엘리베이터', 'MGK 동기권상기', '자체 제작(외주)'].map((kw) => (
+                  {['엠브이텍', '(주)현대엘리베이터', '오티스엘리베이터코리아', '티케이엘리베이터', 'MGK 동기권상기', '자체 제작(외주)'].map((kw) => (
                     <button
                       key={kw}
                       type="button"
                       onClick={() => setInputCompanyName(kw)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer transition-colors"
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer border ${
+                        kw === '엠브이텍' 
+                          ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100 ring-1 ring-blue-400/50' 
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                      }`}
                     >
-                      + {kw}
+                      {kw === '엠브이텍' ? '✨ 엠브이텍 (도면 의뢰처 AI 감지)' : `+ ${kw}`}
                     </button>
                   ))}
                 </div>
