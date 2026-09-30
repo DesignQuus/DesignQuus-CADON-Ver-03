@@ -4,6 +4,7 @@ import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { getClientCache, setClientCache } from '@/lib/cacheStore';
+import { QuoteDeleteConfirmModal, QuoteDeleteToast, SKIP_CONFIRM_KEY } from '@/components/common/QuoteDeleteConfirmModal';
 import {
   FileSpreadsheet,
   Download,
@@ -73,6 +74,24 @@ export default function QuotesListPage() {
   const [expandedCaseKeys, setExpandedCaseKeys] = useState<Set<string>>(new Set());
   const [selectedAdjustmentQuote, setSelectedAdjustmentQuote] = useState<QuoteItem | null>(null);
 
+  // 견적서 삭제 모달 및 확인창 생략(빠른 삭제) 상태
+  const [deleteQuoteModal, setDeleteQuoteModal] = useState<{ isOpen: boolean; quoteId: string; quoteNo: string }>({
+    isOpen: false,
+    quoteId: '',
+    quoteNo: ''
+  });
+  const [isDeletingQuote, setIsDeletingQuote] = useState(false);
+  const [deleteToast, setDeleteToast] = useState<{ text: string; showRestoreConfirm?: boolean } | null>(null);
+
+  useEffect(() => {
+    if (deleteToast) {
+      const timer = setTimeout(() => {
+        setDeleteToast(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [deleteToast]);
+
   const fetchQuotes = async () => {
     // 캐시가 없을 때만 전체 로딩 스피너 표시
     if (quotes.length === 0) {
@@ -140,11 +159,9 @@ export default function QuotesListPage() {
     }
   };
 
-  // 견적서 영구 삭제 핸들러
-  const handleDeleteQuote = async (quoteId: string, quoteNo: string) => {
-    if (!confirm(`견적서 [${quoteNo}]을(를) 정말 삭제하시겠습니까?\n삭제된 견적서는 복구할 수 없습니다.`)) {
-      return;
-    }
+  // 견적서 영구 삭제 핸들러 (커스텀 확인 모달 & 방법 A: 삭제 완료 토스트 복원)
+  const executeDeleteQuote = async (quoteId: string, quoteNo: string, wasSkipped: boolean) => {
+    setIsDeletingQuote(true);
     try {
       const res = await apiFetch(`/api/quotes/${quoteId}`, {
         method: 'DELETE'
@@ -154,10 +171,52 @@ export default function QuotesListPage() {
         throw new Error(err.error || '견적서 삭제 실패');
       }
       setQuotes((prev) => prev.filter((q) => q.id !== quoteId));
-      alert(`견적서 [${quoteNo}]이(가) 삭제되었습니다.`);
+      setDeleteQuoteModal({ isOpen: false, quoteId: '', quoteNo: '' });
+
+      // 방법 A: 삭제 완료 토스트 표시 (확인 없이 삭제된 경우 [확인창 다시 켜기] 복원 버튼 노출)
+      setDeleteToast({
+        text: `견적서 [${quoteNo}]이(가) ${wasSkipped ? '확인 없이 즉시 ' : ''}삭제되었습니다.`,
+        showRestoreConfirm: wasSkipped
+      });
     } catch (e: any) {
       alert(e.message || '견적서 삭제 중 오류가 발생했습니다.');
+    } finally {
+      setIsDeletingQuote(false);
     }
+  };
+
+  const handleDeleteQuoteClick = (quoteId: string, quoteNo: string) => {
+    let skipConfirm = false;
+    try {
+      skipConfirm = localStorage.getItem(SKIP_CONFIRM_KEY) === 'true';
+    } catch {}
+
+    if (skipConfirm) {
+      // 확인창 없이 즉시 삭제 실행
+      executeDeleteQuote(quoteId, quoteNo, true);
+    } else {
+      // 커스텀 모달 띄우기
+      setDeleteQuoteModal({ isOpen: true, quoteId, quoteNo });
+    }
+  };
+
+  const handleConfirmModalDelete = async (skipNextTime: boolean) => {
+    if (skipNextTime) {
+      try {
+        localStorage.setItem(SKIP_CONFIRM_KEY, 'true');
+      } catch {}
+    }
+    await executeDeleteQuote(deleteQuoteModal.quoteId, deleteQuoteModal.quoteNo, skipNextTime);
+  };
+
+  const handleRestoreConfirmDialog = () => {
+    try {
+      localStorage.removeItem(SKIP_CONFIRM_KEY);
+    } catch {}
+    setDeleteToast({
+      text: '✓ 견적서 삭제 확인창이 다시 활성화되었습니다.',
+      showRestoreConfirm: false
+    });
   };
 
   // 견적건별 최신 버전 및 과거 이력 그룹핑
@@ -653,7 +712,7 @@ export default function QuotesListPage() {
 
                               <button
                                 type="button"
-                                onClick={() => handleDeleteQuote(q.id, q.quote_no)}
+                                onClick={() => handleDeleteQuoteClick(q.id, q.quote_no)}
                                 className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
                                 title="견적서 영구 삭제"
                               >
@@ -792,7 +851,7 @@ export default function QuotesListPage() {
 
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteQuote(hq.id, hq.quote_no)}
+                                    onClick={() => handleDeleteQuoteClick(hq.id, hq.quote_no)}
                                     className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
                                     title="과거 이력 견적서 삭제"
                                   >
@@ -900,6 +959,22 @@ export default function QuotesListPage() {
           onClose={() => setSelectedAdjustmentQuote(null)}
         />
       )}
+
+      {/* ⚠️ 견적서 삭제 커스텀 확인 모달 */}
+      <QuoteDeleteConfirmModal
+        isOpen={deleteQuoteModal.isOpen}
+        quoteNo={deleteQuoteModal.quoteNo}
+        onClose={() => setDeleteQuoteModal({ isOpen: false, quoteId: '', quoteNo: '' })}
+        onConfirm={handleConfirmModalDelete}
+        isDeleting={isDeletingQuote}
+      />
+
+      {/* 💡 방법 A: 삭제 완료 토스트 & [확인창 다시 켜기] 복원 버튼 */}
+      <QuoteDeleteToast
+        message={deleteToast}
+        onClose={() => setDeleteToast(null)}
+        onRestoreConfirmDialog={handleRestoreConfirmDialog}
+      />
     </div>
   );
 }
