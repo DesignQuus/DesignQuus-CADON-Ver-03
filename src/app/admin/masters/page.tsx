@@ -955,43 +955,43 @@ export default function MasterDataManagerPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 w-full px-2.5 sm:px-3 py-4 space-y-4">
+      <main className="flex-1 w-full px-2.5 sm:px-3 pt-2 pb-4 space-y-2.5">
         {activeTab === 'products' ? (
           <>
-            {/* Top Stat Cards: 6대 실무 분류 */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-[11px] font-medium text-slate-500 block">전체 표준 품목</span>
-                <span className="text-xl font-black text-slate-900 font-mono mt-0.5 block">{stats.total.toLocaleString()}개</span>
+            {/* Top Stat Cards: 6대 실무 분류 (컴팩트 고밀도 여백) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[11px] font-bold text-slate-500 block leading-tight">전체 표준 품목</span>
+                <span className="text-base font-black text-slate-900 font-mono mt-0.5 block leading-tight">{stats.total.toLocaleString()}개</span>
               </div>
-              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-[11px] font-medium text-blue-600 block">기계 가공품</span>
-                <span className="text-xl font-black text-blue-700 font-mono mt-0.5 block">{stats.machining.toLocaleString()}종</span>
+              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[11px] font-bold text-blue-600 block leading-tight">기계 가공품</span>
+                <span className="text-base font-black text-blue-700 font-mono mt-0.5 block leading-tight">{stats.machining.toLocaleString()}종</span>
               </div>
-              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-[11px] font-medium text-cyan-600 block">판금/제관품</span>
-                <span className="text-xl font-black text-cyan-700 font-mono mt-0.5 block">{stats.sheetMetal.toLocaleString()}종</span>
+              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[11px] font-bold text-cyan-600 block leading-tight">판금/제관품</span>
+                <span className="text-base font-black text-cyan-700 font-mono mt-0.5 block leading-tight">{stats.sheetMetal.toLocaleString()}종</span>
               </div>
-              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-[11px] font-medium text-orange-600 block">주조/주물품</span>
-                <span className="text-xl font-black text-orange-700 font-mono mt-0.5 block">{stats.casting.toLocaleString()}종</span>
+              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[11px] font-bold text-orange-600 block leading-tight">주조/주물품</span>
+                <span className="text-base font-black text-orange-700 font-mono mt-0.5 block leading-tight">{stats.casting.toLocaleString()}종</span>
               </div>
-              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-[11px] font-medium text-emerald-600 block">규격 철물</span>
-                <span className="text-xl font-black text-emerald-700 font-mono mt-0.5 block">{stats.commercial.toLocaleString()}종</span>
+              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[11px] font-bold text-emerald-600 block leading-tight">규격 철물</span>
+                <span className="text-base font-black text-emerald-700 font-mono mt-0.5 block leading-tight">{stats.commercial.toLocaleString()}종</span>
               </div>
-              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-[11px] font-medium text-purple-600 block">전장/공압품</span>
-                <span className="text-xl font-black text-purple-700 font-mono mt-0.5 block">{stats.electrical.toLocaleString()}종</span>
+              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[11px] font-bold text-purple-600 block leading-tight">전장/공압품</span>
+                <span className="text-base font-black text-purple-700 font-mono mt-0.5 block leading-tight">{stats.electrical.toLocaleString()}종</span>
               </div>
-              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-[11px] font-medium text-indigo-600 block">조립품(모듈)</span>
-                <span className="text-xl font-black text-indigo-700 font-mono mt-0.5 block">{stats.assembly.toLocaleString()}종</span>
+              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[11px] font-bold text-indigo-600 block leading-tight">조립품(모듈)</span>
+                <span className="text-base font-black text-indigo-700 font-mono mt-0.5 block leading-tight">{stats.assembly.toLocaleString()}종</span>
               </div>
             </div>
 
             {/* Toolbar: Search, Filters, Actions */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="bg-white py-2 px-3 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
               <form onSubmit={handleSearch} className="flex items-center space-x-2 flex-1 max-w-md">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
