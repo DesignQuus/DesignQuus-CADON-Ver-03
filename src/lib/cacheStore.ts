@@ -164,9 +164,15 @@ export function prefetchPageData(route: string): void {
         fetchWithCache('masters_settings', '/api/admin/masters?type=settings');
       }
     } else if (route.startsWith('/admin/companies')) {
-      // 고객사 마스터 관리 프리페치
+      // 고객사 마스터 관리 프리페치 + 인접 기준정보 메뉴 사전 프리로드
       if (!isCacheFresh('companies', 30000)) {
         fetchWithCache('companies', '/api/companies?include_stats=true&include_deleted=true');
+      }
+      if (!isCacheFresh('masters_items_ALL', 30000)) {
+        fetchWithCache('masters_items_ALL', '/api/admin/masters?q=&category=ALL');
+      }
+      if (!isCacheFresh('masters_settings', 60000)) {
+        fetchWithCache('masters_settings', '/api/admin/masters?type=settings');
       }
     } else if (route.startsWith('/admin/audit')) {
       // 감사 로그 프리페치

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/api';
-import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
+import { getClientCache, setClientCache, isCacheFresh, fetchWithCache } from '@/lib/cacheStore';
 import {
   Database, Plus, Upload, Search, Download, Trash2, CheckCircle2,
   RefreshCw, FileSpreadsheet, ArrowLeft, Sliders, DollarSign,
@@ -120,10 +120,26 @@ interface MasterProduct {
 
 export default function MasterDataManagerPage() {
   const [activeTab, setActiveTab] = useState<'products' | 'settings'>('products');
-  const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<MasterProduct[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // ⚡ 0ms Lazy Initializer: 브라우저가 화면을 그리는 첫 프레임(0ms)부터 캐시 데이터를 즉시 표출
+  const [items, setItems] = useState<MasterProduct[]>(() => {
+    try {
+      const cached = getClientCache<any>('masters_items_ALL');
+      if (cached?.items && Array.isArray(cached.items)) return cached.items;
+    } catch {}
+    return [];
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    try {
+      const cached = getClientCache<any>('masters_items_ALL');
+      if (cached?.items && Array.isArray(cached.items) && cached.items.length > 0) return false;
+    } catch {}
+    return true;
+  });
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [modifiedItems, setModifiedItems] = useState<Record<string, number>>({});
   const [isSavingBatch, setIsSavingBatch] = useState(false);
@@ -146,6 +162,7 @@ export default function MasterDataManagerPage() {
   const [importing, setImporting] = useState(false);
   const [importedPreview, setImportedPreview] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [stats, setStats] = useState<{
     total: number;
     machining: number;
@@ -154,11 +171,31 @@ export default function MasterDataManagerPage() {
     commercial: number;
     electrical: number;
     assembly: number;
-  }>({ total: 0, machining: 0, sheetMetal: 0, casting: 0, commercial: 0, electrical: 0, assembly: 0 });
+  }>(() => {
+    try {
+      const cached = getClientCache<any>('masters_items_ALL');
+      if (cached?.stats) return cached.stats;
+    } catch {}
+    return { total: 0, machining: 0, sheetMetal: 0, casting: 0, commercial: 0, electrical: 0, assembly: 0 };
+  });
 
-  // Settings State
-  const [materialRates, setMaterialRates] = useState<Record<string, number>>({});
-  const [processRates, setProcessRates] = useState<Record<string, number>>({});
+  // Settings State: 0ms Lazy Initializer
+  const [materialRates, setMaterialRates] = useState<Record<string, number>>(() => {
+    try {
+      const cached = getClientCache<any>('masters_settings');
+      if (cached?.materialRates) return cached.materialRates;
+    } catch {}
+    return {};
+  });
+
+  const [processRates, setProcessRates] = useState<Record<string, number>>(() => {
+    try {
+      const cached = getClientCache<any>('masters_settings');
+      if (cached?.processRates) return cached.processRates;
+    } catch {}
+    return {};
+  });
+
   const [savingSettings, setSavingSettings] = useState(false);
 
   // 💡 3단계 담당자 눈높이 UX 상태
@@ -243,24 +280,28 @@ export default function MasterDataManagerPage() {
 
   const loadData = async (forceSpinner = false) => {
     const cacheKey = `masters_items_${categoryFilter}`;
-    const cachedData = getClientCache<any>(cacheKey) || getClientCache<any>('masters_items_ALL');
-    const hasCached = (cachedData?.items && Array.isArray(cachedData.items)) || (items.length > 0);
+    const cachedData = getClientCache<any>(cacheKey) || (categoryFilter === 'ALL' ? getClientCache<any>('masters_items_ALL') : null);
+    const hasCached = (cachedData?.items && Array.isArray(cachedData.items) && cachedData.items.length > 0) || (items.length > 0);
 
-    // 캐시가 전혀 없거나 검색 등 명시적 요청 시에만 로딩 스피너 활성화
+    // 캐시가 전혀 없거나 사용자가 검색 등 명시적으로 스피너를 요청한 경우에만 로딩 활성화
     if (!hasCached || forceSpinner) {
       setLoading(true);
     }
 
     try {
-      // 🚀 병목 해소: 순차(Waterfall) 호출 제거 -> 완전 동시 병렬(Promise.all) 호출로 속도 50% 단축
-      const [res, settingsRes] = await Promise.all([
-        apiFetch(`/api/admin/masters?q=${encodeURIComponent(searchTerm)}&category=${categoryFilter}`),
-        apiFetch('/api/admin/masters?type=settings')
+      const urlItems = `/api/admin/masters?q=${encodeURIComponent(searchTerm)}&category=${categoryFilter}`;
+      const urlSettings = '/api/admin/masters?type=settings';
+
+      // ⚡ 검색어가 없을 때는 fetchWithCache를 통해 GNB 프리페치 캐시를 0ms 즉시 공유 (중복 대기 100% 해소)
+      const [data, sData] = await Promise.all([
+        !searchTerm.trim()
+          ? fetchWithCache<any>(cacheKey, urlItems, { maxAgeMs: 20000 })
+          : apiFetch(urlItems).then((r) => (r.ok ? r.json() : null)),
+        fetchWithCache<any>('masters_settings', urlSettings, { maxAgeMs: 40000 })
       ]);
 
-      if (res.ok) {
-        const data = await res.json();
-        setItems(data.items || []);
+      if (data?.items) {
+        setItems(data.items);
         if (data.stats) {
           setStats(data.stats);
         }
@@ -272,8 +313,7 @@ export default function MasterDataManagerPage() {
         }
       }
 
-      if (settingsRes.ok) {
-        const sData = await settingsRes.json();
+      if (sData) {
         if (sData.materialRates) setMaterialRates(sData.materialRates);
         if (sData.processRates) setProcessRates(sData.processRates);
         setClientCache('masters_settings', sData);
@@ -286,22 +326,16 @@ export default function MasterDataManagerPage() {
   };
 
   useEffect(() => {
-    // ⚡ 0ms 즉시 화면 복원: 캐시된 품목 및 통계, 임률 설정을 즉각 렌더링
+    // ⚡ 0ms 즉시 화면 복원: 필터 변경 시 캐시된 품목 및 통계가 있으면 즉각 표출
     try {
       const cachedData = getClientCache<any>(`masters_items_${categoryFilter}`) || getClientCache<any>('masters_items_ALL');
-      if (cachedData?.items && Array.isArray(cachedData.items) && items.length === 0) {
+      if (cachedData?.items && Array.isArray(cachedData.items) && cachedData.items.length > 0) {
         setItems(cachedData.items);
+        if (cachedData.stats) setStats(cachedData.stats);
       }
-      if (cachedData?.stats) {
-        setStats(cachedData.stats);
-      }
-
-      const cachedSettings = getClientCache<any>('masters_settings');
-      if (cachedSettings?.materialRates) setMaterialRates(cachedSettings.materialRates);
-      if (cachedSettings?.processRates) setProcessRates(cachedSettings.processRates);
     } catch {}
 
-    loadData();
+    loadData(false);
   }, [categoryFilter]);
 
   const handleSearch = (e: React.FormEvent) => {
