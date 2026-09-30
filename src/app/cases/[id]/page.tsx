@@ -513,6 +513,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             setWorkflowStep(1);
           } else {
             setWorkflowStep(2);
+            setIsSidebarOpen(false);
           }
         }
         if (json.normalizedItems?.length > 0) {
@@ -552,12 +553,20 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       if (stepParam === '1') {
         setWorkflowStep(1);
         setIsSidebarOpen(true);
-      } else if (stepParam === '2') setWorkflowStep(2);
-      else if (stepParam === '3') setWorkflowStep(3);
-      else if (stepParam === '4') setWorkflowStep(4);
-      else if (stepParam === '5') setWorkflowStep(5);
-      else {
-        setWorkflowStep((cached.drawings?.length || 0) === 0 ? 1 : 2);
+      } else if (stepParam === '2') {
+        setWorkflowStep(2);
+        setIsSidebarOpen(false);
+      } else if (stepParam === '3') {
+        setWorkflowStep(3);
+        setIsSidebarOpen(false);
+      } else if (stepParam === '4') {
+        setWorkflowStep(4);
+      } else if (stepParam === '5') {
+        setWorkflowStep(5);
+      } else {
+        const nextStep = (cached.drawings?.length || 0) === 0 ? 1 : 2;
+        setWorkflowStep(nextStep);
+        setIsSidebarOpen(nextStep === 1);
       }
     } else {
       const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
@@ -565,10 +574,17 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       if (stepParam === '1') {
         setWorkflowStep(1);
         setIsSidebarOpen(true);
-      } else if (stepParam === '2') setWorkflowStep(2);
-      else if (stepParam === '3') setWorkflowStep(3);
-      else if (stepParam === '4') setWorkflowStep(4);
-      else if (stepParam === '5') setWorkflowStep(5);
+      } else if (stepParam === '2') {
+        setWorkflowStep(2);
+        setIsSidebarOpen(false);
+      } else if (stepParam === '3') {
+        setWorkflowStep(3);
+        setIsSidebarOpen(false);
+      } else if (stepParam === '4') {
+        setWorkflowStep(4);
+      } else if (stepParam === '5') {
+        setWorkflowStep(5);
+      }
     }
     fetchData(!!cached);
     apiFetch('/api/auth/me').then(res => res.json()).then(d => setUser(d.user)).catch(() => {});
@@ -2485,7 +2501,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                   {drawings.length > 0 ? (
                     <>2단계: AI가 파싱한 {drawings.length}개 시트의 2D CAD 벡터 도면 형상, 치수, 도곽을 검토하세요. 검토 후 상단 <strong>[3. 가상 BOM 추출]</strong>을 클릭하세요. (WebGL 60FPS 무랙 가동)</>
                   ) : (
-                    <>2단계: AI 도면 파싱 대기 중입니다. 좌측 패널에서 도면 파일(DWG, DXF)을 등록하고 AI 분석을 시작하세요.</>
+                    <>2단계: AI 도면 파싱 대기 중입니다. 상단 <strong>[1. 도면 접수]</strong> 또는 CAD 툴바 <strong>[+ 도면 추가]</strong>에서 도면 파일(DWG, DXF)을 등록하고 AI 분석을 시작하세요.</>
                   )}
                 </span>
               )}
@@ -2543,9 +2559,9 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       )}
 
       {/* TAB 1: CAD File Upload & Viewer (PROMPT 03, 04, 05, 06, 18-R1, 18-R2) */}
-      <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${isSidebarOpen ? 'gap-2' : ''} items-start w-full relative` : "hidden"}>
-          {/* Unified Upload & Files Left Panel (Collapsible) */}
-          {isSidebarOpen ? (
+      <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${workflowStep === 1 && isSidebarOpen ? 'gap-2' : ''} items-start w-full relative` : "hidden"}>
+          {/* Unified Upload & Files Left Panel (Collapsible) - Step 1 Only */}
+          {workflowStep === 1 && isSidebarOpen ? (
             <div className="w-full lg:w-[340px] xl:w-[360px] shrink-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 animate-in fade-in slide-in-from-left-2 relative">
               {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
               <SidebarBookmarkTab
@@ -2787,8 +2803,8 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             </div>
           ) : null}
 
-          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
-          {!isSidebarOpen && (
+          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) - Step 1 Only */}
+          {workflowStep === 1 && !isSidebarOpen && (
             <SidebarBookmarkTab
               mode="expand"
               onClick={() => setIsSidebarOpen(true)}
@@ -2825,6 +2841,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               onBomUpdated={fetchData}
               controlledViewMode={workflowStep === 3 ? 'SHEET' : 'CAD'}
               onViewModeChange={(m) => setWorkflowStep(m === 'CAD' ? 2 : 3)}
+              onUploadFile={handleProcessFile}
             />
           </div>
       </div>

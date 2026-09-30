@@ -120,6 +120,7 @@ interface CadViewerProps {
   selectedPartNo?: string;
   controlledViewMode?: 'CAD' | 'SHEET';
   onViewModeChange?: (mode: 'CAD' | 'SHEET') => void;
+  onUploadFile?: (file: File) => void;
 }
 
 export default function CadViewer({
@@ -150,8 +151,10 @@ export default function CadViewer({
   selectedBalloonNo,
   selectedPartNo,
   controlledViewMode,
-  onViewModeChange
+  onViewModeChange,
+  onUploadFile
 }: CadViewerProps) {
+  const quickFileInputRef = useRef<HTMLInputElement>(null);
   // Mode switcher: 'CAD' (2D Vector Viewer) vs 'SHEET' (Full-width Excel Grid)
   const [viewMode, setViewMode] = useState<'CAD' | 'SHEET'>(controlledViewMode || 'CAD');
 
@@ -1742,9 +1745,27 @@ export default function CadViewer({
             <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-950/90 border border-slate-800 rounded-xl text-xs text-slate-300 shadow-xs">
               <span className={`w-2 h-2 rounded-full shrink-0 ${drawings.length > 0 ? 'bg-emerald-400 ring-2 ring-emerald-400/30' : 'bg-amber-400 animate-pulse'}`} />
               <span className="text-slate-400">선택 도면:</span>
-              <span className="font-bold text-white truncate max-w-[200px] sm:max-w-[280px]" title={selectedFile.original_file_name}>
-                {selectedFile.original_file_name}
-              </span>
+              {allFiles && allFiles.length > 1 ? (
+                <div className="relative inline-flex items-center">
+                  <select
+                    value={selectedFile.id}
+                    onChange={(e) => onSelectFile && onSelectFile(e.target.value)}
+                    className="bg-slate-900 text-white font-bold pl-2 pr-6 py-0.5 rounded border border-slate-700 hover:border-slate-500 text-xs focus:outline-hidden focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[200px] sm:max-w-[280px] truncate appearance-none"
+                    title="검토할 도면 파일 전환"
+                  >
+                    {allFiles.map((f: any) => (
+                      <option key={f.id} value={f.id}>
+                        {f.original_file_name} {f.has_derived_dxf ? '(DXF변환)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 pointer-events-none" />
+                </div>
+              ) : (
+                <span className="font-bold text-white truncate max-w-[200px] sm:max-w-[280px]" title={selectedFile.original_file_name}>
+                  {selectedFile.original_file_name}
+                </span>
+              )}
               <span className="px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 border border-blue-800/60 font-mono text-[10px]">
                 {selectedFile.file_type === 'DWG' || selectedFile.original_file_name?.endsWith('.dwg')
                   ? (drawings.length > 0 ? 'DWG (DXF 렌더링)' : 'DWG (분석 대기)')
@@ -1765,6 +1786,34 @@ export default function CadViewer({
                   시트: {drawings[selectedDrawingIdx].drawing_no_raw}
                 </span>
               )}
+            </div>
+          )}
+
+          {/* Quick Add Drawing Button */}
+          {onUploadFile && (
+            <div className="flex items-center">
+              <input
+                type="file"
+                ref={quickFileInputRef}
+                accept=".dwg,.dxf,.pdf,.xls,.xlsx"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    onUploadFile(e.target.files[0]);
+                  }
+                  e.target.value = '';
+                }}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => quickFileInputRef.current?.click()}
+                disabled={isAnalyzing}
+                className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-950/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-600 text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shadow-xs"
+                title="추가 CAD 도면(DWG/DXF) 파일 즉시 업로드"
+              >
+                <Upload className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span className="whitespace-nowrap">+ 도면 추가</span>
+              </button>
             </div>
           )}
         </div>
