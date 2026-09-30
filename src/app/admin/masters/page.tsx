@@ -1259,40 +1259,10 @@ export default function MasterDataManagerPage() {
                 </tbody>
               </table>
 
-              {/* Standard Pagination Navigation Bar (프로젝트 통일 표준: 10/20/30/40/50개 보기 & 좌우 네비게이션) */}
+              {/* Standard Pagination Navigation Bar (중앙 정렬 배치 & 프로젝트 표준 로직) */}
               {items.length > 0 && (
-                <div className="py-3 px-4 border-t border-slate-200/90 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 shrink-0">
-                  {/* 건수 정보 및 페이지당 표시 행수 선택기 */}
-                  <div className="flex items-center space-x-3 text-slate-600">
-                    <div>
-                      총 <strong className="text-slate-900 font-bold">{items.length}</strong>개 항목 중{' '}
-                      <span className="font-mono font-semibold text-slate-800">
-                        {items.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} -{' '}
-                        {Math.min(items.length, currentPage * pageSize)}
-                      </span>
-                      개 표시
-                    </div>
-                    <span className="text-slate-300">|</span>
-                    <div className="flex items-center space-x-1.5">
-                      <span className="text-slate-500 text-[11.5px]">페이지당 행 수:</span>
-                      <select
-                        value={pageSize}
-                        onChange={(e) => {
-                          setPageSize(Number(e.target.value));
-                          setCurrentPage(1);
-                        }}
-                        className="px-2 py-0.5 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-700 cursor-pointer shadow-2xs outline-none"
-                      >
-                        <option value={10}>10개씩 보기</option>
-                        <option value={20}>20개씩 보기</option>
-                        <option value={30}>30개씩 보기</option>
-                        <option value={40}>40개씩 보기</option>
-                        <option value={50}>50개씩 보기</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* 좌우 네비게이션 버튼 그룹 (첫페이지, 이전, 번호, 다음, 끝페이지) */}
+                <div className="py-3.5 px-5 border-t border-slate-200/90 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-6 text-xs text-slate-500 shrink-0">
+                  {/* 중앙 번호 네비게이션 버튼 그룹 (첫페이지, 이전, 번호, 다음, 끝페이지) */}
                   <div className="flex items-center space-x-1">
                     {/* 첫 페이지 버튼 */}
                     <button
@@ -1355,6 +1325,38 @@ export default function MasterDataManagerPage() {
                     >
                       <ChevronsRight className="w-3.5 h-3.5" />
                     </button>
+                  </div>
+
+                  <span className="hidden sm:inline text-slate-300">|</span>
+
+                  {/* 건수 정보 및 페이지당 표시 행수 선택기 */}
+                  <div className="flex items-center space-x-3 text-slate-600">
+                    <div>
+                      총 <strong className="text-slate-900 font-bold">{items.length}</strong>개 항목 중{' '}
+                      <span className="font-mono font-semibold text-slate-800">
+                        {items.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} -{' '}
+                        {Math.min(items.length, currentPage * pageSize)}
+                      </span>
+                      개 표시
+                    </div>
+                    <span className="text-slate-300">|</span>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-slate-500 text-[11.5px]">페이지당 행 수:</span>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="px-2 py-0.5 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-700 cursor-pointer shadow-2xs outline-none"
+                      >
+                        <option value={10}>10개씩 보기</option>
+                        <option value={20}>20개씩 보기</option>
+                        <option value={30}>30개씩 보기</option>
+                        <option value={40}>40개씩 보기</option>
+                        <option value={50}>50개씩 보기</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}
