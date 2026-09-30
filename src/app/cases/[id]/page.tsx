@@ -1891,6 +1891,12 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const candidates = hasFiles ? (data?.candidates || []) : [];
   const finalBomItems = hasFiles ? (data?.finalBomItems || []) : [];
   const latestQuote = hasFiles ? data?.latestQuote : null;
+  const canUnlockQuote = Boolean(
+    user && (
+      ['SUPER_ADMIN', 'TENANT_ADMIN'].includes(user.role) ||
+      (latestQuote?.approved_by_user_id && (String(latestQuote.approved_by_user_id) === String(user.userId) || String(latestQuote.approved_by_user_id) === String(user.id)))
+    )
+  );
   const quoteItems = hasFiles ? (data?.quoteItems || []) : [];
 
   // 💎 Filtered and Counted Normalized Items for Tab 2 (Calculated inline without hook to avoid early-return violation)
@@ -2818,16 +2824,22 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                       {latestQuote.status} {latestQuote.is_locked ? '(잠금)' : '(수정가능)'}
                     </span>
                     {latestQuote.is_locked ? (
-                      <button
-                        type="button"
-                        onClick={() => handleUnlockQuote(latestQuote.id)}
-                        disabled={actionLoading}
-                        className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10.5px] font-bold inline-flex items-center space-x-1 cursor-pointer shadow-2xs transition-colors"
-                        title="견적서 잠금을 해제하여 단가 직접 수정 및 변경을 활성화합니다."
-                      >
-                        <Unlock className="w-2.5 h-2.5 shrink-0" />
-                        <span>수정 잠금해제</span>
-                      </button>
+                      canUnlockQuote ? (
+                        <button
+                          type="button"
+                          onClick={() => handleUnlockQuote(latestQuote.id)}
+                          disabled={actionLoading}
+                          className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10.5px] font-bold inline-flex items-center space-x-1 cursor-pointer shadow-2xs transition-colors"
+                          title="견적서 잠금을 해제하여 단가 직접 수정 및 변경을 활성화합니다."
+                        >
+                          <Unlock className="w-2.5 h-2.5 shrink-0" />
+                          <span>수정 잠금해제</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-semibold px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200" title="공식 승인된 견적서의 잠금 해제는 시스템 최고관리자 또는 승인권자만 가능합니다.">
+                          🔒 잠금보호
+                        </span>
+                      )
                     ) : null}
                   </div>
                 </div>
@@ -3454,16 +3466,22 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                         <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                         <span>최종 승인 완료 (수정 잠금 상태)</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleUnlockQuote(latestQuote.id)}
-                        disabled={actionLoading}
-                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-xs flex items-center space-x-1.5 cursor-pointer transition-colors"
-                        title="견적서 잠금을 해제하여 단가 직접 수정 및 검토를 다시 진행합니다."
-                      >
-                        <Unlock className="w-4 h-4" />
-                        <span>수정 잠금 해제 (DRAFT 복귀)</span>
-                      </button>
+                      {canUnlockQuote ? (
+                        <button
+                          type="button"
+                          onClick={() => handleUnlockQuote(latestQuote.id)}
+                          disabled={actionLoading}
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-xs flex items-center space-x-1.5 cursor-pointer transition-colors"
+                          title="견적서 잠금을 해제하여 단가 직접 수정 및 검토를 다시 진행합니다."
+                        >
+                          <Unlock className="w-4 h-4" />
+                          <span>수정 잠금 해제 (DRAFT 복귀)</span>
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400 font-semibold px-2.5 py-2 bg-slate-100 rounded-xl border border-slate-200" title="공식 승인된 견적서의 잠금 해제는 시스템 최고관리자 또는 승인권자만 가능합니다.">
+                          🔒 잠금보호 (관리자 전용)
+                        </span>
+                      )}
                     </div>
                   )}
 
