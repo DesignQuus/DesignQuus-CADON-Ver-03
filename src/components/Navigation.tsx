@@ -5,7 +5,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home, Users, Building2, LayoutDashboard, FileSpreadsheet, Database } from 'lucide-react';
-import { prefetchPageData } from '@/lib/cacheStore';
+import { prefetchPageData, warmupRoute } from '@/lib/cacheStore';
 
 export default function Navigation() {
   const [user, setUser] = useState<any>(null);
@@ -13,6 +13,36 @@ export default function Navigation() {
   const lastFetchRef = useRef<number>(0);
   const router = useRouter();
   const pathname = usePathname();
+
+  // 라우트 프리웜 헬퍼 (Next.js 번들 컴파일 선행 + 데이터 캐싱)
+  const handleLinkWarmup = (route: string) => {
+    try {
+      router.prefetch(route);
+      warmupRoute(route);
+    } catch {}
+  };
+
+  // 마운트 후 유휴 시간(Idle)에 GNB 주요 라우트 백그라운드 선행 컴파일 & 프리웜
+  useEffect(() => {
+    const warmTimer = setTimeout(() => {
+      const priorityRoutes = [
+        '/cases',
+        '/quotes',
+        '/admin/companies',
+        '/admin/masters',
+        '/admin/members',
+        '/admin/audit',
+      ];
+
+      priorityRoutes.forEach((route, idx) => {
+        setTimeout(() => {
+          handleLinkWarmup(route);
+        }, idx * 120);
+      });
+    }, 600);
+
+    return () => clearTimeout(warmTimer);
+  }, []);
 
   const fetchSession = async () => {
     try {
@@ -101,6 +131,9 @@ export default function Navigation() {
           <Link
             href="/"
             prefetch={true}
+            onMouseEnter={() => handleLinkWarmup('/')}
+            onTouchStart={() => handleLinkWarmup('/')}
+            onFocus={() => handleLinkWarmup('/')}
             className="flex items-center space-x-2"
             title="CADON 홈 대시보드로 이동"
           >
@@ -124,8 +157,9 @@ export default function Navigation() {
             <Link
               href="/"
               prefetch={true}
-              onMouseEnter={() => prefetchPageData('/')}
-              onTouchStart={() => prefetchPageData('/')}
+              onMouseEnter={() => handleLinkWarmup('/')}
+              onTouchStart={() => handleLinkWarmup('/')}
+              onFocus={() => handleLinkWarmup('/')}
               className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 pathname === '/'
                   ? 'bg-blue-50 text-blue-700 font-bold'
@@ -140,8 +174,9 @@ export default function Navigation() {
             <Link
               href="/cases"
               prefetch={true}
-              onMouseEnter={() => prefetchPageData('/cases')}
-              onTouchStart={() => prefetchPageData('/cases')}
+              onMouseEnter={() => handleLinkWarmup('/cases')}
+              onTouchStart={() => handleLinkWarmup('/cases')}
+              onFocus={() => handleLinkWarmup('/cases')}
               className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 (pathname === '/cases' || pathname.startsWith('/cases/'))
                   ? 'bg-blue-50 text-blue-700 font-bold'
@@ -170,8 +205,9 @@ export default function Navigation() {
             <Link
               href="/quotes"
               prefetch={true}
-              onMouseEnter={() => prefetchPageData('/quotes')}
-              onTouchStart={() => prefetchPageData('/quotes')}
+              onMouseEnter={() => handleLinkWarmup('/quotes')}
+              onTouchStart={() => handleLinkWarmup('/quotes')}
+              onFocus={() => handleLinkWarmup('/quotes')}
               className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 pathname.startsWith('/quotes')
                   ? 'bg-blue-50 text-blue-700 font-bold'
@@ -192,8 +228,9 @@ export default function Navigation() {
               <Link
                 href="/admin/companies"
                 prefetch={true}
-                onMouseEnter={() => prefetchPageData('/admin/companies')}
-                onTouchStart={() => prefetchPageData('/admin/companies')}
+                onMouseEnter={() => handleLinkWarmup('/admin/companies')}
+                onTouchStart={() => handleLinkWarmup('/admin/companies')}
+                onFocus={() => handleLinkWarmup('/admin/companies')}
                 className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   pathname.startsWith('/admin/companies')
                     ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
@@ -209,8 +246,9 @@ export default function Navigation() {
             <Link
               href="/admin/masters"
               prefetch={true}
-              onMouseEnter={() => prefetchPageData('/admin/masters')}
-              onTouchStart={() => prefetchPageData('/admin/masters')}
+              onMouseEnter={() => handleLinkWarmup('/admin/masters')}
+              onTouchStart={() => handleLinkWarmup('/admin/masters')}
+              onFocus={() => handleLinkWarmup('/admin/masters')}
               className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 pathname.startsWith('/admin/masters')
                   ? 'bg-blue-50 text-blue-700 font-bold'
@@ -227,6 +265,9 @@ export default function Navigation() {
               <Link
                 href="/admin/members"
                 prefetch={true}
+                onMouseEnter={() => handleLinkWarmup('/admin/members')}
+                onTouchStart={() => handleLinkWarmup('/admin/members')}
+                onFocus={() => handleLinkWarmup('/admin/members')}
                 className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   pathname.startsWith('/admin/members') || pathname.startsWith('/admin/permissions')
                     ? 'bg-blue-50 text-blue-700 font-bold'
@@ -248,8 +289,9 @@ export default function Navigation() {
               <Link
                 href="/admin/audit"
                 prefetch={true}
-                onMouseEnter={() => prefetchPageData('/admin/audit')}
-                onTouchStart={() => prefetchPageData('/admin/audit')}
+                onMouseEnter={() => handleLinkWarmup('/admin/audit')}
+                onTouchStart={() => handleLinkWarmup('/admin/audit')}
+                onFocus={() => handleLinkWarmup('/admin/audit')}
                 className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   pathname.startsWith('/admin/audit')
                     ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'

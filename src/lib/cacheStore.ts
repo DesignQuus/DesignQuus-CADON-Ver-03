@@ -174,6 +174,14 @@ export function prefetchPageData(route: string): void {
       if (!isCacheFresh('masters_settings', 60000)) {
         fetchWithCache('masters_settings', '/api/admin/masters?type=settings');
       }
+    } else if (route.startsWith('/admin/members')) {
+      // 사원·권한 관리 프리페치
+      if (!isCacheFresh('members', 20000)) {
+        fetchWithCache('members', '/api/admin/members');
+      }
+      if (!isCacheFresh('permissions', 30000)) {
+        fetchWithCache('permissions', '/api/admin/permissions');
+      }
     } else if (route.startsWith('/admin/audit')) {
       // 감사 로그 프리페치
       if (!isCacheFresh('audit_logs', 15000)) {
@@ -182,5 +190,31 @@ export function prefetchPageData(route: string): void {
     }
   } catch (e) {
     // 백그라운드 프리페치 실패는 조용히 무시
+  }
+}
+
+// 이미 워밍업된 라우트 추적
+const warmedRoutes = new Set<string>();
+
+/**
+ * Next.js 개발/운영 환경에서 클릭 지연을 0ms로 만들기 위한 백그라운드 프리웜
+ */
+export async function warmupRoute(route: string): Promise<void> {
+  if (typeof window === 'undefined' || warmedRoutes.has(route)) return;
+  warmedRoutes.add(route);
+
+  try {
+    // 1. 해당 페이지 API 데이터 사전 캐싱
+    prefetchPageData(route);
+
+    // 2. Next.js RSC & Webpack 컴파일 프리웜 핑 (브라우저 유휴 상태에서 저우선 비동기 요청)
+    fetch(route, {
+      headers: {
+        'RSC': '1',
+        'Next-Router-Prefetch': '1',
+      },
+    }).catch(() => {});
+  } catch {
+    // 무시
   }
 }
