@@ -81,7 +81,7 @@ export default function QuotesListPage() {
     quoteNo: ''
   });
   const [isDeletingQuote, setIsDeletingQuote] = useState(false);
-  const [deleteToast, setDeleteToast] = useState<{ text: string; showRestoreConfirm?: boolean } | null>(null);
+  const [deleteToast, setDeleteToast] = useState<{ text: string; showRestoreConfirm?: boolean; isError?: boolean } | null>(null);
 
   useEffect(() => {
     if (deleteToast) {

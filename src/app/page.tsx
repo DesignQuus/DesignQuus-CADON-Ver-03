@@ -58,15 +58,13 @@ interface UserProfile {
   myActiveCasesCount?: number;
 }
 
-export type PipelineStage = '0' | '1' | '2' | '3' | '4' | '5';
+export type PipelineStage = '1' | '2' | '3' | '4';
 
 export const PIPELINE_STAGE_LABELS: Record<PipelineStage, string> = {
-  '0': '도면 대기 (사전접수)',
-  '1': '1단계: 도면 접수',
-  '2': '2단계: AI 형상·치수 파싱',
-  '3': '3단계: 가상 BOM 추출',
-  '4': '4단계: 마스터 단가 매칭',
-  '5': '5단계: 공식 견적서 발행'
+  '1': '1단계: 도면 접수 & CAD 파싱',
+  '2': '2단계: 멀티레벨 BOM 자동 전개',
+  '3': '3단계: 단가 마스터 매칭 & 원가 산출',
+  '4': '4단계: 공식 견적서 발행 & 승인'
 };
 
 interface QuotationCase {
@@ -137,7 +135,7 @@ export default function HomePage() {
     quoteNo: ''
   });
   const [isDeletingQuote, setIsDeletingQuote] = useState(false);
-  const [deleteToast, setDeleteToast] = useState<{ text: string; showRestoreConfirm?: boolean } | null>(null);
+  const [deleteToast, setDeleteToast] = useState<{ text: string; showRestoreConfirm?: boolean; isError?: boolean } | null>(null);
 
   useEffect(() => {
     if (deleteToast) {
@@ -574,24 +572,20 @@ export default function HomePage() {
   const [pageSize, setPageSize] = useState<number>(5);
 
   // 5단계 스마트 분석 파이프라인 판별 헬퍼 (배너-테이블 1:1 연동)
-  // Stage '0': 도면 미첨부 (사전 접수 / 도면 대기)
-  // Stage '1': 도면 파일 접수 완료 (AI 도면 파싱 대기)
-  // Stage '2': AI 형상·치수 파싱 완료 (2D WebGL 60FPS 뷰어 가동)
-  // Stage '3': 가상 BOM 추출 완료 (표제란·계층구조 판독)
-  // Stage '4': 마스터 단가 매칭 / 검토 및 승인 대기
-  // Stage '5': 공식 견적서 발행 완료 (견적번호 채번)
+  // Stage '1': 도면 접수 & CAD 파싱 (DWG 업로드 및 WebGL 60FPS 파싱)
+  // Stage '2': 멀티레벨 BOM 자동 전개 (도곽·표제란·계층구조 판독)
+  // Stage '3': 단가 마스터 매칭 & 원가 산출 (단가 검토 및 공정 임가공 산출)
+  // Stage '4': 공식 견적서 발행 & 승인 (견적 금액 확정 및 엑셀 배포 완료)
   const getCasePipelineStage = (c: QuotationCase): PipelineStage => {
-    if (c.quote_total_amount && Number(c.quote_total_amount) > 0) return '5';
+    if (c.quote_total_amount && Number(c.quote_total_amount) > 0) return '4';
     if (c.bom_items_count > 0) {
       const stage = (c.lifecycle_stage || '').toUpperCase();
       if (stage.includes('PRICE') || stage.includes('REVIEW') || stage.includes('APPROV') || stage.includes('COST')) {
-        return '4';
+        return '3';
       }
-      return '3';
+      return '2';
     }
-    if (c.drawings_count > 0) return '2';
-    if (c.files_count && c.files_count > 0) return '1';
-    return '0';
+    return '1';
   };
 
   // Lifecycle Partitions (휴지통, 보관함, 활성 실무 프로젝트 분리)
@@ -611,7 +605,7 @@ export default function HomePage() {
     );
   }, [activeCases, user]);
 
-  // 단가 매칭/승인 검토 대기 건 (4단계: BOM 항목은 있으나 최종 견적이 미발행된 활성 건)
+  // 단가 매칭/승인 검토 대기 건 (3단계: BOM 항목은 있으나 최종 견적이 미발행된 활성 건)
   const pendingReviewCases = useMemo(() => {
     return activeCases.filter((c) => {
       const hasBom = Number(c.bom_items_count || 0) > 0;
@@ -620,10 +614,10 @@ export default function HomePage() {
     });
   }, [activeCases]);
 
-  // 파이프라인 단계별 실시간 건수 집계 (활성 프로젝트 대상, 0~5단계 배타적 할당)
+  // 파이프라인 단계별 실시간 건수 집계 (활성 프로젝트 대상, 1~4단계 배타적 할당)
   const pipelineCounts = useMemo(() => {
     const targetList = caseFilter === 'MY' ? myActiveCases : activeCases;
-    const counts: Record<PipelineStage, number> = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+    const counts: Record<PipelineStage, number> = { '1': 0, '2': 0, '3': 0, '4': 0 };
     for (const c of targetList) {
       const stage = getCasePipelineStage(c);
       counts[stage]++;
@@ -1030,51 +1024,24 @@ export default function HomePage() {
               </button>
 
               <div className="space-y-1 text-xs">
-                {/* Stage 0: 도면 대기 (사전 접수) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPipelineFilter((prev) => (prev === '0' ? 'ALL' : '0'));
-                    setCasePage(1);
-                  }}
-                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                    pipelineFilter === '0'
-                      ? 'border-slate-500 bg-slate-100/80 ring-2 ring-slate-400/30 shadow-xs'
-                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-slate-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">
-                      0
-                    </span>
-                    <div>
-                      <div className="font-extrabold text-slate-900">도면 대기 (사전접수)</div>
-                      <div className="text-[10px] text-slate-400">도면 파일 미첨부 의뢰</div>
-                    </div>
-                  </div>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['0'] > 0 ? 'bg-slate-700 text-white shadow-2xs' : 'bg-slate-100 text-slate-400'}`}>
-                    {pipelineCounts['0']}건
-                  </span>
-                </button>
-
-                {/* Step 1 */}
+                {/* Step 1: 도면 접수 & CAD 파싱 */}
                 <button
                   type="button"
                   onClick={() => {
                     setPipelineFilter((prev) => (prev === '1' ? 'ALL' : '1'));
                     setCasePage(1);
                   }}
-                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '1'
                       ? 'border-blue-400 bg-blue-50/70 ring-2 ring-blue-400/40 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-blue-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">1</span>
+                    <span className="w-5 h-5 rounded-md bg-blue-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">1</span>
                     <div>
-                      <div className="font-extrabold text-slate-900">도면 접수</div>
-                      <div className="text-[10px] text-slate-400">DWG 파일 접수·파싱 대기</div>
+                      <div className="font-extrabold text-slate-900">도면 접수 & CAD 파싱</div>
+                      <div className="text-[10px] text-slate-400">DWG 업로드·WebGL 60FPS 파싱</div>
                     </div>
                   </div>
                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['1'] > 0 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
@@ -1082,24 +1049,24 @@ export default function HomePage() {
                   </span>
                 </button>
 
-                {/* Step 2 */}
+                {/* Step 2: 멀티레벨 BOM 자동 전개 */}
                 <button
                   type="button"
                   onClick={() => {
                     setPipelineFilter((prev) => (prev === '2' ? 'ALL' : '2'));
                     setCasePage(1);
                   }}
-                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '2'
                       ? 'border-indigo-400 bg-indigo-50/70 ring-2 ring-indigo-400/40 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-indigo-500 text-white text-[10px] font-black flex items-center justify-center shrink-0">2</span>
+                    <span className="w-5 h-5 rounded-md bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">2</span>
                     <div>
-                      <div className="font-extrabold text-slate-900">AI 형상·치수 파싱</div>
-                      <div className="text-[10px] text-slate-400">60FPS WebGL 분할</div>
+                      <div className="font-extrabold text-slate-900">멀티레벨 BOM 자동 전개</div>
+                      <div className="text-[10px] text-slate-400">도곽·표제란·계층구조 판독</div>
                     </div>
                   </div>
                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['2'] > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
@@ -1107,78 +1074,53 @@ export default function HomePage() {
                   </span>
                 </button>
 
-                {/* Step 3 */}
+                {/* Step 3: 단가 마스터 매칭 & 원가 산출 */}
                 <button
                   type="button"
                   onClick={() => {
                     setPipelineFilter((prev) => (prev === '3' ? 'ALL' : '3'));
                     setCasePage(1);
                   }}
-                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '3'
-                      ? 'border-indigo-500 bg-indigo-50/80 ring-2 ring-indigo-500/40 shadow-xs'
+                      ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-400/40 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">3</span>
+                    <span className="w-5 h-5 rounded-md bg-amber-500 text-slate-900 text-[10px] font-black flex items-center justify-center shrink-0">3</span>
                     <div>
-                      <div className="font-extrabold text-slate-900">가상 BOM 추출</div>
-                      <div className="text-[10px] text-slate-400">표제란·계층구조 판독</div>
+                      <div className="font-extrabold text-slate-900">단가 마스터 매칭 & 원가 산출</div>
+                      <div className="text-[10px] text-slate-400">단가 검토·공정 임가공 산출</div>
                     </div>
                   </div>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['3'] > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['3'] > 0 ? 'bg-amber-500 text-slate-900' : 'bg-slate-100 text-slate-400'}`}>
                     {pipelineCounts['3']}건
                   </span>
                 </button>
 
-                {/* Step 4 */}
+                {/* Step 4: 공식 견적서 발행 & 승인 */}
                 <button
                   type="button"
                   onClick={() => {
                     setPipelineFilter((prev) => (prev === '4' ? 'ALL' : '4'));
                     setCasePage(1);
                   }}
-                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                     pipelineFilter === '4'
-                      ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-400/40 shadow-xs'
-                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-amber-500 text-slate-900 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
-                    <div>
-                      <div className="font-extrabold text-slate-900">마스터 단가 매칭</div>
-                      <div className="text-[10px] text-slate-400">단가 검토 및 승인 대기</div>
-                    </div>
-                  </div>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['4'] > 0 ? 'bg-amber-500 text-slate-900' : 'bg-slate-100 text-slate-400'}`}>
-                    {pipelineCounts['4']}건
-                  </span>
-                </button>
-
-                {/* Step 5 */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPipelineFilter((prev) => (prev === '5' ? 'ALL' : '5'));
-                    setCasePage(1);
-                  }}
-                  className={`w-full p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                    pipelineFilter === '5'
                       ? 'border-emerald-400 bg-emerald-50/70 ring-2 ring-emerald-400/40 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">5</span>
+                    <span className="w-5 h-5 rounded-md bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">4</span>
                     <div>
-                      <div className="font-extrabold text-slate-900">공식 견적서 발행</div>
-                      <div className="text-[10px] text-slate-400">견적채번 완료 및 엑셀</div>
+                      <div className="font-extrabold text-slate-900">공식 견적서 발행 & 승인</div>
+                      <div className="text-[10px] text-slate-400">전자결재 승인·엑셀 배포 완료</div>
                     </div>
                   </div>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['5'] > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                    {pipelineCounts['5']}건
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['4'] > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                    {pipelineCounts['4']}건
                   </span>
                 </button>
               </div>
@@ -1324,24 +1266,6 @@ export default function HomePage() {
               <span className="text-xs text-slate-300 hidden xl:inline">
                 실무 관제 활성: <strong className="text-white">{myActiveCases.length}건</strong> (전사 {activeCases.length}건)
               </span>
-              {pipelineCounts['0'] > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPipelineFilter((prev) => (prev === '0' ? 'ALL' : '0'));
-                    setCasePage(1);
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-extrabold transition-all cursor-pointer shadow-xs ${
-                    pipelineFilter === '0'
-                      ? 'bg-blue-400 text-slate-950 ring-2 ring-blue-300'
-                      : 'bg-white/10 text-blue-200 hover:bg-white/20 border border-white/20'
-                  }`}
-                  title="도면 미첨부로 분석 대기 중인 의뢰건만 필터링"
-                >
-                  <FileText className="w-3.5 h-3.5 text-blue-300" />
-                  <span>도면 대기 <strong>{pipelineCounts['0']}건</strong></span>
-                </button>
-              )}
               <Link
                 href="/cases"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-blue-100 hover:text-white border border-white/20 transition-all text-xs font-bold cursor-pointer"
@@ -1384,12 +1308,10 @@ export default function HomePage() {
                 <span className="text-[11px] font-extrabold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs animate-in fade-in">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
                   <span>
-                    {pipelineFilter === '0' && '도면 대기 (사전접수) 필터링'}
-                    {pipelineFilter === '1' && '1단계: 도면 접수 필터링'}
-                    {pipelineFilter === '2' && '2단계: AI 형상·치수 파싱 필터링'}
-                    {pipelineFilter === '3' && '3단계: 가상 BOM 추출 필터링'}
-                    {pipelineFilter === '4' && '4단계: 마스터 단가 매칭 대기 필터링'}
-                    {pipelineFilter === '5' && '5단계: 공식 견적서 발행 완료 필터링'}
+                    {pipelineFilter === '1' && '1단계: 도면 접수 & CAD 파싱 필터링'}
+                    {pipelineFilter === '2' && '2단계: 멀티레벨 BOM 자동 전개 필터링'}
+                    {pipelineFilter === '3' && '3단계: 단가 마스터 매칭 & 원가 산출 필터링'}
+                    {pipelineFilter === '4' && '4단계: 공식 견적서 발행 & 승인 필터링'}
                     {' '}({filteredCases.length}건)
                   </span>
                   <button
@@ -1407,10 +1329,8 @@ export default function HomePage() {
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              {pipelineFilter === '0'
-                ? '고객사로부터 의뢰는 접수되었으나 CAD 도면(DWG/DXF)이 아직 등록되지 않은 건입니다. 도면을 투입하여 실무 파이프라인을 가동하세요.'
-                : pipelineFilter !== 'ALL'
-                ? `상단 스마트 파이프라인에서 [${PIPELINE_STAGE_LABELS[pipelineFilter] || `${pipelineFilter}단계`}]를 선택하여 해당 진행 상태의 건만 집중 모니터링 중입니다.`
+              {pipelineFilter !== 'ALL'
+                ? `스마트 파이프라인에서 [${PIPELINE_STAGE_LABELS[pipelineFilter] || `${pipelineFilter}단계`}]를 선택하여 해당 진행 상태의 건만 집중 모니터링 중입니다.`
                 : caseFilter === 'MY'
                 ? `${user?.name || '담당자'} 담당자님이 진행 중인 활성 견적 건입니다. (총 ${myCasesCount}건)`
                 : `현재 시스템에서 진행 중인 전사 활성 견적 건입니다. (총 ${activeCases.length}건)`}
@@ -1572,7 +1492,7 @@ export default function HomePage() {
                       <span>전사 현황에서 보기 ({activeCases.length}건)</span>
                     </button>
                   )}
-                  {pipelineFilter === '0' && (
+                  {pipelineFilter === '1' && (
                     <button
                       type="button"
                       onClick={handleOpenUploadModal}

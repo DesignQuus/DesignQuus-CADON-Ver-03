@@ -412,7 +412,8 @@ export default function CasesPage() {
     }
   };
 
-  const fetchCases = async () => {
+  const fetchCases = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const res = await apiFetch('/api/quotation-cases');
       if (res.status === 401) {
@@ -432,7 +433,7 @@ export default function CasesPage() {
       // 캐시가 없을 때만 빈 배열 처리
       setCases((prev) => (prev.length > 0 ? prev : []));
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 

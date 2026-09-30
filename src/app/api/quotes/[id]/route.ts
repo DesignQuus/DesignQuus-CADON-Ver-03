@@ -54,9 +54,8 @@ export async function DELETE(
     try {
       await recordActivity(req, session, {
         activityType: 'DELETE',
-        targetType: 'QUOTE',
-        targetId: id,
-        details: `견적서 [${quote.quote_no}] 영구 삭제 완료 (작업자: ${session.name})`
+        quotationCaseId: quote?.quotation_case_id,
+        details: `견적서 [${quote?.quote_no || id}] 영구 삭제 완료 (작업자: ${session.name})`
       });
     } catch (auditErr: any) {
       console.warn('[DELETE /api/quotes/[id]] Audit log warning:', auditErr?.message);
