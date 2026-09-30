@@ -16,6 +16,7 @@ import QuotationDocumentPreview from '@/components/QuotationDocumentPreview';
 import FabricationFeaturesPanel from '@/components/FabricationFeaturesPanel';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
 import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
+import CadMiniDock from '@/components/CadMiniDock';
 import { getClientCache, setClientCache } from '@/lib/cacheStore';
 
 export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: string }> }) {
@@ -2552,7 +2553,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       )}
 
       {/* TAB 1: CAD File Upload & Viewer (PROMPT 03, 04, 05, 06, 18-R1, 18-R2) */}
-      <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${isSidebarOpen ? 'gap-2' : ''} items-start w-full relative` : "hidden"}>
+      <div className={activeTab === 'cad' ? 'flex flex-col lg:flex-row gap-2 items-start w-full relative' : "hidden"}>
           {/* Unified Upload & Files Left Panel (Collapsible) */}
           {isSidebarOpen ? (
             <div className="w-full lg:w-[340px] xl:w-[360px] shrink-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 animate-in fade-in slide-in-from-left-2 relative">
@@ -2782,8 +2783,8 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             </div>
           ) : null}
 
-          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
-          {!isSidebarOpen && (
+          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 사이드바 닫힘 & 도면 미등록 상태 시 표출 */}
+          {!isSidebarOpen && (!drawings || drawings.length === 0) && (
             <SidebarBookmarkTab
               mode="expand"
               onClick={() => setIsSidebarOpen(true)}
@@ -2791,6 +2792,19 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               icon={Folder}
               title={`도면 등록 패널 열기 (${files.length}개 도면 등록됨)`}
               positionOverride="absolute"
+            />
+          )}
+
+          {/* ⚡ CAD Mini Dock (초슬림 시트 퀵 내비게이션 레일 - 사이드바 닫힘 & 도면 분석 완료 시 고정 도킹) */}
+          {!isSidebarOpen && drawings && drawings.length > 0 && (
+            <CadMiniDock
+              drawings={drawings}
+              currentFocusIdx={externalFocusIdx}
+              onSelectDrawing={(idx) => {
+                setExternalFocusIdx(null);
+                setTimeout(() => setExternalFocusIdx(idx >= 0 ? idx : -1), 50);
+              }}
+              onOpenSidebar={() => setIsSidebarOpen(true)}
             />
           )}
 

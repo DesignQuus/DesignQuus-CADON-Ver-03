@@ -16,6 +16,8 @@ export interface AiCadAnalysisResult {
 
   // 1. 표제란 정밀 분석 (회사명, 도번, 프로젝트명, 리비전, 척도 등)
   titleBlockAnalysis: {
+    designerCompany?: string;
+    customerCompany?: string;
     detectedCompany: string;
     companyConfidence: number;
     projectName: string;
