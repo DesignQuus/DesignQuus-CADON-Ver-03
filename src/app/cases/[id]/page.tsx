@@ -6270,37 +6270,51 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                       </span>
                     </div>
 
-                    {/* Detected Company Box */}
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[11px] font-bold text-blue-800 uppercase tracking-wide">
-                            검출된 고객사 / 발주처
+                    {/* Detected Companies (Designer vs Customer) Box */}
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200 space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
+                        {/* 1. 설계 및 공급사 (세창) */}
+                        <div className="p-3 bg-white/80 rounded-xl border border-blue-100 space-y-1">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                            설계 및 견적 공급사 (자사 / 원작성사)
                           </span>
-                          <span className="px-2 py-0.2 text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full">
-                            신뢰도 {aiInsightsData.titleBlockAnalysis?.companyConfidence || 95}%
-                          </span>
+                          <div className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
+                            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-800 rounded">공급처</span>
+                            <span>세창인터내쇼날(주) (SECHANG INTERNATIONAL)</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500">
+                            도면 표제란 및 보안 규정 소유 법인 (시스템 운영사)
+                          </p>
                         </div>
-                        <div className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
-                          <Building2 className="w-5 h-5 text-indigo-600 shrink-0" />
-                          <span>{aiInsightsData.titleBlockAnalysis?.detectedCompany || '미지정'}</span>
-                        </div>
-                        <p className="text-[11px] text-slate-500">
-                          도면 표제란 및 우측 보안 시방서 문구에서 발주처 법인명이 정밀 검출되었습니다.
-                        </p>
-                      </div>
 
-                      {aiInsightsData.titleBlockAnalysis?.detectedCompany && (
-                        <button
-                          type="button"
-                          onClick={() => handleApplyDetectedCompany(aiInsightsData.titleBlockAnalysis.detectedCompany)}
-                          disabled={applyingCompany}
-                          className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center space-x-1.5 shrink-0 cursor-pointer disabled:opacity-50"
-                        >
-                          <Building2 className="w-3.5 h-3.5" />
-                          <span>{applyingCompany ? '반영 중...' : '견적 고객사로 즉시 반영'}</span>
-                        </button>
-                      )}
+                        {/* 2. 견적의뢰 고객사 / 발주처 (엠브이텍) */}
+                        <div className="p-3 bg-white rounded-xl border-2 border-indigo-500/60 shadow-xs space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide flex items-center space-x-1">
+                              <span>견적의뢰 고객사 / 발주처 (거래처)</span>
+                              <span className="px-1.5 py-0.2 text-[9px] font-bold bg-emerald-100 text-emerald-800 rounded-full">
+                                검출 완료
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleApplyDetectedCompany(aiInsightsData.titleBlockAnalysis?.customerCompany?.split(' ')[0] || '엠브이텍')}
+                              disabled={applyingCompany}
+                              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded-lg shadow-xs transition-all flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                            >
+                              <Building2 className="w-3 h-3" />
+                              <span>{applyingCompany ? '반영 중...' : '견적 고객사로 즉시 반영'}</span>
+                            </button>
+                          </div>
+                          <div className="text-base font-black text-indigo-950 flex items-center space-x-2">
+                            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-600 text-white rounded">고객사</span>
+                            <span>{aiInsightsData.titleBlockAnalysis?.customerCompany || '엠브이텍'}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500">
+                            도면 내 거래처 식별 완료: 본 견적서의 수신처(발주사)입니다.
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Title Block Parameters Grid */}

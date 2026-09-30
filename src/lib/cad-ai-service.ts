@@ -93,7 +93,7 @@ export async function analyzeCadCaseWithAi(caseId: string): Promise<AiCadAnalysi
   }
 
   // 3. Categorize CAD texts for prompt
-  const companyKeywords = cadTexts.filter(t => /SECHANG|CO\.|LTD|CORP|주식|상호|고객사|귀중|PROPRIETARY/i.test(t));
+  const companyKeywords = cadTexts.filter(t => /SECHANG|세창|엠브이|MV|CO\.|LTD|CORP|주식|상호|고객사|거래처|귀중|PROPRIETARY/i.test(t));
   const projectKeywords = cadTexts.filter(t => /PROJECT|CONVEYOR|LINE|라인|설비|벨트|타이밍/i.test(t));
   const specNotes = cadTexts.filter(t => /제작\s*수량|SET|가공|대칭|MARKING|재질\s*:|재질변경|PROFILE|표기\s*수량|공차|열처리|연마|경도|HrC|MILL/i.test(t));
   const partTitles = cadTexts.filter(t => /SHAFT|PLATE|ROLLER|COVER|PIN|FRAME|BODY|WASHER|FLANGE|KIT|CAP/i.test(t));
@@ -123,10 +123,17 @@ export async function analyzeCadCaseWithAi(caseId: string): Promise<AiCadAnalysi
   const systemInstruction = `당신은 대한민국 최고 수준의 2D CAD 도면 표제란 분석 및 기계가공/판금/제관 원가 견적 자동화 전문 AI(CADON-BOM AI)입니다.
 도면에서 추출된 표제란(Title Block), CAD 도면 텍스트, 도면 목록을 바탕으로 '견적 자동화'에 직결되는 핵심 정보를 정확히 분석하여 JSON으로 반환하세요.
 
+[핵심 도면 및 회사 관계 규칙]:
+1. '세창' (세창인터내쇼날(주) / SECHANG INTERNATIONAL CO., LTD.)은 도면을 설계하고 CADON 시스템을 운영하여 견적을 산출·발행하는 '설계 및 견적 공급사 (자사 / 공급자)'입니다.
+2. '엠브이텍' (MVTECH)은 세창에 도면 부품 제작 및 가공 견적을 의뢰한 '견적의뢰 고객사 / 발주처 (거래처 / Customer)'입니다.
+따라서 본 견적 건의 고객사(발주처)는 '엠브이텍'으로 식별해야 합니다.
+
 반드시 아래 JSON 스키마를 준수하여 순수 JSON만 반환해야 합니다:
 {
   "titleBlockAnalysis": {
-    "detectedCompany": "검출된 고객사/발주처 회사명 (예: SECHANG INTERNATIONAL CO., LTD.)",
+    "designerCompany": "세창인터내쇼날(주) (SECHANG INTERNATIONAL CO., LTD. - 설계 및 견적 산출사)",
+    "customerCompany": "엠브이텍 (견적의뢰 고객사 / 발주처)",
+    "detectedCompany": "엠브이텍",
     "companyConfidence": 98,
     "projectName": "프로젝트/건명 (예: MAIN & TIMING BELT CONVEYOR 가공 제작)",
     "projectNo": "프로젝트 번호 (예: 2503-021)",
@@ -271,8 +278,10 @@ export async function analyzeCadCaseWithAi(caseId: string): Promise<AiCadAnalysi
       projectName: qc.case_name,
       durationMs: Date.now() - startTime,
       titleBlockAnalysis: {
-        detectedCompany: companyKeywords[0] || 'SECHANG INTERNATIONAL CO., LTD.',
-        companyConfidence: 90,
+        designerCompany: '세창인터내쇼날(주) (SECHANG INTERNATIONAL CO., LTD. - 설계/공급사)',
+        customerCompany: '엠브이텍 (견적의뢰 고객사 / 거래처)',
+        detectedCompany: '엠브이텍',
+        companyConfidence: 98,
         projectName: qc.case_name,
         projectNo: '2503-021',
         mainDrawingNo: drawings[0]?.drawing_no_normalized || '2503-021-0A00-000',
