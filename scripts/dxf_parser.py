@@ -86,7 +86,7 @@ def get_bounding_box(entity):
         pass
     return {"min_x": 0.0, "min_y": 0.0, "max_x": 0.0, "max_y": 0.0}
 
-def parse_dxf_file(dxf_path: str) -> dict:
+def parse_dxf_file(dxf_path: str, text_and_frames_only: bool = False) -> dict:
     start_time = time.time()
     if not os.path.exists(dxf_path):
         return {"status": "ERROR", "error": "FILE_NOT_FOUND"}
@@ -96,12 +96,12 @@ def parse_dxf_file(dxf_path: str) -> dict:
         import contextlib
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             try:
-                doc = ezdxf.readfile(dxf_path, encoding='utf-8')
+                doc = ezdxf.readfile(dxf_path, encoding='utf-8', errors='surrogateescape')
             except Exception:
                 try:
-                    doc, _ = recover.readfile(dxf_path)
+                    doc = ezdxf.readfile(dxf_path, encoding='latin1', errors='ignore')
                 except Exception:
-                    doc = ezdxf.readfile(dxf_path, encoding='latin1')
+                    doc, _ = recover.readfile(dxf_path)
             
         msp = doc.modelspace()
         layers = [layer.dxf.name for layer in doc.layers]
@@ -139,6 +139,9 @@ def parse_dxf_file(dxf_path: str) -> dict:
             counts[t] = counts.get(t, 0) + 1
             bbox = get_bounding_box(e)
             update_bounds(bbox)
+
+            if text_and_frames_only and t not in ('LWPOLYLINE', 'POLYLINE', 'TEXT', 'MTEXT', 'INSERT', 'ATTRIB', 'ATTDEF'):
+                continue
             
             raw_text = getattr(e.dxf, 'text', None)
             if raw_text is None and t == 'MTEXT':

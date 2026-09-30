@@ -61,6 +61,7 @@ export async function processCadFilePipeline(
 
   let effectiveDxfPath = file.storage_path;
   const now = new Date().toISOString();
+  const tempDir = getStorageSubdir('temp');
 
   // 1. If DWG, run DWG Input Adapter (PROMPT 18 / 18-R1 / 18-R2)
   if (file.file_type === 'DWG') {
@@ -174,9 +175,22 @@ export async function processCadFilePipeline(
     })
     .catch((svgErr) => console.warn('Vector SVG generation non-blocking warning:', svgErr));
 
-  const parseResult = await runPythonScript('dxf_parser.py', [absoluteDxfPath]);
-  if (parseResult.status !== 'SUCCESS') {
-    return { success: false, error: parseResult.error_code || 'DXF_PARSE_FAILED' };
+  // 2. High-Performance Unified In-Memory Pipeline (Single-Pass 8-in-1 Engine)
+  const parseRunId = `parse_${Date.now()}`;
+  const tempPipelineJson = path.join(tempDir, `fast_pipeline_${parseRunId}.json`);
+  const analyzerRes = await runPythonScript('fast_cad_analyzer.py', [absoluteDxfPath, tempPipelineJson]);
+  
+  let pipelineResult = analyzerRes;
+  if (fs.existsSync(tempPipelineJson)) {
+    try {
+      pipelineResult = JSON.parse(fs.readFileSync(tempPipelineJson, 'utf-8'));
+    } catch (e) {
+      console.error('Failed to parse fast pipeline result json:', e);
+    }
+  }
+
+  if (pipelineResult.status !== 'SUCCESS') {
+    return { success: false, error: pipelineResult.error_code || 'DXF_PARSE_FAILED' };
   }
 
   // 💎 Idempotent cleanup: 동일 파일의 이전 parse_run에 적재된 중복 cad_objects 제거 및 상태 SUPERSEDED 전환
@@ -195,23 +209,23 @@ export async function processCadFilePipeline(
     console.warn('[cad-pipeline] Previous parse_runs idempotent cleanup warning:', cleanErr);
   }
 
-  const parseRunId = `parse_${Date.now()}`;
   await db.prepare(`
     INSERT INTO cad_parse_runs (
       id, source_file_id, dxf_version, total_entities, entity_counts_json,
       global_bounds_json, status, duration_ms, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    parseRunId, file.id, parseResult.dxf_version, parseResult.total_entities,
-    JSON.stringify(parseResult.entity_counts), JSON.stringify(parseResult.global_bounds),
-    'SUCCESS', parseResult.duration_ms, now
+    parseRunId, file.id, pipelineResult.dxf_version, pipelineResult.total_entities,
+    JSON.stringify(pipelineResult.entity_counts), JSON.stringify(pipelineResult.global_bounds),
+    'SUCCESS', pipelineResult.total_duration_ms, now
   );
 
-  // Insert CAD objects in batches via insertRows
-  if (parseResult.objects && parseResult.objects.length > 0) {
-    const batchSize = 500;
-    for (let b = 0; b < parseResult.objects.length; b += batchSize) {
-      const chunk = parseResult.objects.slice(b, b + batchSize).map((o: any, idx: number) => ({
+  // Fast indexing of text-like objects for full-text CAD search without DB locking
+  const textObjs = pipelineResult.text_objects || [];
+  if (textObjs.length > 0) {
+    const batchSize = 1000;
+    for (let b = 0; b < textObjs.length; b += batchSize) {
+      const chunk = textObjs.slice(b, b + batchSize).map((o: any, idx: number) => ({
         id: `cad_obj_${parseRunId}_${b + idx + 1}`,
         parse_run_id: parseRunId,
         handle: o.handle,
@@ -227,24 +241,7 @@ export async function processCadFilePipeline(
     }
   }
 
-  // 3. Detect Frames & Sheet Candidates (PROMPT 05)
-  const tempDir = getStorageSubdir('temp');
-  const tempCadJson = path.join(tempDir, `cad_${parseRunId}.json`);
-  fs.writeFileSync(tempCadJson, JSON.stringify(parseResult));
-
-  const frameResult = await runPythonScript('frame_detector.py', [tempCadJson]);
-  const tempFrameJson = path.join(tempDir, `frame_${parseRunId}.json`);
-  fs.writeFileSync(tempFrameJson, JSON.stringify(frameResult));
-
-  // 4. Detect Title Block & Metadata (PROMPT 06)
-  const titleBlockResult = await runPythonScript('title_block_detector.py', [tempCadJson, tempFrameJson]);
-  const tempTitleJson = path.join(tempDir, `title_${parseRunId}.json`);
-  fs.writeFileSync(tempTitleJson, JSON.stringify(titleBlockResult));
-
-  // 5. Structure Classification (PROMPT 07)
-  const structureResult = await runPythonScript('structure_classifier.py', [tempTitleJson]);
-  const tempStrucJson = path.join(tempDir, `struc_${parseRunId}.json`);
-  fs.writeFileSync(tempStrucJson, JSON.stringify(structureResult));
+  const structureResult = pipelineResult;
 
   // Save Drawings to DB (source_file_id 기반 격리 저장 - 다른 도면 데이터 보존)
   await db.prepare('DELETE FROM drawings WHERE quotation_case_id = ? AND (source_file_id = ? OR source_file_id IS NULL)').run(quotationCaseId, sourceFileId);
@@ -375,14 +372,10 @@ export async function processCadFilePipeline(
     await insertRows('drawing_relationships', relRows);
   }
 
-  // 6. Detect BOM Areas (PROMPT 08)
-  const bomAreaResult = await runPythonScript('bom_area_detector.py', [tempCadJson, tempStrucJson]);
-  const tempBomAreaJson = path.join(tempDir, `bom_area_${parseRunId}.json`);
-  fs.writeFileSync(tempBomAreaJson, JSON.stringify(bomAreaResult));
-
+  // 6. Detect BOM Areas (Computed in-memory by fast_cad_analyzer)
   await db.prepare('DELETE FROM bom_areas WHERE quotation_case_id = ? AND (source_file_id = ? OR source_file_id IS NULL)').run(quotationCaseId, sourceFileId);
-  if (bomAreaResult.bom_areas && bomAreaResult.bom_areas.length > 0) {
-    const baRows = bomAreaResult.bom_areas.map((ba: any, i: number) => ({
+  if (pipelineResult.bom_areas && pipelineResult.bom_areas.length > 0) {
+    const baRows = pipelineResult.bom_areas.map((ba: any, i: number) => ({
       id: `ba_${sourceFileId}_${i + 1}`,
       quotation_case_id: quotationCaseId,
       source_file_id: sourceFileId,
@@ -396,14 +389,10 @@ export async function processCadFilePipeline(
     await insertRows('bom_areas', baRows);
   }
 
-  // 7. Extract Raw BOM Rows (PROMPT 09)
-  const rawBomResult = await runPythonScript('bom_row_extractor.py', [tempCadJson, tempBomAreaJson]);
-  const tempRawBomJson = path.join(tempDir, `raw_bom_${parseRunId}.json`);
-  fs.writeFileSync(tempRawBomJson, JSON.stringify(rawBomResult));
-
+  // 7. Extract Raw BOM Rows (Computed in-memory by fast_cad_analyzer)
   await db.prepare('DELETE FROM raw_bom_items WHERE quotation_case_id = ? AND (source_file_id = ? OR source_file_id IS NULL)').run(quotationCaseId, sourceFileId);
-  if (rawBomResult.raw_bom_items && rawBomResult.raw_bom_items.length > 0) {
-    const rbRows = rawBomResult.raw_bom_items.map((rb: any, idx: number) => ({
+  if (pipelineResult.raw_bom_items && pipelineResult.raw_bom_items.length > 0) {
+    const rbRows = pipelineResult.raw_bom_items.map((rb: any, idx: number) => ({
       id: `rb_${sourceFileId}_${idx + 1}`,
       quotation_case_id: quotationCaseId,
       source_file_id: sourceFileId,
@@ -425,14 +414,10 @@ export async function processCadFilePipeline(
     await insertRows('raw_bom_items', rbRows);
   }
 
-  // 8. Multi-Level BOM & Quantity Roll-Up (PROMPT 10)
-  const multiLevelResult = await runPythonScript('multilevel_bom_builder.py', [tempRawBomJson, tempStrucJson, '1.0']);
-  const tempMultiJson = path.join(tempDir, `multi_${parseRunId}.json`);
-  fs.writeFileSync(tempMultiJson, JSON.stringify(multiLevelResult));
-
+  // 8. Multi-Level BOM & Quantity Roll-Up (Computed in-memory by fast_cad_analyzer)
   await db.prepare('DELETE FROM flattened_bom_items WHERE quotation_case_id = ?').run(quotationCaseId);
-  if (multiLevelResult.flattened_bom && multiLevelResult.flattened_bom.length > 0) {
-    const flatRows = multiLevelResult.flattened_bom.map((fb: any, idx: number) => ({
+  if (pipelineResult.flattened_bom && pipelineResult.flattened_bom.length > 0) {
+    const flatRows = pipelineResult.flattened_bom.map((fb: any, idx: number) => ({
       id: `fb_${quotationCaseId}_${idx + 1}`,
       quotation_case_id: quotationCaseId,
       item_key: fb.key,
@@ -449,15 +434,14 @@ export async function processCadFilePipeline(
     await insertRows('flattened_bom_items', flatRows);
   }
 
-  // 9. BOM Normalization (PROMPT 11)
-  const normResult = await runPythonScript('bom_normalizer.py', [tempMultiJson]);
+  // 9. BOM Normalization (Computed in-memory by fast_cad_analyzer)
   const tempNormJson = path.join(tempDir, `norm_${parseRunId}.json`);
-  fs.writeFileSync(tempNormJson, JSON.stringify(normResult));
+  fs.writeFileSync(tempNormJson, JSON.stringify({ normalized_items: pipelineResult.normalized_items || [] }));
 
   await db.prepare('DELETE FROM normalized_bom_items WHERE quotation_case_id = ?').run(quotationCaseId);
   const normIds: string[] = [];
-  if (normResult.normalized_items && normResult.normalized_items.length > 0) {
-    const normRows = normResult.normalized_items.map((ni: any, idx: number) => {
+  if (pipelineResult.normalized_items && pipelineResult.normalized_items.length > 0) {
+    const normRows = pipelineResult.normalized_items.map((ni: any, idx: number) => {
       const nId = `norm_${quotationCaseId}_${idx + 1}`;
       normIds.push(nId);
       return {
@@ -540,8 +524,10 @@ export async function processCadFilePipeline(
   }
 
   // Cleanup temp files
-  [tempCadJson, tempFrameJson, tempTitleJson, tempStrucJson, tempBomAreaJson, tempRawBomJson, tempMultiJson, tempNormJson, tempMastersJson].forEach(f => {
-    if (f && fs.existsSync(f)) fs.unlinkSync(f);
+  [tempPipelineJson, tempNormJson, tempMastersJson].forEach(f => {
+    if (f && fs.existsSync(f)) {
+      try { fs.unlinkSync(f); } catch {}
+    }
   });
 
   // Update Quotation Case status
