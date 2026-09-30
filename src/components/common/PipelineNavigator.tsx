@@ -61,14 +61,14 @@ export default function PipelineNavigator({
     {
       step: 2 as const,
       name: '2. AI 도면 파싱',
-      desc: '2D CAD 벡터 (60FPS WebGL)',
+      desc: '2D CAD 형상·치수 검토',
       href: `/cases/${caseId}?step=2`,
       icon: Scan
     },
     {
       step: 3 as const,
       name: '3. 가상 BOM 추출',
-      desc: '표제란·계층구조 판독 검증',
+      desc: '표제란·부품 계층 판독',
       href: `/cases/${caseId}?step=3`,
       icon: FileSpreadsheet
     },

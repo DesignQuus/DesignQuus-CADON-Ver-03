@@ -1735,51 +1735,14 @@ export default function CadViewer({
       ) : (
         /* 1단계용 기본 전문 툴바 */
         <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-800 text-xs">
-        {/* Left: Mode Switcher Tabs */}
+        {/* Left: Active File & View Mode Indicator */}
         <div className="flex items-center space-x-2.5 shrink-0">
-          {/* Seamless Mode Switcher Tabs */}
-          <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shadow-xs">
-            <button
-              onClick={() => handleSetViewMode('CAD')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${
-                viewMode === 'CAD'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>2D CAD 벡터 도면</span>
-              <span className={`px-1.5 py-0.2 rounded font-mono text-[10px] font-bold ${
-                viewMode === 'CAD' ? 'bg-blue-800 text-blue-100' : 'bg-slate-800 text-slate-400'
-              }`}>
-                WebGL 60 FPS
-              </span>
-            </button>
-
-            <button
-              onClick={() => handleSetViewMode('SHEET')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${
-                viewMode === 'SHEET'
-                  ? 'bg-amber-500 text-slate-950 shadow-xs'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>표제란 엑셀 시트</span>
-              <span className={`px-1.5 py-0.2 rounded font-mono text-[10px] font-bold ${
-                viewMode === 'SHEET' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400'
-              }`}>
-                {drawings.length}개
-              </span>
-            </button>
-          </div>
-
           {/* Active File Indicator */}
           {selectedFile && (
-            <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 bg-slate-950/90 border border-slate-800 rounded-xl text-xs text-slate-300 shadow-xs">
+            <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-950/90 border border-slate-800 rounded-xl text-xs text-slate-300 shadow-xs">
               <span className={`w-2 h-2 rounded-full shrink-0 ${drawings.length > 0 ? 'bg-emerald-400 ring-2 ring-emerald-400/30' : 'bg-amber-400 animate-pulse'}`} />
               <span className="text-slate-400">선택 도면:</span>
-              <span className="font-bold text-white truncate max-w-[200px]" title={selectedFile.original_file_name}>
+              <span className="font-bold text-white truncate max-w-[200px] sm:max-w-[280px]" title={selectedFile.original_file_name}>
                 {selectedFile.original_file_name}
               </span>
               <span className="px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 border border-blue-800/60 font-mono text-[10px]">
@@ -1787,6 +1750,16 @@ export default function CadViewer({
                   ? (drawings.length > 0 ? 'DWG (DXF 렌더링)' : 'DWG (분석 대기)')
                   : (selectedFile.file_type || 'CAD')}
               </span>
+              {viewMode === 'CAD' && (
+                <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded bg-blue-900/60 text-blue-200 border border-blue-700/50 font-mono text-[10px] font-bold">
+                  CAD 도면
+                </span>
+              )}
+              {viewMode === 'SHEET' && (
+                <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded bg-amber-900/60 text-amber-200 border border-amber-700/50 font-mono text-[10px] font-bold">
+                  표제란 시트 ({drawings.length}개)
+                </span>
+              )}
               {selectedDrawingIdx >= 0 && drawings[selectedDrawingIdx] && (
                 <span className="text-amber-300 font-mono font-bold text-[10px] bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/60 truncate max-w-[180px]" title={`${drawings[selectedDrawingIdx].drawing_no_raw}: ${drawings[selectedDrawingIdx].drawing_name_raw}`}>
                   시트: {drawings[selectedDrawingIdx].drawing_no_raw}
