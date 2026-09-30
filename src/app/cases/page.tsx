@@ -1459,7 +1459,7 @@ export default function CasesPage() {
 
         {/* Zone 4: Enterprise High-Density Table / Card Grid Section */}
         <div className="space-y-2">
-          {/* Header Context Banner: 현재 관제 모드 (김세창 담당 관제 vs 전사 공유 견적) */}
+          {/* Header Context Banner: 현재 관제 모드 (내 담당 관제 vs 전사 공유 견적) */}
           <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-0.5 pb-0.5">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">

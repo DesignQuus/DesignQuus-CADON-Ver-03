@@ -172,7 +172,7 @@ export default function LoginPage() {
                 onFocus={() => setIsReadOnly(false)}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="비밀번호를 입력하세요 (기본: 1234 또는 Cadon1234!@)"
+                placeholder="비밀번호를 입력하세요"
                 className="w-full pl-10 pr-11 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
               />
               <button
@@ -190,7 +190,7 @@ export default function LoginPage() {
           {/* Company Login Note */}
           <div className="px-3.5 py-2.5 bg-slate-50/90 rounded-xl border border-slate-200 flex items-center space-x-2.5 text-[11px] text-slate-600">
             <Building className="w-4 h-4 text-slate-400 shrink-0" />
-            <span>세창인터내쇼날 임직원 및 등록된 고객사 담당자는 발급받은 계정으로 로그인해 주세요.</span>
+            <span>사내 임직원 및 등록된 고객사 담당자는 발급받은 계정으로 로그인해 주세요.</span>
           </div>
 
           <button
@@ -201,23 +201,6 @@ export default function LoginPage() {
             <span>{loading ? '로그인 중...' : '로그인'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
-
-          {/* 김세창 견적담당자 퀵 원클릭 로그인 버튼 */}
-          <div className="pt-1">
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => {
-                setLoginId('001');
-                setPassword('1234');
-                executeLogin('001', '1234');
-              }}
-              className="w-full py-2.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 rounded-xl font-semibold text-xs transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
-            >
-              <User className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>김세창 견적담당자 (001) 원클릭 로그인</span>
-            </button>
-          </div>
         </form>
 
         {/* Audit Log Guarantee Note */}

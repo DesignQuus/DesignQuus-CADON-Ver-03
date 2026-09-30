@@ -417,7 +417,7 @@ export default function AdminCompaniesPage() {
           <div className="flex items-center space-x-4 border-t md:border-t-0 md:border-l border-slate-700/80 pt-3 md:pt-0 md:pl-5 shrink-0 text-xs">
             <div>
               <div className="text-slate-400 text-[11px]">본사 실무 담당자</div>
-              <div className="font-bold text-white text-sm">{sechangCompany.memberCount || 3}명 (김세창 외)</div>
+              <div className="font-bold text-white text-sm">{sechangCompany.memberCount ? `${sechangCompany.memberCount}명` : '등록 인원'}</div>
             </div>
             <button
               onClick={() => handleOpenEditModal(sechangCompany)}

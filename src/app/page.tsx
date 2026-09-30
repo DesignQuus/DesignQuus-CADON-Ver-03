@@ -617,7 +617,7 @@ export default function HomePage() {
   const archivedCases = useMemo(() => cases.filter(isCaseArchived), [cases]);
   const trashedCases = useMemo(() => cases.filter(isCaseDeleted), [cases]);
 
-  // 김세창 (또는 로그인 담당자)의 실제 활성 프로젝트 (보관/휴지통 제외)
+  // 로그인한 견적 담당자의 실제 활성 프로젝트 (보관/휴지통 제외)
   const myActiveCases = useMemo(() => {
     if (!user) return [];
     return activeCases.filter(
@@ -1709,7 +1709,7 @@ export default function HomePage() {
                             <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 flex items-center justify-center text-[10px] font-black shrink-0">
                               {user?.name ? user.name.slice(0, 1) : '나'}
                             </span>
-                            <span>{c.created_by_name || user?.name || '박세창'}</span>
+                            <span>{c.created_by_name || user?.name || '담당자'}</span>
                             <span className="text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.2 rounded shrink-0">
                               본인
                             </span>
