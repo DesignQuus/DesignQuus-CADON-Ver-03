@@ -758,6 +758,8 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       });
       if (res.ok) {
         await fetchData();
+        setWorkflowStep(2);
+        setIsSidebarOpen(false);
       } else {
         const err = await res.json();
         alert(err.error || '분석 실패');
@@ -2460,7 +2462,11 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
           currentStep={workflowStep}
           onStepChange={(s) => {
             setWorkflowStep(s);
-            if (s === 1) setIsSidebarOpen(true);
+            if (s === 1) {
+              setIsSidebarOpen(true);
+            } else if (s === 2 || s === 3) {
+              setIsSidebarOpen(false);
+            }
           }}
           stats={{
             unconfirmedCount: (() => {
@@ -2487,7 +2493,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             <span className="px-1.5 py-0.5 rounded bg-blue-600 font-semibold text-[10px] text-white">가이드</span>
             <span className="text-slate-300">
               {workflowStep === 1 && (
-                <span>1단계: 좌측 패널에서 고객사로부터 접수된 도면 파일(DWG, DXF)을 등록하고 관리하세요. 완료 후 상단 <strong>[2. AI 도면 파싱]</strong>을 클릭하세요.</span>
+                <span>1단계: 좌측 패널에서 고객사로부터 접수된 도면 파일(DWG, DXF)을 등록하고 관리하세요. 완료 후 상단 <button type="button" onClick={() => { setWorkflowStep(2); setIsSidebarOpen(false); }} className="font-bold underline text-blue-400 hover:text-blue-200 cursor-pointer">[2. AI 도면 파싱]</button>을 클릭하세요.</span>
               )}
               {workflowStep === 2 && (
                 <span>
@@ -2533,7 +2539,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 현재 등록된 도면 파일이 없습니다.
               </p>
               <p className="text-slate-600 text-[11px] mt-0.5">
-                좌측의 <strong>[통합 도면 파일 등록]</strong> 영역에 DWG 또는 DXF 도면 파일을 끌어다 놓으시면 AI 도면 분석 및 BOM 전개가 시작됩니다.
+                좌측의 <strong>[견적의뢰 도면 등록]</strong> 영역에 DWG 또는 DXF 도면 파일을 끌어다 놓으시면 AI 도면 분석 및 BOM 전개가 시작됩니다.
               </p>
             </div>
           </div>
@@ -2561,17 +2567,17 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 mode="collapse"
                 onClick={() => setIsSidebarOpen(false)}
                 label="접기"
-                title="도면 등록 패널 접기"
+                title="견적의뢰 도면 등록 패널 접기"
               />
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
                   <Upload className="w-4 h-4 text-blue-600" />
-                  <span>통합 도면 파일 등록</span>
+                  <span>견적의뢰 도면 등록</span>
                 </h2>
                 <button
                   onClick={() => setIsSidebarOpen(false)}
                   className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                  title="도면 등록 패널 접기"
+                  title="견적의뢰 도면 등록 패널 접기"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
@@ -2768,10 +2774,24 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                               <span>이 도면으로 분석 실행</span>
                             </button>
                           ) : (
-                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center space-x-1">
-                              <Check className="w-3 h-3 text-emerald-600" />
-                              <span>{drawings.length}개 도면 표시 중</span>
-                            </span>
+                            <div className="flex items-center space-x-1.5">
+                              <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center space-x-1">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span>{drawings.length}개 도면 표시 중</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setWorkflowStep(2);
+                                  setIsSidebarOpen(false);
+                                }}
+                                className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-bold transition-colors cursor-pointer"
+                                title="좌측 패널을 접고 2D CAD 전체 화면으로 검토합니다"
+                              >
+                                CAD 전체화면 →
+                              </button>
+                            </div>
                           )}
                         </div>
                       )}
@@ -2787,9 +2807,9 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             <SidebarBookmarkTab
               mode="expand"
               onClick={() => setIsSidebarOpen(true)}
-              label="도면등록"
+              label="도면접수"
               icon={Folder}
-              title={`도면 등록 패널 열기 (${files.length}개 도면 등록됨)`}
+              title={`견적의뢰 도면 등록 패널 열기 (${files.length}개 도면 등록됨)`}
               positionOverride="absolute"
             />
           )}

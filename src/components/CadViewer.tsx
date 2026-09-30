@@ -1405,7 +1405,7 @@ export default function CadViewer({
         </div>
         <h3 className="text-base font-bold text-white mb-2">등록된 도면 파일이 없습니다</h3>
         <p className="text-xs text-slate-400 mb-6 max-w-xl mx-auto whitespace-nowrap">
-          좌측 <strong className="text-slate-200">[통합 도면 파일 등록]</strong> 영역에 DWG 또는 DXF 도면 파일을 드래그 &amp; 드롭하여 등록해주세요.
+          좌측 <strong className="text-slate-200">[견적의뢰 도면 등록]</strong> 영역에 DWG 또는 DXF 도면 파일을 드래그 &amp; 드롭하여 등록해주세요.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-400 bg-slate-950/80 px-4 py-2 rounded-xl border border-slate-800/80">
           <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
