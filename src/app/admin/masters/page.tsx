@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/api';
 import { getClientCache, setClientCache, isCacheFresh, fetchWithCache } from '@/lib/cacheStore';
@@ -8,7 +8,8 @@ import {
   Database, Plus, Upload, Search, Download, Trash2, CheckCircle2,
   RefreshCw, FileSpreadsheet, ArrowLeft, Sliders, DollarSign,
   AlertCircle, Layers, X, Scissors, Flame, Sparkles, Wrench, Percent, Factory, ShieldCheck,
-  Target, Calculator, TrendingUp, ArrowRight, CheckSquare, Square, Save, ChevronDown, Tag
+  Target, Calculator, TrendingUp, ArrowRight, CheckSquare, Square, Save, ChevronDown, Tag,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 
 const MATERIAL_NAMES: Record<string, string> = {
@@ -146,6 +147,10 @@ export default function MasterDataManagerPage() {
   const [bulkCustomPriceInput, setBulkCustomPriceInput] = useState('');
   const [bulkCategory, setBulkCategory] = useState<string>('MACHINING');
   const [isApplyingCategory, setIsApplyingCategory] = useState<boolean>(false);
+
+  // 페이지네이션 상태 (10, 20, 30, 40, 50개씩 보기)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(20);
 
   // New Item Modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -397,14 +402,53 @@ export default function MasterDataManagerPage() {
     }
   };
 
-  // 체크박스 다중 선택 핸들러
-  const allSelected = items.length > 0 && items.every((it) => selectedIds.includes(it.id));
+  // ⚡ 페이지네이션 연동 품목 및 페이지 번호 계산
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+
+  const paginatedItems = useMemo(() => {
+    const startIdx = (currentPage - 1) * pageSize;
+    return items.slice(startIdx, startIdx + pageSize);
+  }, [items, currentPage, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter, pageSize]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  const getPageNumbers = () => {
+    const maxButtons = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+    let end = start + maxButtons - 1;
+
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(1, end - maxButtons + 1);
+    }
+
+    const pages: number[] = [];
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
+  // 체크박스 다중 선택 핸들러 (현재 페이지 기준 토글)
+  const allPageSelected = paginatedItems.length > 0 && paginatedItems.every((it) => selectedIds.includes(it.id));
 
   const handleToggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds([]);
+    if (allPageSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !paginatedItems.some((it) => it.id === id)));
     } else {
-      setSelectedIds(items.map((it) => it.id));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        paginatedItems.forEach((it) => next.add(it.id));
+        return Array.from(next);
+      });
     }
   };
 
@@ -1077,9 +1121,9 @@ export default function MasterDataManagerPage() {
                         type="button"
                         onClick={handleToggleSelectAll}
                         className="text-slate-500 hover:text-blue-600 transition-colors cursor-pointer flex items-center justify-center mx-auto"
-                        title={allSelected ? '전체 선택 해제' : '전체 선택'}
+                        title={allPageSelected ? '현재 페이지 전체 선택 해제' : '현재 페이지 전체 선택'}
                       >
-                        {allSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4" />}
+                        {allPageSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4" />}
                       </button>
                     </th>
                     <th className="py-2 px-3 w-12 text-center">No</th>
@@ -1107,110 +1151,213 @@ export default function MasterDataManagerPage() {
                       </td>
                     </tr>
                   ) : (
-                    items.map((it, idx) => (
-                      <tr
-                        key={it.id || it.master_code || `master-item-${idx}`}
-                        onClick={() => handleToggleSelect(it.id)}
-                        className={`transition-colors cursor-pointer select-none ${
-                          selectedIds.includes(it.id)
-                            ? 'bg-blue-50/80 hover:bg-blue-100/70 border-l-2 border-l-blue-600'
-                            : 'hover:bg-slate-50'
-                        }`}
-                        title="클릭하여 품목을 선택/해제합니다."
-                      >
-                        <td className="py-2 px-3 text-center">
-                          <div className="flex items-center justify-center">
-                            {selectedIds.includes(it.id) ? (
-                              <CheckSquare className="w-4 h-4 text-blue-600" />
-                            ) : (
-                              <Square className="w-4 h-4 text-slate-300 hover:text-slate-500" />
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-2 px-3 text-center text-slate-400 font-mono">{idx + 1}</td>
-                        <td className="py-2 px-3 font-mono font-bold text-slate-900">{it.master_code}</td>
-                        <td className="py-2 px-3 font-medium text-slate-900">{it.standard_name}</td>
-                        <td className="py-2 px-3 font-mono text-slate-600">{it.specification || '-'}</td>
-                        <td className="py-2 px-3 text-center font-mono">
-                          <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px]">
-                            {it.material || 'SS400'}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="relative inline-flex items-center">
-                            <select
-                              value={it.category || 'MACHINING'}
-                              onChange={(e) => handleInlineCategoryChange(it.id, e.target.value)}
-                              className={`appearance-none pl-2.5 pr-6 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all border outline-none shadow-2xs hover:brightness-95 ${
-                                it.category === 'MACHINING' ? 'bg-blue-100 text-blue-800 border-blue-300' :
-                                it.category === 'SHEET_METAL' ? 'bg-cyan-100 text-cyan-800 border-cyan-300' :
-                                it.category === 'CASTING' ? 'bg-orange-100 text-orange-800 border-orange-300' :
-                                it.category === 'COMMERCIAL' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
-                                it.category === 'ELECTRICAL' ? 'bg-purple-100 text-purple-800 border-purple-300' :
-                                it.category === 'ASSEMBLY' ? 'bg-indigo-100 text-indigo-800 border-indigo-300' :
-                                'bg-slate-100 text-slate-700 border-slate-300'
-                              }`}
-                              title="클릭하여 부품 유형 변경 (선택 시 즉시 저장)"
-                            >
-                              <option value="MACHINING" className="bg-white text-slate-800 font-medium">가공품</option>
-                              <option value="SHEET_METAL" className="bg-white text-slate-800 font-medium">판금/제관</option>
-                              <option value="CASTING" className="bg-white text-slate-800 font-medium">주조품</option>
-                              <option value="COMMERCIAL" className="bg-white text-slate-800 font-medium">규격철물</option>
-                              <option value="ELECTRICAL" className="bg-white text-slate-800 font-medium">전장/공압</option>
-                              <option value="ASSEMBLY" className="bg-white text-slate-800 font-medium">조립품</option>
-                            </select>
-                            <ChevronDown className="w-3 h-3 text-current opacity-60 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                          </div>
-                        </td>
-                        {selectedIds.includes(it.id) ? (
-                          <td className="py-1 px-3 text-right" onClick={(e) => e.stopPropagation()}>
-                            <div className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.5 shadow-2xs ring-2 ring-blue-100">
-                              <span className="text-slate-400 font-mono text-[11px]">₩</span>
-                              <input
-                                type="text"
-                                value={
-                                  it.unit_price > 0
-                                    ? it.unit_price.toLocaleString()
-                                    : ''
-                                }
-                                placeholder="0"
-                                onChange={(e) => handleInlinePriceChange(it.id, e.target.value)}
-                                className="w-24 text-right font-mono font-bold text-xs text-blue-700 outline-none bg-transparent"
-                              />
-                              {modifiedItems[it.id] !== undefined && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="수정됨 (저장 대기)" />
+                    paginatedItems.map((it, idx) => {
+                      const globalIdx = (currentPage - 1) * pageSize + idx + 1;
+                      return (
+                        <tr
+                          key={it.id || it.master_code || `master-item-${globalIdx}`}
+                          onClick={() => handleToggleSelect(it.id)}
+                          className={`transition-colors cursor-pointer select-none ${
+                            selectedIds.includes(it.id)
+                              ? 'bg-blue-50/80 hover:bg-blue-100/70 border-l-2 border-l-blue-600'
+                              : 'hover:bg-slate-50'
+                          }`}
+                          title="클릭하여 품목을 선택/해제합니다."
+                        >
+                          <td className="py-2 px-3 text-center">
+                            <div className="flex items-center justify-center">
+                              {selectedIds.includes(it.id) ? (
+                                <CheckSquare className="w-4 h-4 text-blue-600" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-300 hover:text-slate-500" />
                               )}
                             </div>
                           </td>
-                        ) : (
-                          <td
-                            className="py-2 px-3 text-right font-mono font-bold text-blue-700 text-xs hover:bg-blue-50/50 cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleSelect(it.id);
-                            }}
-                            title="클릭하여 단가 즉시 인라인 수정"
-                          >
-                            {it.unit_price > 0 ? `₩${it.unit_price.toLocaleString()}` : '-'}
+                          <td className="py-2 px-3 text-center text-slate-400 font-mono">{globalIdx}</td>
+                          <td className="py-2 px-3 font-mono font-bold text-slate-900">{it.master_code}</td>
+                          <td className="py-2 px-3 font-medium text-slate-900">{it.standard_name}</td>
+                          <td className="py-2 px-3 font-mono text-slate-600">{it.specification || '-'}</td>
+                          <td className="py-2 px-3 text-center font-mono">
+                            <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px]">
+                              {it.material || 'SS400'}
+                            </span>
                           </td>
-                        )}
-                        <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteItem(it.id, it.master_code);
-                            }}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                            title="삭제"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                          <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="relative inline-flex items-center">
+                              <select
+                                value={it.category || 'MACHINING'}
+                                onChange={(e) => handleInlineCategoryChange(it.id, e.target.value)}
+                                className={`appearance-none pl-2.5 pr-6 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all border outline-none shadow-2xs hover:brightness-95 ${
+                                  it.category === 'MACHINING' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                                  it.category === 'SHEET_METAL' ? 'bg-cyan-100 text-cyan-800 border-cyan-300' :
+                                  it.category === 'CASTING' ? 'bg-orange-100 text-orange-800 border-orange-300' :
+                                  it.category === 'COMMERCIAL' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                                  it.category === 'ELECTRICAL' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                                  it.category === 'ASSEMBLY' ? 'bg-indigo-100 text-indigo-800 border-indigo-300' :
+                                  'bg-slate-100 text-slate-700 border-slate-300'
+                                }`}
+                                title="클릭하여 부품 유형 변경 (선택 시 즉시 저장)"
+                              >
+                                <option value="MACHINING" className="bg-white text-slate-800 font-medium">가공품</option>
+                                <option value="SHEET_METAL" className="bg-white text-slate-800 font-medium">판금/제관</option>
+                                <option value="CASTING" className="bg-white text-slate-800 font-medium">주조품</option>
+                                <option value="COMMERCIAL" className="bg-white text-slate-800 font-medium">규격철물</option>
+                                <option value="ELECTRICAL" className="bg-white text-slate-800 font-medium">전장/공압</option>
+                                <option value="ASSEMBLY" className="bg-white text-slate-800 font-medium">조립품</option>
+                              </select>
+                              <ChevronDown className="w-3 h-3 text-current opacity-60 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            </div>
+                          </td>
+                          {selectedIds.includes(it.id) ? (
+                            <td className="py-1 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.5 shadow-2xs ring-2 ring-blue-100">
+                                <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                                <input
+                                  type="text"
+                                  value={
+                                    it.unit_price > 0
+                                      ? it.unit_price.toLocaleString()
+                                      : ''
+                                  }
+                                  placeholder="0"
+                                  onChange={(e) => handleInlinePriceChange(it.id, e.target.value)}
+                                  className="w-24 text-right font-mono font-bold text-xs text-blue-700 outline-none bg-transparent"
+                                />
+                                {modifiedItems[it.id] !== undefined && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="수정됨 (저장 대기)" />
+                                )}
+                              </div>
+                            </td>
+                          ) : (
+                            <td
+                              className="py-2 px-3 text-right font-mono font-bold text-blue-700 text-xs hover:bg-blue-50/50 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleSelect(it.id);
+                              }}
+                              title="클릭하여 단가 즉시 인라인 수정"
+                            >
+                              {it.unit_price > 0 ? `₩${it.unit_price.toLocaleString()}` : '-'}
+                            </td>
+                          )}
+                          <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteItem(it.id, it.master_code);
+                              }}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="삭제"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
+
+              {/* Standard Pagination Navigation Bar (프로젝트 통일 표준: 10/20/30/40/50개 보기 & 좌우 네비게이션) */}
+              {items.length > 0 && (
+                <div className="py-3 px-4 border-t border-slate-200/90 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 shrink-0">
+                  {/* 건수 정보 및 페이지당 표시 행수 선택기 */}
+                  <div className="flex items-center space-x-3 text-slate-600">
+                    <div>
+                      총 <strong className="text-slate-900 font-bold">{items.length}</strong>개 항목 중{' '}
+                      <span className="font-mono font-semibold text-slate-800">
+                        {items.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} -{' '}
+                        {Math.min(items.length, currentPage * pageSize)}
+                      </span>
+                      개 표시
+                    </div>
+                    <span className="text-slate-300">|</span>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-slate-500 text-[11.5px]">페이지당 행 수:</span>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="px-2 py-0.5 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-700 cursor-pointer shadow-2xs outline-none"
+                      >
+                        <option value={10}>10개씩 보기</option>
+                        <option value={20}>20개씩 보기</option>
+                        <option value={30}>30개씩 보기</option>
+                        <option value={40}>40개씩 보기</option>
+                        <option value={50}>50개씩 보기</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 좌우 네비게이션 버튼 그룹 (첫페이지, 이전, 번호, 다음, 끝페이지) */}
+                  <div className="flex items-center space-x-1">
+                    {/* 첫 페이지 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage <= 1}
+                      className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                      title="첫 페이지"
+                    >
+                      <ChevronsLeft className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* 이전 페이지 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage <= 1}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer flex items-center space-x-1 shadow-2xs"
+                      title="이전 페이지"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span>이전</span>
+                    </button>
+
+                    {/* 페이지 번호 버튼 목록 */}
+                    {getPageNumbers().map((pageNum) => (
+                      <button
+                        key={`page-${pageNum}`}
+                        type="button"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          currentPage === pageNum
+                            ? 'bg-blue-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    ))}
+
+                    {/* 다음 페이지 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer flex items-center space-x-1 shadow-2xs"
+                      title="다음 페이지"
+                    >
+                      <span>다음</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* 마지막 페이지 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage >= totalPages}
+                      className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                      title="마지막 페이지"
+                    >
+                      <ChevronsRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 3. 플로팅 다중 선택 & 인라인 일괄 작업 툴바 */}
