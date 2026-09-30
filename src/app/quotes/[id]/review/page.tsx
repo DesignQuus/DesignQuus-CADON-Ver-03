@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Send, CheckCircle2, RefreshCw, FileText, AlertTriangle, AlertCircle,
-  ExternalLink, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sparkles, Layers, Zap, Database, HelpCircle
+  ExternalLink, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sparkles, Layers, Zap, Database, HelpCircle, Coins
 } from 'lucide-react';
 import QuoteLineGrid, { QuoteReviewLine, InclusionType } from '@/components/review/QuoteLineGrid';
 import SmartBatchActionBar from '@/components/review/SmartBatchActionBar';
@@ -237,7 +237,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterType, setFilterType] = useState<string>('ALL');
-  const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
+  const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(true);
   const [isMasterDrawerOpen, setIsMasterDrawerOpen] = useState<boolean>(false);
   const [isPilotModalOpen, setIsPilotModalOpen] = useState<boolean>(false);
   const [isBatchMasterModalOpen, setIsBatchMasterModalOpen] = useState<boolean>(false);
@@ -2207,19 +2207,31 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       </div>
 
       {/* 하단 패널 접기/펼치기 토글 바 */}
-      <div className="bg-slate-200 border-t border-b border-slate-300 px-4 py-1 flex items-center justify-between text-xs text-slate-600 shrink-0 select-none">
+      <div className="bg-slate-200 border-t border-b border-slate-300 px-4 py-1.5 flex items-center justify-between text-xs text-slate-600 shrink-0 select-none">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-[11px] text-slate-600">
-            {isBottomCollapsed ? '하단 원가·마스터 패널이 접혀 있습니다 (F2로 펼치기)' : '원가 상세 분해 & 사내 마스터 TOP-3 추천 비교'}
+          <span className="font-bold text-[11px] text-slate-700 flex items-center gap-1.5">
+            <Coins className="w-3.5 h-3.5 text-slate-500" />
+            <span>원가 상세 분해 & 사내 마스터 TOP-3 추천 비교</span>
           </span>
+          {isBottomCollapsed && selectedLine && (
+            <span className="text-[10px] text-slate-500 bg-white/80 px-2 py-0.5 rounded border border-slate-200 hidden sm:inline">
+              현재 선택: <strong className="text-slate-800">{selectedLine.partName || selectedLine.drawingNo}</strong>
+            </span>
+          )}
         </div>
         <button
+          type="button"
           onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
-          className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-[11px] font-medium transition-colors shadow-2xs cursor-pointer"
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer ${
+            isBottomCollapsed
+              ? 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-600'
+              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300'
+          }`}
+          title={isBottomCollapsed ? '원가 상세 분해 및 사내 마스터 추천 카드를 펼칩니다 (단축키: F2)' : '하단 패널을 접어 도면과 BOM 목록을 넓게 봅니다 (단축키: F2)'}
         >
           {isBottomCollapsed ? (
             <>
-              <ChevronUp className="w-3.5 h-3.5 text-blue-600" />
+              <ChevronUp className="w-3.5 h-3.5" />
               <span>원가·마스터 패널 펼치기 (F2)</span>
             </>
           ) : (
