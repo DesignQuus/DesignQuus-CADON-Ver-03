@@ -101,11 +101,12 @@ export async function authenticateUser(loginId: string, plainPass: string): Prom
   }
   if (!valid) return null;
 
-  try {
-    await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
-  } catch (updateErr: any) {
-    console.warn('[authenticateUser] Non-critical last_login_at update warning:', updateErr?.message);
-  }
+  // 비차단 백그라운드 업데이트: 로그인 응답 속도 극대화 (응답 지연 0ms)
+  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?')
+    .run(new Date().toISOString(), user.id)
+    .catch((updateErr: any) => {
+      console.warn('[authenticateUser] Non-critical last_login_at update warning:', updateErr?.message);
+    });
 
   const tenantId = user.tenant_id || user.company_id || 'comp_unassigned';
   return {

@@ -16,15 +16,13 @@ export async function POST(req: NextRequest) {
 
     const token = await createSession(session);
 
-    // Audit log: LOGIN (Non-blocking safe execution)
-    try {
-      await recordActivity(req, session, {
-        activityType: 'LOGIN',
-        details: `${session.name} (${session.loginId}) 담당자 시스템 접속 로그인 완료`
-      });
-    } catch (auditErr: any) {
+    // Audit log: LOGIN (Non-blocking background execution for fast response)
+    recordActivity(req, session, {
+      activityType: 'LOGIN',
+      details: `${session.name} (${session.loginId}) 담당자 시스템 접속 로그인 완료`
+    }).catch((auditErr: any) => {
       console.warn('[LOGIN] Non-critical audit log warning:', auditErr?.message);
-    }
+    });
 
     const res = NextResponse.json({ success: true, user: session, token });
     res.cookies.set('cadon_session', token, {

@@ -26,15 +26,20 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // 브라우저 캐시 자동완성 강제 주입 차단
+  // 브라우저 캐시 자동완성 강제 주입 차단 및 주요 목적지 사전 로드 (Prefetching)
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoginId('');
       setPassword('');
       setIsReadOnly(false);
     }, 80);
+
+    // 로그인 후 이동할 주요 경로 백그라운드 사전 로드 (지연 시간 0ms 달성)
+    router.prefetch('/');
+    router.prefetch('/admin/companies');
+
     return () => clearTimeout(timer);
-  }, []);
+  }, [router]);
 
   const executeLogin = async (idToLogin: string, passToLogin: string) => {
     setError('');
@@ -65,7 +70,10 @@ export default function LoginPage() {
 
         const params = new URLSearchParams(window.location.search);
         const redirectUrl = params.get('redirect') || (data.user?.role === 'SUPER_ADMIN' ? '/admin/companies' : '/');
-        window.location.replace(redirectUrl);
+        
+        // 브라우저 전체 새로고침(하드 리로드) 대신 고속 SPA 라우팅 적용
+        router.replace(redirectUrl);
+        router.refresh();
       }
     } catch (err: any) {
       setError(err.message);
