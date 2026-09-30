@@ -100,7 +100,11 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error('GET /api/admin/departments error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    let msg = error.message || '부서 목록을 불러오지 못했습니다.';
+    if (msg.includes('X-Api-Key') || msg.toLowerCase().includes('unauthorized')) {
+      msg = '데이터베이스 인증 연결을 확인 중입니다. 잠시 후 다시 시도해 주세요.';
+    }
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }
 
@@ -235,6 +239,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: '유효하지 않은 액션입니다.' }, { status: 400 });
   } catch (error: any) {
     console.error('POST /api/admin/departments error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    let msg = error.message || '부서 정보 저장 중 오류가 발생했습니다.';
+    if (msg.includes('X-Api-Key') || msg.toLowerCase().includes('unauthorized')) {
+      msg = '데이터베이스 인증 연결을 확인 중입니다. 잠시 후 다시 시도해 주세요.';
+    }
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

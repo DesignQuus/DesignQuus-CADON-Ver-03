@@ -415,6 +415,7 @@ export default function MembersManagementPage() {
         const data = await res.json();
         if (!data.success) {
           setDeptModalError(data.error || "부서 순서 저장에 실패했습니다.");
+          setTimeout(() => setDeptModalError(""), 4000);
           await fetchDepartments();
         } else {
           setReorderSaving(false);
@@ -423,6 +424,7 @@ export default function MembersManagementPage() {
         }
       } catch (err: any) {
         setDeptModalError(err.message || "통신 오류");
+        setTimeout(() => setDeptModalError(""), 4000);
         await fetchDepartments();
       } finally {
         setReorderSaving(false);
