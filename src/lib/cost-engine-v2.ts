@@ -7,8 +7,12 @@ export type PartType =
   | 'MACHINING'
   | 'SHEET_METAL'
   | 'CASTING'
+  | 'INJECTION'
   | 'COMMERCIAL'
+  | 'MECHANICAL'
   | 'ELECTRICAL'
+  | 'IMPORTED'
+  | 'SUPPLIED'
   | 'ASSEMBLY'
   | 'UNCLASSIFIED';
 
@@ -17,8 +21,12 @@ export interface PriceBasisRecord {
     | 'CASTING_MODEL'
     | 'MACHINING_MODEL'
     | 'SHEET_METAL_MODEL'
+    | 'INJECTION_MODEL'
     | 'COMMERCIAL_CATALOG'
+    | 'MECHANICAL_CATALOG'
     | 'ELECTRICAL_CATALOG'
+    | 'IMPORTED_CATALOG'
+    | 'SUPPLIED_CATALOG'
     | 'ASSEMBLY_ROLLUP'
     | 'MANUAL';
   calcFormulaJson: Record<string, any>;

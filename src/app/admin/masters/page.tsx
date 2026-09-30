@@ -12,6 +12,13 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 
+import {
+  PART_CATEGORIES,
+  getPartCategoryLabel,
+  getPartCategoryBadgeClass,
+  normalizePartCategoryFromText
+} from '@/lib/part-categories';
+
 const MATERIAL_NAMES: Record<string, string> = {
   'SS400': '일반구조용 탄소강',
   'S45C': '기계구조용 탄소강',
@@ -28,12 +35,17 @@ const MATERIAL_NAMES: Record<string, string> = {
   'POM': '아세탈 (POM 폴리아세탈)'
 };
 
-const CATEGORY_STAT_KEYS: Record<string, 'machining' | 'sheetMetal' | 'casting' | 'commercial' | 'electrical' | 'assembly'> = {
+const CATEGORY_STAT_KEYS: Record<string, 'machining' | 'sheetMetal' | 'casting' | 'injection' | 'commercial' | 'mechanical' | 'electrical' | 'imported' | 'supplied' | 'assembly'> = {
   MACHINING: 'machining',
   SHEET_METAL: 'sheetMetal',
   CASTING: 'casting',
+  INJECTION: 'injection',
   COMMERCIAL: 'commercial',
+  FASTENER: 'commercial',
+  MECHANICAL: 'mechanical',
   ELECTRICAL: 'electrical',
+  IMPORTED: 'imported',
+  SUPPLIED: 'supplied',
   ASSEMBLY: 'assembly'
 };
 
@@ -173,15 +185,31 @@ export default function MasterDataManagerPage() {
     machining: number;
     sheetMetal: number;
     casting: number;
+    injection: number;
     commercial: number;
+    mechanical: number;
     electrical: number;
+    imported: number;
+    supplied: number;
     assembly: number;
   }>(() => {
     try {
       const cached = getClientCache<any>('masters_items_ALL');
       if (cached?.stats) return cached.stats;
     } catch {}
-    return { total: 0, machining: 0, sheetMetal: 0, casting: 0, commercial: 0, electrical: 0, assembly: 0 };
+    return {
+      total: 0,
+      machining: 0,
+      sheetMetal: 0,
+      casting: 0,
+      injection: 0,
+      commercial: 0,
+      mechanical: 0,
+      electrical: 0,
+      imported: 0,
+      supplied: 0,
+      assembly: 0
+    };
   });
 
   // Settings State: 0ms Lazy Initializer
@@ -489,12 +517,7 @@ export default function MasterDataManagerPage() {
         '표준품명': it.standard_name,
         '규격(Spec)': it.specification || '-',
         '재질': it.material || 'SS400',
-        '부품유형': it.category === 'MACHINING' ? '가공품' :
-                    it.category === 'SHEET_METAL' ? '판금/제관' :
-                    it.category === 'CASTING' ? '주조품' :
-                    it.category === 'COMMERCIAL' ? '규격철물' :
-                    it.category === 'ELECTRICAL' ? '전장/공압' :
-                    it.category === 'ASSEMBLY' ? '조립품' : (it.category || '미분류'),
+        '부품유형': getPartCategoryLabel(it.category),
         '공인기준단가(원)': it.unit_price || 0,
         '단위': it.unit || 'EA'
       }));
@@ -647,12 +670,7 @@ export default function MasterDataManagerPage() {
         throw new Error(errJson.error || '일괄 부품 유형 저장 실패');
       }
 
-      const catLabel =
-        bulkCategory === 'MACHINING' ? '가공품' :
-        bulkCategory === 'SHEET_METAL' ? '판금/제관' :
-        bulkCategory === 'CASTING' ? '주조품' :
-        bulkCategory === 'COMMERCIAL' ? '규격철물' :
-        bulkCategory === 'ELECTRICAL' ? '전장/공압' : '조립품';
+      const catLabel = getPartCategoryLabel(bulkCategory);
 
       alert(`선택된 ${selectedIds.length}개 품목의 부품 유형이 [${catLabel}]으로 일괄 변경 및 저장되었습니다.`);
     } catch (err: any) {
@@ -813,7 +831,7 @@ export default function MasterDataManagerPage() {
         { '항목': '품명', '필수여부': '필수', '허용값 / 설명': '표준 부품 명칭 (예: MOTOR SHAFT, BASE PLATE 등)' },
         { '항목': '규격(Spec)', '필수여부': '선택', '허용값 / 설명': '치수 또는 사양 (예: 150x120x10T, DIA 25x300L, M8x25L 등)' },
         { '항목': '재질', '필수여부': '선택', '허용값 / 설명': 'SS400, S45C, SUS304, SUS316, AL6061, FC250 등 (미입력 시 기본값 SS400)' },
-        { '항목': '부품분류', '필수여부': '선택', '허용값 / 설명': '가공품, 판금/제관, 주조품, 규격철물, 전장/모터, 조립품 중 하나 입력 (미입력 시 가공품)' },
+        { '항목': '부품분류', '필수여부': '선택', '허용값 / 설명': '가공품, 판금/제관, 사출/성형, 기계요소, 규격철물, 전장/공압, 주조품, 해외수입, 고객사급, 조립품 중 하나 입력 (미입력 시 가공품)' },
         { '항목': '기준단가', '필수여부': '선택', '허용값 / 설명': '숫자만 입력 (단위: 원, 쉼표 제외 권장, 예: 45000)' },
         { '항목': '단위', '필수여부': '선택', '허용값 / 설명': 'EA, SET, M, KG 등 (미입력 시 기본값 EA)' },
         { '항목': '비고', '필수여부': '선택', '허용값 / 설명': '용도, 가공 특이사항, 구매처 등 참고사항' }
@@ -863,13 +881,7 @@ export default function MasterDataManagerPage() {
           const normalizedRows = rows.map((row: any) => {
             // 부품분류 텍스트를 영문 카테고리 코드로 변환
             const rawCategory = (row['부품분류'] || row['분류'] || row['카테고리'] || row['category'] || '').toString().trim();
-            let category = 'MACHINING';
-            if (rawCategory.includes('판금') || rawCategory.includes('제관') || rawCategory === 'SHEET_METAL') category = 'SHEET_METAL';
-            else if (rawCategory.includes('주조') || rawCategory.includes('주물') || rawCategory === 'CASTING') category = 'CASTING';
-            else if (rawCategory.includes('철물') || rawCategory.includes('규격') || rawCategory.includes('볼트') || rawCategory === 'COMMERCIAL') category = 'COMMERCIAL';
-            else if (rawCategory.includes('전장') || rawCategory.includes('모터') || rawCategory.includes('공압') || rawCategory === 'ELECTRICAL') category = 'ELECTRICAL';
-            else if (rawCategory.includes('조립') || rawCategory.includes('모듈') || rawCategory === 'ASSEMBLY') category = 'ASSEMBLY';
-            else if (rawCategory.includes('가공') || rawCategory === 'MACHINING') category = 'MACHINING';
+            const category = normalizePartCategoryFromText(rawCategory);
 
             return {
               master_code: (row['품목코드(필수)'] || row['품목코드'] || row['도면번호'] || row['코드'] || row['master_code'] || '').toString().trim(),
@@ -1002,35 +1014,51 @@ export default function MasterDataManagerPage() {
       <main className="flex-1 w-full px-2.5 sm:px-3 pt-2 pb-4 space-y-2.5">
         {activeTab === 'products' ? (
           <>
-            {/* Top Stat Cards: 6대 실무 분류 (컴팩트 고밀도 여백) */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
-              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-slate-500 block leading-tight">전체 표준 품목</span>
-                <span className="text-base font-black text-slate-900 font-mono mt-0.5 block leading-tight">{stats.total.toLocaleString()}개</span>
+            {/* Top Stat Cards: 10대 제조업 표준 분류 */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-1.5">
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-slate-500 block leading-tight">전체 표준 품목</span>
+                <span className="text-sm font-black text-slate-900 font-mono mt-0.5 block leading-tight">{stats.total.toLocaleString()}개</span>
               </div>
-              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-blue-600 block leading-tight">기계 가공품</span>
-                <span className="text-base font-black text-blue-700 font-mono mt-0.5 block leading-tight">{stats.machining.toLocaleString()}종</span>
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-blue-600 block leading-tight">기계 가공품</span>
+                <span className="text-sm font-black text-blue-700 font-mono mt-0.5 block leading-tight">{(stats.machining || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-cyan-600 block leading-tight">판금/제관품</span>
-                <span className="text-base font-black text-cyan-700 font-mono mt-0.5 block leading-tight">{stats.sheetMetal.toLocaleString()}종</span>
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-cyan-600 block leading-tight">판금/제관품</span>
+                <span className="text-sm font-black text-cyan-700 font-mono mt-0.5 block leading-tight">{(stats.sheetMetal || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-orange-600 block leading-tight">주조/주물품</span>
-                <span className="text-base font-black text-orange-700 font-mono mt-0.5 block leading-tight">{stats.casting.toLocaleString()}종</span>
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-pink-600 block leading-tight">사출/성형품</span>
+                <span className="text-sm font-black text-pink-700 font-mono mt-0.5 block leading-tight">{(stats.injection || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-emerald-600 block leading-tight">규격 철물</span>
-                <span className="text-base font-black text-emerald-700 font-mono mt-0.5 block leading-tight">{stats.commercial.toLocaleString()}종</span>
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-teal-600 block leading-tight">기계요소</span>
+                <span className="text-sm font-black text-teal-700 font-mono mt-0.5 block leading-tight">{(stats.mechanical || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-purple-600 block leading-tight">전장/공압품</span>
-                <span className="text-base font-black text-purple-700 font-mono mt-0.5 block leading-tight">{stats.electrical.toLocaleString()}종</span>
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-emerald-600 block leading-tight">규격 철물</span>
+                <span className="text-sm font-black text-emerald-700 font-mono mt-0.5 block leading-tight">{(stats.commercial || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1.5 px-3 rounded-xl border border-slate-200 shadow-2xs">
-                <span className="text-[11px] font-bold text-indigo-600 block leading-tight">조립품(모듈)</span>
-                <span className="text-base font-black text-indigo-700 font-mono mt-0.5 block leading-tight">{stats.assembly.toLocaleString()}종</span>
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-amber-600 block leading-tight">전장/공압품</span>
+                <span className="text-sm font-black text-amber-700 font-mono mt-0.5 block leading-tight">{(stats.electrical || 0).toLocaleString()}종</span>
+              </div>
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-orange-600 block leading-tight">주조/단조품</span>
+                <span className="text-sm font-black text-orange-700 font-mono mt-0.5 block leading-tight">{(stats.casting || 0).toLocaleString()}종</span>
+              </div>
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-violet-600 block leading-tight">해외 수입품</span>
+                <span className="text-sm font-black text-violet-700 font-mono mt-0.5 block leading-tight">{(stats.imported || 0).toLocaleString()}종</span>
+              </div>
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-slate-600 block leading-tight">고객 사급품</span>
+                <span className="text-sm font-black text-slate-700 font-mono mt-0.5 block leading-tight">{(stats.supplied || 0).toLocaleString()}종</span>
+              </div>
+              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-indigo-600 block leading-tight">조립품(모듈)</span>
+                <span className="text-sm font-black text-indigo-700 font-mono mt-0.5 block leading-tight">{(stats.assembly || 0).toLocaleString()}종</span>
               </div>
             </div>
 
@@ -1055,22 +1083,17 @@ export default function MasterDataManagerPage() {
                 </button>
               </form>
 
-              {/* Category Filter Chips (6대 실무 분류) */}
+              {/* Category Filter Chips (10대 실무 분류) */}
               <div className="flex items-center flex-wrap gap-1 text-xs">
                 {[
                   { id: 'ALL', label: '전체' },
-                  { id: 'MACHINING', label: '가공품' },
-                  { id: 'SHEET_METAL', label: '판금/제관' },
-                  { id: 'CASTING', label: '주조품' },
-                  { id: 'COMMERCIAL', label: '규격철물' },
-                  { id: 'ELECTRICAL', label: '전장/공압' },
-                  { id: 'ASSEMBLY', label: '조립품' }
+                  ...PART_CATEGORIES.map(cat => ({ id: cat.id, label: cat.label }))
                 ].map(cat => (
                   <button
                     key={cat.id}
                     type="button"
                     onClick={() => setCategoryFilter(cat.id)}
-                    className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-xl font-bold transition-all cursor-pointer text-[11px] ${
                       categoryFilter === cat.id
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
@@ -1187,23 +1210,14 @@ export default function MasterDataManagerPage() {
                               <select
                                 value={it.category || 'MACHINING'}
                                 onChange={(e) => handleInlineCategoryChange(it.id, e.target.value)}
-                                className={`appearance-none pl-2.5 pr-6 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all border outline-none shadow-2xs hover:brightness-95 ${
-                                  it.category === 'MACHINING' ? 'bg-blue-100 text-blue-800 border-blue-300' :
-                                  it.category === 'SHEET_METAL' ? 'bg-cyan-100 text-cyan-800 border-cyan-300' :
-                                  it.category === 'CASTING' ? 'bg-orange-100 text-orange-800 border-orange-300' :
-                                  it.category === 'COMMERCIAL' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
-                                  it.category === 'ELECTRICAL' ? 'bg-purple-100 text-purple-800 border-purple-300' :
-                                  it.category === 'ASSEMBLY' ? 'bg-indigo-100 text-indigo-800 border-indigo-300' :
-                                  'bg-slate-100 text-slate-700 border-slate-300'
-                                }`}
+                                className={`appearance-none pl-2.5 pr-6 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all border outline-none shadow-2xs hover:brightness-95 ${getPartCategoryBadgeClass(it.category)}`}
                                 title="클릭하여 부품 유형 변경 (선택 시 즉시 저장)"
                               >
-                                <option value="MACHINING" className="bg-white text-slate-800 font-medium">가공품</option>
-                                <option value="SHEET_METAL" className="bg-white text-slate-800 font-medium">판금/제관</option>
-                                <option value="CASTING" className="bg-white text-slate-800 font-medium">주조품</option>
-                                <option value="COMMERCIAL" className="bg-white text-slate-800 font-medium">규격철물</option>
-                                <option value="ELECTRICAL" className="bg-white text-slate-800 font-medium">전장/공압</option>
-                                <option value="ASSEMBLY" className="bg-white text-slate-800 font-medium">조립품</option>
+                                {PART_CATEGORIES.map(c => (
+                                  <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
+                                    {c.label}
+                                  </option>
+                                ))}
                               </select>
                               <ChevronDown className="w-3 h-3 text-current opacity-60 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                             </div>
@@ -1434,12 +1448,11 @@ export default function MasterDataManagerPage() {
                     className="bg-slate-900 border border-slate-600 rounded-lg px-2 py-0.5 text-xs text-white outline-none cursor-pointer font-medium"
                     title="선택된 품목들에 일괄 적용할 부품 유형 선택"
                   >
-                    <option value="MACHINING">가공품</option>
-                    <option value="SHEET_METAL">판금/제관</option>
-                    <option value="CASTING">주조품</option>
-                    <option value="COMMERCIAL">규격철물</option>
-                    <option value="ELECTRICAL">전장/공압</option>
-                    <option value="ASSEMBLY">조립품</option>
+                    {PART_CATEGORIES.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.label} ({c.fullLabel.split('(')[1]?.replace(')', '') || c.id})
+                      </option>
+                    ))}
                   </select>
                   <button
                     type="button"
@@ -2087,14 +2100,24 @@ export default function MasterDataManagerPage() {
                   <select
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg p-2"
+                    className="w-full border border-slate-200 rounded-lg p-2 text-xs"
                   >
-                    <option value="MACHINING">가공품 (Machining)</option>
-                    <option value="SHEET_METAL">판금/제관품 (Sheet Metal / Weldment)</option>
-                    <option value="CASTING">주조품 (Casting)</option>
-                    <option value="COMMERCIAL">표준 규격품/철물 (Hardware / Fasteners)</option>
-                    <option value="ELECTRICAL">전장/공압/구동품 (Electric & Pneumatic)</option>
-                    <option value="ASSEMBLY">조립품/모듈 (Sub-Assembly)</option>
+                    <optgroup label="── 도면 기반 가공/제작품 ──">
+                      <option value="MACHINING">기계 가공품 (Machining - 절삭/선반/밀링)</option>
+                      <option value="SHEET_METAL">판금/제관품 (Sheet Metal / Weldment)</option>
+                      <option value="INJECTION">사출/성형품 (Injection / Molding / Extrusion)</option>
+                      <option value="CASTING">주조/단조품 (Casting / Forging)</option>
+                    </optgroup>
+                    <optgroup label="── 표준 기성 구매품 (Off-The-Shelf) ──">
+                      <option value="MECHANICAL">기계요소 구동품 (Bearings / LM / Couplings)</option>
+                      <option value="COMMERCIAL">표준 규격품/철물 (Hardware / Fasteners)</option>
+                      <option value="ELECTRICAL">전장/공압품 (Electric & Pneumatic)</option>
+                    </optgroup>
+                    <optgroup label="── 특수 조달 및 모듈 ──">
+                      <option value="IMPORTED">해외 수입품 (Direct Import / Foreign)</option>
+                      <option value="SUPPLIED">고객 지급품 (Customer-Supplied / 사급 자재)</option>
+                      <option value="ASSEMBLY">조립품/모듈 (Sub-Assembly / Module)</option>
+                    </optgroup>
                   </select>
                 </div>
               </div>

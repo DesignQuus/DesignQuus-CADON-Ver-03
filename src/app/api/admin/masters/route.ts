@@ -129,15 +129,19 @@ export async function GET(req: NextRequest) {
       id: it.p_id || it.id || it.master_code || `pm_item_${idx}`,
     }));
 
-    // 카테고리 통계 집계 (6대 실무 분류)
+    // 카테고리 통계 집계 (10대 제조업 표준 분류)
     const stats = (await db.prepare(`
       SELECT 
         COUNT(*) as total_count,
         SUM(CASE WHEN category = 'MACHINING' THEN 1 ELSE 0 END) as machining_count,
         SUM(CASE WHEN category = 'SHEET_METAL' THEN 1 ELSE 0 END) as sheet_metal_count,
         SUM(CASE WHEN category = 'CASTING' THEN 1 ELSE 0 END) as casting_count,
-        SUM(CASE WHEN category = 'COMMERCIAL' THEN 1 ELSE 0 END) as commercial_count,
+        SUM(CASE WHEN category = 'INJECTION' THEN 1 ELSE 0 END) as injection_count,
+        SUM(CASE WHEN category = 'COMMERCIAL' OR category = 'FASTENER' THEN 1 ELSE 0 END) as commercial_count,
+        SUM(CASE WHEN category = 'MECHANICAL' THEN 1 ELSE 0 END) as mechanical_count,
         SUM(CASE WHEN category = 'ELECTRICAL' THEN 1 ELSE 0 END) as electrical_count,
+        SUM(CASE WHEN category = 'IMPORTED' THEN 1 ELSE 0 END) as imported_count,
+        SUM(CASE WHEN category = 'SUPPLIED' THEN 1 ELSE 0 END) as supplied_count,
         SUM(CASE WHEN category = 'ASSEMBLY' THEN 1 ELSE 0 END) as assembly_count
       FROM product_masters
     `).get()) as any;
@@ -157,8 +161,12 @@ export async function GET(req: NextRequest) {
         machining: stats?.machining_count || 0,
         sheetMetal: stats?.sheet_metal_count || 0,
         casting: stats?.casting_count || 0,
+        injection: stats?.injection_count || 0,
         commercial: stats?.commercial_count || 0,
+        mechanical: stats?.mechanical_count || 0,
         electrical: stats?.electrical_count || 0,
+        imported: stats?.imported_count || 0,
+        supplied: stats?.supplied_count || 0,
         assembly: stats?.assembly_count || 0
       }
     });
