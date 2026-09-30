@@ -21,7 +21,6 @@ import {
   UploadCloud,
   FileCode2,
   Database,
-  Activity,
   ChevronLeft,
   ChevronRight,
   DollarSign,
@@ -2294,69 +2293,8 @@ export default function HomePage() {
           </div>
         )}
       </div>
-
-      {/* 5. Process Workflow Guide */}
-      <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-slate-50 rounded-2xl p-5 sm:p-6 border border-blue-100/80 shadow-2xs">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xs font-black tracking-wider text-blue-900 uppercase flex items-center gap-2">
-            <Activity className="w-4 h-4 text-blue-600" />
-            <span>CADON BOM AI 표준 분석 & 견적 워크플로우</span>
-          </h3>
-          <span className="text-[11px] font-semibold text-blue-600/80 hidden sm:inline-block">엔드투엔드 자동화 파이프라인</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <div className="bg-white/95 backdrop-blur-xs p-4 rounded-xl border border-blue-100 shadow-2xs hover:shadow-xs hover:border-blue-300 transition-all flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">STEP 01</span>
-                <span className="text-[10px] text-slate-400 font-mono">Input & Parse</span>
-              </div>
-              <div className="text-xs font-bold text-slate-900">CAD 도면 업로드 & 벡터 파싱</div>
-              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                DWG/DXF 도면 업로드, 벡터 엔티티 및 도면 메타데이터 무손실 정밀 파싱
-              </p>
-            </div>
-          </div>
-          <div className="bg-white/95 backdrop-blur-xs p-4 rounded-xl border border-indigo-100 shadow-2xs hover:shadow-xs hover:border-indigo-300 transition-all flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">STEP 02</span>
-                <span className="text-[10px] text-slate-400 font-mono">BOM Structure</span>
-              </div>
-              <div className="text-xs font-bold text-slate-900">멀티레벨 BOM 자동 전개</div>
-              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                도곽·표제란·BOM 테이블 자동 감지 및 부품 규격, 재질, 조립 계층(Tree) 자동 정규화
-              </p>
-            </div>
-          </div>
-          <div className="bg-white/95 backdrop-blur-xs p-4 rounded-xl border border-purple-100 shadow-2xs hover:shadow-xs hover:border-purple-300 transition-all flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-black text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">STEP 03</span>
-                <span className="text-[10px] text-slate-400 font-mono">Cost & Matching</span>
-              </div>
-              <div className="text-xs font-bold text-slate-900">단가 마스터 매칭 & 원가 산출</div>
-              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                표준 단가 마스터 지능형 매칭 및 레이저·절곡·용접 등 공정별 임가공 제조원가 자동 계산
-              </p>
-            </div>
-          </div>
-          <div className="bg-white/95 backdrop-blur-xs p-4 rounded-xl border border-emerald-100 shadow-2xs hover:shadow-xs hover:border-emerald-300 transition-all flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">STEP 04</span>
-                <span className="text-[10px] text-slate-400 font-mono">Approval & Export</span>
-              </div>
-              <div className="text-xs font-bold text-slate-900">사내 전자결재 & 엑셀 배포</div>
-              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                사내 전결 권한 확인, 전자결재 승인 처리 및 공식 견적 패키지(XLSX) 원클릭 발행
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-        </div>
-      </div>
+    </div>
+  </div>
 
       {/* 신규 도면 견적 등록 모달 */}
       {isUploadModalOpen && (
