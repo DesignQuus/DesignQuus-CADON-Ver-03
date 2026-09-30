@@ -1262,27 +1262,13 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-300 hidden xl:inline">
-                실무 관제 활성: <strong className="text-white">{myActiveCases.length}건</strong> (전사 {activeCases.length}건)
-              </span>
-              <Link
-                href="/cases"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-blue-100 hover:text-white border border-white/20 transition-all text-xs font-bold cursor-pointer"
-                title="견적의뢰대장 전체 목록으로 이동"
-              >
-                <span>견적의뢰대장 바로가기</span>
-                <ArrowUpRight className="w-3.5 h-3.5 text-blue-300" />
-              </Link>
-              <button
-                type="button"
-                onClick={handleOpenUploadModal}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold shadow-sm transition-all cursor-pointer"
-                title="새로운 CAD 도면을 업로드하여 신규 견적의뢰 생성"
-              >
-                <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                <span>신규 도면 견적 등록</span>
-              </button>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-xs text-slate-200 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>실무 관제 활성: <strong className="text-white font-mono">{myActiveCases.length}건</strong></span>
+                <span className="text-white/30">|</span>
+                <span className="text-slate-300">전사 <strong className="text-white font-mono">{activeCases.length}건</strong></span>
+              </div>
             </div>
           </div>
 
@@ -1294,15 +1280,31 @@ export default function HomePage() {
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight">최근 견적의뢰 내역</h2>
               {caseFilter === 'MY' ? (
-                <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCaseFilter('ALL');
+                    setCasePage(1);
+                  }}
+                  className="text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="클릭하여 전사 총괄 관제로 전환"
+                >
                   <User className="w-3 h-3 text-blue-600" />
-                  <span>{user?.name || '담당자'} 담당 관제</span>
-                </span>
+                  <span>{user?.name || '담당자'} 담당 관제 ({myActiveCases.length}건)</span>
+                </button>
               ) : (
-                <span className="text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCaseFilter('MY');
+                    setCasePage(1);
+                  }}
+                  className="text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="클릭하여 내 담당 관제로 전환"
+                >
                   <Building2 className="w-3 h-3 text-indigo-600" />
-                  <span>전사 총괄 관제</span>
-                </span>
+                  <span>전사 총괄 관제 ({activeCases.length}건)</span>
+                </button>
               )}
               {pipelineFilter !== 'ALL' && (
                 <span className="text-[11px] font-extrabold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs animate-in fade-in">
@@ -1337,46 +1339,8 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Right: Personal Filter Tabs, Inline Pager & Full Table Link */}
+          {/* Right: Inline Pager & Full Table Link */}
           <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-            {/* Filter Toggle Segment (전사 현황 vs 내 담당 건) */}
-            <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => {
-                  setCaseFilter('ALL');
-                  setCasePage(1);
-                }}
-                className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                  caseFilter === 'ALL'
-                    ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                전사 현황 ({activeCases.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCaseFilter('MY');
-                  setCasePage(1);
-                }}
-                className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
-                  caseFilter === 'MY'
-                    ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
-                    : 'text-slate-500 hover:text-blue-600'
-                }`}
-              >
-                <span>내 담당 건</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                    caseFilter === 'MY' ? 'bg-blue-700 text-white' : 'bg-blue-100 text-blue-700'
-                  }`}
-                >
-                  {myCasesCount}
-                </span>
-              </button>
-            </div>
 
             {/* Smart Inline Pager Controller */}
             {filteredCases.length > 0 && (
