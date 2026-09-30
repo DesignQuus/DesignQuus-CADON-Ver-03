@@ -205,21 +205,6 @@ export default function HomePage() {
     setIsUploadModalOpen(true);
   };
 
-  const handleOpenSampleModal = () => {
-    setNewCaseName('[체험용] 판금 모터 브라켓 가공 견적 (샘플)');
-    const defaultCust = customerCompanies[0] || { id: 'comp_1790030182693', company_name: '엠브이텍' };
-    setSelectedCompanyId(defaultCust.id);
-    setCustomerSelection({
-      companyId: defaultCust.id,
-      companyName: defaultCust.company_name,
-      isNew: false
-    });
-    setSelectedFile(null);
-    setSubmitError(null);
-    setIsSampleMode(true);
-    setIsUploadModalOpen(true);
-  };
-
   const handleFileChange = (file: File) => {
     setSelectedFile(file);
     setSubmitError(null);
@@ -1620,28 +1605,6 @@ export default function HomePage() {
                     <Plus className="w-3.5 h-3.5 stroke-[3]" />
                     <span>신규 도면 견적 등록</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleOpenSampleModal}
-                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-all cursor-pointer shadow-2xs"
-                    title="CAD 도면 파일이 없어도 표준 판금 샘플 도면으로 즉시 AI 견적 과정을 체험해보실 수 있습니다."
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>표준 판금 샘플로 견적 체험하기</span>
-                  </button>
-                  {caseFilter === 'MY' && activeCases.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCaseFilter('ALL');
-                        setPipelineFilter('ALL');
-                        setCasePage(1);
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 border border-slate-200 cursor-pointer"
-                    >
-                      전사 의뢰 보기 ({activeCases.length}건)
-                    </button>
-                  )}
                 </div>
               </>
             )}
