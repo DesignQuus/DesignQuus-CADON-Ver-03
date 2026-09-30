@@ -198,8 +198,25 @@ export default function CadViewer({
   const [openedFolderInfo, setOpenedFolderInfo] = useState<{ path: string; name: string } | null>(null);
   const [copiedPath, setCopiedPath] = useState(false);
 
-  // 💎 Phase 2: Price Columns Visibility & Quality Filter
-  const [showPriceColumns, setShowPriceColumns] = useState(false);
+  // 💎 Phase 2: Price Columns Visibility & Quality Filter (기본값: true + 브라우저 기억)
+  const [showPriceColumns, setShowPriceColumns] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('cadon_show_price_columns');
+        if (saved !== null) return saved === 'true';
+      } catch {}
+    }
+    return true; // 기본값: 항상 표시
+  });
+
+  const togglePriceColumns = (nextVal: boolean) => {
+    setShowPriceColumns(nextVal);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cadon_show_price_columns', String(nextVal));
+      } catch {}
+    }
+  };
   const [qualityFilter, setQualityFilter] = useState<'ALL' | 'NO_MATERIAL' | 'PARTS' | 'ASSY' | 'DUPLICATES' | 'EXCLUDED'>('ALL');
 
   // 💎 Phase 3: Multi-select & Bulk Operation State
@@ -1114,8 +1131,9 @@ export default function CadViewer({
         totalQty += q;
         if (isInc) {
           includedParts++;
-          includedQty += q;
-          totalSubtotal += Number(item?.amount || 0);
+          const uPrice = Number(item?.unit_price || 0);
+          const amt = Number(item?.amount !== undefined && item?.amount !== null && !isNaN(Number(item.amount)) ? item.amount : (q * uPrice));
+          totalSubtotal += amt;
         }
       }
     });
@@ -2269,13 +2287,16 @@ export default function CadViewer({
 
                 {/* Quotation Live Summary */}
                 <div className="flex items-center space-x-2 border-l border-slate-800 pl-2">
-                  <div className="flex items-center space-x-1.5 px-2 py-0.5 bg-blue-950/70 border border-blue-500/40 rounded text-[11px]">
-                    <span className="text-blue-300">견적 포함:</span>
+                  <div className="flex items-center space-x-1.5 px-2.5 py-0.5 bg-blue-950/70 border border-blue-500/40 rounded text-[11px]">
+                    <span className="text-blue-300 font-medium">견적 포함:</span>
                     <span className="font-bold text-white font-mono">{quoteSummary.includedParts}/{quoteSummary.totalParts}</span>
                     {showPriceColumns && (
                       <>
                         <span className="text-slate-600">|</span>
-                        <span className="font-bold text-emerald-400 font-mono">₩{quoteSummary.totalSubtotal.toLocaleString()}</span>
+                        <span className="text-slate-300 font-medium">총 견적 합계:</span>
+                        <span className="font-bold text-emerald-400 font-mono" title="현재 견적 포함 부품 공급가액 실시간 합산">
+                          ₩{quoteSummary.totalSubtotal.toLocaleString()}
+                        </span>
                       </>
                     )}
                   </div>
@@ -2311,16 +2332,21 @@ export default function CadViewer({
                 )}
                 <button
                   type="button"
-                  onClick={() => setShowPriceColumns(!showPriceColumns)}
-                  className={`px-2.5 py-1 text-[11px] rounded-lg font-bold flex items-center space-x-1 transition-all cursor-pointer border ${
+                  onClick={() => togglePriceColumns(!showPriceColumns)}
+                  className={`px-2.5 py-1 text-[11px] rounded-lg font-bold flex items-center space-x-1.5 transition-all cursor-pointer border ${
                     showPriceColumns
-                      ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300 hover:bg-emerald-900'
+                      ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300 hover:bg-emerald-900 shadow-2xs'
                       : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white'
                   }`}
                   title={showPriceColumns ? '단가/금액 컬럼을 숨겨 부품 식별 정보 영역을 넓힙니다' : '단가/금액 컬럼을 표시합니다'}
                 >
                   <span>₩</span>
                   <span>단가 컬럼 {showPriceColumns ? '숨김' : '표시'}</span>
+                  {showPriceColumns && (
+                    <span className="ml-0.5 text-[10px] font-mono bg-emerald-900/90 text-emerald-200 px-1.5 py-0.2 rounded border border-emerald-500/40 font-bold" title="실시간 총 견적 공급가액">
+                      ₩{quoteSummary.totalSubtotal.toLocaleString()}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
@@ -2458,7 +2484,14 @@ export default function CadViewer({
                   {showPriceColumns && (
                     <>
                       <th className="py-2 px-2 w-24 text-right border-r border-slate-800">단가 (원)</th>
-                      <th className="py-2 px-2.5 w-28 text-right border-r border-slate-800">금액 (원)</th>
+                      <th className="py-1.5 px-2.5 min-w-[120px] text-right border-r border-slate-800">
+                        <div className="flex flex-col items-end leading-tight">
+                          <span>금액 (원)</span>
+                          <span className="text-[10px] font-mono text-emerald-400 font-bold" title="현재 견적 포함 부품 공급가액 실시간 합산">
+                            ∑ ₩{quoteSummary.totalSubtotal.toLocaleString()}
+                          </span>
+                        </div>
+                      </th>
                     </>
                   )}
 
