@@ -126,63 +126,65 @@ def convert_dwg_to_dxf(dwg_path: str, output_dxf_path: str, timeout_sec: int = 1
     os.makedirs(temp_dir, exist_ok=True)
     raw_output_dxf = os.path.join(temp_dir, "raw_output.dxf")
 
-    # 2. Check Standalone Native C LibreDWG Executable (Priority 1: 1.9s Ultra-Fast Standalone Native Engine)
-    candidate_paths = [
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "libredwg", "dwg2dxf.exe"),
-        os.environ.get("LIBREDWG_PATH", ""),
-        r"C:\tools\libredwg\dwg2dxf.exe",
-        shutil.which("dwg2dxf") or ""
-    ]
-    converter_exe = None
-    for cp in candidate_paths:
-        if cp and os.path.exists(cp):
-            converter_exe = cp
-            break
+    # 2. Priority 1: Official Autodesk Native Engine (AutoCAD 2026 / TrueView accoreconsole)
+    # Provides 100% authentic AutoCAD DXF AC1032 output with all blocks, layers, and geometry intact.
+    acad_console = os.environ.get("ACAD_CONSOLE_PATH", "")
+    if not acad_console or not os.path.exists(acad_console):
+        import glob
+        cands = glob.glob(r"C:\Program Files\Autodesk\*\accoreconsole.exe")
+        if cands:
+            acad_console = cands[0]
 
     converted_ok = False
-    converter_provider = "LIBREDWG"
+    converter_provider = "UNKNOWN"
 
-    if converter_exe:
+    if acad_console and os.path.exists(acad_console):
+        scr_path = os.path.join(temp_dir, f"dxfout_{int(time.time()*1000)}.scr")
         try:
-            cmd = [converter_exe, "-y", "-m", "-o", raw_output_dxf, dwg_path]
+            with open(scr_path, "w", encoding="ascii") as f:
+                f.write(f'_DXFOUT\n"{raw_output_dxf}"\n16\n_QUIT\n_Y\n')
+            cmd = [acad_console, "/i", dwg_path, "/s", scr_path, "/l", "en-US"]
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout_sec)
             if os.path.exists(raw_output_dxf) and os.path.getsize(raw_output_dxf) > 1000:
                 converted_ok = True
-                converter_provider = "LIBREDWG_NATIVE_C"
+                converter_provider = "ACAD_CONSOLE"
         except Exception:
             converted_ok = False
+        finally:
+            if os.path.exists(scr_path):
+                try: os.remove(scr_path)
+                except: pass
 
-    # Fallback to AutoCAD/TrueView accoreconsole Executable (Priority 2 Fallback)
+    # Priority 2: Standalone Native C LibreDWG Executable (Fallback when AutoCAD is not installed)
     if not converted_ok:
-        acad_console = os.environ.get("ACAD_CONSOLE_PATH", "")
-        if not acad_console or not os.path.exists(acad_console):
-            import glob
-            cands = glob.glob(r"C:\Program Files\Autodesk\*\accoreconsole.exe")
-            if cands:
-                acad_console = cands[0]
+        candidate_paths = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "libredwg", "dwg2dxf.exe"),
+            os.environ.get("LIBREDWG_PATH", ""),
+            r"C:\tools\libredwg\dwg2dxf.exe",
+            shutil.which("dwg2dxf") or ""
+        ]
+        converter_exe = None
+        for cp in candidate_paths:
+            if cp and os.path.exists(cp):
+                converter_exe = cp
+                break
 
-        if acad_console and os.path.exists(acad_console):
-            scr_path = os.path.join(temp_dir, f"dxfout_{int(time.time()*1000)}.scr")
+        if converter_exe:
             try:
-                with open(scr_path, "w", encoding="ascii") as f:
-                    f.write(f'_DXFOUT\n"{raw_output_dxf}"\n16\n_QUIT\n_Y\n')
-                cmd = [acad_console, "/i", dwg_path, "/s", scr_path, "/l", "en-US"]
+                # ⚠️ CRITICAL: NEVER use -m (--minimal)! -m strips BLOCKS and TABLES, dropping 95% of entities!
+                cmd = [converter_exe, "-y", "--as", "r2018", "-o", raw_output_dxf, dwg_path]
                 subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout_sec)
                 if os.path.exists(raw_output_dxf) and os.path.getsize(raw_output_dxf) > 1000:
                     converted_ok = True
-                    converter_provider = "ACAD_CONSOLE"
+                    converter_provider = "LIBREDWG_NATIVE_C"
             except Exception:
                 converted_ok = False
-            finally:
-                if os.path.exists(scr_path):
-                    try: os.remove(scr_path)
-                    except: pass
 
     if not converted_ok:
         return {
             "status": "CONVERTER_EXECUTION_FAILED",
             "error_code": "ALL_CONVERTERS_FAILED",
-            "message": "Both LibreDWG native converter and AutoCAD accoreconsole failed to convert DWG.",
+            "message": "Both AutoCAD accoreconsole and LibreDWG native converter failed to convert DWG.",
             "duration_ms": int((time.time() - start_time) * 1000)
         }
 
