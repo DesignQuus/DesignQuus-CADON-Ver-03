@@ -156,7 +156,7 @@ export async function GET(
       headers: {
         'Content-Type': 'application/octet-stream',
         'Content-Length': fileBuffer.length.toString(),
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
         'Content-Disposition': `inline; filename="${id}__cad_webgl.bin"`
       }
     });

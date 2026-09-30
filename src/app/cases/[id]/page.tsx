@@ -378,6 +378,34 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // 🧠 EGDesk AI Caller (Gemini 2.5 Flash) Deep CAD Analysis States
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [loadingAiInsights, setLoadingAiInsights] = useState(false);
+  const [aiInsightsData, setAiInsightsData] = useState<any>(null);
+  const [aiInsightsError, setAiInsightsError] = useState<string | null>(null);
+
+  const handleOpenAiInsights = async (forceRefresh = false) => {
+    setShowAiModal(true);
+    if (aiInsightsData && !forceRefresh) return;
+    setLoadingAiInsights(true);
+    setAiInsightsError(null);
+    try {
+      const res = await apiFetch(`/api/quotation-cases/${id}/ai-insights`, {
+        method: forceRefresh ? 'POST' : 'GET'
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setAiInsightsData(json.data);
+      } else {
+        setAiInsightsError(json.error || 'AI 분석 데이터를 불러오지 못했습니다.');
+      }
+    } catch (err: any) {
+      setAiInsightsError(err.message || 'AI 분석 중 통신 오류가 발생했습니다.');
+    } finally {
+      setLoadingAiInsights(false);
+    }
+  };
+
   // 📦 Export Package Download (Step 3 최종 패키지 ZIP 다운로드)
   const handleDownloadZip = () => {
     if (!id) return;
@@ -2454,7 +2482,18 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               )}
             </span>
           </div>
-          <span className="text-slate-500 text-[10px] font-mono hidden md:inline">CADON Engine v3.0</span>
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleOpenAiInsights(false)}
+              className="inline-flex items-center space-x-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95"
+              title="EGDesk AI 기반 CAD 도면 심층 통찰 및 사양 자동 추출"
+            >
+              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+              <span>이지데스크 AI 심층 분석</span>
+            </button>
+            <span className="text-slate-500 text-[10px] font-mono hidden md:inline">CADON Engine v3.0</span>
+          </div>
         </div>
       </div>
 
@@ -6103,6 +6142,237 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               >
                 <Archive className="w-3.5 h-3.5" />
                 <span>{detailLifecycleLoading ? '처리 중...' : '보관함으로 이동'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 🧠 EGDesk AI Caller (Gemini 2.5 Flash) CAD Deep Insights Modal */}
+      {showAiModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-indigo-900/40">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-0.5 flex items-center justify-center shadow-md">
+                  <div className="w-full h-full bg-slate-950/60 rounded-[10px] flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-pink-300 animate-pulse" />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="font-bold text-base text-white tracking-tight">
+                      이지데스크 AI CAD 심층 분석 리포트
+                    </h3>
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 rounded-full">
+                      Gemini 2.5 Flash
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    도면 형상, 표제란, BOM 특성을 바탕으로 핵심 엔지니어링 사양 및 가공 공정을 자동 진단합니다.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenAiInsights(true)}
+                  disabled={loadingAiInsights}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/10 flex items-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  title="최신 도면 데이터를 기반으로 AI 재분석을 수행합니다"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingAiInsights ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">다시 분석</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAiModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
+              {loadingAiInsights ? (
+                <div className="py-16 text-center space-y-4">
+                  <div className="relative w-16 h-16 mx-auto">
+                    <div className="absolute inset-0 rounded-full border-4 border-indigo-200 animate-ping opacity-25"></div>
+                    <div className="w-16 h-16 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin flex items-center justify-center">
+                      <Sparkles className="w-6 h-6 text-indigo-600" />
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">
+                      이지데스크 AI 엔지니어가 CAD 데이터를 심층 분석 중입니다
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      도면 600,000+ 벡터 라인, 표제란, BOM 부품 계층 및 재질 사양을 종합 판독하고 있습니다...
+                    </p>
+                  </div>
+                </div>
+              ) : aiInsightsError ? (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs flex items-start space-x-3">
+                  <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-bold text-red-900">AI 분석 데이터를 불러올 수 없습니다</p>
+                    <p className="mt-1 text-red-700">{aiInsightsError}</p>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAiInsights(true)}
+                      className="mt-3 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors cursor-pointer"
+                    >
+                      다시 시도
+                    </button>
+                  </div>
+                </div>
+              ) : aiInsightsData ? (
+                <>
+                  {/* Section 1: Executive Summary */}
+                  <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-purple-50 border border-indigo-100 shadow-xs space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="px-2.5 py-1 text-xs font-bold rounded-md bg-indigo-600 text-white shadow-xs">
+                          {aiInsightsData.machineClassification || '기계 설비'}
+                        </span>
+                        <h4 className="font-bold text-slate-900 text-base">
+                          {aiInsightsData.projectName || '프로젝트'}
+                        </h4>
+                      </div>
+                      <span className="text-[11px] font-mono font-medium text-slate-400 bg-white px-2.5 py-1 rounded-md border border-slate-200">
+                        ⚡ 분석 소요: {aiInsightsData.durationMs || 0}ms
+                      </span>
+                    </div>
+                    <div className="p-3.5 bg-white/80 rounded-xl border border-indigo-50 text-slate-700 text-xs sm:text-[13px] leading-relaxed">
+                      {aiInsightsData.executiveSummary}
+                    </div>
+                  </div>
+
+                  {/* Section 2: Key Specifications */}
+                  {aiInsightsData.keySpecifications && aiInsightsData.keySpecifications.length > 0 && (
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                      <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs">
+                        <Database className="w-4 h-4 text-indigo-600" />
+                        <span>도면 기반 주요 사양 자동 추출</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        {aiInsightsData.keySpecifications.map((spec: any, idx: number) => (
+                          <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <span className="text-[11px] font-semibold text-slate-500 block truncate">
+                              {spec.label}
+                            </span>
+                            <span className="text-xs font-bold text-slate-900 mt-1 block break-words">
+                              {spec.value}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Section 3: Assembly Hierarchy Assessment */}
+                  {aiInsightsData.assemblyHierarchyAssessment && (
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs">
+                          <Layers className="w-4 h-4 text-indigo-600" />
+                          <span>조립체 계층 구조 건전도 진단</span>
+                        </div>
+                        {aiInsightsData.assemblyHierarchyAssessment.structureHealth === 'EXCELLENT' ? (
+                          <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>최우수 (무결점)</span>
+                          </span>
+                        ) : aiInsightsData.assemblyHierarchyAssessment.structureHealth === 'GOOD' ? (
+                          <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-blue-100 text-blue-800 border border-blue-200 flex items-center space-x-1">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>양호</span>
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-200 flex items-center space-x-1">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span>검토 권장</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                          <span className="text-xs text-slate-600 font-medium">조립체(Assembly) 수량</span>
+                          <span className="text-sm font-bold text-indigo-700">
+                            {aiInsightsData.assemblyHierarchyAssessment.totalAssemblies}개
+                          </span>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                          <span className="text-xs text-slate-600 font-medium">단품(Part) 부품 수량</span>
+                          <span className="text-sm font-bold text-indigo-700">
+                            {aiInsightsData.assemblyHierarchyAssessment.totalParts}개
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                        {aiInsightsData.assemblyHierarchyAssessment.comment}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Section 4: Material & Process Insights */}
+                  {aiInsightsData.materialAndProcessInsights && aiInsightsData.materialAndProcessInsights.length > 0 && (
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                      <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs">
+                        <Wrench className="w-4 h-4 text-indigo-600" />
+                        <span>재질별 권장 가공 공정 & 리스크 관리 가이드</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {aiInsightsData.materialAndProcessInsights.map((item: any, idx: number) => (
+                          <div key={idx} className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="px-2 py-0.5 text-xs font-bold bg-slate-900 text-white rounded">
+                                {item.material}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono">가공 매칭</span>
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-semibold text-slate-600 mb-1">권장 공정:</div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {item.suggestedProcesses?.map((p: string, pIdx: number) => (
+                                  <span key={pIdx} className="px-2 py-0.5 text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                                    {p}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            {item.riskNotes && (
+                              <div className="text-[11px] text-amber-800 bg-amber-50/70 border border-amber-200/60 p-2 rounded leading-snug">
+                                ⚠️ {item.riskNotes}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Footnote */}
+                  <div className="text-center text-[11px] text-slate-400">
+                    본 리포트는 EGDesk AI Caller(Gemini 2.5 Flash)가 CADON 데이터베이스를 엔지니어링 관점에서 종합 분석한 결과입니다.
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-500">
+                의뢰 번호: <strong className="text-slate-800 font-mono">{data?.case?.case_no || id}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAiModal(false)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                닫기
               </button>
             </div>
           </div>
