@@ -12,7 +12,6 @@ import {
   User,
   ArrowRight,
   Lock,
-  Building,
   Eye,
   EyeOff
 } from 'lucide-react';
@@ -185,12 +184,6 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-          </div>
-
-          {/* Company Login Note */}
-          <div className="px-3.5 py-2.5 bg-slate-50/90 rounded-xl border border-slate-200 flex items-center space-x-2.5 text-[11px] text-slate-600">
-            <Building className="w-4 h-4 text-slate-400 shrink-0" />
-            <span>사내 임직원 및 등록된 고객사 담당자는 발급받은 계정으로 로그인해 주세요.</span>
           </div>
 
           <button
