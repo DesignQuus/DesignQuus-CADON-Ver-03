@@ -2614,17 +2614,22 @@ export default function HomePage() {
                     }}
                   />
                   {selectedFile ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between bg-white p-3.5 rounded-xl border border-emerald-300 shadow-2xs">
+                    <div className="bg-white p-3.5 rounded-xl border border-emerald-300 shadow-2xs">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3 min-w-0">
                           <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
                             <FileCode2 className="w-6 h-6 text-emerald-600" />
                           </div>
                           <div className="text-left min-w-0">
                             <p className="text-xs font-bold text-slate-800 truncate">{selectedFile.name}</p>
-                            <p className="text-[11px] text-slate-500">
-                              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB • CAD 원본 도면
-                            </p>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-slate-500">
+                              <span>{(selectedFile.size / 1024 / 1024).toFixed(2)} MB • CAD 원본 도면</span>
+                              <span className="text-slate-300 hidden sm:inline">|</span>
+                              <span className="inline-flex items-center gap-1 font-semibold text-indigo-600">
+                                <Sparkles className="w-3 h-3 text-indigo-500 shrink-0" />
+                                <span>표제란 AI 자동 판독 준비</span>
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <button
@@ -2634,17 +2639,11 @@ export default function HomePage() {
                             setSelectedFile(null);
                             setNewCaseName('');
                           }}
-                          className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                          className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
                           title="다른 파일로 변경"
                         >
                           <X className="w-4 h-4" />
                         </button>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-indigo-50/80 border border-indigo-200 text-left flex items-start gap-2">
-                        <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                        <div className="text-[11px] text-indigo-900 leading-tight">
-                          <strong>표제란 자동 판독 준비 완료:</strong> 등록 즉시 AI가 도면 표제란을 스캔하여 <strong>발주 고객사</strong>와 <strong>품명</strong>을 자동 확정합니다.
-                        </div>
                       </div>
                     </div>
                   ) : (
