@@ -362,7 +362,10 @@ export async function GET(
   const permission = await checkCasePermission(session.userId, session.role, id);
 
     return NextResponse.json({
-      case: qc,
+      case: {
+        ...qc,
+        primary_file_name: files.length > 0 ? files[0].original_file_name : null
+      },
       permission,
       files,
       allFiles: allCaseFiles,

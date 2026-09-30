@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
         COALESCE(p.project_name, '프로젝트 미지정') as project_name, 
         COALESCE(p.project_code, '-') as project_code,
         (SELECT COUNT(DISTINCT uf.original_file_name) FROM uploaded_files uf WHERE uf.quotation_case_id = qc.id AND uf.file_role = 'SOURCE') as files_count,
+        (SELECT uf.original_file_name FROM uploaded_files uf WHERE uf.quotation_case_id = qc.id AND uf.file_role = 'SOURCE' ORDER BY uf.rowid ASC LIMIT 1) as primary_file_name,
         (SELECT COUNT(*) FROM drawings d WHERE d.quotation_case_id = qc.id) as drawings_count,
         COALESCE(NULLIF((SELECT COUNT(*) FROM final_bom_items fbi WHERE fbi.quotation_case_id = qc.id), 0), (SELECT COUNT(*) FROM normalized_bom_items nbi WHERE nbi.quotation_case_id = qc.id), 0) as bom_items_count,
         (SELECT q.total_amount FROM quotes q WHERE q.quotation_case_id = qc.id ORDER BY q.quote_version DESC LIMIT 1) as quote_total_amount

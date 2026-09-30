@@ -77,6 +77,7 @@ interface QuotationCase {
   company_code: string;
   lifecycle_stage: string;
   files_count?: number;
+  primary_file_name?: string | null;
   drawings_count: number;
   bom_items_count: number;
   quote_total_amount?: number;
@@ -1685,13 +1686,26 @@ export default function HomePage() {
                       {/* 1. 의뢰번호 / 명칭 */}
                       <td className="py-3 px-4">
                         <span className="font-mono text-[11px] text-slate-500 group-hover:text-blue-700 font-bold block transition-colors">{c.case_no}</span>
-                        <div className="mt-0.5">
+                        <div className="mt-1 flex items-center gap-1.5 min-w-0">
+                          {c.primary_file_name?.toLowerCase().endsWith('.dwg') ? (
+                            <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                              DWG
+                            </span>
+                          ) : c.primary_file_name?.toLowerCase().endsWith('.dxf') ? (
+                            <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                              DXF
+                            </span>
+                          ) : null}
                           <SmartTruncateTooltip
-                            text={c.case_name || '도면 견적의뢰'}
+                            text={
+                              c.primary_file_name
+                                ? (c.files_count && c.files_count > 1 ? `${c.primary_file_name} 외 ${c.files_count - 1}건` : c.primary_file_name)
+                                : (c.case_name || '도면 견적의뢰')
+                            }
                             className={`font-bold text-xs ${
                               isDeleted ? 'text-slate-500 line-through' : 'text-slate-800 group-hover:text-blue-700'
                             }`}
-                            maxWidthClass="max-w-[320px] 2xl:max-w-[420px]"
+                            maxWidthClass="max-w-[280px] 2xl:max-w-[380px]"
                             showCopy={true}
                           />
                         </div>

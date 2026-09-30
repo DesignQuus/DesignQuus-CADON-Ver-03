@@ -2077,12 +2077,23 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
           <span className="font-mono font-bold text-slate-800 shrink-0 px-1.5 py-0.5 bg-slate-100 rounded text-xs">
             {qc.case_no}
           </span>
-          <h1 
-            className="text-xs sm:text-sm font-bold text-slate-900 truncate max-w-[160px] md:max-w-[240px] xl:max-w-[360px]" 
-            title={qc.case_name}
-          >
-            {qc.case_name}
-          </h1>
+          <div className="flex items-center gap-1.5 min-w-0">
+            {(qc.primary_file_name || qc.case_name)?.toLowerCase().endsWith('.dwg') ? (
+              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                DWG
+              </span>
+            ) : (qc.primary_file_name || qc.case_name)?.toLowerCase().endsWith('.dxf') ? (
+              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                DXF
+              </span>
+            ) : null}
+            <h1 
+              className="text-xs sm:text-sm font-bold text-slate-900 truncate max-w-[160px] md:max-w-[240px] xl:max-w-[360px]" 
+              title={qc.primary_file_name || qc.case_name}
+            >
+              {qc.primary_file_name || qc.case_name}
+            </h1>
+          </div>
 
           {qc.visibility === 'SHARED' && (
             <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-700 shrink-0">

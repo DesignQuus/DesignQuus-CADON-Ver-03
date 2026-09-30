@@ -1137,11 +1137,12 @@ export default function CasesPage() {
     if (searchQuery.trim()) {
       const q = searchQuery.trim();
       const matchName = matchHangulSearch(c.case_name || '', q);
+      const matchFile = matchHangulSearch(c.primary_file_name || '', q);
       const matchNo = matchHangulSearch(c.case_no || '', q);
       const matchComp = matchHangulSearch(c.company_name || '', q);
       const matchProj = matchHangulSearch(c.project_name || '', q);
       const matchManager = matchHangulSearch(c.created_by_name || '', q);
-      return matchName || matchNo || matchComp || matchProj || matchManager;
+      return matchName || matchFile || matchNo || matchComp || matchProj || matchManager;
     }
     return true;
   });
@@ -2113,9 +2114,22 @@ export default function CasesPage() {
                           {/* Case Name */}
                           <td className="py-3 px-3.5 min-w-[240px]">
                             <div className="flex items-center justify-between gap-2.5 min-w-0">
-                              <div className="min-w-0 flex-1">
+                              <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                                {c.primary_file_name?.toLowerCase().endsWith('.dwg') ? (
+                                  <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                                    DWG
+                                  </span>
+                                ) : c.primary_file_name?.toLowerCase().endsWith('.dxf') ? (
+                                  <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                    DXF
+                                  </span>
+                                ) : null}
                                 <SmartTruncateTooltip
-                                  text={c.case_name || ''}
+                                  text={
+                                    c.primary_file_name
+                                      ? (c.files_count && c.files_count > 1 ? `${c.primary_file_name} 외 ${c.files_count - 1}건` : c.primary_file_name)
+                                      : (c.case_name || '')
+                                  }
                                   className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-[13.5px]"
                                   maxWidthClass="max-w-[210px]"
                                 />
