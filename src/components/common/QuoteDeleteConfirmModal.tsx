@@ -134,15 +134,36 @@ export function QuoteDeleteToast({
   onClose,
   onRestoreConfirmDialog,
 }: DeleteToastProps) {
+  const [isPaused, setIsPaused] = useState(false);
+
+  // 3.5초 후 자동 닫힘 타이머 (호버 시 일시 정지)
+  useEffect(() => {
+    if (!message || isPaused) return;
+
+    // 에러 메시지는 4.5초, 일반 성공 알림은 3.5초 후 자동 소멸
+    const duration = message.isError ? 4500 : 3500;
+    const timer = setTimeout(() => {
+      onClose();
+    }, duration);
+
+    return () => clearTimeout(timer);
+  }, [message, isPaused, onClose]);
+
   if (!message) return null;
 
   return (
-    <div className={`fixed top-6 right-6 z-[120] max-w-md text-white px-4 py-3 rounded-2xl shadow-2xl border flex items-center justify-between space-x-3 text-xs animate-in slide-in-from-top-3 fade-in duration-200 ${
-      message.isError
-        ? 'bg-rose-950/95 border-rose-700/80 text-rose-100 shadow-rose-950/40'
-        : 'bg-slate-900 border-slate-700'
-    }`}>
-      <div className="flex items-center space-x-2.5">
+    <div
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      role="status"
+      aria-live="polite"
+      className={`fixed top-8 left-1/2 -translate-x-1/2 z-[130] w-auto max-w-lg min-w-[340px] text-white px-5 py-3 rounded-2xl shadow-2xl border flex items-center justify-between space-x-3.5 text-xs backdrop-blur-md transition-all animate-in slide-in-from-top-4 fade-in duration-200 ${
+        message.isError
+          ? 'bg-rose-950/95 border-rose-700/80 text-rose-100 shadow-rose-950/40'
+          : 'bg-slate-900/95 border-slate-700/90 shadow-slate-950/50'
+      }`}
+    >
+      <div className="flex items-center space-x-2.5 min-w-0">
         {message.isError ? (
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
         ) : message.showRestoreConfirm ? (
@@ -150,7 +171,7 @@ export function QuoteDeleteToast({
         ) : (
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
         )}
-        <span className="font-medium leading-snug">{message.text}</span>
+        <span className="font-medium leading-snug truncate">{message.text}</span>
       </div>
 
       <div className="flex items-center space-x-2 shrink-0">
@@ -168,7 +189,7 @@ export function QuoteDeleteToast({
         <button
           type="button"
           onClick={onClose}
-          className="text-slate-400 hover:text-white p-0.5 rounded transition"
+          className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
           title="닫기"
         >
           <X className="w-4 h-4" />

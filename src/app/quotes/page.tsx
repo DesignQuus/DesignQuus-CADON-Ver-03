@@ -189,10 +189,8 @@ export default function QuotesListPage() {
 
       // 방법 A: 삭제 완료 토스트 표시 (확인 없이 삭제된 경우 [확인창 다시 켜기] 복원 버튼 노출)
       setDeleteToast({
-        text: data?.alreadyDeleted
-          ? `견적서 [${quoteNo}]은(는) 이미 삭제되어 목록에서 정리되었습니다.`
-          : `견적서 [${quoteNo}]이(가) ${wasSkipped ? '확인 없이 즉시 ' : ''}삭제되었습니다.`,
-        showRestoreConfirm: wasSkipped && !data?.alreadyDeleted
+        text: `견적서 [${quoteNo}]이(가) ${wasSkipped ? '확인 없이 즉시 ' : ''}삭제되었습니다.`,
+        showRestoreConfirm: wasSkipped
       });
     } catch (e: any) {
       console.error('Delete quote error:', e);
