@@ -998,7 +998,7 @@ export default function HomePage() {
             </div>
 
             {/* Smart Pipeline Vertical Navigation */}
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between text-xs font-extrabold text-slate-800">
                 <span className="flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-blue-600" />
@@ -1017,6 +1017,17 @@ export default function HomePage() {
                   </button>
                 )}
               </div>
+
+              {/* 파이프라인 진입 시작점: 신규 도면 견적 등록 버튼 */}
+              <button
+                type="button"
+                onClick={handleOpenUploadModal}
+                className="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold shadow-md shadow-blue-600/20 hover:shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>신규 도면 견적 등록</span>
+                <UploadCloud className="w-3.5 h-3.5 text-blue-200" />
+              </button>
 
               <div className="space-y-1 text-xs">
                 {/* Stage 0: 도면 대기 (사전 접수) */}
@@ -1212,18 +1223,8 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Quick Action Buttons */}
-            <div className="pt-3 border-t border-slate-100 space-y-2">
-              <button
-                type="button"
-                onClick={handleOpenUploadModal}
-                className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Plus className="w-4 h-4 stroke-[3]" />
-                <span>신규 도면 견적 등록</span>
-                <UploadCloud className="w-3.5 h-3.5 text-blue-200" />
-              </button>
-
+            {/* Quick Action Navigation Links */}
+            <div className="pt-3 border-t border-slate-100">
               <div className="grid grid-cols-1 gap-1.5 text-xs font-bold text-slate-700">
                 <Link
                   href="/cases?tab=ANALYZED"
