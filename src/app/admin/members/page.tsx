@@ -1249,7 +1249,7 @@ export default function MembersManagementPage() {
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
             <tr>
-              <th className="px-3 py-3 text-center w-24">순서</th>
+              <th className="px-3 py-3 text-center w-20">순서</th>
               <th className="px-4 py-3">사원번호</th>
               <th className="px-4 py-3">성명 (아이디)</th>
               <th className="px-4 py-3 text-center">진행 견적</th>
@@ -1303,9 +1303,9 @@ export default function MembersManagementPage() {
                       : ""
                   }`}
                 >
-                  {/* 순서 변경 (하이브리드: 드래그 핸들 + 화살표 이동) */}
-                  <td className="px-3 py-3 text-center whitespace-nowrap">
-                    <div className="flex items-center justify-center space-x-1">
+                  {/* 순서 변경 (호버 시에만 슬림 노출: 평소에는 단정한 01, 호버 시 ▲▼ 등장, Zero Layout Shift) */}
+                  <td className="px-2 py-3 text-center whitespace-nowrap">
+                    <div className="inline-flex items-center justify-center min-w-[76px] h-7 px-1.5 rounded-lg group-hover:bg-slate-100/70 transition-colors">
                       {/* 드래그 핸들 (⋮⋮) */}
                       <div
                         className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-500 hover:!text-indigo-600 p-0.5 rounded transition shrink-0"
@@ -1314,13 +1314,13 @@ export default function MembersManagementPage() {
                         <GripVertical className="w-3.5 h-3.5" />
                       </div>
 
-                      {/* 순서 번호 */}
-                      <span className="w-5 text-center text-xs font-mono font-bold text-slate-400">
-                        {idx + 1}
+                      {/* 순서 번호 (두 자리 모노스페이스) */}
+                      <span className="w-6 text-center text-xs font-mono font-bold text-slate-400 group-hover:text-slate-800 transition-colors">
+                        {String(idx + 1).padStart(2, '0')}
                       </span>
 
-                      {/* 화살표 이동 버튼 (▲, ▼) */}
-                      <div className="flex items-center space-x-0.5 border-l border-slate-200 pl-1">
+                      {/* 화살표 이동 버튼 (▲, ▼) - 평소에는 투명(opacity-0), 호버 시 부드럽게 등장 */}
+                      <div className="flex items-center space-x-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                         <button
                           type="button"
                           disabled={isFirst}
@@ -1328,7 +1328,7 @@ export default function MembersManagementPage() {
                             e.stopPropagation();
                             handleMoveMember(idx, 'UP');
                           }}
-                          className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 cursor-pointer disabled:cursor-not-allowed transition"
+                          className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-100/70 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-300 cursor-pointer disabled:cursor-not-allowed transition"
                           title="위로 1칸 이동"
                         >
                           <ChevronUp className="w-3.5 h-3.5" />
@@ -1340,7 +1340,7 @@ export default function MembersManagementPage() {
                             e.stopPropagation();
                             handleMoveMember(idx, 'DOWN');
                           }}
-                          className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 cursor-pointer disabled:cursor-not-allowed transition"
+                          className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-100/70 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-300 cursor-pointer disabled:cursor-not-allowed transition"
                           title="아래로 1칸 이동"
                         >
                           <ChevronDown className="w-3.5 h-3.5" />
