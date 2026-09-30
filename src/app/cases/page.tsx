@@ -9,6 +9,8 @@ import CustomerSelectCombobox, { CustomerSelectionValue, AUTO_DETECT_CUSTOMER } 
 import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
 import { useRouter } from 'next/navigation';
 import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
+import { CaseActionConfirmModal, SKIP_CASE_TRASH_CONFIRM_KEY, CaseActionType } from '@/components/common/CaseActionConfirmModal';
+import { QuoteDeleteToast } from '@/components/common/QuoteDeleteConfirmModal';
 import {
   FileText,
   Plus,
@@ -203,6 +205,26 @@ export default function CasesPage() {
       return next;
     });
   };
+
+  // 💡 견적의뢰 대장 화면 정중앙 액션 확인 모달 상태 (브라우저 기본 confirm 제거)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    actionType: 'TRASH' | 'PERMANENT_DELETE';
+    ids: string[];
+    caseTitle?: string;
+  }>({
+    isOpen: false,
+    actionType: 'TRASH',
+    ids: [],
+    caseTitle: undefined
+  });
+
+  // 💡 삭제/이동 후 화면 중앙 토스트 알림 상태
+  const [actionToast, setActionToast] = useState<{
+    text: string;
+    showRestoreConfirm?: boolean;
+    isError?: boolean;
+  } | null>(null);
 
   // 신규 도면 견적 등록 표준 모달 상태
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -701,11 +723,9 @@ export default function CasesPage() {
     }
   };
 
-  const handleTrashCases = async (ids: string[]) => {
+  // 실제 휴지통 이동 실행 함수
+  const executeTrashCases = async (ids: string[], wasSkipped: boolean) => {
     if (ids.length === 0) return;
-    if (!confirm(`선택한 ${ids.length}건의 견적 건을 휴지통으로 이동하시겠습니까?\n(30일간 보관 후 완전 삭제되며, 언제든 복원할 수 있습니다.)`)) {
-      return;
-    }
     setLifecycleLoading(true);
     try {
       const res = await apiFetch('/api/quotation-cases/bulk-lifecycle', {
@@ -718,15 +738,48 @@ export default function CasesPage() {
       });
       if (res.ok) {
         setSelectedCaseIds(prev => prev.filter(id => !ids.includes(id)));
-        await fetchCases();
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        await fetchCases(true);
+
+        setActionToast({
+          text: `선택한 ${ids.length}건의 견적 건이 ${wasSkipped ? '확인 없이 즉시 ' : ''}휴지통으로 이동되었습니다.`,
+          showRestoreConfirm: wasSkipped
+        });
       } else {
-        const d = await res.json();
-        alert(d.error || '휴지통 이동 실패');
+        const d = await res.json().catch(() => ({}));
+        setActionToast({
+          text: d.error || '휴지통 이동 실패',
+          isError: true
+        });
       }
     } catch (err: any) {
-      alert('휴지통 이동 중 오류: ' + err.message);
+      setActionToast({
+        text: '휴지통 이동 중 오류: ' + err.message,
+        isError: true
+      });
     } finally {
       setLifecycleLoading(false);
+    }
+  };
+
+  // 휴지통 이동 버튼 클릭 핸들러 (화면 중앙 커스텀 모달 표출)
+  const handleTrashCases = (ids: string[], title?: string) => {
+    if (ids.length === 0) return;
+
+    let skipConfirm = false;
+    try {
+      skipConfirm = localStorage.getItem(SKIP_CASE_TRASH_CONFIRM_KEY) === 'true';
+    } catch {}
+
+    if (skipConfirm) {
+      executeTrashCases(ids, true);
+    } else {
+      setConfirmModal({
+        isOpen: true,
+        actionType: 'TRASH',
+        ids,
+        caseTitle: title
+      });
     }
   };
 
@@ -744,23 +797,31 @@ export default function CasesPage() {
       });
       if (res.ok) {
         setSelectedCaseIds(prev => prev.filter(id => !ids.includes(id)));
-        await fetchCases();
+        await fetchCases(true);
+        setActionToast({
+          text: `선택한 ${ids.length}건의 견적 건이 정상 복원되었습니다.`,
+          isError: false
+        });
       } else {
-        const d = await res.json();
-        alert(d.error || '복원 실패');
+        const d = await res.json().catch(() => ({}));
+        setActionToast({
+          text: d.error || '복원 실패',
+          isError: true
+        });
       }
     } catch (err: any) {
-      alert('복원 처리 중 오류: ' + err.message);
+      setActionToast({
+        text: '복원 처리 중 오류: ' + err.message,
+        isError: true
+      });
     } finally {
       setLifecycleLoading(false);
     }
   };
 
-  const handlePermanentDeleteCases = async (ids: string[]) => {
+  // 실제 영구 삭제 실행 함수
+  const executePermanentDeleteCases = async (ids: string[]) => {
     if (ids.length === 0) return;
-    if (!confirm(`⚠️ 경고: 선택한 ${ids.length}건을 완전 영구 삭제하시겠습니까?\n모든 도면 파일 및 BOM 산출 데이터가 복구 불가능하게 삭제됩니다.`)) {
-      return;
-    }
     setLifecycleLoading(true);
     try {
       const res = await apiFetch('/api/quotation-cases/bulk-lifecycle', {
@@ -774,21 +835,75 @@ export default function CasesPage() {
       const d = await res.json().catch(() => ({}));
       if (res.ok && d.success) {
         setSelectedCaseIds(prev => prev.filter(id => !ids.includes(id)));
-        await fetchCases();
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        await fetchCases(true);
 
         if (d.skippedCount > 0 && d.processedCount > 0) {
-          alert(`선택한 ${d.totalRequested}건 중 ${d.processedCount}건이 영구 삭제되었습니다.\n\n⚠️ 제외된 ${d.skippedCount}건: 타 담당자의 보안 견적건으로 최고관리자(admin) 계정 권한이 필요하여 보존되었습니다.`);
+          setActionToast({
+            text: `선택한 ${d.totalRequested}건 중 ${d.processedCount}건이 영구 삭제되었습니다. (보안 권한에 따라 ${d.skippedCount}건 보존)`,
+            isError: false
+          });
         } else if (d.skippedCount > 0 && d.processedCount === 0) {
-          alert(`영구 삭제할 수 없습니다.\n\n⚠️ ${d.skippedItems?.[0]?.reason || '타 담당자의 견적건은 본인 작성자 또는 최고관리자만 영구 삭제할 수 있습니다.'}`);
+          setActionToast({
+            text: `영구 삭제 불가: ${d.skippedItems?.[0]?.reason || '타 담당자 견적건은 최고관리자만 영구 삭제 가능합니다.'}`,
+            isError: true
+          });
+        } else {
+          setActionToast({
+            text: `선택한 ${ids.length}건의 견적 건이 영구히 완전 삭제되었습니다.`,
+            isError: false
+          });
         }
       } else {
-        alert(d.error || '영구 삭제 실패');
+        setActionToast({
+          text: d.error || '영구 삭제 실패',
+          isError: true
+        });
       }
     } catch (err: any) {
-      alert('영구 삭제 중 오류: ' + err.message);
+      setActionToast({
+        text: '영구 삭제 중 오류: ' + err.message,
+        isError: true
+      });
     } finally {
       setLifecycleLoading(false);
     }
+  };
+
+  // 영구 삭제 버튼 클릭 핸들러 (화면 중앙 커스텀 모달 표출)
+  const handlePermanentDeleteCases = (ids: string[], title?: string) => {
+    if (ids.length === 0) return;
+    setConfirmModal({
+      isOpen: true,
+      actionType: 'PERMANENT_DELETE',
+      ids,
+      caseTitle: title
+    });
+  };
+
+  // 모달 승인 처리 핸들러
+  const handleConfirmActionModal = async (skipNextTime: boolean) => {
+    if (confirmModal.actionType === 'TRASH') {
+      if (skipNextTime) {
+        try {
+          localStorage.setItem(SKIP_CASE_TRASH_CONFIRM_KEY, 'true');
+        } catch {}
+      }
+      await executeTrashCases(confirmModal.ids, skipNextTime);
+    } else if (confirmModal.actionType === 'PERMANENT_DELETE') {
+      await executePermanentDeleteCases(confirmModal.ids);
+    }
+  };
+
+  // 확인창 다시 켜기 복원 핸들러
+  const handleRestoreCaseTrashConfirmDialog = () => {
+    try {
+      localStorage.removeItem(SKIP_CASE_TRASH_CONFIRM_KEY);
+    } catch {}
+    setActionToast({
+      text: '✓ 휴지통 이동 확인창이 다시 활성화되었습니다.',
+      showRestoreConfirm: false
+    });
   };
 
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -2167,7 +2282,7 @@ export default function CasesPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handlePermanentDeleteCases([c.id])}
+                                    onClick={() => handlePermanentDeleteCases([c.id], c.case_name)}
                                     title="완전 영구 삭제 (복구 불가)"
                                     className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-300 transition-all cursor-pointer shadow-2xs"
                                   >
@@ -2195,7 +2310,7 @@ export default function CasesPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleTrashCases([c.id])}
+                                    onClick={() => handleTrashCases([c.id], c.case_name)}
                                     title="휴지통으로 이동"
                                     className="p-1.5 text-rose-700 hover:bg-rose-50 rounded border border-rose-300 transition-colors cursor-pointer"
                                   >
@@ -2250,7 +2365,7 @@ export default function CasesPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleTrashCases([c.id])}
+                                    onClick={() => handleTrashCases([c.id], c.case_name)}
                                     title="견적건 삭제 (휴지통으로 이동)"
                                     className="p-1.5 text-rose-700 hover:bg-rose-50 rounded border border-rose-300 transition-colors cursor-pointer"
                                   >
@@ -2820,6 +2935,24 @@ export default function CasesPage() {
           </div>
         </div>
       )}
+
+      {/* ⚠️ 견적의뢰 대장 화면 정중앙 액션 확인 모달 (브라우저 confirm 대체) */}
+      <CaseActionConfirmModal
+        isOpen={confirmModal.isOpen}
+        actionType={confirmModal.actionType}
+        itemCount={confirmModal.ids.length}
+        caseTitle={confirmModal.caseTitle}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={handleConfirmActionModal}
+        isLoading={lifecycleLoading}
+      />
+
+      {/* 💡 화면 중앙 토스트 알림 & [확인창 다시 켜기] 복원 버튼 */}
+      <QuoteDeleteToast
+        message={actionToast}
+        onClose={() => setActionToast(null)}
+        onRestoreConfirmDialog={handleRestoreCaseTrashConfirmDialog}
+      />
     </div>
   );
 }
