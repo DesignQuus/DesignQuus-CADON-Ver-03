@@ -581,17 +581,8 @@ export default function HomePage() {
   };
 
   const roleInfo = getRoleBadge(user?.role);
-  const [caseFilter, setCaseFilter] = useState<'ALL' | 'MY'>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = JSON.parse(localStorage.getItem('cadon_user') || 'null');
-        if (cached?.role && !['SUPER_ADMIN', 'TENANT_ADMIN'].includes(cached.role)) {
-          return 'MY';
-        }
-      } catch {}
-    }
-    return 'ALL';
-  });
+  // SSR Hydration Mismatch 방지: 초기 상태는 'ALL'로 서버/클라이언트 일치시키고, useEffect 마운트 시 사용자 권한에 따라 안전하게 'MY'로 동기화
+  const [caseFilter, setCaseFilter] = useState<'ALL' | 'MY'>('ALL');
   const [pipelineFilter, setPipelineFilter] = useState<'ALL' | PipelineStage>('ALL');
   const [casePage, setCasePage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(5);
