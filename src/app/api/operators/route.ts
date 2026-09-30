@@ -148,7 +148,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ success: true, operators: safeUsers });
   } catch (error: any) {
     console.error('GET /api/operators error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    let msg = error.message || '임직원 목록을 불러오지 못했습니다.';
+    if (msg.includes('X-Api-Key') || msg.toLowerCase().includes('unauthorized')) {
+      msg = '데이터베이스 인증 연결을 확인 중입니다. 잠시 후 [새로고침]을 눌러주세요.';
+    }
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }
 

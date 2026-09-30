@@ -231,9 +231,9 @@ export default function MembersManagementPage() {
   }, []);
 
   // 운영자 목록 불러오기 (isSilent: true일 경우 화면 언마운트 및 스크롤 튐 없이 조용히 백그라운드 갱신)
-  const fetchData = async (isSilent = false) => {
-    if (!isSilent) setIsLoading(true);
-    setErrorMsg("");
+  const fetchData = async (isSilent = false, isRetry = false) => {
+    if (!isSilent && !isRetry) setIsLoading(true);
+    if (!isRetry) setErrorMsg("");
     try {
       // 1. 운영자 목록 및 권한 설정
       const opUrl = `/api/operators?include_deleted=true`;
@@ -247,7 +247,13 @@ export default function MembersManagementPage() {
       const opData = await opRes.json();
       if (opData.success) {
         setOperators(opData.operators || []);
+        setErrorMsg("");
       } else {
+        // 일시적 통신 실패 시 1회 자동 백그라운드 재시도
+        if (!isRetry) {
+          setTimeout(() => fetchData(true, true), 700);
+          return;
+        }
         setErrorMsg(opData.error || "임직원 목록을 불러오지 못했습니다.");
       }
 
@@ -263,6 +269,10 @@ export default function MembersManagementPage() {
         if (permData.pendingCount !== undefined) setPendingCount(permData.pendingCount);
       }
     } catch (err: any) {
+      if (!isRetry) {
+        setTimeout(() => fetchData(true, true), 700);
+        return;
+      }
       setErrorMsg(err.message || "데이터 통신 중 오류가 발생했습니다.");
     } finally {
       if (!isSilent) setIsLoading(false);
@@ -1266,6 +1276,24 @@ export default function MembersManagementPage() {
                 <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                   <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500" />
                   <span>데이터를 불러오는 중입니다...</span>
+                </td>
+              </tr>
+            ) : errorMsg && operators.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-4 py-12 text-center">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <AlertTriangle className="w-8 h-8 text-amber-500 mb-1" />
+                    <p className="text-sm font-bold text-slate-700">{errorMsg}</p>
+                    <p className="text-xs text-slate-400">데이터베이스와의 일시적 연결 지연이 발생했습니다.</p>
+                    <button
+                      type="button"
+                      onClick={() => fetchData()}
+                      className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>데이터 다시 불러오기</span>
+                    </button>
+                  </div>
                 </td>
               </tr>
             ) : filteredOperators.length === 0 ? (

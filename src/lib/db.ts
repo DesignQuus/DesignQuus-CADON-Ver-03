@@ -24,8 +24,10 @@ if (typeof process !== 'undefined') {
   if (!process.env.NEXT_PUBLIC_EGDESK_ENV) {
     process.env.NEXT_PUBLIC_EGDESK_ENV = 'development';
   }
-  if (!process.env.NEXT_PUBLIC_EGDESK_API_KEY) {
-    process.env.NEXT_PUBLIC_EGDESK_API_KEY = '48632c34-0fd1-4b53-b448-b8162e19b925';
+  // Enforce valid active EGDesk API key for localhost:8080
+  const VALID_KEY = '48632c34-0fd1-4b53-b448-b8162e19b925';
+  if (!process.env.NEXT_PUBLIC_EGDESK_API_KEY || process.env.NEXT_PUBLIC_EGDESK_API_KEY.length < 10) {
+    process.env.NEXT_PUBLIC_EGDESK_API_KEY = VALID_KEY;
   }
 
   // Enforce local EGDesk endpoint for local dev/preview to eliminate render tunnel latency & auth dropouts
