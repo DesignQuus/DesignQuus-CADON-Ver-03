@@ -151,17 +151,17 @@ export default function Navigation() {
             >
               <FileText className="w-4 h-4 text-blue-600" />
               <span>견적의뢰</span>
-              {user?.name && !isSuperAdmin && (
+              {user?.name && !isSuperAdmin && (user.myActiveCasesCount ?? 0) > 0 && (
                 <span
                   className={`ml-1 px-1.5 py-0.2 rounded-full text-[11px] font-black inline-flex items-center gap-0.5 tracking-tight transition-all ${
                     (pathname === '/cases' || pathname.startsWith('/cases/'))
                       ? 'bg-blue-600 text-white shadow-2xs'
                       : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                   }`}
-                  title={`${user.name} 담당 진행 견적: ${user.myActiveCasesCount ?? 0}건`}
+                  title={`${user.name} 담당 진행 견적: ${user.myActiveCasesCount}건`}
                 >
                   <span className="text-[10px] opacity-85 font-medium">내</span>
-                  <span>{user.myActiveCasesCount ?? 0}</span>
+                  <span>{user.myActiveCasesCount}</span>
                 </span>
               )}
             </Link>
@@ -222,35 +222,19 @@ export default function Navigation() {
               <span>표준 단가·임률</span>
             </Link>
 
-            {/* 6. 사원 관리 */}
-            {(isTenantAdmin || isSuperAdmin) && (
+            {/* 6. 사원·권한 관리 (사원 관리 + 권한 설정 통합) */}
+            {isAnyAdmin && (
               <Link
                 href="/admin/members"
                 prefetch={true}
                 className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                  pathname.startsWith('/admin/members')
+                  pathname.startsWith('/admin/members') || pathname.startsWith('/admin/permissions')
                     ? 'bg-blue-50 text-blue-700 font-bold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 }`}
               >
                 <Users className="w-4 h-4 text-indigo-600" />
-                <span>사원 관리</span>
-              </Link>
-            )}
-
-            {/* 7. 승인권한 설정 */}
-            {isAnyAdmin && (
-              <Link
-                href="/admin/permissions"
-                prefetch={true}
-                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                  pathname.startsWith('/admin/permissions')
-                    ? 'bg-blue-50 text-blue-700 font-bold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Sliders className="w-4 h-4 text-purple-600" />
-                <span>승인권한 설정</span>
+                <span>사원·권한 관리</span>
                 {pendingCount > 0 && (
                   <span className="ml-1 px-1.5 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-white animate-pulse">
                     {pendingCount}
@@ -299,11 +283,11 @@ export default function Navigation() {
                   </span>
                 ) : user.role === 'REVIEWER' ? (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-                    검토자
+                    가공·설계 검토
                   </span>
                 ) : (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
-                    영업담당
+                    영업 실무
                   </span>
                 )}
               </div>

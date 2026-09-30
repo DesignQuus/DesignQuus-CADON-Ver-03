@@ -36,9 +36,10 @@ function runExcelExporter(quoteJsonPath: string, templatePath: string, outputPat
   });
 }
 
-export async function POST(
+async function handleExportExcel(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  params: Promise<{ id: string }>,
+  isBinaryResponse = false
 ) {
   const session = await getSession();
   if (!session) {
@@ -58,10 +59,19 @@ export async function POST(
     return NextResponse.json({ error: '견적서를 찾을 수 없습니다.' }, { status: 404 });
   }
 
-  // 🛡️ [조치 A] 미승인 견적서 엑셀 내보내기 원천 차단 가드 (status === 'APPROVED' & is_locked === 1)
+  // 🛡️ [0원 견적서 원천 차단 가드]
+  if (!quote.total_amount || Number(quote.total_amount) <= 0) {
+    return NextResponse.json({ 
+      error: '총 견적 금액이 0원인 견적서는 엑셀로 출력할 수 없습니다. [단가 검토] 화면에서 품목별 단가를 먼저 확정해주세요.',
+      status: quote.status,
+      total_amount: quote.total_amount
+    }, { status: 400 });
+  }
+
+  // 🛡️ [미승인 견적서 엑셀 내보내기 원천 차단 가드] (status === 'APPROVED' & is_locked === 1)
   if (quote.status !== 'APPROVED' || quote.is_locked !== 1) {
     return NextResponse.json({ 
-      error: `미승인 견적서(상태: ${quote.status || 'DRAFT'})는 엑셀로 내보낼 수 없습니다. [견적 검토] 화면에서 모든 단가를 확정하고 [견적 승인]을 완료해주세요.`,
+      error: `미승인 견적서(상태: ${quote.status || 'DRAFT'})는 엑셀로 내보낼 수 없습니다. [단가 검토] 화면에서 모든 단가를 확정하고 [견적 승인]을 완료해주세요.`,
       status: quote.status,
       is_locked: quote.is_locked
     }, { status: 403 });
@@ -69,9 +79,11 @@ export async function POST(
 
   try {
     let reqBody: any = {};
-    try {
-      reqBody = await req.json();
-    } catch {}
+    if (req.method === 'POST') {
+      try {
+        reqBody = await req.json();
+      } catch {}
+    }
 
     let items = (await db.prepare(`
       SELECT 
@@ -190,6 +202,17 @@ export async function POST(
       details: `표준 견적서 엑셀 내보내기 다운로드: ${exportFileName} (${items.length}개 품목, 총액 ${(quote.total_amount || 0).toLocaleString()}원)`
     });
 
+    if (isBinaryResponse && fs.existsSync(outputPath)) {
+      const fileBuffer = fs.readFileSync(outputPath);
+      const encodedName = encodeURIComponent(exportFileName);
+      return new NextResponse(fileBuffer, {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename*=UTF-8''${encodedName}`
+        }
+      });
+    }
+
     return NextResponse.json({
       success: true,
       exportId,
@@ -201,4 +224,18 @@ export async function POST(
   } catch (error: any) {
     return NextResponse.json({ error: error.message || '엑셀 출력 실패' }, { status: 500 });
   }
+}
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return handleExportExcel(req, params, true);
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return handleExportExcel(req, params, false);
 }

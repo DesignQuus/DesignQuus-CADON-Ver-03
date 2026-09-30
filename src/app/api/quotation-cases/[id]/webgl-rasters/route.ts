@@ -19,9 +19,9 @@ export async function GET(
   const fileId = searchParams.get('fileId');
 
   // Verify that a valid CAD file exists
-  const hasFile = fileId
+  const hasFile = await (fileId
     ? db.prepare(`SELECT 1 FROM uploaded_files WHERE quotation_case_id = ? AND (id = ? OR derived_from_file_id = ?) LIMIT 1`).get(id, fileId, fileId)
-    : db.prepare(`SELECT 1 FROM uploaded_files WHERE quotation_case_id = ? LIMIT 1`).get(id);
+    : db.prepare(`SELECT 1 FROM uploaded_files WHERE quotation_case_id = ? LIMIT 1`).get(id));
 
   if (!hasFile) {
     return NextResponse.json({ error: '도면 파일을 찾을 수 없습니다.' }, { status: 404 });
@@ -33,10 +33,29 @@ export async function GET(
 
   const candidates = [
     path.join(derivedDir, `${filePrefix}__cad_rasters.json`),
-    path.join(localDerived, `${filePrefix}__cad_rasters.json`),
+    path.join(localDerived, `${filePrefix}__cad_rasters.json`)
+  ];
+
+  // If fileId given and derived_from_file_id might have been used in naming, check alternative
+  if (fileId) {
+    const altRow = (await db.prepare(`
+      SELECT id FROM uploaded_files
+      WHERE quotation_case_id = ? AND (derived_from_file_id = ? OR id = ?) AND file_type = 'DXF'
+      LIMIT 1
+    `).get(id, fileId, fileId)) as any;
+    if (altRow && altRow.id) {
+      const altPrefix = `${id}_${altRow.id}`;
+      candidates.unshift(
+        path.join(derivedDir, `${altPrefix}__cad_rasters.json`),
+        path.join(localDerived, `${altPrefix}__cad_rasters.json`)
+      );
+    }
+  }
+
+  candidates.push(
     path.join(derivedDir, `${id}__cad_rasters.json`),
     path.join(localDerived, `${id}__cad_rasters.json`)
-  ];
+  );
 
   let rasters: any[] = [];
 

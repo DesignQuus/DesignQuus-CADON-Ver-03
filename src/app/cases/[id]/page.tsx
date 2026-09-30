@@ -16,14 +16,16 @@ import QuotationDocumentPreview from '@/components/QuotationDocumentPreview';
 import FabricationFeaturesPanel from '@/components/FabricationFeaturesPanel';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
 import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
+import { getClientCache, setClientCache } from '@/lib/cacheStore';
 
 export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [privacyReason, setPrivacyReason] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'cad' | 'structure' | 'approval' | 'quote' | 'excel' | 'features'>('cad');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -435,9 +437,12 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
     setActiveTab('cad');
   };
 
-  const fetchData = async () => {
+  const fetchData = async (isSilent: boolean = false) => {
     try {
       setFetchError(null);
+      if (!isSilent && !data && (typeof window === 'undefined' || !getClientCache(`case_${id}`))) {
+        setLoading(true);
+      }
       const res = await apiFetch(`/api/quotation-cases/${id}`);
       if (res.status === 401) {
         window.location.href = '/login';
@@ -446,6 +451,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       if (res.ok) {
         const json = await res.json();
         setData(json);
+        setClientCache(`case_${id}`, json);
         const drawingsCount = json.drawings?.length || 0;
         const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
         const explicitStep = sp ? sp.get('step') : null;
@@ -458,14 +464,12 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
           }
         }
         if (json.normalizedItems?.length > 0) {
-          if (!selectedNormItem) {
-            setSelectedNormItem(json.normalizedItems[0]);
-          }
+          setSelectedNormItem((prev: any) => prev || json.normalizedItems[0]);
           // Synchronize selectedApprovalIds with all quote-included items from Tab 1
           const quoteIncludedIds = json.normalizedItems
             .filter((ni: any) => ni.is_quote_included !== 0)
             .map((ni: any) => ni.id);
-          setSelectedApprovalIds(quoteIncludedIds);
+          setSelectedApprovalIds((prev: string[]) => (prev && prev.length > 0 ? prev : quoteIncludedIds));
         }
       } else {
         const errJson = await res.json().catch(() => null);
@@ -479,7 +483,42 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   };
 
   useEffect(() => {
-    fetchData();
+    setMounted(true);
+    const cached = typeof window !== 'undefined' ? getClientCache(`case_${id}`) : null;
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      if (cached.normalizedItems?.length > 0) {
+        setSelectedNormItem(cached.normalizedItems[0]);
+        const quoteIncludedIds = cached.normalizedItems
+          .filter((ni: any) => ni.is_quote_included !== 0)
+          .map((ni: any) => ni.id);
+        setSelectedApprovalIds(quoteIncludedIds);
+      }
+      const sp = new URLSearchParams(window.location.search);
+      const stepParam = sp.get('step');
+      if (stepParam === '1') {
+        setWorkflowStep(1);
+        setIsSidebarOpen(true);
+      } else if (stepParam === '2') setWorkflowStep(2);
+      else if (stepParam === '3') setWorkflowStep(3);
+      else if (stepParam === '4') setWorkflowStep(4);
+      else if (stepParam === '5') setWorkflowStep(5);
+      else {
+        setWorkflowStep((cached.drawings?.length || 0) === 0 ? 1 : 2);
+      }
+    } else {
+      const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const stepParam = sp ? sp.get('step') : null;
+      if (stepParam === '1') {
+        setWorkflowStep(1);
+        setIsSidebarOpen(true);
+      } else if (stepParam === '2') setWorkflowStep(2);
+      else if (stepParam === '3') setWorkflowStep(3);
+      else if (stepParam === '4') setWorkflowStep(4);
+      else if (stepParam === '5') setWorkflowStep(5);
+    }
+    fetchData(!!cached);
     apiFetch('/api/auth/me').then(res => res.json()).then(d => setUser(d.user)).catch(() => {});
   }, [id]);
 
@@ -1755,7 +1794,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="flex flex-col items-center justify-center py-32 space-y-4">
         <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />

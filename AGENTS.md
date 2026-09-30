@@ -3,8 +3,8 @@
 <!-- BEGIN:egdesk-dev-context -->
 ## EGDesk Development Context
 
-EGDesk opened this project with the dev server on **port 4006** (http://localhost:4006, coding (dev)).
-Do not assume port 3000 or 4000. Use port 4006 for local preview and dev commands.
+EGDesk opened this project with the dev server on **port 4003** (http://localhost:4003, coding (dev)).
+Do not assume port 3000 or 4000. Use port 4003 for local preview and dev commands.
 EGDesk MCP/API runs at http://localhost:8080.
 
 See `.agents/rules/egdesk-dev-context.md` for full details.
@@ -77,3 +77,16 @@ See `.agents/rules/egdesk-dev-context.md` for full details.
      - 저장 버튼 클릭 시점의 `window.scrollY`를 기억하고, 모달 닫힘 및 데이터 갱신 완료 후에도 사용자가 보고 있던 위치를 1픽셀의 오차 없이 그대로 유지합니다.
   4. **비침습형 플로팅 토스트 (Floating Toast Notifications)**:
      - 작업 성공/실패 메시지는 본문 레이아웃을 밀어내는 상단 인라인 배너 대신, **우측 상단 플로팅 토스트(`fixed top-6 right-6 z-[80] shadow-lg`)**로 띄워 페이지 전체의 높이 변화(CLS / Layout Shift)를 100% 방지합니다.
+
+## 표준 리스트/테이블 행번호(순번) 필수 표출 규칙 (Mandatory Row Numbering Rule)
+- **절대 원칙**: 프로젝트 내의 모든 데이터 테이블 및 리스트 UI(대시보드 접수 현황, 최근 견적서 목록, 견적서 관리 대장, 임직원 관리, 고객사 관리 등)에서는 **항상 좌측 맨 첫 번째 열에 직관적인 행번호(No. / 번호 / 순번)를 반드시 표출**합니다.
+- **핵심 구현 지침**:
+  1. **페이지네이션 연동 글로벌 순번 계산**:
+     - 페이지가 나뉘는 테이블의 경우, 단순 1부터 다시 세지 않고 전체 데이터 기준의 실제 글로벌 인덱스(`(currentPage - 1) * pageSize + idx + 1`)를 정확히 계산하여 표출합니다.
+     - 예: 1페이지(1~10), 2페이지(11~20), 3페이지(21~30)...
+  2. **시각적 정렬 및 타이포그래피 표준**:
+     - 자릿수 변화에도 흔들림이 없도록 모노스페이스 숫자(`font-mono`), 중앙 정렬(`text-center`), 적절한 너비(`w-12` 또는 `w-14`), 차분한 톤(`text-slate-400 font-bold`)을 적용합니다.
+     - 대시보드 요약 테이블 등 세련된 스타일이 필요한 곳은 `01`, `02` 형태의 두 자리 패딩 표기를 활용합니다.
+  3. **검색 및 필터링 시 순번 무결성**:
+     - 검색어 입력이나 상태 필터링 시에도 현재 필터링된 결과물에 맞춰 1번부터 차례대로 매끄럽게 재정렬 표출되어야 합니다.
+

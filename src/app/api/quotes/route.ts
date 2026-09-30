@@ -42,7 +42,8 @@ export async function GET(req: NextRequest) {
         qc.case_no,
         qc.case_name,
         COALESCE(c.company_name, '미지정 고객사') as company_name,
-        (SELECT COUNT(*) FROM quote_items qi WHERE qi.quote_id = q.id) as item_count
+        (SELECT COUNT(*) FROM quote_items qi WHERE qi.quote_id = q.id) as item_count,
+        (SELECT COUNT(*) FROM quote_items qi WHERE qi.quote_id = q.id AND (qi.price_source IN ('MANUAL_PRICE', 'MANUAL_INPUT', 'USER_OVERRIDE', 'PRICE_MASTER', 'MANUAL_REVIEW') OR qi.unit_price > 0)) as modified_count
       FROM quotes q
       LEFT JOIN quotation_cases qc ON qc.id = q.quotation_case_id
       LEFT JOIN companies c ON c.id = q.company_id
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
       params.push(statusFilter);
     }
 
-    sql += ` ORDER BY q.rowid DESC, q.quote_version DESC`;
+    sql += ` ORDER BY q.quote_date DESC, q.rowid DESC, q.quote_version DESC`;
 
     const quotes = (await db.prepare(sql).all(...params)) as any[];
 
@@ -74,6 +75,30 @@ export async function GET(req: NextRequest) {
       q.author_name = userMap.get(q.created_by_user_id) || '담당자';
       q.created_at = q.quote_date || q.created_at || '';
     }
+
+    // 견적건 그룹핑 및 정렬:
+    // 1. 견적의뢰 케이스(case_no 또는 quote_no 앞부분) 및 최신 일자 역순 정렬
+    // 2. 동일 케이스 내에서는 최신 버전(quote_version DESC) 정렬
+    quotes.sort((a: any, b: any) => {
+      const caseA = a.case_no || a.quote_no?.replace(/-V\d+$/i, '') || '';
+      const caseB = b.case_no || b.quote_no?.replace(/-V\d+$/i, '') || '';
+
+      // 동일 케이스인 경우: 최신 버전(quote_version 내림차순) 우선
+      if (a.quotation_case_id === b.quotation_case_id || (caseA && caseA === caseB)) {
+        return Number(b.quote_version || 0) - Number(a.quote_version || 0);
+      }
+
+      // 서로 다른 케이스인 경우: 케이스 번호 역순(최신 날짜/번호 먼저)
+      const caseCompare = caseB.localeCompare(caseA);
+      if (caseCompare !== 0) return caseCompare;
+
+      const dateA = a.quote_date || a.created_at || '';
+      const dateB = b.quote_date || b.created_at || '';
+      const dateCompare = dateB.localeCompare(dateA);
+      if (dateCompare !== 0) return dateCompare;
+
+      return Number(b.quote_version || 0) - Number(a.quote_version || 0);
+    });
 
     // 클라이언트 검색어 필터 (견적번호, 케이스명, 고객사명)
     let filteredQuotes = quotes;
@@ -86,10 +111,19 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 견적 통계 집계
-    const totalCount = filteredQuotes.length;
-    const totalAmount = filteredQuotes.reduce((acc: number, q: any) => acc + Number(q.total_amount || 0), 0);
-    const approvedAmount = filteredQuotes
+    // 견적 통계 집계: 케이스별 최신 버전만 기준으로 집계하여 중복 왜곡 방지
+    const caseLatestMap = new Map<string, any>();
+    for (const q of filteredQuotes) {
+      const key = q.quotation_case_id || q.case_no || q.id;
+      if (!caseLatestMap.has(key)) {
+        caseLatestMap.set(key, q);
+      }
+    }
+    const latestList = Array.from(caseLatestMap.values());
+    const totalCount = latestList.length;
+    const totalRevisions = filteredQuotes.length;
+    const totalAmount = latestList.reduce((acc: number, q: any) => acc + Number(q.total_amount || 0), 0);
+    const approvedAmount = latestList
       .filter((q: any) => ['APPROVED', 'ISSUED'].includes(q.status))
       .reduce((acc: number, q: any) => acc + Number(q.total_amount || 0), 0);
 
@@ -98,6 +132,7 @@ export async function GET(req: NextRequest) {
       quotes: filteredQuotes,
       stats: {
         totalCount,
+        totalRevisions,
         totalAmount,
         approvedAmount
       }

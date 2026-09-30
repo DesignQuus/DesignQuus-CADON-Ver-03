@@ -176,6 +176,10 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
 
   // ⚡ 1. 팀장 전결 즉시 승인 핸들러 (마진 12% 이상 시 최고관리자 부재와 무관하게 즉시 발행)
   const handleTeamLeadApprove = async () => {
+    if (quoteData.totalSupply <= 0) {
+      alert('총 견적 금액이 0원인 상태에서는 견적서를 승인하거나 발행할 수 없습니다.\n4단계 [단가 검토] 화면에서 품목별 단가를 먼저 확정해 주세요.');
+      return;
+    }
     setApprovingTeamLead(true);
     try {
       await apiFetch(`/api/quotation-cases/${caseId}/create-quote`, {
@@ -197,6 +201,10 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
 
   // 🚨 2. 비상시 긴급 선발행 핸들러 (최고 관리자 부재/긴급 마감 대응)
   const handleExecuteEmergencyPublish = () => {
+    if (quoteData.totalSupply <= 0) {
+      alert('총 견적 금액이 0원인 상태에서는 긴급 선발행을 진행할 수 없습니다.\n품목 단가가 산출되지 않은 0원 견적서는 고객 제출용으로 발행할 수 없습니다.');
+      return;
+    }
     if (!emergencyReason.trim()) {
       alert('긴급 선발행 사유를 필수로 입력해 주세요.');
       return;
@@ -376,56 +384,79 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
               </div>
             </div>
 
-            {/* 🎯 긴급 승인 액션 섹션 */}
-            <div className="p-4 rounded-xl border space-y-3 text-left ${
-              quoteData.marginRate >= 12.0 ? 'bg-emerald-50/60 border-emerald-200' : 'bg-amber-50/60 border-amber-200'
-            }">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="font-bold text-xs flex items-center gap-1.5 text-slate-900">
-                    {quoteData.marginRate >= 12.0 ? (
-                      <>
-                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                        <span>안전 마진 충족: 팀장 전결 즉시 승인 가능</span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertTriangle className="w-4 h-4 text-amber-600" />
-                        <span>기준 마진 미달 또는 결재권자 부재 긴급 대응</span>
-                      </>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500">
-                    {quoteData.marginRate >= 12.0
-                      ? '사내 마진 가이드라인(12% 이상)을 통과하였으므로 최고 관리자 대기 없이 즉시 공식 발행할 수 있습니다.'
-                      : '입찰 마감 임박 또는 최고 관리자 부재 시 [긴급 선발행] 사유를 입력하여 즉시 견적서를 출력할 수 있습니다.'}
-                  </p>
+            {quoteData.totalSupply <= 0 ? (
+              <div className="p-4 rounded-xl border border-rose-300 bg-rose-50/80 text-left space-y-2">
+                <div className="flex items-center gap-2 text-rose-800 font-extrabold text-xs">
+                  <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>견적 총액 0원 (단가 미산출) ➔ 공식 발행 원천 불가</span>
+                </div>
+                <p className="text-[11px] text-rose-700 leading-relaxed">
+                  현재 품목 단가가 산출되지 않아 견적 총액이 0원입니다.
+                  금액이 0원인 견적서는 사내 거버넌스 규정상 공식 승인 및 긴급 선발행이 엄격히 차단됩니다.
+                  [단가 검토] 화면으로 이동하여 품목별 단가를 먼저 입력 및 확정해 주세요.
+                </p>
+                <div className="pt-1">
+                  <Link
+                    href={`/quotes/${caseId}/review`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
+                  >
+                    <span>4단계 단가 검토 화면으로 이동</span>
+                    <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+                  </Link>
                 </div>
               </div>
+            ) : (
+              /* 🎯 긴급 승인 액션 섹션 */
+              <div className={`p-4 rounded-xl border space-y-3 text-left ${
+                quoteData.marginRate >= 12.0 ? 'bg-emerald-50/60 border-emerald-200' : 'bg-amber-50/60 border-amber-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-xs flex items-center gap-1.5 text-slate-900">
+                      {quoteData.marginRate >= 12.0 ? (
+                        <>
+                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                          <span>안전 마진 충족: 팀장 전결 즉시 승인 가능</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="w-4 h-4 text-amber-600" />
+                          <span>기준 마진 미달 또는 결재권자 부재 긴급 대응</span>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {quoteData.marginRate >= 12.0
+                        ? '사내 마진 가이드라인(12% 이상)을 통과하였으므로 최고 관리자 대기 없이 즉시 공식 발행할 수 있습니다.'
+                        : '입찰 마감 임박 또는 최고 관리자 부재 시 [긴급 선발행] 사유를 입력하여 즉시 견적서를 출력할 수 있습니다.'}
+                    </p>
+                  </div>
+                </div>
 
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                {/* 1. 팀장 전결 버튼 (12% 이상일 때 우선 활성화) */}
-                {quoteData.marginRate >= 12.0 && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {/* 1. 팀장 전결 버튼 (12% 이상일 때 우선 활성화) */}
+                  {quoteData.marginRate >= 12.0 && (
+                    <button
+                      onClick={handleTeamLeadApprove}
+                      disabled={approvingTeamLead}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {approvingTeamLead ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                      <span>⚡ 팀장 전결 승인 및 즉시 발행</span>
+                    </button>
+                  )}
+
+                  {/* 2. 비상 긴급 선발행 버튼 (최고 관리자 부재 및 마감 임박 대응) */}
                   <button
-                    onClick={handleTeamLeadApprove}
-                    disabled={approvingTeamLead}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                    onClick={() => setShowEmergencyModal(true)}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    {approvingTeamLead ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-                    <span>⚡ 팀장 전결 승인 및 즉시 발행</span>
+                    <AlertOctagon className="w-3.5 h-3.5" />
+                    <span>🚨 최고 관리자 부재/긴급 건 : 긴급 선발행 (사후 추인)</span>
                   </button>
-                )}
-
-                {/* 2. 비상 긴급 선발행 버튼 (최고 관리자 부재 및 마감 임박 대응) */}
-                <button
-                  onClick={() => setShowEmergencyModal(true)}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <AlertOctagon className="w-3.5 h-3.5" />
-                  <span>🚨 최고 관리자 부재/긴급 건 : 긴급 선발행 (사후 추인)</span>
-                </button>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link

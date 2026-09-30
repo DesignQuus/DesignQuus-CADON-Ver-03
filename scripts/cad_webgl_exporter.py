@@ -847,6 +847,10 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
             if not block:
                 return [], [], []
 
+            bp = getattr(block, 'base_point', (0.0, 0.0, 0.0))
+            bpx = bp.x if hasattr(bp, 'x') else (bp[0] if bp else 0.0)
+            bpy = bp.y if hasattr(bp, 'y') else (bp[1] if bp else 0.0)
+
             block_cache[bname] = []
             block_tris[bname] = []
             block_texts[bname] = []
@@ -873,46 +877,46 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
 
                 if t in ['LINE', 'LWPOLYLINE', 'POLYLINE', 'SPLINE', 'SOLID', 'TRACE']:
                     if t == 'LINE':
-                        p1 = (e.dxf.start.x, e.dxf.start.y)
-                        p2 = (e.dxf.end.x, e.dxf.end.y)
+                        p1 = (e.dxf.start.x - bpx, e.dxf.start.y - bpy)
+                        p2 = (e.dxf.end.x - bpx, e.dxf.end.y - bpy)
                         b_lines.append((p1, p2, rgb, col, lay_name, lw))
                         line_segs.append((p1, p2))
                     elif t in ['LWPOLYLINE', 'POLYLINE']:
                         segs, pts2, is_rect_cand = decompose_polyline_entity(e)
                         for p1, p2 in segs:
-                            b_lines.append((p1, p2, rgb, col, lay_name, lw))
+                            b_lines.append(((p1[0] - bpx, p1[1] - bpy), (p2[0] - bpx, p2[1] - bpy), rgb, col, lay_name, lw))
                         if is_rect_cand:
-                            poly_pts_list.append(pts2)
+                            poly_pts_list.append([(p[0] - bpx, p[1] - bpy) for p in pts2])
                     elif t == 'SPLINE':
                         try:
                             pts = list(e.flattening(distance=0.05))
                             for i in range(len(pts)-1):
-                                b_lines.append(((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb, col, lay_name, lw))
+                                b_lines.append(((pts[i][0] - bpx, pts[i][1] - bpy), (pts[i+1][0] - bpx, pts[i+1][1] - bpy), rgb, col, lay_name, lw))
                             if e.closed and len(pts) > 2:
-                                b_lines.append(((pts[-1][0], pts[-1][1]), (pts[0][0], pts[0][1]), rgb, col, lay_name, lw))
+                                b_lines.append(((pts[-1][0] - bpx, pts[-1][1] - bpy), (pts[0][0] - bpx, pts[0][1] - bpy), rgb, col, lay_name, lw))
                         except Exception:
                             pass
                     else:  # SOLID / TRACE
-                        v0 = (e.dxf.vtx0.x, e.dxf.vtx0.y)
-                        v1 = (e.dxf.vtx1.x, e.dxf.vtx1.y)
-                        v2 = (e.dxf.vtx2.x, e.dxf.vtx2.y)
-                        v3 = (e.dxf.vtx3.x, e.dxf.vtx3.y) if hasattr(e.dxf, 'vtx3') else v2
+                        v0 = (e.dxf.vtx0.x - bpx, e.dxf.vtx0.y - bpy)
+                        v1 = (e.dxf.vtx1.x - bpx, e.dxf.vtx1.y - bpy)
+                        v2 = (e.dxf.vtx2.x - bpx, e.dxf.vtx2.y - bpy)
+                        v3 = (e.dxf.vtx3.x - bpx, e.dxf.vtx3.y - bpy) if hasattr(e.dxf, 'vtx3') else v2
                         b_tris_list.append((v0, v1, v3, rgb, col, lay_name))
                         b_tris_list.append((v3, v2, v0, rgb, col, lay_name))
                 elif t == '3DFACE':
                     for p1, p2 in face_outline_segments(e):
-                        b_lines.append((p1, p2, rgb, col, lay_name, lw))
+                        b_lines.append(((p1[0] - bpx, p1[1] - bpy), (p2[0] - bpx, p2[1] - bpy), rgb, col, lay_name, lw))
                 elif t == 'HATCH':
                     for p1, p2 in hatch_outline_segments(e):
-                        b_lines.append((p1, p2, rgb, col, lay_name, lw))
+                        b_lines.append(((p1[0] - bpx, p1[1] - bpy), (p2[0] - bpx, p2[1] - bpy), rgb, col, lay_name, lw))
                 elif t == 'CIRCLE':
-                    cx, cy, r = e.dxf.center.x, e.dxf.center.y, e.dxf.radius
+                    cx, cy, r = e.dxf.center.x - bpx, e.dxf.center.y - bpy, e.dxf.radius
                     steps = calc_circle_steps(r)
                     c_pts = [(cx + r * math.cos(i*2*math.pi/steps), cy + r * math.sin(i*2*math.pi/steps)) for i in range(steps)]
                     for i in range(steps):
                         b_lines.append((c_pts[i], c_pts[(i+1)%steps], rgb, col, lay_name, lw))
                 elif t == 'ARC':
-                    cx, cy, r = e.dxf.center.x, e.dxf.center.y, e.dxf.radius
+                    cx, cy, r = e.dxf.center.x - bpx, e.dxf.center.y - bpy, e.dxf.radius
                     sa, ea = math.radians(e.dxf.start_angle), math.radians(e.dxf.end_angle)
                     if ea < sa:
                         ea += 2 * math.pi
@@ -924,35 +928,39 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                 elif t == 'DIMENSION':
                     d_lines, d_txt, d_rgb = extract_dim_geom_and_text(e)
                     for p1, p2 in d_lines:
-                        b_lines.append((p1, p2, d_rgb, col, lay_name, lw))
+                        b_lines.append(((p1[0] - bpx, p1[1] - bpy), (p2[0] - bpx, p2[1] - bpy), d_rgb, col, lay_name, lw))
                     if d_txt:
                         d_txt['raw_col'] = col
                         d_txt['lay_name'] = lay_name
+                        d_txt['x'] -= bpx
+                        d_txt['y'] -= bpy
                         b_txts.append(d_txt)
                 elif t == 'ELLIPSE':
                     try:
                         pts = list(e.flattening(distance=0.05))
                         for i in range(len(pts)-1):
-                            b_lines.append(((pts[i][0], pts[i][1]), (pts[i+1][0], pts[i+1][1]), rgb, col, lay_name, lw))
+                            b_lines.append(((pts[i][0] - bpx, pts[i][1] - bpy), (pts[i+1][0] - bpx, pts[i+1][1] - bpy), rgb, col, lay_name, lw))
                     except Exception:
                         pass
                 elif t == 'LEADER':
                     try:
                         verts = list(e.vertices)
                         for i in range(len(verts) - 1):
-                            b_lines.append(((verts[i].x, verts[i].y), (verts[i+1].x, verts[i+1].y), rgb, col, lay_name, lw))
+                            b_lines.append(((verts[i].x - bpx, verts[i].y - bpy), (verts[i+1].x - bpx, verts[i+1].y - bpy), rgb, col, lay_name, lw))
                     except Exception:
                         pass
                 elif t == 'MULTILEADER':
                     ml_lines, ml_tris, ml_txt = extract_mleader_geom_and_text(e)
                     for p1, p2 in ml_lines:
-                        b_lines.append((p1, p2, rgb, col, lay_name, lw))
+                        b_lines.append(((p1[0] - bpx, p1[1] - bpy), (p2[0] - bpx, p2[1] - bpy), rgb, col, lay_name, lw))
                     for p1, p2, p3 in ml_tris:
-                        b_tris_list.append((p1, p2, p3, rgb, col, lay_name))
+                        b_tris_list.append(((p1[0] - bpx, p1[1] - bpy), (p2[0] - bpx, p2[1] - bpy), (p3[0] - bpx, p3[1] - bpy), rgb, col, lay_name))
                     if ml_txt:
                         ml_txt['c'] = hex_col
                         ml_txt['raw_col'] = col
                         ml_txt['lay_name'] = lay_name
+                        ml_txt['x'] -= bpx
+                        ml_txt['y'] -= bpy
                         b_txts.append(ml_txt)
                 elif t in ['TEXT', 'MTEXT', 'ATTDEF']:
                     raw = e.dxf.text if t != 'MTEXT' else e.text
@@ -988,8 +996,8 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
 
                         b_txts.append({
                             't': cln,
-                            'x': target_pt_x,
-                            'y': target_pt_y,
+                            'x': target_pt_x - bpx,
+                            'y': target_pt_y - bpy,
                             'h': h,
                             'w': txt_w,
                             'r': rot,
@@ -1004,7 +1012,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     sub_bname = getattr(e.dxf, 'name', None)
                     if sub_bname:
                         sub_lines, sub_tris, sub_txts = resolve_block(sub_bname)
-                        ins = (e.dxf.insert.x, e.dxf.insert.y)
+                        ins = (e.dxf.insert.x - bpx, e.dxf.insert.y - bpy)
                         rot_deg = getattr(e.dxf, 'rotation', 0.0)
                         rot = math.radians(rot_deg)
                         cos_r, sin_r = math.cos(rot), math.sin(rot)

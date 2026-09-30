@@ -121,11 +121,25 @@ export default function QuoteLineGrid({
   const suppliedCount = lines.filter((l) => l.inclusionType === 'CUSTOMER_SUPPLIED').length;
   const unconfirmedCount = quoteTargetLines.filter((l) => l.status !== 'CONFIRMED' && l.inclusionType !== 'CUSTOMER_SUPPLIED').length;
 
+  const isLineModified = (l: QuoteReviewLine) => {
+    const isManualSource = ['MANUAL_INPUT', 'MANUAL_PRICE', 'USER_OVERRIDE', 'PRICE_MASTER', 'MANUAL_REVIEW'].includes(l.priceSource || '');
+    const isDiffFromEngine = Boolean(l.engineSuggestedPrice && l.unitCost && Number(l.unitCost) !== Number(l.engineSuggestedPrice));
+    const isDiffFromMaster = Boolean(l.masterPrice && l.unitCost && Number(l.unitCost) !== Number(l.masterPrice));
+    const hasManualRemark = Boolean(l.memo && (l.memo.includes('단가') || l.memo.includes('수기') || l.memo.includes('수정')));
+    return isManualSource || isDiffFromEngine || isDiffFromMaster || hasManualRemark || (Number(l.unitCost) > 0 && l.priceSource !== 'NOT_FOUND');
+  };
+
+  const modifiedCount = quoteTargetLines.filter(isLineModified).length;
+
   const filtered = lines.filter((l) => {
     const incType = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
     if (filterType === 'ALL') {
       // 기본 ALL 뷰: 조립도, 견적제외, 체결구제외, 도면노이즈는 숨김 처리되어 진짜 부품만 깨끗하게 노출!
       return !l.isAssembly && incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED' && incType !== 'ANNOTATION_NOISE';
+    }
+    if (filterType === 'MODIFIED') {
+      // ⚡ 단가 직접 수정 품목 전용 뷰
+      return !l.isAssembly && incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED' && incType !== 'ANNOTATION_NOISE' && isLineModified(l);
     }
     if (filterType === 'NOISE') {
       // 🧹 도면 주석/노이즈 격리실 전용 뷰
@@ -168,6 +182,21 @@ export default function QuoteLineGrid({
               <Package className="w-3 h-3" /> 사급 {suppliedCount}건
             </span>
           )}
+          {modifiedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => onFilterChange(filterType === 'MODIFIED' ? 'ALL' : 'MODIFIED')}
+              className={`text-[10.5px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                filterType === 'MODIFIED'
+                  ? 'bg-amber-500 text-white shadow-xs ring-2 ring-amber-300'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
+              }`}
+              title="견적 분석 담당자가 수기로 수정한 단가 품목만 모아보기"
+            >
+              <Sparkles className="w-3 h-3 text-amber-600" />
+              <span>⚡ 단가수정 {modifiedCount}건</span>
+            </button>
+          )}
           {noiseCount > 0 && (
             <button
               onClick={() => onFilterChange('NOISE')}
@@ -207,6 +236,9 @@ export default function QuoteLineGrid({
             className="text-xs px-2 py-1 border border-slate-200 rounded-md bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
           >
             <option value="ALL">견적 대상 전체 ({quoteTargetLines.length}건)</option>
+            {modifiedCount > 0 && (
+              <option value="MODIFIED">⚡ 단가 직접 수정 항목 ({modifiedCount}건)</option>
+            )}
             <option value="NEEDS_REVIEW">검토필요 항목</option>
             <option value="UNCONFIRMED">미확정 항목</option>
             <option value="SUPPLIED">고객 사급품 ({suppliedCount}건)</option>

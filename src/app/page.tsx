@@ -38,7 +38,9 @@ import {
   RotateCcw,
   FileWarning,
   Filter,
-  Trash2
+  Trash2,
+  Search,
+  RefreshCw
 } from 'lucide-react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import CustomerSelectCombobox, { CustomerSelectionValue, AUTO_DETECT_CUSTOMER } from '@/components/common/CustomerSelectCombobox';
@@ -358,7 +360,12 @@ export default function HomePage() {
       const cachedQuotes = getClientCache('quotes')?.quotes;
       const cachedCompanies = getClientCache('companies')?.companies;
 
-      if (cachedUser) setUser(cachedUser);
+      if (cachedUser) {
+        setUser(cachedUser);
+        if (!['SUPER_ADMIN', 'TENANT_ADMIN'].includes(cachedUser.role)) {
+          setCaseFilter('MY');
+        }
+      }
       if (cachedCases && Array.isArray(cachedCases)) setCases(cachedCases);
       if (cachedQuotes && Array.isArray(cachedQuotes)) setQuotes(cachedQuotes);
       if (cachedCompanies && Array.isArray(cachedCompanies)) setCompanies(cachedCompanies);
@@ -404,7 +411,7 @@ export default function HomePage() {
           localStorage.setItem('cadon_user', JSON.stringify(normalizedUser));
         } catch {}
 
-        if (normalizedUser.role === 'SALES_USER') {
+        if (!['SUPER_ADMIN', 'TENANT_ADMIN'].includes(normalizedUser.role)) {
           setCaseFilter('MY');
         }
 
@@ -517,25 +524,37 @@ export default function HomePage() {
     switch (role) {
       case 'SUPER_ADMIN':
         return {
-          label: '시스템 최고관리자 (SUPER ADMIN)',
+          label: '시스템 최고관리자',
           bg: 'bg-indigo-50 border-indigo-200 text-indigo-700',
           dot: 'bg-indigo-500'
         };
       case 'TENANT_ADMIN':
         return {
-          label: '총괄 관리자 (ADMIN)',
+          label: '총괄 관리자',
           bg: 'bg-blue-50 border-blue-200 text-blue-700',
           dot: 'bg-blue-500'
         };
-      case 'MANAGER':
+      case 'SALES_USER':
         return {
-          label: '견적/승인 책임자 (MANAGER)',
-          bg: 'bg-purple-50 border-purple-200 text-purple-700',
-          dot: 'bg-purple-500'
+          label: '영업담당 (실무)',
+          bg: 'bg-blue-50 border-blue-200 text-blue-700',
+          dot: 'bg-blue-500'
+        };
+      case 'REVIEWER':
+        return {
+          label: '가공·설계 검토 (실무)',
+          bg: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+          dot: 'bg-emerald-500'
+        };
+      case 'GUEST':
+        return {
+          label: '조회 전용',
+          bg: 'bg-slate-50 border-slate-200 text-slate-700',
+          dot: 'bg-slate-500'
         };
       default:
         return {
-          label: '실무 사용자 (USER)',
+          label: '실무 사용자',
           bg: 'bg-emerald-50 border-emerald-200 text-emerald-700',
           dot: 'bg-emerald-500'
         };
@@ -543,7 +562,17 @@ export default function HomePage() {
   };
 
   const roleInfo = getRoleBadge(user?.role);
-  const [caseFilter, setCaseFilter] = useState<'ALL' | 'MY'>('ALL');
+  const [caseFilter, setCaseFilter] = useState<'ALL' | 'MY'>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('cadon_user') || 'null');
+        if (cached?.role && !['SUPER_ADMIN', 'TENANT_ADMIN'].includes(cached.role)) {
+          return 'MY';
+        }
+      } catch {}
+    }
+    return 'ALL';
+  });
   const [pipelineFilter, setPipelineFilter] = useState<'ALL' | PipelineStage>('ALL');
   const [casePage, setCasePage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(5);
@@ -634,14 +663,147 @@ export default function HomePage() {
     return filteredCases.slice(startIdx, startIdx + pageSize);
   }, [filteredCases, casePage, pageSize]);
 
-  const recentQuotes = useMemo(() => quotes.slice(0, 5), [quotes]);
+  // 최근 견적서 필터링, 정렬 및 페이징 상태
+  const [quotePage, setQuotePage] = useState<number>(1);
+  const [quotePageSize, setQuotePageSize] = useState<number>(10);
+  const [quoteSearchQuery, setQuoteSearchQuery] = useState<string>('');
+  const [quoteCompanyFilter, setQuoteCompanyFilter] = useState<string>('ALL');
+  const [quoteAmountFilter, setQuoteAmountFilter] = useState<string>('ALL');
+  const [quoteSortField, setQuoteSortField] = useState<'default' | 'quote_no' | 'amount' | 'company'>('default');
+  const [quoteSortOrder, setQuoteSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // 등록된 유효 고객사 목록 추출
+  const availableQuoteCompanies = useMemo(() => {
+    const set = new Set<string>();
+    quotes.forEach((q) => {
+      if (q.company_name && q.company_name.trim()) {
+        set.add(q.company_name.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [quotes]);
+
+  // 필터 및 정렬이 적용된 견적서 목록
+  const filteredQuotes = useMemo(() => {
+    let list = [...quotes];
+
+    // 1. 견적번호 / 케이스명 검색 필터
+    if (quoteSearchQuery.trim()) {
+      const qLower = quoteSearchQuery.trim().toLowerCase();
+      list = list.filter(
+        (q) =>
+          (q.quote_no && q.quote_no.toLowerCase().includes(qLower)) ||
+          (q.case_name && q.case_name.toLowerCase().includes(qLower))
+      );
+    }
+
+    // 2. 고객사 필터
+    if (quoteCompanyFilter !== 'ALL') {
+      list = list.filter((q) => (q.company_name || '미지정 고객사') === quoteCompanyFilter);
+    }
+
+    // 3. 견적 총액 조건 필터
+    if (quoteAmountFilter === 'POSITIVE') {
+      list = list.filter((q) => Number(q.total_amount || 0) > 0);
+    } else if (quoteAmountFilter === 'ZERO') {
+      list = list.filter((q) => Number(q.total_amount || 0) === 0);
+    }
+
+    // 4. 정렬 (견적번호, 고객사, 견적 총액)
+    if (quoteSortField === 'quote_no') {
+      list.sort((a, b) => {
+        const cmp = (a.quote_no || '').localeCompare(b.quote_no || '');
+        return quoteSortOrder === 'asc' ? cmp : -cmp;
+      });
+    } else if (quoteSortField === 'amount') {
+      list.sort((a, b) => {
+        const diff = Number(a.total_amount || 0) - Number(b.total_amount || 0);
+        return quoteSortOrder === 'asc' ? diff : -diff;
+      });
+    } else if (quoteSortField === 'company') {
+      list.sort((a, b) => {
+        const cmp = (a.company_name || '').localeCompare(b.company_name || '');
+        return quoteSortOrder === 'asc' ? cmp : -cmp;
+      });
+    }
+
+    return list;
+  }, [quotes, quoteSearchQuery, quoteCompanyFilter, quoteAmountFilter, quoteSortField, quoteSortOrder]);
+
+  const hasActiveQuoteFilters =
+    Boolean(quoteSearchQuery.trim()) ||
+    quoteCompanyFilter !== 'ALL' ||
+    quoteAmountFilter !== 'ALL' ||
+    quoteSortField !== 'default';
+
+  const handleResetQuoteFilters = () => {
+    setQuoteSearchQuery('');
+    setQuoteCompanyFilter('ALL');
+    setQuoteAmountFilter('ALL');
+    setQuoteSortField('default');
+    setQuoteSortOrder('desc');
+    setQuotePage(1);
+  };
+
+  const handleToggleQuoteSort = (field: 'quote_no' | 'amount' | 'company') => {
+    if (quoteSortField === field) {
+      if (quoteSortOrder === 'desc') {
+        setQuoteSortOrder('asc');
+      } else {
+        setQuoteSortField('default');
+        setQuoteSortOrder('desc');
+      }
+    } else {
+      setQuoteSortField(field);
+      setQuoteSortOrder('desc');
+    }
+    setQuotePage(1);
+  };
+
+  const quoteTotalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(filteredQuotes.length / quotePageSize));
+  }, [filteredQuotes.length, quotePageSize]);
+
+  const handleQuotePageSizeChange = (newSize: number) => {
+    setQuotePageSize(newSize);
+    setQuotePage(1);
+  };
+
+  const getQuotePageNumbers = () => {
+    const maxButtons = 5;
+    let start = Math.max(1, quotePage - Math.floor(maxButtons / 2));
+    let end = start + maxButtons - 1;
+
+    if (end > quoteTotalPages) {
+      end = quoteTotalPages;
+      start = Math.max(1, end - maxButtons + 1);
+    }
+
+    const pages = [];
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
+  useEffect(() => {
+    if (quotePage > quoteTotalPages) {
+      setQuotePage(1);
+    }
+  }, [quoteTotalPages, quotePage]);
+
+  const paginatedQuotes = useMemo(() => {
+    const startIdx = (quotePage - 1) * quotePageSize;
+    return filteredQuotes.slice(startIdx, startIdx + quotePageSize);
+  }, [filteredQuotes, quotePage, quotePageSize]);
 
   const handleDownloadExcel = async (quoteId: string, quoteNo: string) => {
     setDownloadingQuoteId(quoteId);
     try {
       const res = await apiFetch(`/api/quotes/${quoteId}/export-excel`);
       if (!res.ok) {
-        alert('엑셀 다운로드에 실패했습니다.');
+        const errJson = await res.json().catch(() => ({}));
+        alert(errJson.error || '엑셀 다운로드에 실패했습니다. (승인 완료된 견적서만 출력 가능합니다)');
         return;
       }
       const blob = await res.blob();
@@ -981,10 +1143,16 @@ export default function HomePage() {
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 col-span-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-slate-500">총 견적 산출액</span>
-                    <span className="text-[10px] font-bold text-emerald-600">공식 {quotes.length}건 발행</span>
+                    <span className="text-[10px] font-bold text-emerald-600">
+                      공식 {quotes.filter((q) => ['APPROVED', 'ISSUED'].includes(q.status) && Number(q.total_amount || 0) > 0).length}건 발행
+                    </span>
                   </div>
                   <div className="text-lg font-black text-slate-900 font-mono mt-0.5">
                     ₩{stats.totalQuoteAmount.toLocaleString()}
+                  </div>
+                  <div className="text-[9.5px] text-slate-400 mt-1 flex items-center justify-between border-t border-slate-200/60 pt-1">
+                    <span>초안(단가 미확정): <strong className="text-amber-600 font-bold">{quotes.filter((q) => q.status === 'DRAFT' || Number(q.total_amount || 0) === 0).length}건</strong></span>
+                    <span>승인확정: <strong className="text-emerald-700 font-mono">₩{stats.approvedQuoteAmount.toLocaleString()}</strong></span>
                   </div>
                 </div>
               </div>
@@ -1146,10 +1314,15 @@ export default function HomePage() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight">최근 견적의뢰 내역</h2>
-              {user?.name && (
+              {caseFilter === 'MY' ? (
                 <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
                   <User className="w-3 h-3 text-blue-600" />
-                  <span>{user.name} 담당 관제</span>
+                  <span>{user?.name || '담당자'} 담당 관제</span>
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                  <Building2 className="w-3 h-3 text-indigo-600" />
+                  <span>전사 총괄 관제</span>
                 </span>
               )}
               {pipelineFilter !== 'ALL' && (
@@ -1409,14 +1582,14 @@ export default function HomePage() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-100">
                 <tr>
-                  <th className="py-3 pl-10 pr-2 font-bold text-center w-20 text-slate-500">No.</th>
-                  <th className="py-3 px-3.5 font-bold">의뢰번호 / 명칭</th>
-                  <th className="py-3 px-3.5 font-bold">고객사</th>
-                  <th className="py-3 px-3.5 font-bold">견적 담당자</th>
-                  <th className="py-3 px-3.5 font-bold">도면 구조 / BOM (다품일도)</th>
-                  <th className="py-3 px-3.5 font-bold text-right">견적금액</th>
-                  <th className="py-3 px-3.5 font-bold text-center">진행 / 보관 상태</th>
-                  <th className="py-3 px-3.5 font-bold text-center">관리</th>
+                  <th className="py-3 px-4 font-bold text-center w-16 text-slate-500">No.</th>
+                  <th className="py-3 px-4 font-bold">의뢰번호 / 명칭</th>
+                  <th className="py-3 px-4 font-bold">고객사</th>
+                  <th className="py-3 px-4 font-bold">견적 담당자</th>
+                  <th className="py-3 px-4 font-bold">도면 구조 / BOM (다품일도)</th>
+                  <th className="py-3 px-4 font-bold text-right">견적금액</th>
+                  <th className="py-3 px-4 font-bold text-center">진행 / 보관 상태</th>
+                  <th className="py-3 px-4 font-bold text-center">관리</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1438,11 +1611,11 @@ export default function HomePage() {
                       }`}
                     >
                       {/* 0. No. 순번 */}
-                      <td className="py-3 pl-10 pr-2 text-center font-mono font-bold text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
+                      <td className="py-3 px-4 text-center font-mono font-bold text-xs text-slate-400 group-hover:text-blue-600 transition-colors w-16">
                         {String(globalIdx).padStart(2, '0')}
                       </td>
                       {/* 1. 의뢰번호 / 명칭 */}
-                      <td className="py-3 px-3.5">
+                      <td className="py-3 px-4">
                         <span className="font-mono text-[11px] text-slate-500 group-hover:text-blue-700 font-bold block transition-colors">{c.case_no}</span>
                         <div className="mt-0.5">
                           <SmartTruncateTooltip
@@ -1798,32 +1971,148 @@ export default function HomePage() {
       </div>
 
       {/* 4-B. Recent Official Quotes Table (최근 발행 공식 견적서 및 엑셀 다운로드) */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-50/50 via-white to-white">
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-50/50 via-white to-white shrink-0">
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
               <FileSpreadsheet className="w-4 h-4" />
             </div>
             <div>
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                <span>최근 발행된 견적서</span>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  {quotes.length}건 보관
+                <span>최근 견적서 관리</span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                  총 {quotes.length}건 (초안 {quotes.filter((q) => q.status === 'DRAFT' || Number(q.total_amount || 0) === 0).length}건 / 공식발행 {quotes.filter((q) => ['APPROVED', 'ISSUED'].includes(q.status) && Number(q.total_amount || 0) > 0).length}건)
                 </span>
               </h2>
-              <p className="text-xs text-slate-500">정식 채번 및 원가 단가가 매칭되어 발행된 견적서 목록입니다.</p>
+              <p className="text-xs text-slate-500">
+                도면 분석 후 생성된 견적서 목록입니다. (0원 초안은 [단가검토]에서 금액을 확정해야 공식 승인 및 엑셀 출력이 가능합니다)
+              </p>
             </div>
           </div>
           <Link
             href="/quotes"
-            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
+            prefetch={true}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all cursor-pointer shadow-2xs"
+            title="발행된 모든 견적서 전체 관리 대장으로 이동"
           >
             <span>견적서대장 전체보기</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
-        {recentQuotes.length === 0 ? (
+        {/* Quick Filter Toolbar for Recent Quotes */}
+        {quotes.length > 0 && (
+          <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2.5 text-xs shrink-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* 1. 견적번호 / 케이스명 검색창 */}
+              <div className="relative min-w-[200px]">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={quoteSearchQuery}
+                  onChange={(e) => {
+                    setQuoteSearchQuery(e.target.value);
+                    setQuotePage(1);
+                  }}
+                  placeholder="견적번호 / 케이스명 검색"
+                  className="w-full pl-8 pr-6 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs"
+                />
+                {quoteSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuoteSearchQuery('');
+                      setQuotePage(1);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-xs cursor-pointer"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* 2. 고객사 필터 드롭다운 */}
+              <div className="flex items-center space-x-1.5">
+                <span className="text-slate-500 text-[11px] font-bold flex items-center gap-1">
+                  <Building2 className="w-3 h-3 text-slate-400" />
+                  고객사:
+                </span>
+                <select
+                  value={quoteCompanyFilter}
+                  onChange={(e) => {
+                    setQuoteCompanyFilter(e.target.value);
+                    setQuotePage(1);
+                  }}
+                  className={`px-2 py-1 bg-white border rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors ${
+                    quoteCompanyFilter !== 'ALL'
+                      ? 'border-emerald-500 text-emerald-800 bg-emerald-50/50 font-bold'
+                      : 'border-slate-300 text-slate-700'
+                  }`}
+                >
+                  <option value="ALL">전체 고객사 ({quotes.length}건)</option>
+                  {availableQuoteCompanies.map((c) => {
+                    const cnt = quotes.filter((q) => (q.company_name || '미지정 고객사') === c).length;
+                    return (
+                      <option key={c} value={c}>
+                        {c} ({cnt}건)
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* 3. 견적 총액 조건 필터 드롭다운 */}
+              <div className="flex items-center space-x-1.5">
+                <span className="text-slate-500 text-[11px] font-bold flex items-center gap-1">
+                  <DollarSign className="w-3 h-3 text-slate-400" />
+                  금액:
+                </span>
+                <select
+                  value={quoteAmountFilter}
+                  onChange={(e) => {
+                    setQuoteAmountFilter(e.target.value);
+                    setQuotePage(1);
+                  }}
+                  className={`px-2 py-1 bg-white border rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors ${
+                    quoteAmountFilter !== 'ALL'
+                      ? 'border-emerald-500 text-emerald-800 bg-emerald-50/50 font-bold'
+                      : 'border-slate-300 text-slate-700'
+                  }`}
+                >
+                  <option value="ALL">전체 금액</option>
+                  <option value="POSITIVE">₩0 초과 (단가 산출 완료)</option>
+                  <option value="ZERO">₩0 (초안 / 미산출)</option>
+                </select>
+              </div>
+
+              {/* 필터 초기화 버튼 */}
+              {hasActiveQuoteFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetQuoteFilters}
+                  className="px-2 py-1 rounded-lg text-[11px] font-bold text-slate-500 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 transition-all flex items-center space-x-1 shadow-2xs cursor-pointer"
+                  title="모든 필터 및 정렬 초기화"
+                >
+                  <RefreshCw className="w-3 h-3 text-slate-400" />
+                  <span>필터 초기화</span>
+                </button>
+              )}
+            </div>
+
+            {/* 현재 필터링 상태 요약 */}
+            <div className="text-[11px] text-slate-500">
+              {hasActiveQuoteFilters ? (
+                <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  필터링 결과: {filteredQuotes.length}건
+                </span>
+              ) : (
+                <span>전체 {quotes.length}건 보관</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {quotes.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             <FileSpreadsheet className="w-10 h-10 mx-auto text-slate-300 mb-2" />
             <p className="text-sm font-semibold">발행된 견적서가 아직 없습니다.</p>
@@ -1836,22 +2125,71 @@ export default function HomePage() {
               <span>견적의뢰에서 견적서 생성하기</span>
             </Link>
           </div>
+        ) : filteredQuotes.length === 0 ? (
+          <div className="py-16 text-center text-slate-500">
+            <Search className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+            <p className="text-sm font-semibold text-slate-700">선택한 필터 조건에 일치하는 견적서가 없습니다.</p>
+            <p className="text-xs text-slate-400 mt-1">검색어나 고객사, 금액 필터 조건을 변경해보세요.</p>
+            <button
+              type="button"
+              onClick={handleResetQuoteFilters}
+              className="mt-3 inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs border border-emerald-200 transition-colors cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>모든 필터 초기화</span>
+            </button>
+          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-100">
-                <tr>
-                  <th className="py-3 pl-10 pr-4 font-bold">견적번호 / 버전</th>
-                  <th className="py-3 px-4 font-bold">연동 케이스명</th>
-                  <th className="py-3 px-4 font-bold">고객사</th>
-                  <th className="py-3 px-4 font-bold text-center">품목 수</th>
-                  <th className="py-3 px-4 font-bold text-right">견적 총액 (VAT포함)</th>
-                  <th className="py-3 px-4 font-bold text-center">상태</th>
-                  <th className="py-3 px-4 font-bold text-center">원클릭 엑셀</th>
+          <div className="overflow-x-auto overflow-y-auto max-h-[500px] 2xl:max-h-[620px] scrollbar-thin">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
+                <tr className="text-slate-600 font-bold">
+                  <th className="py-2.5 px-4 font-bold text-center w-16 bg-slate-50">No.</th>
+                  <th
+                    onClick={() => handleToggleQuoteSort('quote_no')}
+                    className="py-2.5 px-4 font-bold bg-slate-50 cursor-pointer select-none hover:bg-slate-100 transition-colors group"
+                    title="견적번호 기준 정렬 (클릭)"
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>견적번호 / 버전</span>
+                      <span className={`text-[10px] ${quoteSortField === 'quote_no' ? 'text-emerald-700 font-black' : 'text-slate-300 group-hover:text-slate-500'}`}>
+                        {quoteSortField === 'quote_no' ? (quoteSortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                      </span>
+                    </div>
+                  </th>
+                  <th className="py-2.5 px-4 font-bold bg-slate-50">연동 케이스명</th>
+                  <th
+                    onClick={() => handleToggleQuoteSort('company')}
+                    className="py-2.5 px-4 font-bold bg-slate-50 cursor-pointer select-none hover:bg-slate-100 transition-colors group"
+                    title="고객사 이름순 정렬 (클릭)"
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>고객사</span>
+                      <span className={`text-[10px] ${quoteSortField === 'company' ? 'text-emerald-700 font-black' : 'text-slate-300 group-hover:text-slate-500'}`}>
+                        {quoteSortField === 'company' ? (quoteSortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                      </span>
+                    </div>
+                  </th>
+                  <th className="py-2.5 px-4 font-bold text-center bg-slate-50">품목 수</th>
+                  <th
+                    onClick={() => handleToggleQuoteSort('amount')}
+                    className="py-2.5 px-4 font-bold text-right bg-slate-50 cursor-pointer select-none hover:bg-slate-100 transition-colors group"
+                    title="견적 금액순 정렬 (클릭)"
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>견적 총액 (VAT포함)</span>
+                      <span className={`text-[10px] ${quoteSortField === 'amount' ? 'text-emerald-700 font-black' : 'text-slate-300 group-hover:text-slate-500'}`}>
+                        {quoteSortField === 'amount' ? (quoteSortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                      </span>
+                    </div>
+                  </th>
+                  <th className="py-2.5 px-4 font-bold text-center bg-slate-50">상태</th>
+                  <th className="py-2.5 px-4 font-bold text-center bg-slate-50">원클릭 엑셀</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {recentQuotes.map((q) => {
+                {paginatedQuotes.map((q, idx) => {
+                  const globalIdx = (quotePage - 1) * quotePageSize + idx + 1;
                   let statusBadge = 'bg-slate-100 text-slate-700 border-slate-200';
                   let statusLabel = '임시저장 (DRAFT)';
                   if (q.status === 'APPROVED') {
@@ -1865,9 +2203,12 @@ export default function HomePage() {
                   return (
                     <tr
                       key={q.id}
-                      className="hover:bg-emerald-50/30 transition-colors"
+                      className="relative transition-all duration-150 group border-l-4 border-l-transparent hover:border-l-emerald-600 hover:bg-emerald-50/30"
                     >
-                      <td className="py-3 pl-10 pr-4">
+                      <td className="py-3 px-4 text-center font-mono font-bold text-xs text-slate-400 group-hover:text-emerald-700 transition-colors w-16">
+                        {String(globalIdx).padStart(2, '0')}
+                      </td>
+                      <td className="py-3 px-4">
                         <div className="flex items-center space-x-1.5">
                           <Link
                             href={`/cases/${q.quotation_case_id}`}
@@ -1881,7 +2222,7 @@ export default function HomePage() {
                           </span>
                         </div>
                         <span className="text-[11px] text-slate-400 block mt-0.5">
-                          {q.quote_date || new Date(q.created_at).toLocaleDateString('ko-KR')}
+                          {q.quote_date || (q.created_at ? new Date(q.created_at).toLocaleDateString('ko-KR') : '-')}
                         </span>
                       </td>
                       <td className="py-3 px-4 font-semibold text-slate-800 max-w-[200px] truncate">
@@ -1903,20 +2244,31 @@ export default function HomePage() {
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center space-x-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadExcel(q.id, q.quote_no)}
-                            disabled={downloadingQuoteId === q.id}
-                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-                            title="한국 표준 견적서 양식 Excel (.xlsx) 즉시 다운로드"
-                          >
-                            {downloadingQuoteId === q.id ? (
-                              <Clock className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Download className="w-3.5 h-3.5" />
-                            )}
-                            <span>엑셀출력</span>
-                          </button>
+                          {Number(q.total_amount || 0) > 0 && ['APPROVED', 'ISSUED'].includes(q.status) ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadExcel(q.id, q.quote_no)}
+                              disabled={downloadingQuoteId === q.id}
+                              className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                              title="한국 표준 견적서 양식 Excel (.xlsx) 즉시 다운로드"
+                            >
+                              {downloadingQuoteId === q.id ? (
+                                <Clock className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5" />
+                              )}
+                              <span>엑셀출력</span>
+                            </button>
+                          ) : (
+                            <Link
+                              href={`/quotes/${q.quotation_case_id}/review`}
+                              className="inline-flex items-center space-x-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-[11px] font-bold border border-amber-300 transition-all shadow-2xs cursor-pointer"
+                              title="단가가 0원인 임시저장(초안) 견적서입니다. 단가검토 화면에서 금액을 확정하세요."
+                            >
+                              <span>단가검토</span>
+                              <ChevronRight className="w-3 h-3 text-amber-600" />
+                            </Link>
+                          )}
 
                           <button
                             type="button"
@@ -1933,6 +2285,82 @@ export default function HomePage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Standard Pagination Navigation Bar (중앙 정렬 배치 & 프로젝트 표준 로직) */}
+        {filteredQuotes.length > 0 && (
+          <div className="py-3.5 px-5 border-t border-slate-200/90 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-6 text-xs text-slate-500 shrink-0">
+            {/* 중앙 번호 네비게이션 버튼 그룹 */}
+            <div className="flex items-center space-x-1">
+              {/* 이전 페이지 버튼 */}
+              <button
+                type="button"
+                onClick={() => setQuotePage((p) => Math.max(1, p - 1))}
+                disabled={quotePage <= 1}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer flex items-center space-x-1 shadow-2xs"
+                title="이전 페이지"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>이전</span>
+              </button>
+
+              {/* 페이지 번호 버튼 목록 */}
+              {getQuotePageNumbers().map((pageNum) => (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setQuotePage(pageNum)}
+                  className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    quotePage === pageNum
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+
+              {/* 다음 페이지 버튼 */}
+              <button
+                type="button"
+                onClick={() => setQuotePage((p) => Math.min(quoteTotalPages, p + 1))}
+                disabled={quotePage >= quoteTotalPages}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer flex items-center space-x-1 shadow-2xs"
+                title="다음 페이지"
+              >
+                <span>다음</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <span className="hidden sm:inline text-slate-300">|</span>
+
+            {/* 건수 정보 및 페이지당 표시 행수 선택기 */}
+            <div className="flex items-center space-x-3 text-slate-600">
+              <div>
+                총 <strong className="text-slate-900 font-bold">{filteredQuotes.length}</strong>건 중{' '}
+                <span className="font-mono font-semibold text-slate-800">
+                  {filteredQuotes.length === 0 ? 0 : (quotePage - 1) * quotePageSize + 1} -{' '}
+                  {Math.min(filteredQuotes.length, quotePage * quotePageSize)}
+                </span>
+                건 표시
+              </div>
+              <span className="text-slate-300">|</span>
+              <div className="flex items-center space-x-1.5">
+                <span className="text-slate-500 text-[11.5px]">페이지당 행 수:</span>
+                <select
+                  value={quotePageSize}
+                  onChange={(e) => handleQuotePageSizeChange(Number(e.target.value))}
+                  className="px-2 py-0.5 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-700 cursor-pointer shadow-2xs"
+                >
+                  <option value={10}>10개씩 보기</option>
+                  <option value={20}>20개씩 보기</option>
+                  <option value={30}>30개씩 보기</option>
+                  <option value={50}>50개씩 보기</option>
+                </select>
+              </div>
+            </div>
           </div>
         )}
       </div>

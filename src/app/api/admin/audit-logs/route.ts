@@ -18,67 +18,108 @@ export async function GET(req: NextRequest) {
     const userId = searchParams.get('userId');
     const activityType = searchParams.get('activityType');
     const search = searchParams.get('search')?.trim();
+    const period = searchParams.get('period')?.trim() || 'all'; // 'all', 'today', 'week', 'month', 'year', 'custom'
+    const startDate = searchParams.get('startDate')?.trim();
+    const endDate = searchParams.get('endDate')?.trim();
 
-    const conditions: string[] = [];
-    const params: any[] = [];
-
-    if (userId) {
-      conditions.push('user_id = ?');
-      params.push(userId);
-    }
-
-    if (activityType) {
-      conditions.push('activity_type = ?');
-      params.push(activityType);
-    }
-
-    if (search) {
-      conditions.push('(details LIKE ? OR user_name LIKE ? OR case_name LIKE ?)');
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const countRow = (await db
-      .prepare(`SELECT COUNT(*) as cnt FROM user_activity_logs ${whereClause}`)
-      .get(...params)) as { cnt: number };
-
-    const total = countRow ? countRow.cnt : 0;
-    const totalPages = Math.ceil(total / limit);
-
-    const logs = await db
-      .prepare(
-        `SELECT * FROM user_activity_logs ${whereClause} ORDER BY rowid DESC LIMIT ? OFFSET ?`
-      )
-      .all(...params, limit, offset);
-
-    // Calculate Summary Stats
-    const today = new Date().toISOString().split('T')[0];
-    const allActivityLogs = (await db.prepare('SELECT * FROM user_activity_logs').all()) as any[];
-    const statsRow = {
-      totalLogs: allActivityLogs.length,
-      todayLogins: allActivityLogs.filter(l => l.activity_type === 'LOGIN' && (l.created_at || '').startsWith(today)).length,
-      priceUpdates: allActivityLogs.filter(l => l.activity_type === 'PRICE_UPDATE').length,
-      excelExports: allActivityLogs.filter(l => l.activity_type === 'EXCEL_EXPORT').length,
-      quoteToggles: allActivityLogs.filter(l => l.activity_type === 'QUOTE_TOGGLE').length
+    const now = new Date();
+    const formatYMD = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     };
 
-    const activeUsers = (await db.prepare('SELECT id, login_id, name, role FROM users WHERE is_active = 1 ORDER BY name ASC').all()) as any[];
+    const todayStr = formatYMD(now);
+    const weekAgoStr = formatYMD(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
+    const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const yearStartStr = `${now.getFullYear()}-01-01`;
+
+    // Fetch all logs cleanly without forbidden SQL keywords (EGDesk restricts 'CREATE' in SQL statements)
+    const allLogs = (await db
+      .prepare('SELECT * FROM user_activity_logs ORDER BY rowid DESC')
+      .all()) as any[];
+
+    // Calculate Summary Stats
+    let todayCount = 0;
+    let weekCount = 0;
+    let monthCount = 0;
+    let yearCount = 0;
+    let todayLogins = 0;
+    let priceUpdates = 0;
+    let excelExports = 0;
+    let quoteToggles = 0;
+
+    for (const l of allLogs) {
+      const d = (l.created_at || '').slice(0, 10);
+      if (d === todayStr) {
+        todayCount++;
+        if (l.activity_type === 'LOGIN') todayLogins++;
+      }
+      if (d >= weekAgoStr && d <= todayStr) weekCount++;
+      if (d >= monthStartStr && d <= todayStr) monthCount++;
+      if (d >= yearStartStr && d <= todayStr) yearCount++;
+
+      if (l.activity_type === 'PRICE_UPDATE') priceUpdates++;
+      else if (l.activity_type === 'EXCEL_EXPORT') excelExports++;
+      else if (l.activity_type === 'QUOTE_TOGGLE') quoteToggles++;
+    }
+
+    // Filter logs
+    const filteredLogs = allLogs.filter((l) => {
+      if (userId && l.user_id !== userId) return false;
+      if (activityType && l.activity_type !== activityType) return false;
+      if (search) {
+        const s = search.toLowerCase();
+        const details = (l.details || '').toLowerCase();
+        const userName = (l.user_name || '').toLowerCase();
+        const caseName = (l.case_name || '').toLowerCase();
+        if (!details.includes(s) && !userName.includes(s) && !caseName.includes(s)) {
+          return false;
+        }
+      }
+      const d = (l.created_at || '').slice(0, 10);
+      if (period === 'today') {
+        if (d !== todayStr) return false;
+      } else if (period === 'week') {
+        if (d < weekAgoStr || d > todayStr) return false;
+      } else if (period === 'month') {
+        if (d < monthStartStr || d > todayStr) return false;
+      } else if (period === 'year') {
+        if (d < yearStartStr || d > todayStr) return false;
+      } else if (period === 'custom' || startDate || endDate) {
+        if (startDate && d < startDate) return false;
+        if (endDate && d > endDate) return false;
+      }
+      return true;
+    });
+
+    const total = filteredLogs.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+    const paginatedLogs = filteredLogs.slice(offset, offset + limit);
+
+    const activeUsers = (await db
+      .prepare('SELECT id, login_id, name, role FROM users WHERE is_active = 1 ORDER BY name ASC')
+      .all()) as any[];
 
     return NextResponse.json({
       success: true,
-      logs,
+      logs: paginatedLogs,
       total,
       page,
       totalPages,
       users: activeUsers,
       stats: {
-        totalLogs: statsRow?.totalLogs || 0,
-        todayLogins: statsRow?.todayLogins || 0,
-        priceUpdates: statsRow?.priceUpdates || 0,
-        excelExports: statsRow?.excelExports || 0,
-        quoteToggles: statsRow?.quoteToggles || 0,
-      }
+        totalLogs: allLogs.length,
+        todayCount,
+        weekCount,
+        monthCount,
+        yearCount,
+        todayLogins,
+        priceUpdates,
+        excelExports,
+        quoteToggles,
+      },
     });
   } catch (error: any) {
     console.error('[AUDIT_LOGS_API_ERROR]', error);

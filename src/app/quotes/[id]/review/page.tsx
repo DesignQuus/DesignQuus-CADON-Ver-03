@@ -259,6 +259,16 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
   // 케이스 데이터 로드 (실데이터 우선 바인딩 & CAD 벡터 도면 동기화)
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const f = urlParams.get('filter');
+      if (f && (f.toUpperCase() === 'MODIFIED' || f.toLowerCase() === 'modified')) {
+        setFilterType('MODIFIED');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     async function loadData() {
       setLoading(true);
       try {

@@ -28,7 +28,11 @@ export async function POST(
     }, { status: 403 });
   }
 
-  // 0원 및 미검토(NEEDS_REVIEW/PRICE_NOT_FOUND) 품목 승인 차단 (0원 확정 원천 차단)
+  // 0원 견적서 및 미검토(NEEDS_REVIEW/PRICE_NOT_FOUND) 품목 승인 차단 (0원 확정 원천 차단)
+  if (!quote.total_amount || Number(quote.total_amount) <= 0) {
+    return NextResponse.json({ error: '총 견적 금액이 0원인 견적서는 승인할 수 없습니다. 품목별 단가를 먼저 입력 및 확정해 주세요.' }, { status: 400 });
+  }
+
   const priceCheck = (await db.prepare(`
     SELECT 
       COUNT(CASE WHEN is_included = 1 AND (unit_price <= 0 OR price_status = 'PRICE_NOT_FOUND') THEN 1 END) as unpriced_cnt,

@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState } from 'react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
+import { getClientCache, setClientCache } from '@/lib/cacheStore';
 import {
   ShieldCheck,
   Search,
@@ -19,7 +20,9 @@ import {
   LogOut,
   Sliders,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 export default function AuditLogsPage() {
@@ -31,25 +34,46 @@ export default function AuditLogsPage() {
     excelExports: 0,
     quoteToggles: 0,
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Filters
   const [users, setUsers] = useState<any[]>([]);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedType, setSelectedType] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [period, setPeriod] = useState<string>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
-  const fetchLogs = async (pageNum = page) => {
-    setLoading(true);
+  const fetchLogs = async (
+    pageNum = page,
+    currentSize = pageSize,
+    isSilent = false,
+    overridePeriod?: string,
+    overrideStart?: string,
+    overrideEnd?: string
+  ) => {
+    if (!isSilent && logs.length === 0) setLoading(true);
     try {
+      const activePeriod = overridePeriod !== undefined ? overridePeriod : period;
+      const activeStart = overrideStart !== undefined ? overrideStart : customStartDate;
+      const activeEnd = overrideEnd !== undefined ? overrideEnd : customEndDate;
+
       const params = new URLSearchParams();
       params.set('page', String(pageNum));
-      params.set('limit', '30');
+      params.set('limit', String(currentSize));
       if (selectedUser) params.set('userId', selectedUser);
       if (selectedType) params.set('activityType', selectedType);
       if (searchQuery) params.set('search', searchQuery);
+      if (activePeriod && activePeriod !== 'all') params.set('period', activePeriod);
+      if (activePeriod === 'custom') {
+        if (activeStart) params.set('startDate', activeStart);
+        if (activeEnd) params.set('endDate', activeEnd);
+      }
 
       const res = await apiFetch(`/api/admin/audit-logs?${params.toString()}`);
       if (res.ok) {
@@ -58,8 +82,13 @@ export default function AuditLogsPage() {
         setStats(data.stats || {});
         setTotalPages(data.totalPages || 1);
         setPage(data.page || 1);
+        setTotalCount(data.total || 0);
         if (data.users) {
           setUsers(data.users);
+        }
+        // Cache initial view
+        if (pageNum === 1 && !selectedUser && !selectedType && !searchQuery && activePeriod === 'all') {
+          setClientCache('audit_logs_p1', data);
         }
       }
     } catch (err) {
@@ -70,12 +99,75 @@ export default function AuditLogsPage() {
   };
 
   useEffect(() => {
-    fetchLogs(1);
+    let hasCache = false;
+    try {
+      const cached = getClientCache('audit_logs_p1');
+      if (cached && !selectedUser && !selectedType && !searchQuery && period === 'all') {
+        if (cached.logs) setLogs(cached.logs);
+        if (cached.stats) setStats(cached.stats);
+        if (cached.total) setTotalCount(cached.total);
+        if (cached.totalPages) setTotalPages(cached.totalPages);
+        hasCache = true;
+      }
+    } catch {}
+    fetchLogs(1, pageSize, hasCache);
   }, [selectedUser, selectedType]);
+
+  const handlePeriodChange = (newPeriod: string) => {
+    setPeriod(newPeriod);
+    if (newPeriod !== 'custom') {
+      fetchLogs(1, pageSize, false, newPeriod);
+    }
+  };
+
+  const handleCustomRangeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customStartDate && !customEndDate) return;
+    fetchLogs(1, pageSize, false, 'custom', customStartDate, customEndDate);
+  };
+
+  const formatDateGroupTitle = (dateStr: string) => {
+    if (!dateStr) return { formatted: '', isToday: false };
+    const [y, m, d] = dateStr.split('-');
+    const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const dayName = days[dateObj.getDay()] || '';
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const isToday = dateStr === todayStr;
+
+    return {
+      formatted: `${y}년 ${m}월 ${d}일 (${dayName}요일)`,
+      isToday,
+    };
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchLogs(1);
+    fetchLogs(1, pageSize);
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    fetchLogs(1, newSize);
+  };
+
+  const getPageNumbers = () => {
+    const pages: number[] = [];
+    const maxButtons = 5;
+    let startPage = Math.max(1, page - Math.floor(maxButtons / 2));
+    let endPage = startPage + maxButtons - 1;
+
+    if (endPage > totalPages) {
+      endPage = totalPages;
+      startPage = Math.max(1, endPage - maxButtons + 1);
+    }
+
+    for (let p = startPage; p <= endPage; p++) {
+      pages.push(p);
+    }
+    return pages;
   };
 
   const getActionBadge = (type: string) => {
@@ -149,6 +241,23 @@ export default function AuditLogsPage() {
             <span>{type}</span>
           </span>
         );
+    }
+  };
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'SUPER_ADMIN':
+        return '최고관리자';
+      case 'TENANT_ADMIN':
+        return '기업관리자';
+      case 'SALES_USER':
+        return '영업·견적 실무';
+      case 'REVIEWER':
+        return '가공·설계 검토';
+      case 'GUEST':
+        return '조회 전용';
+      default:
+        return role || '일반';
     }
   };
 
@@ -229,6 +338,76 @@ export default function AuditLogsPage() {
         </div>
       </div>
 
+      {/* 1-클릭 퀵 기간 분류 세그먼트 바 (일별 / 주별 / 월별 / 년별 / 직접지정) */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <span className="text-xs font-bold text-slate-700 mr-1 flex items-center gap-1.5 shrink-0">
+            <Calendar className="w-4 h-4 text-blue-600" />
+            <span>기간 분류:</span>
+          </span>
+
+          {[
+            { key: 'all', label: '전체', count: stats.totalLogs },
+            { key: 'today', label: '오늘 (일별)', count: stats.todayCount },
+            { key: 'week', label: '최근 7일 (주별)', count: stats.weekCount },
+            { key: 'month', label: '이번 달 (월별)', count: stats.monthCount },
+            { key: 'year', label: '올해 (년별)', count: stats.yearCount },
+            { key: 'custom', label: '📅 직접 기간 지정', count: null },
+          ].map((item) => {
+            const isActive = period === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => handlePeriodChange(item.key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700'
+                }`}
+              >
+                <span>{item.label}</span>
+                {item.count !== null && item.count !== undefined && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10.5px] font-mono font-bold ${
+                      isActive ? 'bg-blue-700/60 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    {item.count.toLocaleString()}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 직접 기간 지정 인라인 입력 폼 */}
+        {period === 'custom' && (
+          <form onSubmit={handleCustomRangeSubmit} className="flex flex-wrap items-center gap-2 bg-blue-50/60 p-2 rounded-lg border border-blue-200 self-start md:self-auto">
+            <span className="text-[11px] font-bold text-blue-900 shrink-0">날짜 직접 선택:</span>
+            <input
+              type="date"
+              value={customStartDate}
+              onChange={(e) => setCustomStartDate(e.target.value)}
+              className="px-2 py-1 bg-white border border-slate-300 rounded text-xs text-slate-800 font-mono shadow-2xs"
+            />
+            <span className="text-slate-400 text-xs font-bold">~</span>
+            <input
+              type="date"
+              value={customEndDate}
+              onChange={(e) => setCustomEndDate(e.target.value)}
+              className="px-2 py-1 bg-white border border-slate-300 rounded text-xs text-slate-800 font-mono shadow-2xs"
+            />
+            <button
+              type="submit"
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+            >
+              조회
+            </button>
+          </form>
+        )}
+      </div>
+
       {/* Filter Toolbar */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
@@ -243,7 +422,7 @@ export default function AuditLogsPage() {
               <option value="">전체 담당자</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.name} ({u.role === 'SUPER_ADMIN' ? '최고관리자' : u.role})
+                  {u.name} ({getRoleLabel(u.role)})
                 </option>
               ))}
             </select>
@@ -294,7 +473,8 @@ export default function AuditLogsPage() {
       </div>
 
       {/* Audit Log Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      {/* 4. Logs Table Card */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
         {loading ? (
           <div className="py-16 text-center text-slate-500 font-medium">감사 로그 조회 중...</div>
         ) : logs.length === 0 ? (
@@ -303,31 +483,62 @@ export default function AuditLogsPage() {
             <p className="text-slate-600 font-medium">조회된 활동 로그가 없습니다.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-auto max-h-[520px] 2xl:max-h-[640px] scrollbar-thin">
             <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-bold">
-                  <th className="py-2.5 px-3.5 w-44">일시 (Timestamp)</th>
-                  <th className="py-2.5 px-3.5 w-36">담당자</th>
-                  <th className="py-2.5 px-3 w-28 text-center">작업 유형</th>
-                  <th className="py-2.5 px-3.5 w-72">대상 프로젝트 / 케이스</th>
-                  <th className="py-2.5 px-3.5 min-w-[340px]">상세 작업 내역</th>
-                  <th className="py-2.5 px-3.5 w-24 text-center">접속 IP</th>
+              <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
+                <tr className="text-slate-600 font-bold">
+                  <th className="py-2.5 px-3 w-14 text-center bg-slate-50">No.</th>
+                  <th className="py-2.5 px-3.5 w-44 bg-slate-50">일시 (Timestamp)</th>
+                  <th className="py-2.5 px-3.5 w-36 bg-slate-50">담당자</th>
+                  <th className="py-2.5 px-3 w-28 text-center bg-slate-50">작업 유형</th>
+                  <th className="py-2.5 px-3.5 w-72 bg-slate-50">대상 프로젝트 / 케이스</th>
+                  <th className="py-2.5 px-3.5 min-w-[340px] bg-slate-50">상세 작업 내역</th>
+                  <th className="py-2.5 px-3.5 w-24 text-center bg-slate-50">접속 IP</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {logs.map((log, idx) => {
+                  const globalIdx = (page - 1) * pageSize + idx + 1;
                   const dt = new Date(log.created_at);
                   const formattedDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}:${String(dt.getSeconds()).padStart(2, '0')}`;
                   const isLatestRow = page === 1 && idx === 0;
 
+                  const currentDateStr = (log.created_at || '').slice(0, 10);
+                  const prevDateStr = idx > 0 ? (logs[idx - 1]?.created_at || '').slice(0, 10) : null;
+                  const isNewDateGroup = currentDateStr && currentDateStr !== prevDateStr;
+                  const dateInfo = isNewDateGroup ? formatDateGroupTitle(currentDateStr) : null;
+
                   return (
-                    <tr
-                      key={log.id}
-                      className={`transition-colors hover:bg-blue-50/50 ${
-                        isLatestRow ? 'bg-blue-50/30' : ''
-                      }`}
-                    >
+                    <React.Fragment key={log.id}>
+                      {isNewDateGroup && dateInfo && (
+                        <tr className="bg-slate-100/90 border-y border-slate-200 select-none">
+                          <td colSpan={7} className="py-2 px-3.5 bg-slate-100/95">
+                            <div className="flex items-center space-x-2">
+                              <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                              <span className="font-bold text-slate-800 text-xs tracking-tight">
+                                {dateInfo.formatted}
+                              </span>
+                              {dateInfo.isToday && (
+                                <span className="px-2 py-0.2 rounded-full text-[10px] font-black bg-blue-600 text-white shadow-2xs">
+                                  오늘 (Today)
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      <tr
+                        className={`transition-colors hover:bg-blue-50/50 ${
+                          isLatestRow ? 'bg-blue-50/30' : ''
+                        }`}
+                      >
+                      {/* 0. 행번호 (No.) */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <span className="font-mono text-slate-400 text-xs font-bold">
+                          {String(globalIdx).padStart(2, '0')}
+                        </span>
+                      </td>
+
                       {/* 1. 일시 (Timestamp) */}
                       <td className="py-2.5 px-3.5 whitespace-nowrap">
                         <div className="flex items-center space-x-1.5">
@@ -391,35 +602,88 @@ export default function AuditLogsPage() {
                         </span>
                       </td>
                     </tr>
-                  );
-                })}
+                  </React.Fragment>
+                );
+              })}
               </tbody>
             </table>
           </div>
         )}
 
-        {/* Pagination Bar */}
-        {totalPages > 1 && (
-          <div className="py-3 px-4 border-t border-slate-100 flex items-center justify-center space-x-4 text-xs text-slate-500">
-            <button
-              onClick={() => fetchLogs(page - 1)}
-              disabled={page <= 1}
-              className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md disabled:opacity-40 cursor-pointer transition-colors"
-            >
-              이전
-            </button>
-            <div className="font-medium">
-              페이지 <span className="font-bold text-slate-800">{page}</span> / {totalPages}
+        {/* Standard Pagination Navigation Bar (중앙 정렬 배치) */}
+        <div className="py-3.5 px-5 border-t border-slate-200/90 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-6 text-xs text-slate-500 shrink-0">
+          {/* 중앙 번호 네비게이션 버튼 그룹 */}
+          {totalPages > 1 && (
+            <div className="flex items-center space-x-1">
+              {/* 이전 버튼 */}
+              <button
+                type="button"
+                onClick={() => fetchLogs(page - 1)}
+                disabled={page <= 1}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer flex items-center space-x-1 shadow-2xs"
+                title="이전 페이지"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>이전</span>
+              </button>
+
+              {/* 페이지 번호 버튼 목록 */}
+              {getPageNumbers().map((pageNum) => (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => fetchLogs(pageNum)}
+                  className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    page === pageNum
+                      ? 'bg-blue-600 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+
+              {/* 다음 버튼 */}
+              <button
+                type="button"
+                onClick={() => fetchLogs(page + 1)}
+                disabled={page >= totalPages}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer flex items-center space-x-1 shadow-2xs"
+                title="다음 페이지"
+              >
+                <span>다음</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <button
-              onClick={() => fetchLogs(page + 1)}
-              disabled={page >= totalPages}
-              className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-md disabled:opacity-40 cursor-pointer transition-colors"
-            >
-              다음
-            </button>
+          )}
+
+          {totalPages > 1 && <span className="hidden sm:inline text-slate-300">|</span>}
+
+          {/* 건수 정보 및 페이지당 표시 행수 선택기 */}
+          <div className="flex items-center space-x-3 text-slate-600">
+            <div>
+              총 <strong className="text-slate-900 font-bold">{totalCount}</strong>건 중{' '}
+              <span className="font-mono font-semibold text-slate-800">
+                {totalCount === 0 ? 0 : (page - 1) * pageSize + 1} - {Math.min(totalCount, page * pageSize)}
+              </span>
+              건 표시
+            </div>
+            <span className="text-slate-300">|</span>
+            <div className="flex items-center space-x-1.5">
+              <span className="text-slate-500 text-[11.5px]">페이지당 행 수:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                className="px-2 py-0.5 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-700 cursor-pointer shadow-2xs"
+              >
+                <option value={10}>10개씩 보기</option>
+                <option value={20}>20개씩 보기</option>
+                <option value={30}>30개씩 보기</option>
+                <option value={50}>50개씩 보기</option>
+              </select>
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

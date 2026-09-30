@@ -1,8 +1,9 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { queryTable, insertRows, updateRows } from '../../../../egdesk-helpers';
+import { queryTable, insertRows, updateRows } from '@/lib/db';
 import { getSessionUser } from '@/lib/tenant';
 import bcrypt from 'bcryptjs';
+import { invalidateCasesCache } from '../quotation-cases/route';
 
 function normalizeRows(res: any): any[] {
   if (Array.isArray(res)) return res;
@@ -15,6 +16,7 @@ function normalizeRows(res: any): any[] {
  * - SUPER_ADMIN: 전체 테넌트 조회 가능 (또는 ?tenant_id= 로 필터링)
  * - TENANT_ADMIN: 본인 소속 tenant_id로 강제 스코프 제한
  * - ?include_deleted=true: 소프트 삭제된 계정 포함 여부
+ * - ?check_active_cases=[user_id]: 특정 사원의 진행 중인 활성 견적건 검사
  */
 export async function GET(req: Request) {
   try {
@@ -24,13 +26,67 @@ export async function GET(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
+
+    // [특정 사원의 진행 중인 견적건 조회 (인수인계 사전 검사)]
+    const checkCasesUserId = searchParams.get('check_active_cases');
+    if (checkCasesUserId) {
+      const casesRes = await queryTable('quotation_cases');
+      const allCases = normalizeRows(casesRes);
+      const companiesRes = await queryTable('companies').catch(() => []);
+      const allCompanies = normalizeRows(companiesRes);
+      const companyMap = new Map(allCompanies.map((c: any) => [String(c.id), c.company_name]));
+
+      const isCaseDeleted = (c: any) => Boolean(c.deleted_at) && c.deleted_at !== 'NULL' && c.deleted_at !== 'null';
+      const activeCases = allCases.filter((c: any) =>
+        String(c.created_by_user_id) === String(checkCasesUserId) &&
+        !isCaseDeleted(c) &&
+        c.lifecycle_status !== 'TRASHED' &&
+        c.lifecycle_status !== 'ARCHIVED' &&
+        c.status !== 'ARCHIVED' &&
+        c.status !== 'DELETED'
+      ).map((c: any) => ({
+        id: c.id,
+        case_no: c.case_no || '-',
+        case_name: c.case_name || '무제 견적건',
+        status: c.status || 'DRAFT',
+        company_name: companyMap.get(String(c.company_id)) || c.company_name || '고객사 미지정',
+        created_at: c.created_at || null,
+      }));
+
+      return NextResponse.json({
+        success: true,
+        active_cases_count: activeCases.length,
+        active_cases: activeCases
+      });
+    }
     const requestedTenantId = searchParams.get('tenant_id');
     const includeDeleted = session.role === 'SUPER_ADMIN' || session.role === 'TENANT_ADMIN'
       ? searchParams.get('include_deleted') === 'true'
       : false;
 
-    const usersRes = await queryTable('users');
+    const [usersRes, casesRes] = await Promise.all([
+      queryTable('users'),
+      queryTable('quotation_cases').catch(() => [])
+    ]);
     const allUsers = normalizeRows(usersRes);
+    const allCases = normalizeRows(casesRes);
+
+    // 진행 중인 활성 견적건 수 집계 (사원별)
+    const isCaseDeleted = (c: any) => Boolean(c.deleted_at) && c.deleted_at !== 'NULL' && c.deleted_at !== 'null';
+    const activeCasesCountMap = new Map<string, number>();
+    for (const c of allCases) {
+      if (
+        c.created_by_user_id &&
+        !isCaseDeleted(c) &&
+        c.lifecycle_status !== 'TRASHED' &&
+        c.lifecycle_status !== 'ARCHIVED' &&
+        c.status !== 'ARCHIVED' &&
+        c.status !== 'DELETED'
+      ) {
+        const uid = String(c.created_by_user_id);
+        activeCasesCountMap.set(uid, (activeCasesCountMap.get(uid) || 0) + 1);
+      }
+    }
 
     // 1. 테넌트 스코프 적용
     let scopedUsers = allUsers;
@@ -54,9 +110,11 @@ export async function GET(req: Request) {
     const safeUsers = scopedUsers.map((u: any) => {
       const { password_hash, ...rest } = u;
       const dept = isCandidateDept(u.tenant_id) ? u.tenant_id : (isCandidateDept(u.company_id) ? u.company_id : null);
+      const activeCount = activeCasesCountMap.get(String(u.id)) || 0;
       return {
         ...rest,
         department: dept,
+        active_cases_count: activeCount,
         // 호환 필드
         username: u.login_id,
         login_id: u.login_id,
@@ -65,6 +123,27 @@ export async function GET(req: Request) {
         is_deleted: Boolean(u.deleted_at)
       };
     });
+
+    // 4. 저장된 정렬 순서(MEMBERS_ORDER) 적용
+    try {
+      const settingsRes = await queryTable('system_settings').catch(() => []);
+      const settingsRows = normalizeRows(settingsRes);
+      const orderRow = settingsRows.find((r: any) => r.key === 'MEMBERS_ORDER');
+      if (orderRow?.value) {
+        const parsedOrder = typeof orderRow.value === 'string' ? JSON.parse(orderRow.value) : orderRow.value;
+        if (Array.isArray(parsedOrder) && parsedOrder.length > 0) {
+          const orderMap = new Map(parsedOrder.map((id: any, idx: number) => [String(id), idx]));
+          safeUsers.sort((a: any, b: any) => {
+            const idxA = orderMap.has(String(a.id)) ? orderMap.get(String(a.id))! : 999999;
+            const idxB = orderMap.has(String(b.id)) ? orderMap.get(String(b.id))! : 999999;
+            if (idxA !== idxB) return idxA - idxB;
+            return (a.created_at || '').localeCompare(b.created_at || '');
+          });
+        }
+      }
+    } catch (orderErr) {
+      console.warn('Failed to apply MEMBERS_ORDER sorting:', orderErr);
+    }
 
     return NextResponse.json({ success: true, operators: safeUsers });
   } catch (error: any) {
@@ -75,7 +154,7 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/operators
- * 신규 임직원 등록
+ * 신규 임직원 등록 및 순서 변경(REORDER)
  */
 export async function POST(req: Request) {
   try {
@@ -85,6 +164,41 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
+
+    // [사원 표시 순서 일괄 저장 (REORDER) 처리]
+    if (body.action === 'REORDER') {
+      const newOrder = body.newOrder;
+      if (!Array.isArray(newOrder)) {
+        return NextResponse.json({ success: false, error: '유효하지 않은 순서 데이터입니다.' }, { status: 400 });
+      }
+
+      const jsonStr = JSON.stringify(newOrder);
+      const now = new Date().toISOString();
+      const settingsRes = await queryTable('system_settings');
+      const rows = normalizeRows(settingsRes);
+      const existing = rows.find((r: any) => r.key === 'MEMBERS_ORDER');
+
+      if (existing) {
+        await updateRows(
+          'system_settings',
+          { value: jsonStr, updated_at: now, updated_by: session.loginId || session.name },
+          { filters: { key: 'MEMBERS_ORDER' } }
+        );
+      } else {
+        const newId = `set_${Date.now()}`;
+        await insertRows('system_settings', [{
+          id: newId,
+          key: 'MEMBERS_ORDER',
+          value: jsonStr,
+          tenant_id: 'tenant-cadon',
+          description: '사내 임직원 표시 순서',
+          updated_at: now,
+          updated_by: session.loginId || session.name
+        }]);
+      }
+
+      return NextResponse.json({ success: true, message: '사원 표시 순서가 저장되었습니다.' });
+    }
     const loginId = (body.login_id || body.username || '').trim();
     const password = (body.password || '').trim();
     const name = (body.name || '').trim();
@@ -288,10 +402,20 @@ export async function DELETE(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
+    let id = searchParams.get('id');
+    let successorId = searchParams.get('successor_id');
+
+    // JSON 본문 지원 (body에 전달된 경우)
+    if (req.headers.get('content-type')?.includes('application/json')) {
+      try {
+        const body = await req.json();
+        if (body.id) id = body.id;
+        if (body.successor_id) successorId = body.successor_id;
+      } catch {}
+    }
 
     if (!id) {
-      return NextResponse.json({ success: false, error: 'ID is missing' }, { status: 400 });
+      return NextResponse.json({ success: false, error: '사용자 ID가 누락되었습니다.' }, { status: 400 });
     }
 
     const allUsers = normalizeRows(await queryTable('users'));
@@ -303,16 +427,85 @@ export async function DELETE(req: Request) {
 
     // 관리자 자신 스스로 삭제 차단
     if (String(targetUser.id) === String(session.userId) || targetUser.login_id === session.loginId) {
-      return NextResponse.json({ success: false, error: '현재 로그인 중인 본인 계정은 삭제할 수 없습니다.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: '현재 로그인 중인 본인 계정은 비활성화할 수 없습니다.' }, { status: 400 });
     }
 
     // 시스템 기본 최고관리자 admin 삭제 차단
     if (targetUser.login_id === 'admin') {
-      return NextResponse.json({ success: false, error: '시스템 최고관리자(admin) 계정은 삭제할 수 없습니다.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: '시스템 최고관리자(admin) 계정은 비활성화할 수 없습니다.' }, { status: 400 });
     }
 
-    // 소프트 삭제(Soft Delete) 수행
+    // 1. 진행 중인 활성 견적건 검사
+    const casesRes = await queryTable('quotation_cases');
+    const allCases = normalizeRows(casesRes);
+    const isCaseDeleted = (c: any) => Boolean(c.deleted_at) && c.deleted_at !== 'NULL' && c.deleted_at !== 'null';
+    const activeCases = allCases.filter((c: any) =>
+      String(c.created_by_user_id) === String(id) &&
+      !isCaseDeleted(c) &&
+      c.lifecycle_status !== 'TRASHED' &&
+      c.lifecycle_status !== 'ARCHIVED' &&
+      c.status !== 'ARCHIVED' &&
+      c.status !== 'DELETED'
+    );
+
+    // 진행 중인 견적건이 있는데 후임자 지정이 없는 경우: 인수인계 모달 팝업 요청 반환
+    if (activeCases.length > 0 && !successorId) {
+      return NextResponse.json({
+        success: false,
+        require_handover: true,
+        active_cases_count: activeCases.length,
+        error: `'${targetUser.name}' 담당자가 진행 중인 견적건이 ${activeCases.length}건 있습니다. 업무를 인수인계할 후임 담당자를 지정해 주세요.`
+      }, { status: 400 });
+    }
+
     const dateStr = new Date().toISOString();
+
+    // 2. 후임자가 지정된 경우: 진행 중인 견적건 및 관련 견적서 담당자 일괄 이관
+    if (successorId) {
+      if (String(successorId) === String(id)) {
+        return NextResponse.json({ success: false, error: '자기 자신에게는 업무를 인수인계할 수 없습니다.' }, { status: 400 });
+      }
+
+      const successor = allUsers.find((u: any) => String(u.id) === String(successorId) && !u.deleted_at);
+      if (!successor) {
+        return NextResponse.json({ success: false, error: '인수인계할 후임 담당자 계정이 유효하지 않거나 비활성화 상태입니다.' }, { status: 400 });
+      }
+
+      // (1) 진행 중인 견적건(quotation_cases) 담당자를 후임자로 이관
+      for (const c of activeCases) {
+        await updateRows('quotation_cases', {
+          created_by_user_id: String(successor.id),
+          updated_at: dateStr,
+          updated_by: session.loginId || session.name
+        }, { filters: { id: String(c.id) } });
+      }
+
+      // (2) 해당 활성 견적건에 종속된 견적서(quotes) 담당자도 동기화
+      const activeCaseIds = new Set(activeCases.map((c: any) => String(c.id)));
+      try {
+        const quotesRes = await queryTable('quotes');
+        const allQuotes = normalizeRows(quotesRes);
+        const relatedQuotes = allQuotes.filter((q: any) =>
+          activeCaseIds.has(String(q.quotation_case_id)) || String(q.created_by_user_id) === String(id)
+        );
+        for (const q of relatedQuotes) {
+          await updateRows('quotes', {
+            created_by_user_id: String(successor.id),
+            updated_at: dateStr,
+            updated_by: session.loginId || session.name
+          }, { filters: { id: String(q.id) } });
+        }
+      } catch (qErr) {
+        console.warn('Quotes transfer warning during member deactivation:', qErr);
+      }
+
+      try {
+        invalidateCasesCache();
+      } catch {}
+    }
+
+    // 3. 소프트 삭제(Soft Delete) 수행
+    // 과거 완료/보관된 견적건은 원본 작성자(targetUser.id)가 그대로 유지되어 이력 및 감사 데이터가 100% 보존됩니다.
     await updateRows('users', {
       is_active: 0,
       deleted_at: dateStr,
@@ -320,7 +513,15 @@ export async function DELETE(req: Request) {
       updated_at: dateStr
     }, { filters: { id: String(id) } });
 
-    return NextResponse.json({ success: true, message: '계정이 비활성화(소프트 삭제)되었습니다.' });
+    const message = successorId && activeCases.length > 0
+      ? `'${targetUser.name}' 담당자의 진행 견적 ${activeCases.length}건이 성공적으로 이관되었으며, 계정이 비활성화되었습니다.`
+      : `'${targetUser.name}' 계정이 비활성화되었습니다.`;
+
+    return NextResponse.json({
+      success: true,
+      message,
+      transferred_count: activeCases.length
+    });
   } catch (error: any) {
     console.error('DELETE /api/operators error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

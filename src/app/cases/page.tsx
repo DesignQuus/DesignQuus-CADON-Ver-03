@@ -187,6 +187,10 @@ export default function CasesPage() {
       if (tabParam && ['ALL', 'READY_FOR_QUOTE', 'ANALYZED', 'PENDING', 'PRIVATE_APPROVAL', 'SECURE_VAULT', 'ARCHIVED', 'TRASHED'].includes(tabParam)) {
         setSelectedTab(tabParam as any);
       }
+      const managerParam = params.get('manager');
+      if (managerParam) {
+        setFilterManager(managerParam);
+      }
     }
   }, []);
 
@@ -599,7 +603,11 @@ export default function CasesPage() {
             setUser(data.user);
             setClientCache('user', data.user);
             try { localStorage.setItem('cadon_user', JSON.stringify(data.user)); } catch {}
-            if (!['TENANT_ADMIN', 'SUPER_ADMIN'].includes(data.user.role)) {
+            const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+            const urlManager = urlParams?.get('manager');
+            if (urlManager) {
+              setFilterManager(urlManager);
+            } else if (!['TENANT_ADMIN', 'SUPER_ADMIN'].includes(data.user.role)) {
               // 일반 견적 담당자는 로그인 시 '내 담당건' 필터로 기본 적용
               setFilterManager(data.user.userId);
             } else {
