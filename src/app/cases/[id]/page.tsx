@@ -2511,10 +2511,10 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               type="button"
               onClick={() => handleOpenAiInsights(false)}
               className="inline-flex items-center space-x-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95"
-              title="EGDesk AI 기반 CAD 도면 심층 통찰 및 사양 자동 추출"
+              title="CADON BOM AI 기반 도면 표제란, 가공 특성 및 견적 자동화 심층 분석 리포트"
             >
               <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-              <span>이지데스크 AI 심층 분석</span>
+              <span>CADON AI 도면·견적 심층분석</span>
             </button>
             <span className="text-slate-500 text-[10px] font-mono hidden md:inline">CADON Engine v3.0</span>
           </div>
@@ -6186,14 +6186,14 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 <div>
                   <div className="flex items-center space-x-2">
                     <h3 className="font-bold text-base text-white tracking-tight">
-                      이지데스크 AI CAD 심층 분석 리포트
+                      CADON AI 도면·견적 심층 분석 리포트
                     </h3>
                     <span className="px-2 py-0.5 text-[10px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 rounded-full">
                       Gemini 2.5 Flash
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 mt-0.5">
-                    도면 형상, 표제란, BOM 특성을 바탕으로 핵심 엔지니어링 사양 및 가공 공정을 자동 진단합니다.
+                    도면 표제란, 가공 특성 및 BOM을 바탕으로 핵심 엔지니어링 사양 및 견적 자동화를 진단합니다.
                   </p>
                 </div>
               </div>
@@ -6230,7 +6230,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-900 text-sm">
-                      이지데스크 AI 엔지니어가 CAD 데이터를 심층 분석 중입니다
+                      CADON AI 엔지니어가 도면 및 견적 데이터를 심층 분석 중입니다
                     </h4>
                     <p className="text-xs text-slate-500 mt-1">
                       도면 600,000+ 벡터 라인, 표제란, BOM 부품 계층 및 재질 사양을 종합 판독하고 있습니다...
@@ -6522,7 +6522,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
                   {/* Footnote */}
                   <div className="text-center text-[11px] text-slate-400">
-                    본 리포트는 EGDesk AI Caller(Gemini 2.5 Flash)가 CADON SQLite DB 도면 및 11,000+개 CAD 텍스트를 종합 분석하여 작성되었습니다.
+                    본 리포트는 CADON-BOM AI 엔진(Gemini 2.5 Flash)이 CAD 도면 표제란 및 11,000+개 텍스트를 종합 분석하여 작성되었습니다.
                   </div>
                 </>
               ) : null}
