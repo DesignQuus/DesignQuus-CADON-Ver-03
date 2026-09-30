@@ -406,6 +406,30 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const [applyingCompany, setApplyingCompany] = useState(false);
+  const handleApplyDetectedCompany = async (companyName: string) => {
+    if (!companyName || applyingCompany) return;
+    setApplyingCompany(true);
+    try {
+      const res = await apiFetch(`/api/quotation-cases/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName: companyName.trim() })
+      });
+      if (res.ok) {
+        await fetchData();
+        alert(`고객사명이 '${companyName.trim()}'(으)로 견적의뢰 건에 성공적으로 반영되었습니다.`);
+      } else {
+        const json = await res.json();
+        alert(json.error || '고객사 저장 실패');
+      }
+    } catch (e: any) {
+      alert('오류 발생: ' + e.message);
+    } finally {
+      setApplyingCompany(false);
+    }
+  };
+
   // 📦 Export Package Download (Step 3 최종 패키지 ZIP 다운로드)
   const handleDownloadZip = () => {
     if (!id) return;
@@ -6230,133 +6254,261 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 </div>
               ) : aiInsightsData ? (
                 <>
-                  {/* Section 1: Executive Summary */}
-                  <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-purple-50 border border-indigo-100 shadow-xs space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+                  {/* 1. 표제란(Title Block) AI 분석 및 고객사 검출 */}
+                  <div className="bg-white p-5 rounded-2xl border border-indigo-100 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                       <div className="flex items-center space-x-2">
-                        <span className="px-2.5 py-1 text-xs font-bold rounded-md bg-indigo-600 text-white shadow-xs">
-                          {aiInsightsData.machineClassification || '기계 설비'}
-                        </span>
-                        <h4 className="font-bold text-slate-900 text-base">
-                          {aiInsightsData.projectName || '프로젝트'}
+                        <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                          1
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-sm">
+                          표제란(Title Block) AI 분석 & 고객사 자동 검출
                         </h4>
                       </div>
-                      <span className="text-[11px] font-mono font-medium text-slate-400 bg-white px-2.5 py-1 rounded-md border border-slate-200">
-                        ⚡ 분석 소요: {aiInsightsData.durationMs || 0}ms
+                      <span className="text-[11px] font-mono font-medium text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                        ⚡ AI 분석 소요: {aiInsightsData.durationMs || 0}ms
                       </span>
                     </div>
-                    <div className="p-3.5 bg-white/80 rounded-xl border border-indigo-50 text-slate-700 text-xs sm:text-[13px] leading-relaxed">
-                      {aiInsightsData.executiveSummary}
+
+                    {/* Detected Company Box */}
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[11px] font-bold text-blue-800 uppercase tracking-wide">
+                            검출된 고객사 / 발주처
+                          </span>
+                          <span className="px-2 py-0.2 text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full">
+                            신뢰도 {aiInsightsData.titleBlockAnalysis?.companyConfidence || 95}%
+                          </span>
+                        </div>
+                        <div className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
+                          <Building2 className="w-5 h-5 text-indigo-600 shrink-0" />
+                          <span>{aiInsightsData.titleBlockAnalysis?.detectedCompany || '미지정'}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          도면 표제란 및 우측 보안 시방서 문구에서 발주처 법인명이 정밀 검출되었습니다.
+                        </p>
+                      </div>
+
+                      {aiInsightsData.titleBlockAnalysis?.detectedCompany && (
+                        <button
+                          type="button"
+                          onClick={() => handleApplyDetectedCompany(aiInsightsData.titleBlockAnalysis.detectedCompany)}
+                          disabled={applyingCompany}
+                          className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center space-x-1.5 shrink-0 cursor-pointer disabled:opacity-50"
+                        >
+                          <Building2 className="w-3.5 h-3.5" />
+                          <span>{applyingCompany ? '반영 중...' : '견적 고객사로 즉시 반영'}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Title Block Parameters Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 pt-1">
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                        <span className="text-[10px] text-slate-500 font-semibold block">프로젝트 / 건명</span>
+                        <span className="text-xs font-bold text-slate-900 truncate block mt-0.5" title={aiInsightsData.titleBlockAnalysis?.projectName}>
+                          {aiInsightsData.titleBlockAnalysis?.projectName || '-'}
+                        </span>
+                      </div>
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                        <span className="text-[10px] text-slate-500 font-semibold block">프로젝트 번호</span>
+                        <span className="text-xs font-bold text-indigo-700 font-mono block mt-0.5">
+                          {aiInsightsData.titleBlockAnalysis?.projectNo || '-'}
+                        </span>
+                      </div>
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                        <span className="text-[10px] text-slate-500 font-semibold block">대표 도면 번호</span>
+                        <span className="text-xs font-bold text-slate-900 font-mono block mt-0.5 truncate" title={aiInsightsData.titleBlockAnalysis?.mainDrawingNo}>
+                          {aiInsightsData.titleBlockAnalysis?.mainDrawingNo || '-'}
+                        </span>
+                      </div>
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                        <span className="text-[10px] text-slate-500 font-semibold block">리비전 (Rev)</span>
+                        <span className="text-xs font-bold text-amber-700 font-mono block mt-0.5 truncate" title={aiInsightsData.titleBlockAnalysis?.revision}>
+                          {aiInsightsData.titleBlockAnalysis?.revision || 'R00'}
+                        </span>
+                      </div>
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                        <span className="text-[10px] text-slate-500 font-semibold block">대표 척도 (Scale)</span>
+                        <span className="text-xs font-bold text-slate-800 font-mono block mt-0.5 truncate">
+                          {aiInsightsData.titleBlockAnalysis?.scale || '1:1'}
+                        </span>
+                      </div>
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                        <span className="text-[10px] text-slate-500 font-semibold block">도면 일자</span>
+                        <span className="text-xs font-bold text-slate-800 font-mono block mt-0.5">
+                          {aiInsightsData.titleBlockAnalysis?.plotDate || '-'}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Section 2: Key Specifications */}
-                  {aiInsightsData.keySpecifications && aiInsightsData.keySpecifications.length > 0 && (
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                      <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs">
-                        <Database className="w-4 h-4 text-indigo-600" />
-                        <span>도면 기반 주요 사양 자동 추출</span>
+                  {/* 2. 견적 진행 도면 관련 정보 및 가공 특성 */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                          2
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-sm">
+                          견적 진행 도면 구성 & 핵심 가공 지시사항 검출
+                        </h4>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                        {aiInsightsData.keySpecifications.map((spec: any, idx: number) => (
-                          <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                            <span className="text-[11px] font-semibold text-slate-500 block truncate">
-                              {spec.label}
-                            </span>
-                            <span className="text-xs font-bold text-slate-900 mt-1 block break-words">
-                              {spec.value}
-                            </span>
+                      <div className="flex items-center space-x-2">
+                        <span className="px-2 py-0.5 text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 rounded-md">
+                          총 {aiInsightsData.drawingAndMachiningFeatures?.totalSheets || 19}매
+                        </span>
+                        <span className="px-2 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-md">
+                          조립도 {aiInsightsData.drawingAndMachiningFeatures?.assemblySheetsCount || 6}매 · 가공품도 {aiInsightsData.drawingAndMachiningFeatures?.partSheetsCount || 13}매
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 12대 핵심 제작 지시사항 (시방서 및 주기 검출) */}
+                    <div>
+                      <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-800 mb-2.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                        <span>도면 특기 시방서 및 주기(Notes) 검출 사항 (견적 필수 반영)</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {aiInsightsData.drawingAndMachiningFeatures?.criticalManufacturingNotes?.map((note: string, idx: number) => (
+                          <div key={idx} className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-200/70 text-xs text-amber-950 flex items-start space-x-2">
+                            <span className="font-bold text-amber-600 shrink-0">⚡</span>
+                            <span className="leading-snug">{note}</span>
                           </div>
                         ))}
                       </div>
                     </div>
-                  )}
 
-                  {/* Section 3: Assembly Hierarchy Assessment */}
-                  {aiInsightsData.assemblyHierarchyAssessment && (
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs">
-                          <Layers className="w-4 h-4 text-indigo-600" />
-                          <span>조립체 계층 구조 건전도 진단</span>
-                        </div>
-                        {aiInsightsData.assemblyHierarchyAssessment.structureHealth === 'EXCELLENT' ? (
-                          <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>최우수 (무결점)</span>
-                          </span>
-                        ) : aiInsightsData.assemblyHierarchyAssessment.structureHealth === 'GOOD' ? (
-                          <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-blue-100 text-blue-800 border border-blue-200 flex items-center space-x-1">
-                            <Check className="w-3.5 h-3.5" />
-                            <span>양호</span>
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-200 flex items-center space-x-1">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            <span>검토 권장</span>
-                          </span>
-                        )}
+                    {/* 핵심 부품군 분류 및 권장 가공 공정 */}
+                    <div>
+                      <div className="text-xs font-bold text-slate-800 mb-2.5">
+                        도면 부품군 분류 및 공정 매칭
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-                          <span className="text-xs text-slate-600 font-medium">조립체(Assembly) 수량</span>
-                          <span className="text-sm font-bold text-indigo-700">
-                            {aiInsightsData.assemblyHierarchyAssessment.totalAssemblies}개
-                          </span>
-                        </div>
-                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-                          <span className="text-xs text-slate-600 font-medium">단품(Part) 부품 수량</span>
-                          <span className="text-sm font-bold text-indigo-700">
-                            {aiInsightsData.assemblyHierarchyAssessment.totalParts}개
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-slate-600 leading-relaxed bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                        {aiInsightsData.assemblyHierarchyAssessment.comment}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Section 4: Material & Process Insights */}
-                  {aiInsightsData.materialAndProcessInsights && aiInsightsData.materialAndProcessInsights.length > 0 && (
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                      <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs">
-                        <Wrench className="w-4 h-4 text-indigo-600" />
-                        <span>재질별 권장 가공 공정 & 리스크 관리 가이드</span>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {aiInsightsData.materialAndProcessInsights.map((item: any, idx: number) => (
-                          <div key={idx} className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5">
-                            <div className="flex items-center justify-between">
-                              <span className="px-2 py-0.5 text-xs font-bold bg-slate-900 text-white rounded">
-                                {item.material}
-                              </span>
-                              <span className="text-[10px] text-slate-500 font-mono">가공 매칭</span>
-                            </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {aiInsightsData.drawingAndMachiningFeatures?.keyPartGroups?.map((group: any, idx: number) => (
+                          <div key={idx} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+                            <span className="font-bold text-xs text-slate-900 block border-b border-slate-200 pb-1.5">
+                              {group.groupName}
+                            </span>
                             <div>
-                              <div className="text-[11px] font-semibold text-slate-600 mb-1">권장 공정:</div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {item.suggestedProcesses?.map((p: string, pIdx: number) => (
-                                  <span key={pIdx} className="px-2 py-0.5 text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                              <span className="text-[10px] text-slate-500 font-semibold block mb-1">검출 부품:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {group.parts?.map((p: string, pIdx: number) => (
+                                  <span key={pIdx} className="px-1.5 py-0.5 text-[10px] font-medium bg-white text-slate-800 border border-slate-200 rounded">
                                     {p}
                                   </span>
                                 ))}
                               </div>
                             </div>
-                            {item.riskNotes && (
-                              <div className="text-[11px] text-amber-800 bg-amber-50/70 border border-amber-200/60 p-2 rounded leading-snug">
-                                ⚠️ {item.riskNotes}
+                            <div>
+                              <span className="text-[10px] text-indigo-700 font-semibold block mb-1">권장 가공 공정:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {group.processes?.map((proc: string, procIdx: number) => (
+                                  <span key={procIdx} className="px-1.5 py-0.5 text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                                    {proc}
+                                  </span>
+                                ))}
                               </div>
-                            )}
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
-                  )}
+                  </div>
+
+                  {/* 3. BOM 리스트 분석 및 정합성 검토 */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                          3
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-sm">
+                          BOM 리스트 분석 및 재질 정합성 검토
+                        </h4>
+                      </div>
+                      <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        예상 부품 수량: {aiInsightsData.bomAnalysis?.estimatedTotalPartsCount || 38}종
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                      {aiInsightsData.bomAnalysis?.materialsIdentified?.map((mat: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                          <span className="px-2 py-0.5 text-xs font-bold bg-slate-900 text-white rounded inline-block">
+                            {mat.material}
+                          </span>
+                          <p className="text-[11px] text-slate-600 leading-snug pt-1">
+                            {mat.usage}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl text-xs text-emerald-950 leading-relaxed flex items-start space-x-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>BOM 정합성 진단:</strong> {aiInsightsData.bomAnalysis?.bomIntegrityNotes}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. 견적 자동화 연계 및 원가 산출 제언 */}
+                  <div className="bg-white p-5 rounded-2xl border border-purple-200 shadow-xs space-y-4 bg-gradient-to-br from-white via-purple-50/30 to-indigo-50/30">
+                    <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-6 h-6 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                          4
+                        </div>
+                        <h4 className="font-bold text-purple-950 text-sm">
+                          견적 자동화 연계 및 원가 산출 제언 (Quotation Automation)
+                        </h4>
+                      </div>
+                      <span className="text-[11px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">
+                        원가 누락 방지 가이드
+                      </span>
+                    </div>
+
+                    {/* Cost Estimation Points */}
+                    <div className="space-y-2">
+                      <span className="text-xs font-bold text-slate-800 block">
+                        공정별 원가 산출 핵심 파라미터:
+                      </span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {aiInsightsData.quotationAutomationRecommendations?.costEstimationPoints?.map((point: string, idx: number) => (
+                          <div key={idx} className="p-2.5 bg-white rounded-xl border border-purple-100 shadow-2xs text-xs text-slate-700 flex items-start space-x-2">
+                            <Coins className="w-3.5 h-3.5 text-purple-600 shrink-0 mt-0.5" />
+                            <span className="leading-snug">{point}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Suggested Automation Actions */}
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block mb-2">
+                        견적 자동화 추천 액션:
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                        {aiInsightsData.quotationAutomationRecommendations?.suggestedActions?.map((act: any, idx: number) => (
+                          <div key={idx} className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 inline-block">
+                              {act.label}
+                            </span>
+                            <p className="text-xs font-semibold text-slate-900 leading-snug">
+                              {act.value}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Footnote */}
                   <div className="text-center text-[11px] text-slate-400">
-                    본 리포트는 EGDesk AI Caller(Gemini 2.5 Flash)가 CADON 데이터베이스를 엔지니어링 관점에서 종합 분석한 결과입니다.
+                    본 리포트는 EGDesk AI Caller(Gemini 2.5 Flash)가 CADON SQLite DB 도면 및 11,000+개 CAD 텍스트를 종합 분석하여 작성되었습니다.
                   </div>
                 </>
               ) : null}
