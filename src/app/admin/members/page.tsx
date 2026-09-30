@@ -645,6 +645,7 @@ export default function MembersManagementPage() {
     setFormTenantId(defaultDept);
     setIsCustomDeptAdd(false);
     setFormError("");
+    setIsSubmitting(false);
 
     setFormCanEditPrice(true);
     setFormCanApproveQuote(true);
@@ -675,7 +676,11 @@ export default function MembersManagementPage() {
       });
       const data = await res.json();
       if (!data.success) {
-        setFormError(data.error || "등록에 실패했습니다.");
+        let msg = data.error || "등록에 실패했습니다.";
+        if (msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('gateway')) {
+          msg = "데이터베이스 통신 지연이 발생했습니다. 다시 시도해 주세요.";
+        }
+        setFormError(msg);
       } else {
         setShowAddModal(false);
         setSuccessMsg("신규 임직원 계정이 성공적으로 등록되었습니다.");
@@ -711,7 +716,11 @@ export default function MembersManagementPage() {
         }
       }
     } catch (err: any) {
-      setFormError(err.message || "통신 중 오류가 발생했습니다.");
+      let msg = err.message || "통신 중 오류가 발생했습니다.";
+      if (msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('gateway')) {
+        msg = "데이터베이스 통신 지연이 발생했습니다. 다시 시도해 주세요.";
+      }
+      setFormError(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -729,6 +738,7 @@ export default function MembersManagementPage() {
     setIsCustomDeptEdit(false);
     setFormPassword("");
     setFormError("");
+    setIsSubmitting(false); // 💡 수정 모달 열림 시 제출 상태 즉시 초기화 (버튼 멈춤 원천 방지)
 
     const userPerm = userPermissions.find((p) => p.user_id === op.id);
     setFormCanEditPrice(userPerm ? Boolean(userPerm.can_edit_price) : true);
@@ -748,21 +758,33 @@ export default function MembersManagementPage() {
     try {
       const trimmedDept = formTenantId.trim();
 
-      // 1. 즉각적인 낙관적 업데이트 (화면 깜빡임 / 스크롤 이동 0ms 원천 차단)
-      const updatedOp = {
-        name: formName.trim(),
-        role: formRole,
-        employee_number: formEmployeeNumber.trim() || null,
-        phone: formPhone.trim() || null,
-        tenant_id: trimmedDept,
-        department: trimmedDept
-      };
-      setOperators(prev => prev.map(op => (op.id === editingOperator.id ? { ...op, ...updatedOp } : op)));
-      setShowEditModal(false);
-      setSuccessMsg("임직원 정보 및 권한이 수정되었습니다.");
-      setTimeout(() => setSuccessMsg(""), 3000);
+      // 1. 백엔드 통신 (사원 정보 업데이트)
+      const res = await apiFetch("/api/operators", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingOperator.id,
+          name: formName.trim(),
+          role: formRole,
+          employee_number: formEmployeeNumber.trim(),
+          phone: formPhone.trim(),
+          tenant_id: trimmedDept,
+          password: formPassword || undefined
+        })
+      });
 
-      // 2. 권한 백엔드 동기화 및 로컬 상태 반영
+      const data = await res.json();
+      if (!data.success) {
+        let msg = data.error || "수정에 실패했습니다.";
+        if (msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('gateway')) {
+          msg = "데이터베이스 통신 지연이 발생했습니다. 다시 시도해 주세요.";
+        }
+        setFormError(msg);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 2. 권한 백엔드 동기화
       apiFetch('/api/admin/permissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -777,6 +799,7 @@ export default function MembersManagementPage() {
         })
       }).catch(() => {});
 
+      // 3. 로컬 권한 상태 갱신
       setUserPermissions(prev => {
         const exists = prev.some(p => p.user_id === editingOperator.id);
         if (exists) {
@@ -801,41 +824,31 @@ export default function MembersManagementPage() {
         }
       });
 
-      // 3. 백엔드 통신
-      const res = await apiFetch("/api/operators", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingOperator.id,
-          name: formName.trim(),
-          role: formRole,
-          employee_number: formEmployeeNumber.trim(),
-          phone: formPhone.trim(),
-          tenant_id: trimmedDept,
-          password: formPassword || undefined
-        })
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setFormError(data.error || "수정에 실패했습니다.");
-        await fetchData(true); // 실패 시 롤백
-      } else {
-        await fetchData(true); // 조용한 백그라운드 동기화 (화면 언마운트 없음)
-        if (typeof window !== 'undefined' && window.scrollY !== savedScrollY) {
-          window.scrollTo({ top: savedScrollY, behavior: 'instant' as ScrollBehavior });
-        }
-        // 신규 부서인 경우 부서 목록에도 자동 등록
-        if (trimmedDept && !departments.some(d => d.name === trimmedDept)) {
-          apiFetch("/api/admin/departments", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "ADD", name: trimmedDept })
-          }).then(() => fetchDepartments()).catch(() => {});
-        }
+      // 4. 통신 성공 후 안전하게 모달 닫기 및 성공 토스트 표출
+      setShowEditModal(false);
+      setSuccessMsg("임직원 정보 및 권한이 수정되었습니다.");
+      setTimeout(() => setSuccessMsg(""), 3000);
+
+      // 5. 조용한 백그라운드 동기화 (스크롤 보존)
+      await fetchData(true);
+      if (typeof window !== 'undefined' && window.scrollY !== savedScrollY) {
+        window.scrollTo({ top: savedScrollY, behavior: 'instant' as ScrollBehavior });
+      }
+
+      // 신규 부서인 경우 부서 목록 자동 등록
+      if (trimmedDept && !departments.some(d => d.name === trimmedDept)) {
+        apiFetch("/api/admin/departments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "ADD", name: trimmedDept })
+        }).then(() => fetchDepartments()).catch(() => {});
       }
     } catch (err: any) {
-      setFormError(err.message || "통신 중 오류가 발생했습니다.");
-      await fetchData(true);
+      let msg = err.message || "통신 중 오류가 발생했습니다.";
+      if (msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('gateway')) {
+        msg = "데이터베이스 통신 지연이 발생했습니다. 다시 시도해 주세요.";
+      }
+      setFormError(msg);
     } finally {
       setIsSubmitting(false);
     }
