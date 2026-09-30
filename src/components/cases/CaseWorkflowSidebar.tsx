@@ -97,7 +97,7 @@ export default function CaseWorkflowSidebar({
           mode="collapse"
           onClick={onToggleCollapse}
           label="접기"
-          title="작업 파이프라인 접기 (도면/테이블 넓게 보기)"
+          title="견적 진행 단계 접기 (테이블 넓게 보기)"
         />
       )}
 
@@ -107,7 +107,7 @@ export default function CaseWorkflowSidebar({
           <div className="flex items-center space-x-2">
             <Layers className="w-4 h-4 text-blue-600" />
             <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
-              작업 파이프라인
+              견적 진행 단계
             </h3>
           </div>
           <div className="flex items-center space-x-1.5">
@@ -178,7 +178,7 @@ export default function CaseWorkflowSidebar({
               </p>
             </div>
             <p className="text-[10.5px] text-slate-500 leading-snug px-1">
-              도면을 드롭하면 <strong className="text-slate-800 font-semibold">신규 프로젝트 자동 생성 ➔ 도면 업로드 ➔ AI BOM 추출 파이프라인</strong>이 즉시 시작됩니다.
+              도면을 드롭하면 <strong className="text-slate-800 font-semibold">신규 프로젝트 자동 생성 ➔ 도면 업로드 ➔ AI BOM 추출 프로세스</strong>가 즉시 시작됩니다.
             </p>
           </div>
 

@@ -1331,9 +1331,9 @@ export default function CasesPage() {
         <SidebarBookmarkTab
           mode="expand"
           onClick={handleToggleSidebar}
-          label="파이프라인"
+          label="진행단계"
           icon={Layers}
-          title="작업 파이프라인 펼치기"
+          title="견적 진행 단계 패널 펼치기"
         />
       )}
 
@@ -1537,7 +1537,7 @@ export default function CasesPage() {
                   ? 'bg-blue-50 text-blue-700 border-blue-300 shadow-2xs hover:bg-blue-100'
                   : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
               }`}
-              title={isSidebarCollapsed ? '좌측 파이프라인 사이드바 펼치기' : '좌측 사이드바 접기 (테이블 100% 넓게 보기)'}
+              title={isSidebarCollapsed ? '좌측 견적 진행 단계 사이드바 펼치기' : '좌측 사이드바 접기 (테이블 100% 넓게 보기)'}
             >
               <Layers className="w-3.5 h-3.5" />
               <span>{isSidebarCollapsed ? '열기' : '넓게보기'}</span>
@@ -2936,7 +2936,7 @@ export default function CasesPage() {
                   {isSubmittingModal ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>도면 분석 파이프라인 가동 중...</span>
+                      <span>도면 분석 및 견적 처리 중...</span>
                     </>
                   ) : (
                     <>
