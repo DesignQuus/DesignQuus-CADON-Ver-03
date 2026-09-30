@@ -67,9 +67,25 @@ export async function GET(
     path.join(localDerived, `${id}__cad_texts.json`)
   );
 
+  function isValidJsonFile(filePath: string): boolean {
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.size < 10) return false;
+      const fd = fs.openSync(filePath, 'r');
+      const readLen = Math.min(stat.size, 64);
+      const buf = Buffer.alloc(readLen);
+      fs.readSync(fd, buf, 0, readLen, stat.size - readLen);
+      fs.closeSync(fd);
+      const tail = buf.toString('utf8').trim();
+      return tail.endsWith('}') || tail.endsWith(']');
+    } catch {
+      return false;
+    }
+  }
+
   let targetTxt = '';
   for (const c of candidates) {
-    if (fs.existsSync(c)) {
+    if (fs.existsSync(c) && isValidJsonFile(c)) {
       targetTxt = c;
       break;
     }
@@ -78,7 +94,7 @@ export async function GET(
   // Cross-sync if found in one location
   if (targetTxt) {
     for (const c of candidates.slice(0, 3)) {
-      if (!fs.existsSync(c)) {
+      if (!fs.existsSync(c) || !isValidJsonFile(c)) {
         try {
           fs.mkdirSync(path.dirname(c), { recursive: true });
           fs.copyFileSync(targetTxt, c);
@@ -88,7 +104,7 @@ export async function GET(
   }
 
   // Auto-generate if missing in all locations
-  if (!targetTxt || !fs.existsSync(targetTxt)) {
+  if (!targetTxt || !fs.existsSync(targetTxt) || !isValidJsonFile(targetTxt)) {
     const sourceFile = fileId
       ? ((await db.prepare(`
           SELECT * FROM uploaded_files
@@ -109,12 +125,12 @@ export async function GET(
         const pyScript = path.join(process.cwd(), 'scripts', 'cad_webgl_exporter.py');
         const destBin = path.join(candidates[0].replace('__cad_texts.json', '__cad_webgl.bin'));
         fs.mkdirSync(path.dirname(destBin), { recursive: true });
-        spawnSync('python', [pyScript, srcPath, destBin], { timeout: 30000 });
-        if (fs.existsSync(candidates[0])) {
+        spawnSync('python', [pyScript, srcPath, destBin], { timeout: 180000 });
+        if (fs.existsSync(candidates[0]) && isValidJsonFile(candidates[0])) {
           targetTxt = candidates[0];
           // Copy to other locations as well
           for (const c of candidates.slice(0, 3)) {
-            if (c !== candidates[0] && !fs.existsSync(c)) {
+            if (c !== candidates[0]) {
               try {
                 fs.mkdirSync(path.dirname(c), { recursive: true });
                 fs.copyFileSync(candidates[0], c);

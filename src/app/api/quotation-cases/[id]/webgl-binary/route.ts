@@ -119,7 +119,7 @@ export async function GET(
         const destBin = candidates[0];
         fs.mkdirSync(path.dirname(destBin), { recursive: true });
         const pyScript = path.join(process.cwd(), 'scripts', 'cad_webgl_exporter.py');
-        spawnSync('python', [pyScript, srcPath, destBin], { timeout: 45000 });
+        spawnSync('python', [pyScript, srcPath, destBin], { timeout: 180000 });
         if (fs.existsSync(destBin) && fs.statSync(destBin).size >= 28) {
           targetBin = destBin;
         }
