@@ -157,13 +157,13 @@ export function QuoteDeleteToast({
       onMouseLeave={() => setIsPaused(false)}
       role="status"
       aria-live="polite"
-      className={`fixed top-8 left-1/2 -translate-x-1/2 z-[130] w-auto max-w-lg min-w-[340px] text-white px-5 py-3 rounded-2xl shadow-2xl border flex items-center justify-between space-x-3.5 text-xs backdrop-blur-md transition-all animate-in slide-in-from-top-4 fade-in duration-200 ${
+      className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[130] w-auto max-w-xl min-w-[360px] text-white px-6 py-4 rounded-2xl shadow-2xl border flex items-center justify-between space-x-4 text-xs backdrop-blur-md transition-all animate-in zoom-in-95 fade-in duration-150 ${
         message.isError
-          ? 'bg-rose-950/95 border-rose-700/80 text-rose-100 shadow-rose-950/40'
-          : 'bg-slate-900/95 border-slate-700/90 shadow-slate-950/50'
+          ? 'bg-rose-950/95 border-rose-700/80 text-rose-100 shadow-rose-950/50 ring-1 ring-rose-500/30'
+          : 'bg-slate-900/95 border-slate-700/90 shadow-slate-950/60 ring-1 ring-white/10'
       }`}
     >
-      <div className="flex items-center space-x-2.5 min-w-0">
+      <div className="flex items-center space-x-3 min-w-0 pr-2">
         {message.isError ? (
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
         ) : message.showRestoreConfirm ? (
@@ -171,7 +171,7 @@ export function QuoteDeleteToast({
         ) : (
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
         )}
-        <span className="font-medium leading-snug truncate">{message.text}</span>
+        <span className="font-medium leading-snug whitespace-normal">{message.text}</span>
       </div>
 
       <div className="flex items-center space-x-2 shrink-0">
