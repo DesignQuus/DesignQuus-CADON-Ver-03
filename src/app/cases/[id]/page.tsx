@@ -2053,261 +2053,215 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {/* 🎯 CADON v3.0 스마트 슬림 일체형 통합 헤더 카드 */}
-      <div className="no-print print:hidden bg-white rounded-2xl px-4 py-2.5 border border-slate-200/90 shadow-2xs space-y-2">
-        {/* 1행: 내비게이션 메타 + 상태/권한 뱃지 + 우측 접속자 및 액션 */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-          <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-            <Link
-              href="/cases"
-              className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-700 font-bold text-xs transition-all shadow-2xs group cursor-pointer"
-              title="견적의뢰 관리 메인 목록(대시보드)으로 돌아가기"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 text-blue-600 transition-transform group-hover:-translate-x-0.5" />
-              <span>메인 목록</span>
-            </Link>
-            <span className="text-slate-300">|</span>
-            <nav className="flex items-center space-x-1.5 text-xs text-slate-500 font-medium">
-              <Link href="/cases" className="hover:text-blue-600 flex items-center space-x-1">
-                <Home className="w-3.5 h-3.5" />
-                <span>홈</span>
-              </Link>
-              <ChevronRight className="w-3 h-3 text-slate-400" />
-              <Link href="/cases" className="hover:text-blue-600 font-semibold text-slate-600">
-                견적의뢰
-              </Link>
-              <ChevronRight className="w-3 h-3 text-slate-400" />
-              <span className="text-slate-900 font-bold font-mono px-1.5 py-0.5 bg-slate-100 rounded text-xs">
-                {qc.case_no}
-              </span>
-            </nav>
+      {/* 🎯 CADON v3.0 슈퍼 슬림 일체형 1행 스마트 헤더 바 (방안 A) */}
+      <div className="no-print print:hidden bg-white rounded-xl px-3 sm:px-4 py-1.5 border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-2.5 text-xs">
+        {/* 좌측: 목록 이동 + 번호 + 건명 + 발주처 + 담당자 + 상태/권한 뱃지 */}
+        <div className="flex items-center space-x-2 flex-wrap gap-y-1 min-w-0 flex-1">
+          <Link
+            href="/cases"
+            className="inline-flex items-center space-x-1 px-2 py-1 rounded-lg border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-700 font-bold text-xs transition-all shadow-2xs group cursor-pointer shrink-0"
+            title="견적의뢰 관리 메인 목록(대시보드)으로 돌아가기"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-blue-600 transition-transform group-hover:-translate-x-0.5" />
+            <span>목록</span>
+          </Link>
+          <span className="text-slate-300">|</span>
 
-            <span className="text-slate-300">|</span>
+          {/* 의뢰 번호 & 건명 */}
+          <span className="font-mono font-bold text-slate-800 shrink-0 px-1.5 py-0.5 bg-slate-100 rounded text-xs">
+            {qc.case_no}
+          </span>
+          <h1 
+            className="text-xs sm:text-sm font-bold text-slate-900 truncate max-w-[160px] md:max-w-[240px] xl:max-w-[360px]" 
+            title={qc.case_name}
+          >
+            {qc.case_name}
+          </h1>
 
-            {/* 견적 준비 상태 뱃지 */}
-            <span
-              className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                qc.quote_readiness === 'READY_FOR_QUOTE'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : qc.status === 'ANALYZED'
-                  ? 'bg-blue-100 text-blue-800'
-                  : 'bg-amber-100 text-amber-800'
-              }`}
-            >
-              {qc.quote_readiness === 'READY_FOR_QUOTE'
-                ? '견적 준비완료'
-                : qc.status === 'ANALYZED'
-                ? '도면/BOM 분석완료'
-                : '도면 등록 대기'}
+          {qc.visibility === 'SHARED' && (
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-700 shrink-0">
+              사내공유
             </span>
+          )}
+          {qc.visibility === 'PRIVATE_PENDING' && (
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-700 shrink-0">
+              공개심사중
+            </span>
+          )}
+          {qc.visibility === 'PRIVATE' && (
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-red-100 text-red-700 shrink-0">
+              보안(비공개)
+            </span>
+          )}
 
-            {/* 권한 뱃지 (인라인 통합) */}
-            {isOwner ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300">
-                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                내 견적 담당건
-              </span>
-            ) : permission?.isSuspended ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-300">
-                <Sparkles className="w-3 h-3 text-indigo-600" />
-                결재 보류 모드 (자유 진행)
-              </span>
-            ) : canEdit ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-300">
-                <ShieldCheck className="w-3 h-3 text-blue-600" />
-                최고관리자 승인 완료 (수정 활성)
+          <span className="text-slate-300 hidden sm:inline">|</span>
+
+          {/* 발주처 (고객사) */}
+          <div className="flex items-center space-x-1 shrink-0">
+            <Building2 className="w-3 h-3 text-slate-400" />
+            {qc.company_id === 'comp_unassigned' || qc.company_name === '고객사 미지정' ? (
+              <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300 text-[11px]">
+                ⚠️ 미지정
+                <button
+                  onClick={handleOpenCompanyModal}
+                  className="text-[10px] text-blue-700 hover:text-blue-900 underline font-bold cursor-pointer"
+                >
+                  [지정]
+                </button>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
-                <Lock className="w-3 h-3 text-amber-600" />
-                타 담당자 건 ({ownerName})
+              <span className="font-semibold text-slate-700 flex items-center gap-1 bg-slate-100/90 px-1.5 py-0.2 rounded border border-slate-200 text-[11px]">
+                <span className="text-slate-500 font-normal">발주처:</span>
+                <span className="font-bold text-slate-900 max-w-[110px] truncate" title={qc.company_name}>{qc.company_name}</span>
+                <button
+                  onClick={handleOpenCompanyModal}
+                  className="text-slate-400 hover:text-blue-600 cursor-pointer ml-0.5"
+                  title="발주처(고객사) 수정"
+                >
+                  <Pencil className="w-2.5 h-2.5 inline" />
+                </button>
               </span>
             )}
-
-            {/* 담당자 복제 버튼 (타 담당자 건인 경우 인라인 배치) */}
-            {!isOwner && latestQuote && (
-              <button
-                type="button"
-                onClick={() => handleCloneVersion(latestQuote.id)}
-                disabled={actionLoading}
-                className="btn-hover-effect px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs flex items-center space-x-1 cursor-pointer disabled:opacity-50 transition-all"
-                title="타 담당자 원본을 보존하고 내 전용 새 버전으로 복제하여 작업"
-              >
-                <Copy className="w-3 h-3" />
-                <span>새 버전(V{latestQuote.quote_version + 1}) 복제</span>
-              </button>
-            )}
           </div>
 
-          {/* 우측: 접속자 및 보관/삭제 버튼 */}
-          <div className="flex items-center space-x-3">
-            <div className="hidden lg:flex items-center space-x-1.5 text-xs text-slate-500">
-              <span className="text-[11px] text-slate-400">접속자:</span>
-              <span className="font-bold text-slate-800">{user ? user.name : '게스트'}</span>
-              {user?.role === 'SUPER_ADMIN' ? (
-                <span className="px-1.5 py-0.2 bg-purple-100 text-purple-800 text-[10px] font-bold rounded">
-                  최고관리자
-                </span>
-              ) : user?.department ? (
-                <span className="px-1.5 py-0.2 bg-blue-100 text-blue-800 text-[10px] font-bold rounded">
-                  {user.department}
-                </span>
-              ) : null}
-              <Link
-                href="/login"
-                className="text-[10px] text-blue-600 hover:text-blue-800 underline ml-0.5"
-              >
-                변경
-              </Link>
-            </div>
+          {/* 담당자 */}
+          <span className="text-slate-400 text-[11px] hidden md:inline shrink-0">
+            담당: <span className="text-slate-700 font-semibold">{qc.created_by_name || ownerName}</span>
+          </span>
 
-            <span className="hidden lg:inline text-slate-300">|</span>
+          <span className="text-slate-300 hidden sm:inline">|</span>
 
-            <div className="flex items-center space-x-1.5">
-              {qc?.lifecycle_status === 'ARCHIVED' ? (
-                <button
-                  type="button"
-                  onClick={handleRestoreCase}
-                  disabled={detailLifecycleLoading}
-                  className="inline-flex items-center space-x-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-300 rounded-lg text-xs font-bold text-purple-700 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>복원</span>
-                </button>
-              ) : qc?.lifecycle_status === 'TRASHED' ? (
-                <button
-                  type="button"
-                  onClick={handleRestoreCase}
-                  disabled={detailLifecycleLoading}
-                  className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-700 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>복원</span>
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setDetailArchiveModalOpen(true)}
-                    className="inline-flex items-center space-x-1 px-2 py-1 bg-white hover:bg-purple-50 border border-purple-200 hover:border-purple-300 rounded-lg text-xs font-bold text-purple-700 transition-all shadow-2xs cursor-pointer"
-                    title="견적건 보관함으로 이동"
-                  >
-                    <Archive className="w-3 h-3" />
-                    <span>보관</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleTrashCase}
-                    disabled={detailLifecycleLoading}
-                    className="inline-flex items-center space-x-1 px-2 py-1 bg-white hover:bg-rose-50 border border-rose-200 hover:border-rose-300 rounded-lg text-xs font-bold text-rose-600 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-                    title="견적건 휴지통으로 이동"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span>삭제</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
+          {/* 견적 준비 상태 뱃지 */}
+          <span
+            className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+              qc.quote_readiness === 'READY_FOR_QUOTE'
+                ? 'bg-emerald-100 text-emerald-800'
+                : qc.status === 'ANALYZED'
+                ? 'bg-blue-100 text-blue-800'
+                : 'bg-amber-100 text-amber-800'
+            }`}
+          >
+            {qc.quote_readiness === 'READY_FOR_QUOTE'
+              ? '견적 준비완료'
+              : qc.status === 'ANALYZED'
+              ? '도면/BOM 분석완료'
+              : '도면 등록 대기'}
+          </span>
+
+          {/* 권한 뱃지 (인라인 통합) */}
+          {isOwner ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 shrink-0">
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              내 견적
+            </span>
+          ) : permission?.isSuspended ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-300 shrink-0">
+              <Sparkles className="w-3 h-3 text-indigo-600" />
+              결재 보류 모드
+            </span>
+          ) : canEdit ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-300 shrink-0">
+              <ShieldCheck className="w-3 h-3 text-blue-600" />
+              최고관리자 승인
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300 shrink-0">
+              <Lock className="w-3 h-3 text-amber-600" />
+              타 담당자 건
+            </span>
+          )}
+
+          {/* 담당자 복제 버튼 */}
+          {!isOwner && latestQuote && (
+            <button
+              type="button"
+              onClick={() => handleCloneVersion(latestQuote.id)}
+              disabled={actionLoading}
+              className="btn-hover-effect px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs flex items-center space-x-1 cursor-pointer disabled:opacity-50 transition-all shrink-0"
+              title="타 담당자 원본을 보존하고 내 전용 새 버전으로 복제하여 작업"
+            >
+              <Copy className="w-3 h-3" />
+              <span>새 버전 복제</span>
+            </button>
+          )}
         </div>
 
-        {/* 2행: 건명 / 고객사 / 프로젝트 / 일자 + 우측 컴팩트 워터폴 통계 */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-0.5">
-          <div className="min-w-0">
-            <div className="flex items-center space-x-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate max-w-[340px] lg:max-w-[480px]">
-                {qc.case_name}
-              </h1>
-              {qc.visibility === 'SHARED' && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">
-                  사내공유
-                </span>
-              )}
-              {qc.visibility === 'PRIVATE_PENDING' && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700">
-                  공개심사중
-                </span>
-              )}
-              {qc.visibility === 'PRIVATE' && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">
-                  보안(비공개)
-                </span>
-              )}
-              <span className="text-xs text-slate-400 font-medium">
-                (담당: <span className="text-slate-700 font-semibold">{qc.created_by_name || ownerName}</span>)
-              </span>
-            </div>
-
-            {/* 고객사, 프로젝트, 의뢰일 인라인 메타 */}
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-1">
-              <span className="flex items-center space-x-1">
-                <Building2 className="w-3 h-3 text-slate-400" />
-                {qc.company_id === 'comp_unassigned' || qc.company_name === '고객사 미지정' ? (
-                  <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-300 text-[11px]">
-                    ⚠️ 발주처 미지정
-                    <button
-                      onClick={handleOpenCompanyModal}
-                      className="text-[10px] text-blue-700 hover:text-blue-900 underline font-bold cursor-pointer"
-                    >
-                      [지정]
-                    </button>
-                  </span>
-                ) : (
-                  <span className="font-semibold text-slate-700 flex items-center gap-1 bg-slate-100/90 px-1.5 py-0.2 rounded border border-slate-200 text-[11px]">
-                    <span className="text-slate-500 font-normal">발주처:</span>
-                    <span className="font-bold text-slate-900">{qc.company_name}</span>
-                    <button
-                      onClick={handleOpenCompanyModal}
-                      className="text-slate-400 hover:text-blue-600 cursor-pointer ml-0.5"
-                      title="발주처(고객사) 수정"
-                    >
-                      <Pencil className="w-2.5 h-2.5 inline" />
-                    </button>
-                  </span>
-                )}
-              </span>
-              <span className="text-slate-300">·</span>
-              <span className="flex items-center space-x-1 text-slate-600">
-                <Folder className="w-3 h-3 text-slate-400" />
-                <span>{qc.company_id === 'comp_unassigned' ? '프로젝트 미정' : qc.project_name}</span>
-              </span>
-              <span className="text-slate-300">·</span>
-              <span className="flex items-center space-x-1 text-slate-600">
-                <Calendar className="w-3 h-3 text-slate-400" />
-                <span>의뢰일: {qc.request_date}</span>
-              </span>
-            </div>
-          </div>
-
-          {/* 📊 컴팩트 워터폴(Waterfall) 인포 바 */}
-          <div className="flex items-center bg-slate-50/90 px-2 py-1 rounded-xl border border-slate-200 text-xs shrink-0 self-start md:self-center shadow-2xs">
-            <div className="text-center px-2.5 border-r border-slate-200" title="분석 완료된 CAD 도면 장수">
-              <div className="text-[10px] text-slate-400 font-medium">총 도면</div>
-              <div className="text-xs sm:text-sm font-bold text-slate-900 font-mono">{drawings.length}장</div>
-            </div>
-            <div className="text-center px-2.5 border-r border-slate-200" title="단일 가공비 계산에서 제외되는 유닛/메인 조립도">
-              <div className="text-[10px] text-slate-400 font-medium">조립도(제외)</div>
-              <div className="text-xs sm:text-sm font-bold text-slate-600 font-mono">
-                {drawings.filter((d: any) => d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY').length}장
-              </div>
-            </div>
-            <div className="text-center px-2.5 border-r border-slate-200" title={`도면 ${drawings.length}장 + 규격품 ${Math.max(0, normalizedItems.length - drawings.length)}개`}>
-              <div className="text-[10px] text-slate-400 font-medium">정규화 BOM</div>
-              <div className="text-xs sm:text-sm font-bold text-slate-800 font-mono">
-                {normalizedItems.length || drawings.length}개
-              </div>
-            </div>
-            <div className="text-center px-2.5" title="실제 2단계 단가 검토 및 견적 대상">
-              <div className="text-[10px] text-indigo-700 font-bold">견적 대상</div>
-              <div className="text-xs sm:text-sm font-bold text-blue-700 font-mono">
+        {/* 우측: 📊 4단 인라인 워터폴 수치 바 + 보관/삭제 액션 */}
+        <div className="flex items-center space-x-2 shrink-0">
+          <div className="flex items-center bg-slate-50 border border-slate-200/90 rounded-lg px-2 py-0.5 space-x-2 text-[11px] shadow-2xs">
+            <span title="분석 완료된 CAD 도면 장수" className="text-slate-500">
+              도면 <strong className="font-mono text-slate-900 font-bold">{drawings.length}</strong>
+            </span>
+            <span className="text-slate-300">·</span>
+            <span title="단일 가공비 계산에서 제외되는 유닛/메인 조립도" className="text-slate-500">
+              조립 <strong className="font-mono text-slate-600 font-bold">
+                {drawings.filter((d: any) => d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY').length}
+              </strong>
+            </span>
+            <span className="text-slate-300">·</span>
+            <span title={`도면 ${drawings.length}장 + 규격품 ${Math.max(0, normalizedItems.length - drawings.length)}개`} className="text-slate-500">
+              BOM <strong className="font-mono text-slate-800 font-bold">{normalizedItems.length || drawings.length}</strong>
+            </span>
+            <span className="text-slate-300">·</span>
+            <span title="실제 2단계 단가 검토 및 견적 대상" className="text-indigo-800 font-bold bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+              견적 <strong className="font-mono text-blue-700 font-bold">
                 {(() => {
                   const incCount = normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length;
                   if (incCount > 0) return incCount;
                   if (drawings.length > 16) return drawings.length - 16;
                   return drawings.length > 0 ? drawings.length : 0;
                 })()}종
-              </div>
-            </div>
+              </strong>
+            </span>
+          </div>
+
+          <span className="text-slate-300">|</span>
+
+          {/* 생애주기 버튼 (보관/삭제/복원) */}
+          <div className="flex items-center space-x-1">
+            {qc?.lifecycle_status === 'ARCHIVED' ? (
+              <button
+                type="button"
+                onClick={handleRestoreCase}
+                disabled={detailLifecycleLoading}
+                className="inline-flex items-center space-x-1 px-2 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-300 rounded-lg text-xs font-bold text-purple-700 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>복원</span>
+              </button>
+            ) : qc?.lifecycle_status === 'TRASHED' ? (
+              <button
+                type="button"
+                onClick={handleRestoreCase}
+                disabled={detailLifecycleLoading}
+                className="inline-flex items-center space-x-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-700 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>복원</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setDetailArchiveModalOpen(true)}
+                  className="inline-flex items-center space-x-1 px-2 py-1 bg-white hover:bg-purple-50 border border-purple-200 hover:border-purple-300 rounded-lg text-xs font-bold text-purple-700 transition-all shadow-2xs cursor-pointer"
+                  title="견적건 보관함으로 이동"
+                >
+                  <Archive className="w-3 h-3" />
+                  <span>보관</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTrashCase}
+                  disabled={detailLifecycleLoading}
+                  className="inline-flex items-center space-x-1 px-2 py-1 bg-white hover:bg-rose-50 border border-rose-200 hover:border-rose-300 rounded-lg text-xs font-bold text-rose-600 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                  title="견적건 휴지통으로 이동"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>삭제</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
