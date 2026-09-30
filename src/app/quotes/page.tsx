@@ -166,20 +166,40 @@ export default function QuotesListPage() {
       const res = await apiFetch(`/api/quotes/${quoteId}`, {
         method: 'DELETE'
       });
+      const data = await res.json().catch(() => null);
+
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || '견적서 삭제 실패');
+        let errMsg = data?.error || data?.message;
+        if (!errMsg) {
+          if (res.status === 401) errMsg = '인증 세션이 만료되었습니다. 다시 로그인해주세요.';
+          else if (res.status === 403) errMsg = '견적서 삭제 권한이 없습니다.';
+          else if (res.status === 404) errMsg = '이미 삭제되었거나 존재하지 않는 견적서입니다.';
+          else errMsg = `견적서 삭제 실패 (상태 코드: ${res.status})`;
+        }
+        throw new Error(errMsg);
       }
-      setQuotes((prev) => prev.filter((q) => q.id !== quoteId));
+
+      // UI에서 즉시 제거 (낙관적 UI 및 캐시 갱신)
+      setQuotes((prev) => {
+        const next = prev.filter((q) => q.id !== quoteId);
+        setClientCache('quotes', { quotes: next });
+        return next;
+      });
       setDeleteQuoteModal({ isOpen: false, quoteId: '', quoteNo: '' });
 
       // 방법 A: 삭제 완료 토스트 표시 (확인 없이 삭제된 경우 [확인창 다시 켜기] 복원 버튼 노출)
       setDeleteToast({
-        text: `견적서 [${quoteNo}]이(가) ${wasSkipped ? '확인 없이 즉시 ' : ''}삭제되었습니다.`,
-        showRestoreConfirm: wasSkipped
+        text: data?.alreadyDeleted
+          ? `견적서 [${quoteNo}]은(는) 이미 삭제되어 목록에서 정리되었습니다.`
+          : `견적서 [${quoteNo}]이(가) ${wasSkipped ? '확인 없이 즉시 ' : ''}삭제되었습니다.`,
+        showRestoreConfirm: wasSkipped && !data?.alreadyDeleted
       });
     } catch (e: any) {
-      alert(e.message || '견적서 삭제 중 오류가 발생했습니다.');
+      console.error('Delete quote error:', e);
+      setDeleteToast({
+        text: e.message || '견적서 삭제 중 오류가 발생했습니다.',
+        isError: true
+      });
     } finally {
       setIsDeletingQuote(false);
     }
