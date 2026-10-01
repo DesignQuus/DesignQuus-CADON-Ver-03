@@ -64,14 +64,11 @@ function buildServerEgdeskHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const apiKey =
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_KEY) ||
-    EGDESK_CONFIG.apiKey ||
-    '48632c34-0fd1-4b53-b448-b8162e19b925';
+    EGDESK_CONFIG.apiKey;
   const projectId =
-    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_PROJECT_ID) ||
-    '8dd35536-8cbb-4e1c-bb65-b35f2920cb03';
+    typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_EGDESK_PROJECT_ID : undefined;
   const egdeskEnv =
-    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_ENV) ||
-    'development';
+    typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_EGDESK_ENV : undefined;
   if (apiKey) headers['X-Api-Key'] = apiKey;
   if (projectId) headers['X-EGDesk-Project-Id'] = projectId;
   if (egdeskEnv) headers['X-EGDesk-Env'] = egdeskEnv;
@@ -231,7 +228,7 @@ async function parseEgdeskMcpToolResponse(response: Response): Promise<any> {
         fromBody = (result as { message: string }).message;
       }
     }
-    throw new Error(`${fromBody || `HTTP ${response.status}: ${response.statusText}`} (URL: ${response.url})`);
+    throw new Error(fromBody || `HTTP ${response.status}: ${response.statusText}`);
   }
 
   if (!result || result.success !== true) {
@@ -346,15 +343,13 @@ export async function callUserDataTool(
 
   let response: Response;
   if (isServer) {
-    const rawUrl =
+    // API routes: call Egdesk directly (relative URL is invalid in Node)
+    const apiUrl =
       (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
-      EGDESK_CONFIG.apiUrl ||
-      'http://localhost:8080';
-    const apiUrl = rawUrl.includes('tunneling-service.onrender.com') ? 'http://localhost:8080' : rawUrl;
-    const serverHeaders = buildServerEgdeskHeaders();
+      EGDESK_CONFIG.apiUrl;
     response = await fetch(`${apiUrl}/user-data/tools/call`, {
       method: 'POST',
-      headers: serverHeaders,
+      headers: buildServerEgdeskHeaders(),
       body
     });
   } else {

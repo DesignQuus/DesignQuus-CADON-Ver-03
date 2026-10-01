@@ -24,13 +24,8 @@ function visitorUpstreamHeaders(request: NextRequest): Record<string, string> {
   return headers;
 }
 
-function getProxyApiUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
-  return raw.includes('tunneling-service.onrender.com') ? 'http://localhost:8080' : raw;
-}
-
 function workspaceUpstreamHeaders(request: NextRequest): Record<string, string> {
-  const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY || '48632c34-0fd1-4b53-b448-b8162e19b925';
+  const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) headers['X-Api-Key'] = apiKey;
   const authorization = request.headers.get('authorization');
@@ -59,17 +54,16 @@ export async function middleware(request: NextRequest) {
       const body = await request.text();
 
       // Read API key and URL from environment
-      const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY || '48632c34-0fd1-4b53-b448-b8162e19b925';
-      const apiUrl = getProxyApiUrl();
-      const projectId = process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID || '8dd35536-8cbb-4e1c-bb65-b35f2920cb03';
-      const egdeskEnv = process.env.NEXT_PUBLIC_EGDESK_ENV || 'development';
+      const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
+      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
-        'X-Api-Key': apiKey,
-        'X-EGDesk-Project-Id': projectId,
-        'X-EGDesk-Env': egdeskEnv
       };
+
+      if (apiKey) {
+        headers['X-Api-Key'] = apiKey;
+      }
 
       // Forward to EGDesk MCP server
       const response = await fetch(`${apiUrl}/user-data/tools/call`, {
