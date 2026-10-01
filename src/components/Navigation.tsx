@@ -153,7 +153,7 @@ export default function Navigation() {
           </Link>
 
           <nav className="hidden md:flex items-center space-x-0.5 lg:space-x-1 pl-3 lg:pl-4 border-l border-slate-200 overflow-x-auto no-scrollbar">
-            {/* 1. 대시보드 */}
+            {/* 1. 전체보기 */}
             <Link
               href="/"
               prefetch={true}
@@ -167,7 +167,7 @@ export default function Navigation() {
               }`}
             >
               <LayoutDashboard className="w-4 h-4 text-blue-600" />
-              <span>대시보드</span>
+              <span>전체보기</span>
             </Link>
 
             {/* 2. 견적의뢰 */}
