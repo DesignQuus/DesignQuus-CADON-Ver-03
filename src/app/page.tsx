@@ -575,15 +575,18 @@ export default function HomePage() {
   // Stage '2': 멀티레벨 BOM 자동 전개 (도곽·표제란·계층구조 판독)
   // Stage '3': 단가 마스터 매칭 & 원가 산출 (단가 검토 및 공정 임가공 산출)
   // Stage '4': 공식 견적서 발행 & 승인 (견적 금액 확정 및 엑셀 배포 완료)
-  const getCasePipelineStage = (c: QuotationCase): PipelineStage => {
-    if (c.quote_total_amount && Number(c.quote_total_amount) > 0) return '4';
-    if (c.bom_items_count > 0) {
-      const stage = (c.lifecycle_stage || '').toUpperCase();
-      if (stage.includes('PRICE') || stage.includes('REVIEW') || stage.includes('APPROV') || stage.includes('COST')) {
-        return '3';
-      }
+  const getCasePipelineStage = (c: any): PipelineStage => {
+    // 4단계: 공식 견적서 발행 & 승인 (견적 금액 확정 완료)
+    if ((c.quote_total_amount && Number(c.quote_total_amount) > 0) || c.quote_readiness === 'READY_FOR_QUOTE') return '4';
+    // 3단계: 단가 마스터 매칭 & 원가 산출 (멀티레벨 BOM 추출 완료 후 단가 매칭 진행)
+    if (Number(c.bom_items_count || 0) > 0 || c.status === 'ANALYZED') {
+      return '3';
+    }
+    // 2단계: 멀티레벨 BOM 자동 전개 (CAD 도면 등록 후 AI 기하/텍스트 파싱 진행)
+    if ((c.drawings_count && c.drawings_count > 0) || (c.files_count && c.files_count > 0)) {
       return '2';
     }
+    // 1단계: 도면 접수 & CAD 파싱 (신규 등록 및 파일 접수 대기)
     return '1';
   };
 

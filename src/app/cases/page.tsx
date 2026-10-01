@@ -72,12 +72,19 @@ interface ManagerTheme {
 }
 
 const THEME_PALETTES: ManagerTheme[] = [
-  { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', badge: 'bg-blue-600 text-white', dept: '견적팀', initial: '견' },
-  { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', badge: 'bg-emerald-600 text-white', dept: '견적팀', initial: '견' },
-  { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badge: 'bg-purple-600 text-white', dept: '견적팀', initial: '견' },
-  { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', badge: 'bg-indigo-600 text-white', dept: '견적팀', initial: '견' },
-  { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', badge: 'bg-amber-600 text-white', dept: '견적팀', initial: '견' }
+  { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', badge: 'bg-blue-600 text-white', dept: '영업 실무', initial: '영' },
+  { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', badge: 'bg-emerald-600 text-white', dept: '영업 실무', initial: '영' },
+  { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badge: 'bg-purple-600 text-white', dept: '영업 실무', initial: '영' },
+  { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', badge: 'bg-indigo-600 text-white', dept: '영업 실무', initial: '영' },
+  { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', badge: 'bg-amber-600 text-white', dept: '영업 실무', initial: '영' }
 ];
+
+export function getRoleBadgeLabel(role?: string): string {
+  if (role === 'SUPER_ADMIN') return '최고관리자';
+  if (role === 'TENANT_ADMIN') return '대표관리자';
+  if (role === 'REVIEWER') return '가공·설계 검토';
+  return '영업 실무';
+}
 
 function getManagerTheme(userId: string, userName?: string): ManagerTheme {
   if (userId === 'usr_admin') {
@@ -1012,7 +1019,7 @@ export default function CasesPage() {
   }, [selectedTab, activeCases, archivedCases, trashedCases]);
 
   const uniqueManagers = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; dept?: string }>();
+    const map = new Map<string, { id: string; name: string; dept?: string; role?: string }>();
 
     // 1. 사내 등록된 모든 임직원 마스터(operators)에서 추가 (견적 0건이어도 항상 노출)
     operators.forEach((op: any) => {
@@ -1021,7 +1028,8 @@ export default function CasesPage() {
         map.set(opId, {
           id: opId,
           name: op.name,
-          dept: op.department || (op.role === 'TENANT_ADMIN' ? '대표' : '견적팀')
+          dept: op.department || getRoleBadgeLabel(op.role),
+          role: op.role
         });
       }
     });
@@ -1033,18 +1041,20 @@ export default function CasesPage() {
           map.set(c.created_by_user_id, {
             id: c.created_by_user_id,
             name: c.created_by_name || c.created_by_user_id,
-            dept: '견적팀'
+            dept: c.created_by_role ? getRoleBadgeLabel(c.created_by_role) : '영업 실무',
+            role: c.created_by_role
           });
         }
       }
     });
 
-    // 3. 현재 로그인 사용자 본인도 포함
+    // 3. 현재 로그인 사용자 본인도 포함 (로그인 직무 최우선 반영)
     if (user?.userId && !map.has(user.userId)) {
       map.set(user.userId, {
         id: user.userId,
         name: user.name || user.userId,
-        dept: user.role === 'TENANT_ADMIN' ? '대표' : '견적팀'
+        dept: getRoleBadgeLabel(user.role),
+        role: user.role
       });
     }
 
@@ -1110,8 +1120,9 @@ export default function CasesPage() {
   const analyzedCount = scopeActiveCases.filter(c => c.status === 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE').length;
   const pendingCount = scopeActiveCases.filter(c => c.status !== 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE').length;
   const pendingApprovalCount = scopeActiveCases.filter(c => c.visibility === 'PRIVATE_PENDING').length;
-  const archivedCount = scopeArchivedCases.length;
-  const trashedCount = scopeTrashedCases.length;
+  // 사이드바 전사 보관함 및 휴지통 총 건수 (전체보기 요약과 100% 동기화)
+  const archivedCount = archivedCases.length;
+  const trashedCount = trashedCases.length;
 
   const latestReadyCase = useMemo(() => {
     return scopeActiveCases.find(c => c.quote_readiness === 'READY_FOR_QUOTE') || null;
@@ -1236,6 +1247,12 @@ export default function CasesPage() {
   // [Solution 3] 지능형 필터 완화: 탭을 클릭했을 때 현재 고객사 필터로 인해 0건이 되면 고객사 필터를 자동으로 'ALL'로 완화하여 데이터가 즉시 보이도록 처리
   const handleSelectTab = (tab: any) => {
     setSelectedTab(tab);
+    // 보관함이나 휴지통 선택 시 전사 격리 목록을 즉시 조회할 수 있도록 필터 완화
+    if (tab === 'TRASHED' || tab === 'ARCHIVED') {
+      setFilterManager('ALL');
+      setFilterCompany('ALL');
+      return;
+    }
     if (filterCompany !== 'ALL') {
       const willHaveItems = activeCases.some(c => {
         if (tab === 'PENDING') return c.status !== 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE';
@@ -2210,6 +2227,9 @@ export default function CasesPage() {
                             {(() => {
                               const mgrInfo = uniqueManagers.find(m => m.id === c.created_by_user_id);
                               const managerDisplayName = c.created_by_name || mgrInfo?.name || (c.created_by_user_id === user?.userId ? user?.name : null) || '담당자 미지정';
+                              const roleLabel = (c.created_by_user_id === user?.userId && user?.role)
+                                ? getRoleBadgeLabel(user.role)
+                                : (mgrInfo?.dept || theme.dept || '영업 실무');
                               const theme = getManagerTheme(c.created_by_user_id, managerDisplayName);
                               const isFiltered = filterManager === c.created_by_user_id;
                               return (
@@ -2226,7 +2246,7 @@ export default function CasesPage() {
                                   </span>
                                   <span className="font-bold">{managerDisplayName}</span>
                                   <span className="text-[10px] font-medium opacity-75 border-l border-current/30 pl-1 ml-0.5">
-                                    {mgrInfo?.dept || theme.dept}
+                                    {roleLabel}
                                   </span>
                                 </button>
                               );
