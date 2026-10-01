@@ -137,22 +137,9 @@ export default function MasterDataManagerPage() {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // ⚡ 0ms Lazy Initializer: 브라우저가 화면을 그리는 첫 프레임(0ms)부터 캐시 데이터를 즉시 표출
-  const [items, setItems] = useState<MasterProduct[]>(() => {
-    try {
-      const cached = getClientCache<any>('masters_items_ALL');
-      if (cached?.items && Array.isArray(cached.items)) return cached.items;
-    } catch {}
-    return [];
-  });
-
-  const [loading, setLoading] = useState<boolean>(() => {
-    try {
-      const cached = getClientCache<any>('masters_items_ALL');
-      if (cached?.items && Array.isArray(cached.items) && cached.items.length > 0) return false;
-    } catch {}
-    return true;
-  });
+  // ⚡ SSR 하이드레이션 불일치 방지: 초기 상태는 서버/클라이언트 동일 기본값으로 유지하고, 마운트 직후(useEffect) 캐시를 즉각 복원
+  const [items, setItems] = useState<MasterProduct[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [modifiedItems, setModifiedItems] = useState<Record<string, number>>({});
@@ -206,42 +193,23 @@ export default function MasterDataManagerPage() {
     imported: number;
     supplied: number;
     assembly: number;
-  }>(() => {
-    try {
-      const cached = getClientCache<any>('masters_items_ALL');
-      if (cached?.stats) return cached.stats;
-    } catch {}
-    return {
-      total: 0,
-      machining: 0,
-      sheetMetal: 0,
-      casting: 0,
-      injection: 0,
-      commercial: 0,
-      mechanical: 0,
-      electrical: 0,
-      imported: 0,
-      supplied: 0,
-      assembly: 0
-    };
+  }>({
+    total: 0,
+    machining: 0,
+    sheetMetal: 0,
+    casting: 0,
+    injection: 0,
+    commercial: 0,
+    mechanical: 0,
+    electrical: 0,
+    imported: 0,
+    supplied: 0,
+    assembly: 0
   });
 
-  // Settings State: 0ms Lazy Initializer
-  const [materialRates, setMaterialRates] = useState<Record<string, number>>(() => {
-    try {
-      const cached = getClientCache<any>('masters_settings');
-      if (cached?.materialRates) return cached.materialRates;
-    } catch {}
-    return {};
-  });
-
-  const [processRates, setProcessRates] = useState<Record<string, number>>(() => {
-    try {
-      const cached = getClientCache<any>('masters_settings');
-      if (cached?.processRates) return cached.processRates;
-    } catch {}
-    return {};
-  });
+  // Settings State: 임률 설정 상태
+  const [materialRates, setMaterialRates] = useState<Record<string, number>>({});
+  const [processRates, setProcessRates] = useState<Record<string, number>>({});
 
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -373,12 +341,18 @@ export default function MasterDataManagerPage() {
   };
 
   useEffect(() => {
-    // ⚡ 0ms 즉시 화면 복원: 필터 변경 시 캐시된 품목 및 통계가 있으면 즉각 표출
+    // ⚡ 0ms 즉시 화면 복원: 필터 변경 시 캐시된 품목 및 통계가 있으면 즉각 표출 (하이드레이션 완료 후 안전 복원)
     try {
       const cachedData = getClientCache<any>(`masters_items_${categoryFilter}`) || getClientCache<any>('masters_items_ALL');
       if (cachedData?.items && Array.isArray(cachedData.items) && cachedData.items.length > 0) {
         setItems(cachedData.items);
+        setLoading(false);
         if (cachedData.stats) setStats(cachedData.stats);
+      }
+      const cachedSettings = getClientCache<any>('masters_settings');
+      if (cachedSettings) {
+        if (cachedSettings.materialRates) setMaterialRates(cachedSettings.materialRates);
+        if (cachedSettings.processRates) setProcessRates(cachedSettings.processRates);
       }
     } catch {}
 
