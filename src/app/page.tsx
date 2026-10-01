@@ -901,14 +901,14 @@ export default function HomePage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 w-full px-2.5 sm:px-3 py-3 relative">
-      {/* 버티컬 북마크 견출 탭 (펼치기) */}
+      {/* 버티컬 북마크 견출 탭 (펼치기) - 전체보기 */}
       {!isSidebarOpen && (
         <SidebarBookmarkTab
           mode="expand"
           onClick={handleToggleSidebar}
-          label="관제탑"
+          label="전체보기"
           icon={Layers}
-          title="스마트 견적 관제탑 열기"
+          title="스마트 견적 전체보기 (파이프라인 및 현황 요약 열기)"
         />
       )}
 
@@ -922,7 +922,7 @@ export default function HomePage() {
               mode="collapse"
               onClick={handleToggleSidebar}
               label="접기"
-              title="관제탑 접기"
+              title="사이드바 접기 (넓게 보기)"
             />
 
             {/* Sidebar Header with Unified Tab Style Collapse Button */}
@@ -932,7 +932,7 @@ export default function HomePage() {
                   <Layers className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <span className="text-xs font-black text-slate-900 tracking-tight block">스마트 견적 관제탑</span>
+                  <span className="text-xs font-black text-slate-900 tracking-tight block">스마트 견적 전체보기</span>
                   <span className="text-[10px] text-slate-400 font-semibold">AutoCAD 실무 파이프라인</span>
                 </div>
               </div>
@@ -940,7 +940,7 @@ export default function HomePage() {
                 type="button"
                 onClick={handleToggleSidebar}
                 className="group flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-600 border border-slate-200 hover:border-blue-300 transition-all duration-120 cursor-pointer text-xs font-bold shadow-2xs"
-                title="사이드바 접기 (도면 넓게 보기)"
+                title="사이드바 접기 (도면 및 견적 목록 넓게 보기)"
               >
                 <ChevronLeft className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-600 group-hover:-translate-x-0.5 transition-transform" />
                 <span>접기</span>
@@ -1196,43 +1196,8 @@ export default function HomePage() {
       )}
 
         {/* RIGHT MAIN WORKSPACE: Cases Table & Recent Quotes (Maximized Height, Zero Scroll!) */}
-        <div className="flex-1 min-w-0 space-y-1">
-          {/* Top Slim Welcome Strip */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 rounded-2xl py-3.5 px-6 text-white shadow-md flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              {!isSidebarOpen && (
-                <button
-                  type="button"
-                  onClick={handleToggleSidebar}
-                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-blue-200 border border-white/20 transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
-                  title="관제 패널 펼치기"
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>관제탑 펼치기</span>
-                </button>
-              )}
-              <h1 className="text-base sm:text-lg font-black tracking-tight flex items-center gap-2">
-                <span>안녕하세요,</span>
-                <span className="text-blue-400">{user?.name || '담당자'}</span>
-                <span>님! 👋</span>
-              </h1>
-              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold bg-white/10 text-blue-200 border border-white/15">
-                <span className={`w-1.5 h-1.5 rounded-full ${roleInfo.dot}`}></span>
-                <span>{roleInfo.label}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-xs text-slate-200 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>실무 관제 활성: <strong className="text-white font-mono">{myActiveCases.length}건</strong></span>
-                <span className="text-white/30">|</span>
-                <span className="text-slate-300">전사 <strong className="text-white font-mono">{activeCases.length}건</strong></span>
-              </div>
-            </div>
-          </div>
-
-    {/* 4. Recent Quotation Cases Table */}
+        <div className="flex-1 min-w-0 space-y-2">
+          {/* 4. Recent Quotation Cases Table */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-50/50 via-white to-white">
           {/* Left: Title & Personalization */}
