@@ -144,6 +144,7 @@ export default function MasterDataManagerPage() {
   const [loading, setLoading] = useState<boolean>(true);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null); // 개별 단가 인라인 편집 상태 (다중 선택과 완전 분리)
   const [modifiedItems, setModifiedItems] = useState<Record<string, number>>({});
   const [isSavingBatch, setIsSavingBatch] = useState(false);
   const [bulkCustomPriceInput, setBulkCustomPriceInput] = useState('');
@@ -1266,12 +1267,13 @@ export default function MasterDataManagerPage() {
                               </select>
                             </div>
                           </td>
-                          {isSelected ? (
+                          {editingPriceId === it.id ? (
                             <td className="py-1 px-3 text-right" onClick={(e) => e.stopPropagation()}>
                               <div className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.5 shadow-2xs ring-2 ring-blue-100 justify-end w-full max-w-[155px]">
                                 <span className="text-slate-400 font-mono text-[11px] shrink-0">₩</span>
                                 <input
                                   type="text"
+                                  autoFocus
                                   value={
                                     it.unit_price > 0
                                       ? it.unit_price.toLocaleString()
@@ -1279,6 +1281,12 @@ export default function MasterDataManagerPage() {
                                   }
                                   placeholder="0"
                                   maxLength={15}
+                                  onBlur={() => setEditingPriceId(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === 'Escape') {
+                                      setEditingPriceId(null);
+                                    }
+                                  }}
                                   onChange={(e) => handleInlinePriceChange(it.id, e.target.value)}
                                   className="w-full text-right font-mono font-bold text-xs text-blue-700 outline-none bg-transparent"
                                 />
@@ -1289,14 +1297,19 @@ export default function MasterDataManagerPage() {
                             </td>
                           ) : (
                             <td
-                              className="py-2 px-3 text-right font-mono font-bold text-blue-700 text-xs hover:bg-blue-50/50 cursor-pointer whitespace-nowrap"
+                              className="py-2 px-3 text-right font-mono font-bold text-blue-700 text-xs hover:bg-blue-100/60 cursor-pointer whitespace-nowrap"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleToggleSelect(it.id);
+                                setEditingPriceId(it.id);
                               }}
-                              title="클릭하여 단가 즉시 인라인 수정"
+                              title="클릭하여 단가 즉시 수정"
                             >
-                              {it.unit_price > 0 ? `₩${it.unit_price.toLocaleString()}` : '-'}
+                              <div className="flex items-center justify-end gap-1.5">
+                                {modifiedItems[it.id] !== undefined && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="수정됨 (저장 대기)" />
+                                )}
+                                <span>{it.unit_price > 0 ? `₩${it.unit_price.toLocaleString()}` : '-'}</span>
+                              </div>
                             </td>
                           )}
                           <td className="py-2 px-2 text-center" onClick={(e) => e.stopPropagation()}>
@@ -1423,7 +1436,10 @@ export default function MasterDataManagerPage() {
 
             {/* 3. 플로팅 다중 선택 & 인라인 일괄 작업 툴바 */}
             {selectedIds.length > 0 && (
-              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl px-5 py-3 shadow-2xl border border-slate-700 flex flex-wrap items-center gap-3 z-50 animate-in slide-in-from-bottom-4">
+              <>
+                {/* 플로팅 툴바 가림 방지 안전 여백 버퍼 (테이블 하단 행 및 페이지네이션 보호) */}
+                <div className="h-28 sm:h-32 shrink-0 pointer-events-none" aria-hidden="true" />
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl px-5 py-3 shadow-2xl border border-slate-700 flex flex-wrap items-center gap-3 z-50 animate-in slide-in-from-bottom-4 max-w-[95vw]">
                 {/* 선택 카운터 뱃지 */}
                 <div className="flex items-center gap-2 text-xs">
                   <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-[11px]">
@@ -1595,7 +1611,8 @@ export default function MasterDataManagerPage() {
                   </button>
                 </div>
               </div>
-            )}
+            </>
+          )}
           </>
         ) : (
           /* Tab 2: Settings (소재 시세 & 임률 설정) */
