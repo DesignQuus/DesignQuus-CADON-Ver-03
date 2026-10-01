@@ -1164,72 +1164,33 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Quick Action Navigation Links */}
-            <div className="pt-3 border-t border-slate-100">
-              <div className="grid grid-cols-1 gap-1.5 text-xs font-bold text-slate-700">
-                <Link
-                  href="/cases?tab=ANALYZED"
-                  className="p-2 rounded-lg hover:bg-slate-100 border border-slate-200/80 flex items-center justify-between transition-colors"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                    <span>단가 미매칭 검토 큐</span>
-                  </span>
-                  <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800">
-                    {pendingReviewCases.length}건
-                  </span>
-                </Link>
-
-                <Link
-                  href="/quotes"
-                  className="p-2 rounded-lg hover:bg-slate-100 border border-slate-200/80 flex items-center justify-between transition-colors"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>견적서 관리 대장</span>
-                  </span>
-                  <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">
-                    {quotes.length}건
-                  </span>
-                </Link>
-
-                <Link
-                  href="/admin/masters"
-                  className="p-2 rounded-lg hover:bg-slate-100 border border-slate-200/80 flex items-center justify-between transition-colors text-slate-600"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Database className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>표준 단가·임률 관리</span>
-                  </span>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                </Link>
-
-                {user?.role === 'SUPER_ADMIN' && (
-                  <>
-                    <Link
-                      href="/admin/companies"
-                      className="p-2 rounded-lg hover:bg-blue-50 border border-blue-200/80 flex items-center justify-between transition-colors text-blue-700"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-blue-600" />
-                        <span>고객사(발주처) 관리 센터</span>
-                      </span>
-                      <ChevronRight className="w-3.5 h-3.5 text-blue-400" />
-                    </Link>
-                    <Link
-                      href="/admin/audit"
-                      className="p-2 rounded-lg hover:bg-slate-100 border border-slate-200/80 flex items-center justify-between transition-colors text-slate-700"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <ShieldCheck className="w-3.5 h-3.5 text-slate-600" />
-                        <span>사용자 활동 로그</span>
-                      </span>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                    </Link>
-                  </>
-                )}
+            {/* Super Admin Quick Links (관리자 전용 기능) */}
+            {user?.role === 'SUPER_ADMIN' && (
+              <div className="pt-2.5 border-t border-slate-100">
+                <div className="grid grid-cols-1 gap-1.5 text-xs font-bold text-slate-700">
+                  <Link
+                    href="/admin/companies"
+                    className="p-2 rounded-lg hover:bg-blue-50 border border-blue-200/80 flex items-center justify-between transition-colors text-blue-700"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                      <span>고객사(발주처) 관리 센터</span>
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-blue-400" />
+                  </Link>
+                  <Link
+                    href="/admin/audit"
+                    className="p-2 rounded-lg hover:bg-slate-100 border border-slate-200/80 flex items-center justify-between transition-colors text-slate-700"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-slate-600" />
+                      <span>사용자 활동 로그</span>
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  </Link>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </aside>
       )}
