@@ -241,6 +241,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const [isMasterDrawerOpen, setIsMasterDrawerOpen] = useState<boolean>(false);
   const [isPilotModalOpen, setIsPilotModalOpen] = useState<boolean>(false);
   const [isBatchMasterModalOpen, setIsBatchMasterModalOpen] = useState<boolean>(false);
+  const [batchMasterTargetIds, setBatchMasterTargetIds] = useState<string[]>([]);
   const [isAddNonDrawingModalOpen, setIsAddNonDrawingModalOpen] = useState<boolean>(false);
 
   // 실제 CAD 도면 및 2D 벡터 오브젝트 상태
@@ -2199,7 +2200,18 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             onUpdateLineInclusion={handleUpdateLineInclusion}
             onBatchUpdateInclusion={handleBatchUpdateInclusion}
             onAddNoiseBlacklist={handleAddNoiseBlacklist}
-            onOpenBatchMasterModal={() => setIsBatchMasterModalOpen(true)}
+            onOpenBatchMasterModal={(targetIds) => {
+              if (targetIds && targetIds.length > 0) {
+                setBatchMasterTargetIds(targetIds);
+              } else if (selectedIds.length > 0) {
+                setBatchMasterTargetIds(selectedIds);
+              } else if (lines[selectedIndex]) {
+                setBatchMasterTargetIds([lines[selectedIndex].id]);
+              } else {
+                setBatchMasterTargetIds(lines.map((l) => l.id));
+              }
+              setIsBatchMasterModalOpen(true);
+            }}
             onOpenAddNonDrawingModal={() => setIsAddNonDrawingModalOpen(true)}
             onUpdateLineQuantity={handleUpdateLineQuantity}
           />
@@ -2215,7 +2227,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           </span>
           {isBottomCollapsed && selectedLine && (
             <span className="text-[10px] text-slate-500 bg-white/80 px-2 py-0.5 rounded border border-slate-200 hidden sm:inline">
-              현재 선택: <strong className="text-slate-800">{selectedLine.partName || selectedLine.drawingNo}</strong>
+              현재 선택: <strong className="text-slate-800">{selectedLine.partName || selectedLine.partNo}</strong>
             </span>
           )}
         </div>
@@ -2354,7 +2366,15 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         isOpen={isBatchMasterModalOpen}
         onClose={() => setIsBatchMasterModalOpen(false)}
         caseId={caseId}
-        selectedLines={lines.filter((l) => selectedIds.includes(l.id))}
+        selectedLines={
+          batchMasterTargetIds.length > 0
+            ? lines.filter((l) => batchMasterTargetIds.includes(l.id))
+            : selectedIds.length > 0
+            ? lines.filter((l) => selectedIds.includes(l.id))
+            : lines[selectedIndex]
+            ? [lines[selectedIndex]]
+            : lines
+        }
         onSuccess={handleBatchMasterSuccess}
       />
 

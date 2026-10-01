@@ -17,6 +17,11 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { QuoteReviewLine } from './QuoteLineGrid';
+import {
+  PART_CATEGORIES,
+  getPartCategoryBadgeClass,
+  getPartCategoryLabel
+} from '@/lib/part-categories';
 
 interface BatchMasterItemState {
   id: string;
@@ -103,6 +108,13 @@ export default function BatchMasterRegisterModal({
     const val = parseInt(newPriceStr.replace(/[^0-9]/g, ''), 10) || 0;
     setItems((prev) =>
       prev.map((it) => (it.id === id ? { ...it, supplyPrice: val } : it))
+    );
+  };
+
+  // 개별 품목 부품 유형 변경
+  const handleUpdateItemPartType = (id: string, newType: string) => {
+    setItems((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, partType: newType } : it))
     );
   };
 
@@ -348,6 +360,7 @@ export default function BatchMasterRegisterModal({
                   </th>
                   <th className="py-2.5 px-3 w-28">도번</th>
                   <th className="py-2.5 px-3">품명</th>
+                  <th className="py-2.5 px-2.5 w-24 text-center">부품유형</th>
                   <th className="py-2.5 px-2.5 w-20">재질</th>
                   <th className="py-2.5 px-2.5 w-24">규격</th>
                   <th className="py-2.5 px-3 w-24 text-right">산출원가</th>
@@ -359,54 +372,86 @@ export default function BatchMasterRegisterModal({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {items.map((row, idx) => {
-                  const marginPct =
-                    row.supplyPrice > 0 && row.unitCost > 0
-                      ? (((row.supplyPrice - row.unitCost) / row.supplyPrice) * 100).toFixed(1)
-                      : '0.0';
-                  const marginNum = parseFloat(marginPct);
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="py-12 text-center text-slate-400">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <AlertCircle className="w-8 h-8 text-amber-500/80" />
+                        <p className="text-xs font-bold text-slate-700">
+                          등록 대상 견적 품목이 선택되지 않았습니다.
+                        </p>
+                        <p className="text-[11px] text-slate-400 max-w-md">
+                          견적 검토 테이블에서 마스터 DB에 등록할 품목을 체크하시거나, 부품 행의 [⭐ 마스터 등록] 버튼을 클릭해 주세요.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((row, idx) => {
+                    const marginPct =
+                      row.supplyPrice > 0 && row.unitCost > 0
+                        ? (((row.supplyPrice - row.unitCost) / row.supplyPrice) * 100).toFixed(1)
+                        : '0.0';
+                    const marginNum = parseFloat(marginPct);
 
-                  return (
-                    <tr
-                      key={row.id}
-                      className={`hover:bg-blue-50/40 transition-colors ${
-                        !row.selected ? 'opacity-40 bg-slate-50/50' : ''
-                      }`}
-                    >
-                      {/* 체크박스 */}
-                      <td className="py-2.5 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => toggleSelectItem(row.id)}
-                          className="text-slate-500 hover:text-blue-600 transition-colors"
-                        >
-                          {row.selected ? (
-                            <CheckSquare className="w-4 h-4 text-blue-600" />
-                          ) : (
-                            <Square className="w-4 h-4" />
-                          )}
-                        </button>
-                      </td>
+                    return (
+                      <tr
+                        key={row.id}
+                        className={`hover:bg-blue-50/40 transition-colors ${
+                          !row.selected ? 'opacity-40 bg-slate-50/50' : ''
+                        }`}
+                      >
+                        {/* 체크박스 */}
+                        <td className="py-2.5 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => toggleSelectItem(row.id)}
+                            className="text-slate-500 hover:text-blue-600 transition-colors"
+                          >
+                            {row.selected ? (
+                              <CheckSquare className="w-4 h-4 text-blue-600" />
+                            ) : (
+                              <Square className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
 
-                      {/* 도번 */}
-                      <td className="py-2.5 px-3 font-semibold text-slate-800 font-mono text-[11.5px] truncate max-w-[120px]">
-                        {row.partNo || '-'}
-                      </td>
+                        {/* 도번 */}
+                        <td className="py-2.5 px-3 font-semibold text-slate-800 font-mono text-[11.5px] truncate max-w-[120px]">
+                          {row.partNo || '-'}
+                        </td>
 
-                      {/* 품명 */}
-                      <td className="py-2.5 px-3 font-medium text-slate-900 truncate max-w-[160px]">
-                        {row.partName}
-                      </td>
+                        {/* 품명 */}
+                        <td className="py-2.5 px-3 font-medium text-slate-900 truncate max-w-[160px]">
+                          {row.partName}
+                        </td>
 
-                      {/* 재질 */}
-                      <td className="py-2.5 px-2.5 text-slate-600 font-mono text-[11px] truncate">
-                        {row.material || '-'}
-                      </td>
+                        {/* 부품유형 (10대 제조 분류) */}
+                        <td className="py-2 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={row.partType || 'MACHINING'}
+                            onChange={(e) => handleUpdateItemPartType(row.id, e.target.value)}
+                            disabled={!row.selected}
+                            className={`appearance-none px-2 py-0.5 rounded text-[11px] font-bold cursor-pointer border outline-none shadow-2xs ${getPartCategoryBadgeClass(row.partType)}`}
+                            title="부품 유형 변경"
+                          >
+                            {PART_CATEGORIES.map((c) => (
+                              <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
+                                {c.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
 
-                      {/* 규격 */}
-                      <td className="py-2.5 px-2.5 text-slate-500 font-mono text-[11px] truncate">
-                        {row.specification || '-'}
-                      </td>
+                        {/* 재질 */}
+                        <td className="py-2.5 px-2.5 text-slate-600 font-mono text-[11px] truncate">
+                          {row.material || '-'}
+                        </td>
+
+                        {/* 규격 */}
+                        <td className="py-2.5 px-2.5 text-slate-500 font-mono text-[11px] truncate">
+                          {row.specification || '-'}
+                        </td>
 
                       {/* 산출원가 */}
                       <td className="py-2.5 px-3 text-right font-mono text-slate-600">
@@ -457,28 +502,28 @@ export default function BatchMasterRegisterModal({
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
+                })
+              )}
+            </tbody>
             </table>
           </div>
         </div>
 
         {/* 푸터 액션 바 */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <div className="text-xs text-slate-500 flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-            <span>
-              등록 시 <strong>product_masters</strong>, <strong>price_masters</strong>,{' '}
-              <strong>manual_price_pool</strong>에 즉시 영구 적재되어 향후 동일/유사 부품 분석 시 100% 자동 매칭됩니다.
+        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="text-xs text-slate-500 flex items-center gap-2 flex-1 min-w-0">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+            <span className="text-[11.5px] truncate" title="등록 시 product_masters, price_masters, manual_price_pool에 즉시 영구 적재되어 향후 동일/유사 부품 분석 시 100% 자동 매칭됩니다.">
+              등록 시 <strong>product_masters</strong>, <strong>price_masters</strong>에 즉시 영구 적재되어 자동 매칭됩니다.
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
             >
               취소
             </button>
@@ -486,7 +531,7 @@ export default function BatchMasterRegisterModal({
               type="button"
               onClick={handleSubmit}
               disabled={isSubmitting || selectedItems.length === 0}
-              className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
             >
               {isSubmitting ? (
                 <>
