@@ -10,9 +10,28 @@ import { prefetchPageData, warmupRoute } from '@/lib/cacheStore';
 export default function Navigation() {
   const [user, setUser] = useState<any>(null);
   const [pendingCount, setPendingCount] = useState<number>(0);
+  const [pendingPath, setPendingPath] = useState<string | null>(null);
   const lastFetchRef = useRef<number>(0);
   const router = useRouter();
   const pathname = usePathname();
+
+  // 페이지 이동 완료 시 낙관적 경로 리셋
+  useEffect(() => {
+    setPendingPath(null);
+  }, [pathname]);
+
+  const activeRoute = pendingPath || pathname;
+
+  // ⚡ 0ms 즉각 반응 라우팅 가속기 (마우스 버튼을 누르는 순간 즉시 활성화 및 라우팅 시작)
+  const handleNavigate = (route: string) => {
+    if (pathname === route) return;
+    setPendingPath(route);
+    try {
+      router.prefetch(route);
+      warmupRoute(route);
+    } catch {}
+    router.push(route);
+  };
 
   // 라우트 프리웜 헬퍼 (Next.js 번들 컴파일 선행 + 데이터 캐싱)
   const handleLinkWarmup = (route: string) => {
@@ -125,7 +144,11 @@ export default function Navigation() {
   const isAnyAdmin = isSuperAdmin || isTenantAdmin;
 
   return (
-    <header className="no-print print:hidden bg-white border-b border-slate-200 sticky top-0 z-50 shadow-xs">
+    <header className="no-print print:hidden bg-white border-b border-slate-200 sticky top-0 z-50 shadow-xs relative">
+      {/* ⚡ 0ms 즉각 반응 상단 프로그레스 인디케이터 (버튼 클릭 즉시 활성화) */}
+      {pendingPath && (
+        <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 animate-pulse z-[60]" />
+      )}
       <div className="w-full px-2.5 sm:px-3 h-16 flex items-center justify-between">
         <div className="flex items-center space-x-4 sm:space-x-6">
           <Link
@@ -133,7 +156,8 @@ export default function Navigation() {
             prefetch={true}
             onMouseEnter={() => handleLinkWarmup('/')}
             onTouchStart={() => handleLinkWarmup('/')}
-            onFocus={() => handleLinkWarmup('/')}
+            onMouseDown={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey) handleNavigate('/'); }}
+            onClick={(e) => { e.preventDefault(); handleNavigate('/'); }}
             className="flex items-center space-x-2"
             title="CADON 홈으로 이동"
           >
@@ -159,9 +183,10 @@ export default function Navigation() {
               prefetch={true}
               onMouseEnter={() => handleLinkWarmup('/')}
               onTouchStart={() => handleLinkWarmup('/')}
-              onFocus={() => handleLinkWarmup('/')}
-              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                pathname === '/'
+              onMouseDown={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey) handleNavigate('/'); }}
+              onClick={(e) => { e.preventDefault(); handleNavigate('/'); }}
+              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+                activeRoute === '/'
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
@@ -176,9 +201,10 @@ export default function Navigation() {
               prefetch={true}
               onMouseEnter={() => handleLinkWarmup('/cases')}
               onTouchStart={() => handleLinkWarmup('/cases')}
-              onFocus={() => handleLinkWarmup('/cases')}
-              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                (pathname === '/cases' || pathname.startsWith('/cases/'))
+              onMouseDown={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey) handleNavigate('/cases'); }}
+              onClick={(e) => { e.preventDefault(); handleNavigate('/cases'); }}
+              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+                (activeRoute === '/cases' || activeRoute.startsWith('/cases/'))
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
@@ -189,7 +215,7 @@ export default function Navigation() {
               {user?.name && !isSuperAdmin && (user.myActiveCasesCount ?? 0) > 0 && (
                 <span
                   className={`ml-1 px-1.5 py-0.2 rounded-full text-[11px] font-black inline-flex items-center gap-0.5 tracking-tight transition-all ${
-                    (pathname === '/cases' || pathname.startsWith('/cases/'))
+                    (activeRoute === '/cases' || activeRoute.startsWith('/cases/'))
                       ? 'bg-blue-600 text-white shadow-2xs'
                       : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                   }`}
@@ -207,9 +233,10 @@ export default function Navigation() {
               prefetch={true}
               onMouseEnter={() => handleLinkWarmup('/quotes')}
               onTouchStart={() => handleLinkWarmup('/quotes')}
-              onFocus={() => handleLinkWarmup('/quotes')}
-              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                pathname.startsWith('/quotes')
+              onMouseDown={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey) handleNavigate('/quotes'); }}
+              onClick={(e) => { e.preventDefault(); handleNavigate('/quotes'); }}
+              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+                activeRoute.startsWith('/quotes')
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
@@ -230,9 +257,10 @@ export default function Navigation() {
                 prefetch={true}
                 onMouseEnter={() => handleLinkWarmup('/admin/companies')}
                 onTouchStart={() => handleLinkWarmup('/admin/companies')}
-                onFocus={() => handleLinkWarmup('/admin/companies')}
-                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                  pathname.startsWith('/admin/companies')
+                onMouseDown={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey) handleNavigate('/admin/companies'); }}
+                onClick={(e) => { e.preventDefault(); handleNavigate('/admin/companies'); }}
+                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+                  activeRoute.startsWith('/admin/companies')
                     ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 }`}
@@ -248,9 +276,10 @@ export default function Navigation() {
               prefetch={true}
               onMouseEnter={() => handleLinkWarmup('/admin/masters')}
               onTouchStart={() => handleLinkWarmup('/admin/masters')}
-              onFocus={() => handleLinkWarmup('/admin/masters')}
-              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                pathname.startsWith('/admin/masters')
+              onMouseDown={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey) handleNavigate('/admin/masters'); }}
+              onClick={(e) => { e.preventDefault(); handleNavigate('/admin/masters'); }}
+              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+                activeRoute.startsWith('/admin/masters')
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
@@ -267,9 +296,10 @@ export default function Navigation() {
                 prefetch={true}
                 onMouseEnter={() => handleLinkWarmup('/admin/members')}
                 onTouchStart={() => handleLinkWarmup('/admin/members')}
-                onFocus={() => handleLinkWarmup('/admin/members')}
-                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                  pathname.startsWith('/admin/members') || pathname.startsWith('/admin/permissions')
+                onMouseDown={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey) handleNavigate('/admin/members'); }}
+                onClick={(e) => { e.preventDefault(); handleNavigate('/admin/members'); }}
+                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+                  activeRoute.startsWith('/admin/members') || activeRoute.startsWith('/admin/permissions')
                     ? 'bg-blue-50 text-blue-700 font-bold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 }`}
@@ -284,16 +314,17 @@ export default function Navigation() {
               </Link>
             )}
 
-            {/* 8. 시스템 감사 로그 (최고관리자) */}
+            {/* 7. 시스템 감사 로그 (최고관리자) */}
             {isSuperAdmin && (
               <Link
                 href="/admin/audit"
                 prefetch={true}
                 onMouseEnter={() => handleLinkWarmup('/admin/audit')}
                 onTouchStart={() => handleLinkWarmup('/admin/audit')}
-                onFocus={() => handleLinkWarmup('/admin/audit')}
-                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                  pathname.startsWith('/admin/audit')
+                onMouseDown={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey) handleNavigate('/admin/audit'); }}
+                onClick={(e) => { e.preventDefault(); handleNavigate('/admin/audit'); }}
+                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+                  activeRoute.startsWith('/admin/audit')
                     ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 }`}
