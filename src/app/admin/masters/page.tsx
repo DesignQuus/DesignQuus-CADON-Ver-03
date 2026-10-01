@@ -1155,8 +1155,8 @@ export default function MasterDataManagerPage() {
                     <th className="py-2.5 px-3">마스터 코드</th>
                     <th className="py-2.5 px-3">표준 품명</th>
                     <th className="py-2.5 px-3">규격 (Spec)</th>
-                    <th className="py-2.5 pl-2 pr-3 text-center">재질</th>
-                    <th className="py-2.5 pl-4 pr-2 text-center">부품 유형</th>
+                    <th className="py-2.5 px-3 text-left">재질</th>
+                    <th className="py-2.5 px-3 text-left">부품 유형</th>
                     <th className="py-2.5 px-3 text-right">공인 기준단가</th>
                     <th className="py-2.5 px-2 text-center">관리</th>
                   </tr>
@@ -1213,11 +1213,11 @@ export default function MasterDataManagerPage() {
                           <td className="py-2 px-3 font-mono text-slate-600 truncate" title={it.specification || '-'}>
                             {it.specification || '-'}
                           </td>
-                          <td className="py-2 pl-2 pr-3 text-center font-mono font-medium text-slate-700 text-xs truncate" title={it.material || 'SS400'}>
+                          <td className="py-2 px-3 text-left font-mono font-medium text-slate-700 text-xs truncate" title={it.material || 'SS400'}>
                             {it.material || 'SS400'}
                           </td>
-                          <td className="py-2 pl-4 pr-2 text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center gap-1.5 justify-center max-w-[185px] mx-auto">
+                          <td className="py-2 px-3 text-left" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-1.5 justify-start">
                               <div className="relative inline-flex items-center group">
                                 <select
                                   value={it.category || 'MACHINING'}
