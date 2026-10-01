@@ -17,6 +17,7 @@ import {
   getPartCategoryLabel,
   getPartCategoryBadgeClass,
   getPartCategoryTextClass,
+  getPartCategorySubDetail,
   normalizePartCategoryFromText
 } from '@/lib/part-categories';
 import PartCategoryPickerModal from '@/components/common/PartCategoryPickerModal';
@@ -1135,7 +1136,7 @@ export default function MasterDataManagerPage() {
                   <col style={{ minWidth: '150px' }} />
                   <col style={{ width: '135px' }} />
                   <col style={{ width: '170px' }} />
-                  <col style={{ width: '205px' }} />
+                  <col style={{ width: '230px' }} />
                   <col style={{ width: '165px' }} />
                   <col style={{ width: '52px' }} />
                 </colgroup>
@@ -1218,7 +1219,21 @@ export default function MasterDataManagerPage() {
                           </td>
                           <td className="py-2 px-3 text-left" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1.5 justify-start">
-                              <div className="relative inline-flex items-center group">
+                              <div className="relative inline-flex items-center group max-w-[215px]">
+                                {/* 시각 레이어 (대분류 볼드 컬러 + 공정 세부사항 미니멀 슬레이트 + 드롭다운 화살표) */}
+                                <div className="flex items-center gap-1.5 py-0.5 px-1.5 rounded hover:bg-slate-100/80 transition-colors pointer-events-none">
+                                  <span className={`text-xs font-bold whitespace-nowrap ${getPartCategoryTextClass(it.category)}`}>
+                                    {getPartCategoryLabel(it.category)}
+                                  </span>
+                                  {getPartCategorySubDetail(it.category) && (
+                                    <span className="text-[11px] text-slate-400 font-normal whitespace-nowrap">
+                                      ({getPartCategorySubDetail(it.category)})
+                                    </span>
+                                  )}
+                                  <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-colors shrink-0 ml-0.5" />
+                                </div>
+
+                                {/* 1-클릭 풀다운 투명 오버레이 셀렉트 (네이티브 드롭다운 즉시 반응) */}
                                 <select
                                   value={it.category || 'MACHINING'}
                                   onChange={(e) => {
@@ -1235,22 +1250,21 @@ export default function MasterDataManagerPage() {
                                     }
                                     handleInlineCategoryChange(it.id, val);
                                   }}
-                                  className={`appearance-none bg-transparent hover:bg-slate-100/80 focus:bg-slate-100/90 pl-1.5 pr-4 py-0.5 rounded text-xs font-bold cursor-pointer transition-all border-none outline-none ${getPartCategoryTextClass(it.category)}`}
+                                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                                   title="클릭하여 부품 유형 변경 (선택 시 즉시 저장)"
                                 >
                                   <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1">
                                     ✨ 스마트피커 열기...
                                   </option>
                                   <option disabled className="text-slate-400 bg-slate-100 font-semibold text-[10px]">
-                                    ──────── 10대 분류 ────────
+                                    ──────── 10대 분류 및 공정 세부사항 ────────
                                   </option>
                                   {PART_CATEGORIES.map(c => (
                                     <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
-                                      {c.label}
+                                      {c.label} ({c.subDetail})
                                     </option>
                                   ))}
                                 </select>
-                                <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-colors absolute right-0.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                               </div>
                               <button
                                 type="button"
@@ -1518,7 +1532,7 @@ export default function MasterDataManagerPage() {
                     </option>
                     {PART_CATEGORIES.map(c => (
                       <option key={c.id} value={c.id}>
-                        {c.label} ({c.fullLabel.split('(')[1]?.replace(')', '') || c.id})
+                        {c.label} ({c.subDetail})
                       </option>
                     ))}
                   </select>

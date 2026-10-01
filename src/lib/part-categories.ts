@@ -1,6 +1,7 @@
 export interface PartCategoryDef {
   id: string;
   label: string;
+  subDetail: string;
   fullLabel: string;
   badgeClass: string;
   borderClass: string;
@@ -25,6 +26,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'MACHINING',
     label: '가공품',
+    subDetail: '절삭·선반·밀링',
     fullLabel: '기계 가공품 (절삭/선반/밀링)',
     badgeClass: 'bg-blue-100 text-blue-800 border-blue-300',
     borderClass: 'border-blue-300',
@@ -39,6 +41,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'SHEET_METAL',
     label: '판금/제관',
+    subDetail: '레이저·절곡·용접',
     fullLabel: '판금 / 제관품 (레이저/절곡/용접)',
     badgeClass: 'bg-cyan-100 text-cyan-800 border-cyan-300',
     borderClass: 'border-cyan-300',
@@ -53,6 +56,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'INJECTION',
     label: '사출/성형',
+    subDetail: '플라스틱·압출',
     fullLabel: '사출 / 성형품 (플라스틱/고무/압출)',
     badgeClass: 'bg-pink-100 text-pink-800 border-pink-300',
     borderClass: 'border-pink-300',
@@ -67,6 +71,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'MECHANICAL',
     label: '기계요소',
+    subDetail: '베어링·LM·스크류',
     fullLabel: '기계요소 구동품 (베어링/LM/볼스크류/커플링)',
     badgeClass: 'bg-teal-100 text-teal-800 border-teal-300',
     borderClass: 'border-teal-300',
@@ -81,6 +86,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'COMMERCIAL',
     label: '규격철물',
+    subDetail: '볼트·너트·와셔',
     fullLabel: '표준 규격품 / 체결류 (볼트/너트/와셔/핀)',
     badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
     borderClass: 'border-emerald-300',
@@ -95,6 +101,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'ELECTRICAL',
     label: '전장/공압',
+    subDetail: '모터·실린더·PLC',
     fullLabel: '전장 / 공압 / 제어품 (모터/실린더/센서/PLC)',
     badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
     borderClass: 'border-amber-300',
@@ -109,6 +116,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'CASTING',
     label: '주조품',
+    subDetail: '형상주물·단조',
     fullLabel: '주조 / 주물 / 단조품 (Casting / Forging)',
     badgeClass: 'bg-orange-100 text-orange-800 border-orange-300',
     borderClass: 'border-orange-300',
@@ -123,6 +131,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'IMPORTED',
     label: '해외수입',
+    subDetail: '외산 직수입',
     fullLabel: '해외 직수입품 (미스미 일본/독일/미국 외산)',
     badgeClass: 'bg-violet-100 text-violet-800 border-violet-300',
     borderClass: 'border-violet-300',
@@ -137,6 +146,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'SUPPLIED',
     label: '고객사급',
+    subDetail: '사급 자재',
     fullLabel: '고객 지급품 (발주처 무상/유상 지급자재)',
     badgeClass: 'bg-slate-200 text-slate-800 border-slate-400',
     borderClass: 'border-slate-400',
@@ -151,6 +161,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'ASSEMBLY',
     label: '조립품',
+    subDetail: '서브 모듈',
     fullLabel: '조립품 / 모듈 (Sub-Assembly / Module)',
     badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-300',
     borderClass: 'border-indigo-300',
@@ -194,6 +205,14 @@ export function getPartCategoryTextClass(catId?: string): string {
   if (found) return found.textClass;
   if (catId === 'FASTENER') return 'text-emerald-700';
   return 'text-slate-700';
+}
+
+export function getPartCategorySubDetail(catId?: string): string {
+  if (!catId) return '';
+  const found = PART_CATEGORIES.find(c => c.id === catId);
+  if (found?.subDetail) return found.subDetail;
+  if (catId === 'FASTENER') return '볼트·너트·와셔';
+  return '';
 }
 
 export function normalizePartCategoryFromText(rawText: string): string {
