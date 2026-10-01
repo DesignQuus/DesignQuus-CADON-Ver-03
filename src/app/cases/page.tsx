@@ -8,7 +8,7 @@ import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import CustomerSelectCombobox, { CustomerSelectionValue, AUTO_DETECT_CUSTOMER } from '@/components/common/CustomerSelectCombobox';
 import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
 import { useRouter } from 'next/navigation';
-import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
+import { getClientCache, setClientCache, isCacheFresh, fetchWithCache } from '@/lib/cacheStore';
 import { CaseActionConfirmModal, SKIP_CASE_TRASH_CONFIRM_KEY, CaseActionType } from '@/components/common/CaseActionConfirmModal';
 import { QuoteDeleteToast } from '@/components/common/QuoteDeleteConfirmModal';
 import {
@@ -384,12 +384,10 @@ export default function CasesPage() {
 
   const fetchCompanies = async () => {
     try {
-      const res = await apiFetch('/api/companies');
-      if (res.ok) {
-        const data = await res.json();
+      const data = await fetchWithCache<any>('companies', '/api/companies', { maxAgeMs: 30000 });
+      if (data?.companies) {
         const compList = data.companies || [];
         setCompanies(compList);
-        setClientCache('companies', data);
         if (compList.length > 0) {
           setCompanyId(compList[0].id);
         }
@@ -401,30 +399,25 @@ export default function CasesPage() {
 
   const fetchOperators = async () => {
     try {
-      const res = await apiFetch('/api/operators');
-      if (res.ok) {
-        const data = await res.json();
+      const data = await fetchWithCache<any>('operators', '/api/operators', { maxAgeMs: 30000 });
+      if (data?.operators) {
         setOperators(data.operators || []);
-        setClientCache('operators', data);
       }
     } catch (e) {
       console.error('Failed to fetch operators:', e);
     }
   };
 
-  const fetchCases = async (isSilent = false) => {
+  const fetchCases = async (isSilent = false, forceFresh = false) => {
     if (!isSilent) setLoading(true);
     try {
-      const res = await apiFetch('/api/quotation-cases');
-      if (res.status === 401) {
-        window.location.href = '/login';
-        return;
-      }
-      if (res.ok) {
-        const data = await res.json();
+      const data = await fetchWithCache<any>('cases', '/api/quotation-cases', {
+        maxAgeMs: 12000,
+        forceFresh
+      });
+      if (data?.cases) {
         const list = data.cases || [];
         setCases(list);
-        setClientCache('cases', data);
         try {
           localStorage.setItem('cadon_cached_cases', JSON.stringify(list));
         } catch {}
@@ -601,22 +594,36 @@ export default function CasesPage() {
   }, [handleQuickUploadFile, router]);
 
   useEffect(() => {
-    // 클라이언트 마운트 즉시 캐시 복원 (Hydration 일치 및 0ms 즉시 렌더링)
+    let hasCached = false;
+    // ⚡ 클라이언트 마운트 즉시 캐시 복원 (Hydration 일치 및 0ms 즉시 렌더링)
     try {
       const cachedCases = getClientCache('cases')?.cases || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('cadon_cached_cases') || 'null') : null);
       const cachedUser = getClientCache('user') || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('cadon_user') || 'null') : null);
       const cachedCompanies = getClientCache('companies')?.companies;
       const cachedOperators = getClientCache('operators')?.operators;
 
-      if (cachedCases && Array.isArray(cachedCases)) setCases(cachedCases);
-      if (cachedUser) setUser(cachedUser);
+      if (cachedCases && Array.isArray(cachedCases) && cachedCases.length > 0) {
+        setCases(cachedCases);
+        hasCached = true;
+      }
+      if (cachedUser) {
+        setUser(cachedUser);
+        // ⚡ 핵심: 캐시된 사용자 정보로부터 마운트 '첫 프레임(0ms)'에 담당자 필터를 즉시 확정 (2건 -> 1건 깜빡임 원천 차단)
+        const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+        const urlManager = urlParams?.get('manager');
+        if (urlManager) {
+          setFilterManager(urlManager);
+        } else if (!['TENANT_ADMIN', 'SUPER_ADMIN'].includes(cachedUser.role)) {
+          setFilterManager(cachedUser.userId);
+        }
+      }
       if (cachedCompanies && Array.isArray(cachedCompanies)) setCompanies(cachedCompanies);
       if (cachedOperators && Array.isArray(cachedOperators)) setOperators(cachedOperators);
     } catch {}
 
-    // 비동기 요청들을 완전 병렬로 동시 실행
+    // ⚡ 캐시 데이터가 있으면 isSilent = true로 호출하여 로딩 스피너 및 화면 튕김(CLS) 100% 방지
     Promise.all([
-      fetchCases(),
+      fetchCases(hasCached),
       fetchCompanies(),
       fetchOperators(),
       apiFetch('/api/auth/me')
@@ -631,10 +638,7 @@ export default function CasesPage() {
             if (urlManager) {
               setFilterManager(urlManager);
             } else if (!['TENANT_ADMIN', 'SUPER_ADMIN'].includes(data.user.role)) {
-              // 일반 견적 담당자는 로그인 시 '내 담당건' 필터로 기본 적용
               setFilterManager(data.user.userId);
-            } else {
-              setFilterManager('ALL');
             }
           }
         })
