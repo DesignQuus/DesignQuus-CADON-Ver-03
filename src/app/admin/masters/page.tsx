@@ -18,6 +18,7 @@ import {
   getPartCategoryBadgeClass,
   normalizePartCategoryFromText
 } from '@/lib/part-categories';
+import PartCategoryPickerModal from '@/components/common/PartCategoryPickerModal';
 
 const MATERIAL_NAMES: Record<string, string> = {
   'SS400': '일반구조용 탄소강',
@@ -159,6 +160,19 @@ export default function MasterDataManagerPage() {
   const [bulkCustomPriceInput, setBulkCustomPriceInput] = useState('');
   const [bulkCategory, setBulkCategory] = useState<string>('MACHINING');
   const [isApplyingCategory, setIsApplyingCategory] = useState<boolean>(false);
+
+  // 10대 부품 분류 & 실무 대표 품목 스마트 피커 모달 상태
+  const [categoryPickerState, setCategoryPickerState] = useState<{
+    isOpen: boolean;
+    mode: 'inline' | 'bulk' | 'add';
+    targetId?: string;
+    targetInfo?: { code?: string; name?: string; spec?: string };
+    currentCategory: string;
+  }>({
+    isOpen: false,
+    mode: 'inline',
+    currentCategory: 'MACHINING'
+  });
 
   // 페이지네이션 상태 (10, 20, 30, 40, 50개씩 보기)
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -1206,20 +1220,36 @@ export default function MasterDataManagerPage() {
                             </span>
                           </td>
                           <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="relative inline-flex items-center">
-                              <select
-                                value={it.category || 'MACHINING'}
-                                onChange={(e) => handleInlineCategoryChange(it.id, e.target.value)}
-                                className={`appearance-none pl-2.5 pr-6 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all border outline-none shadow-2xs hover:brightness-95 ${getPartCategoryBadgeClass(it.category)}`}
-                                title="클릭하여 부품 유형 변경 (선택 시 즉시 저장)"
+                            <div className="inline-flex items-center gap-1 justify-center">
+                              <div className="relative inline-flex items-center">
+                                <select
+                                  value={it.category || 'MACHINING'}
+                                  onChange={(e) => handleInlineCategoryChange(it.id, e.target.value)}
+                                  className={`appearance-none pl-2.5 pr-6 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all border outline-none shadow-2xs hover:brightness-95 ${getPartCategoryBadgeClass(it.category)}`}
+                                  title="클릭하여 부품 유형 변경 (선택 시 즉시 저장)"
+                                >
+                                  {PART_CATEGORIES.map(c => (
+                                    <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
+                                      {c.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <ChevronDown className="w-3 h-3 text-current opacity-60 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setCategoryPickerState({
+                                  isOpen: true,
+                                  mode: 'inline',
+                                  targetId: it.id,
+                                  targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
+                                  currentCategory: it.category || 'MACHINING'
+                                })}
+                                className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                title="10대 부품 분류 & 실무 품목(샤프트, 베어링, LM가이드 등) 스마트 피커 열기"
                               >
-                                {PART_CATEGORIES.map(c => (
-                                  <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
-                                    {c.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <ChevronDown className="w-3 h-3 text-current opacity-60 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                              </button>
                             </div>
                           </td>
                           {selectedIds.includes(it.id) ? (
@@ -1454,6 +1484,19 @@ export default function MasterDataManagerPage() {
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryPickerState({
+                      isOpen: true,
+                      mode: 'bulk',
+                      currentCategory: bulkCategory
+                    })}
+                    className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-blue-300 rounded text-[10.5px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    title="10대 부품 분류 & 실무 품목 스마트 피커 열기"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>스마트 피커</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleBulkApplyCategory}
@@ -2096,7 +2139,23 @@ export default function MasterDataManagerPage() {
                   />
                 </div>
                 <div>
-                  <label className="font-medium text-slate-700 block mb-1">부품 유형</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-medium text-slate-700 block">부품 유형</label>
+                    <button
+                      type="button"
+                      onClick={() => setCategoryPickerState({
+                        isOpen: true,
+                        mode: 'add',
+                        targetInfo: { code: newCode, name: newName, spec: newSpec },
+                        currentCategory: newCategory
+                      })}
+                      className="text-[11px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      title="10대 부품 분류 및 실무 대표 품목 스마트 피커 열기"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-500" />
+                      <span>스마트 피커</span>
+                    </button>
+                  </div>
                   <select
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
@@ -2292,6 +2351,27 @@ export default function MasterDataManagerPage() {
           </div>
         </div>
       )}
+      {/* 10대 부품 분류 & 실무 대표 품목 스마트 피커 모달 */}
+      <PartCategoryPickerModal
+        isOpen={categoryPickerState.isOpen}
+        onClose={() => setCategoryPickerState((prev) => ({ ...prev, isOpen: false }))}
+        selectedCategory={categoryPickerState.currentCategory}
+        targetItemInfo={categoryPickerState.targetInfo}
+        onSelect={(category, selectedSubItem) => {
+          if (categoryPickerState.mode === 'inline' && categoryPickerState.targetId) {
+            handleInlineCategoryChange(categoryPickerState.targetId, category);
+          } else if (categoryPickerState.mode === 'bulk') {
+            setBulkCategory(category);
+          } else if (categoryPickerState.mode === 'add') {
+            setNewCategory(category);
+            // 품명이 비어있고 대표 품목이 선택된 경우 자동 제안
+            if (!newName.trim() && selectedSubItem) {
+              setNewName(selectedSubItem);
+            }
+          }
+          setCategoryPickerState((prev) => ({ ...prev, isOpen: false }));
+        }}
+      />
     </div>
   );
 }

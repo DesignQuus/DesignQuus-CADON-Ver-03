@@ -7,9 +7,19 @@ export interface PartCategoryDef {
   textClass: string;
   bgClass: string;
   group: 'FABRICATED' | 'COMMERCIAL' | 'SPECIAL' | 'ASSEMBLY';
+  groupName: string;
   description: string;
   costFormulaHint: string;
+  subItems: string[];
 }
+
+export const PART_CATEGORY_GROUPS = [
+  { id: 'ALL', label: '전체' },
+  { id: 'FABRICATED', label: '도면 가공/제작품', desc: '도면 형상 기반 자체 및 외주 가공' },
+  { id: 'COMMERCIAL', label: '표준 기성 구매품', desc: '카탈로그 기반 시중 구매품' },
+  { id: 'SPECIAL', label: '특수 조달 자재', desc: '해외 직수입품 및 고객사 지급 자재' },
+  { id: 'ASSEMBLY', label: '조립 단위/모듈', desc: '서브 조립체 및 유닛 모듈' }
+] as const;
 
 export const PART_CATEGORIES: PartCategoryDef[] = [
   {
@@ -21,8 +31,10 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
     textClass: 'text-blue-700',
     bgClass: 'bg-blue-100',
     group: 'FABRICATED',
+    groupName: '도면 가공/제작품',
     description: 'CNC 선반, MCT 밀링, 연마, 방전 등 환봉 및 블록 절삭 가공품',
-    costFormulaHint: '(소재중량 × kg단가) + (절삭시간 × 가공임율) + 열처리/표면처리비'
+    costFormulaHint: '(소재중량 × kg단가) + (절삭시간 × 가공임율) + 열처리/표면처리비',
+    subItems: ['샤프트', '롤러', '블록', '플랜지', '보스', '핀', '부싱', '기어블랭크', '정밀절삭']
   },
   {
     id: 'SHEET_METAL',
@@ -33,8 +45,10 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
     textClass: 'text-cyan-700',
     bgClass: 'bg-cyan-100',
     group: 'FABRICATED',
+    groupName: '도면 가공/제작품',
     description: '레이저 절단, V커팅 절곡, 제관용접, 프레임 구조물 및 커버류',
-    costFormulaHint: '(원판면적 × 비중 × 단가) + 레이저절단비 + 절곡비 + 용접공수 + 분체도장'
+    costFormulaHint: '(원판면적 × 비중 × 단가) + 레이저절단비 + 절곡비 + 용접공수 + 분체도장',
+    subItems: ['브라켓', '커버', '베이스플레이트', '프레임용접', '덕트', '호퍼', '판금케이스', '패널']
   },
   {
     id: 'INJECTION',
@@ -45,8 +59,10 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
     textClass: 'text-pink-700',
     bgClass: 'bg-pink-100',
     group: 'FABRICATED',
+    groupName: '도면 가공/제작품',
     description: '플라스틱 금형 사출품, 고무 몰딩, 엔프라(POM/MC/PEEK), AL 압출재',
-    costFormulaHint: '(원료수지비 + 사출임율) + (금형비 ÷ 상각수량) 또는 단중(m당) 단가'
+    costFormulaHint: '(원료수지비 + 사출임율) + (금형비 ÷ 상각수량) 또는 단중(m당) 단가',
+    subItems: ['사출기구물', 'POM/아세탈', 'MC나일론', 'PEEK', '고무 몰딩/오링', '우레탄', 'AL 압출 프로파일']
   },
   {
     id: 'MECHANICAL',
@@ -57,8 +73,10 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
     textClass: 'text-teal-700',
     bgClass: 'bg-teal-100',
     group: 'COMMERCIAL',
+    groupName: '표준 기성 구매품',
     description: 'LM가이드, 볼스크류, 베어링, 플렉시블 커플링, 기어, 체인, 벨트/풀리 등 구동품',
-    costFormulaHint: '카탈로그 표준 소비자가격(MSRP) × 대리점 공급률(DC%)'
+    costFormulaHint: '카탈로그 표준 소비자가격(MSRP) × 대리점 공급률(DC%)',
+    subItems: ['LM가이드', '볼스크류', '볼/롤러베어링', '플렉시블커플링', '기어/랙피니언', '타이밍풀리/벨트', '체인/스프라켓', '쇼바/완충기']
   },
   {
     id: 'COMMERCIAL',
@@ -69,8 +87,10 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
     textClass: 'text-emerald-700',
     bgClass: 'bg-emerald-100',
     group: 'COMMERCIAL',
+    groupName: '표준 기성 구매품',
     description: '육각/렌치볼트, 너트, 평/스프링와셔, 세트스크류, 다웰핀, 평행키 등 체결철물',
-    costFormulaHint: '시중 단가표(M규격/길이별 박스단가) × 소요 수량'
+    costFormulaHint: '시중 단가표(M규격/길이별 박스단가) × 소요 수량',
+    subItems: ['렌치볼트', '육각볼트', '육각너트', '평/스프링와셔', '세트스크류(무두)', '다웰핀', '평행키', '아이볼트', '리벳']
   },
   {
     id: 'ELECTRICAL',
@@ -81,8 +101,10 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
     textClass: 'text-amber-700',
     bgClass: 'bg-amber-100',
     group: 'COMMERCIAL',
+    groupName: '표준 기성 구매품',
     description: '서보모터, 감속기, 에어 실린더, 솔레노이드 밸브, 센서, PLC, 인버터, 공압 피팅',
-    costFormulaHint: '제조사 표준 소비자가격 × 프로젝트 특약 공급률'
+    costFormulaHint: '제조사 표준 소비자가격 × 프로젝트 특약 공급률',
+    subItems: ['서보모터', '감속기', '에어 실린더', '솔레노이드 밸브', '센서(포토/근접)', 'PLC/IO모듈', '인버터', '공압 피팅', '진공패드']
   },
   {
     id: 'CASTING',
@@ -93,8 +115,10 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
     textClass: 'text-orange-700',
     bgClass: 'bg-orange-100',
     group: 'FABRICATED',
+    groupName: '도면 가공/제작품',
     description: '사형주조, 정밀주조, 다이캐스팅, 단조품 (기어박스 몸체, 주물 베이스 등)',
-    costFormulaHint: '(소재 용해 중량 × 주물단가) + (목형/금형비 상각) + 2차 정밀가공비'
+    costFormulaHint: '(소재 용해 중량 × 주물단가) + (목형/금형비 상각) + 2차 정밀가공비',
+    subItems: ['기어박스 하우징', '주물 베이스', '대형 프레임', '단조 플랜지', '주물 브라켓', '다이캐스팅 몸체']
   },
   {
     id: 'IMPORTED',
@@ -105,8 +129,10 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
     textClass: 'text-violet-700',
     bgClass: 'bg-violet-100',
     group: 'SPECIAL',
+    groupName: '특수 조달 자재',
     description: '해외 제조사 직발주 또는 해외 수입 조달품 (환율, 관세, 통관/운임 반영)',
-    costFormulaHint: '[외화단가 × 기준환율] × (1 + 관세율 + 운임/통관율) × 수입마진율'
+    costFormulaHint: '[외화단가 × 기준환율] × (1 + 관세율 + 운임/통관율) × 수입마진율',
+    subItems: ['미스미 일본 직수입', '외산 THK/SMC', '수입 정밀 계측기', '하모닉 드라이브', '외산 특수 밸브']
   },
   {
     id: 'SUPPLIED',
@@ -117,8 +143,10 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
     textClass: 'text-slate-700',
     bgClass: 'bg-slate-200',
     group: 'SPECIAL',
+    groupName: '특수 조달 자재',
     description: '발주처/고객사가 사전에 구매하여 무상 지급하는 부품 (자재비 0원 처리)',
-    costFormulaHint: '자재비 0원 (자재비 완전 제외, 단순 장착/배선 조립비만 계상)'
+    costFormulaHint: '자재비 0원 (자재비 완전 제외, 단순 장착/배선 조립비만 계상)',
+    subItems: ['고객 지급 모터', '발주처 사급 컨트롤러', '고객사 전용 센서', '무상 사급 자재', '지급 통신모듈']
   },
   {
     id: 'ASSEMBLY',
@@ -129,8 +157,10 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
     textClass: 'text-indigo-700',
     bgClass: 'bg-indigo-100',
     group: 'ASSEMBLY',
+    groupName: '조립 단위/모듈',
     description: '하위 부품들로 조립된 서브 어셈블리 또는 모듈형 유닛',
-    costFormulaHint: '하위 부품 원가 합산(Roll-up) + 유닛 조립 공수(M/H) × 조립 임율'
+    costFormulaHint: '하위 부품 원가 합산(Roll-up) + 유닛 조립 공수(M/H) × 조립 임율',
+    subItems: ['서브 어셈블리', '구동 유닛 모듈', '스테이션 조립체', '메인 프레임 유닛', '컨베이어 조립체']
   }
 ];
 
