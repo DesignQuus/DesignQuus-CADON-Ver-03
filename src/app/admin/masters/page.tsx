@@ -1123,11 +1123,22 @@ export default function MasterDataManagerPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs table-fixed">
+                <colgroup>
+                  <col style={{ width: '44px' }} />
+                  <col style={{ width: '48px' }} />
+                  <col style={{ width: '130px' }} />
+                  <col style={{ minWidth: '180px' }} />
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '90px' }} />
+                  <col style={{ width: '185px' }} />
+                  <col style={{ width: '140px' }} />
+                  <col style={{ width: '52px' }} />
+                </colgroup>
                 <thead>
                   <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 select-none">
-                    <th className="py-2.5 px-3 w-10 text-center shrink-0">
+                    <th className="py-2.5 px-2 text-center">
                       <button
                         type="button"
                         onClick={handleToggleSelectAll}
@@ -1137,14 +1148,14 @@ export default function MasterDataManagerPage() {
                         {allPageSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4" />}
                       </button>
                     </th>
-                    <th className="py-2.5 px-2 w-12 text-center shrink-0 font-mono">No</th>
-                    <th className="py-2.5 px-3 w-32 shrink-0">마스터 코드</th>
-                    <th className="py-2.5 px-3 min-w-[150px]">표준 품명</th>
-                    <th className="py-2.5 px-3 w-28 shrink-0">규격 (Spec)</th>
-                    <th className="py-2.5 px-2 w-20 text-center shrink-0">재질</th>
-                    <th className="py-2.5 px-3 w-48 text-center shrink-0">부품 유형</th>
-                    <th className="py-2.5 px-4 w-36 text-right shrink-0">공인 기준단가</th>
-                    <th className="py-2.5 px-2 w-12 text-center shrink-0">관리</th>
+                    <th className="py-2.5 px-2 text-center font-mono">No</th>
+                    <th className="py-2.5 px-3">마스터 코드</th>
+                    <th className="py-2.5 px-3">표준 품명</th>
+                    <th className="py-2.5 px-3">규격 (Spec)</th>
+                    <th className="py-2.5 px-2 text-center">재질</th>
+                    <th className="py-2.5 px-2 text-center">부품 유형</th>
+                    <th className="py-2.5 px-4 text-right">공인 기준단가</th>
+                    <th className="py-2.5 px-2 text-center">관리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
@@ -1177,7 +1188,7 @@ export default function MasterDataManagerPage() {
                           }`}
                           title="클릭하여 품목을 선택/해제합니다."
                         >
-                          <td className="py-2 px-3 text-center relative">
+                          <td className="py-2 px-2 text-center relative">
                             {isSelected && (
                               <span className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600" />
                             )}
@@ -1204,7 +1215,7 @@ export default function MasterDataManagerPage() {
                               {it.material || 'SS400'}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <td className="py-2 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1.5 justify-center max-w-[170px] mx-auto">
                               <div className="relative inline-flex items-center shrink-0">
                                 <select
