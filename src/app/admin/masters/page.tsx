@@ -1131,10 +1131,10 @@ export default function MasterDataManagerPage() {
                   <col style={{ width: '44px' }} />
                   <col style={{ width: '48px' }} />
                   <col style={{ width: '130px' }} />
-                  <col style={{ minWidth: '160px' }} />
-                  <col style={{ width: '100px' }} />
-                  <col style={{ width: '100px' }} />
-                  <col style={{ width: '200px' }} />
+                  <col style={{ minWidth: '150px' }} />
+                  <col style={{ width: '95px' }} />
+                  <col style={{ width: '170px' }} />
+                  <col style={{ width: '205px' }} />
                   <col style={{ width: '165px' }} />
                   <col style={{ width: '52px' }} />
                 </colgroup>
@@ -1154,8 +1154,8 @@ export default function MasterDataManagerPage() {
                     <th className="py-2.5 px-3">마스터 코드</th>
                     <th className="py-2.5 px-3">표준 품명</th>
                     <th className="py-2.5 px-3">규격 (Spec)</th>
-                    <th className="py-2.5 px-2 text-center">재질</th>
-                    <th className="py-2.5 px-2 text-center">부품 유형</th>
+                    <th className="py-2.5 pl-2 pr-3 text-center">재질</th>
+                    <th className="py-2.5 pl-4 pr-2 text-center">부품 유형</th>
                     <th className="py-2.5 px-3 text-right">공인 기준단가</th>
                     <th className="py-2.5 px-2 text-center">관리</th>
                   </tr>
@@ -1212,12 +1212,12 @@ export default function MasterDataManagerPage() {
                           <td className="py-2 px-3 font-mono text-slate-600 truncate" title={it.specification || '-'}>
                             {it.specification || '-'}
                           </td>
-                          <td className="py-2 px-2 text-center font-mono">
-                            <span className="px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px] truncate max-w-[80px] inline-block" title={it.material || 'SS400'}>
+                          <td className="py-2 pl-2 pr-3 text-center font-mono">
+                            <span className="px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px] truncate max-w-[160px] inline-block" title={it.material || 'SS400'}>
                               {it.material || 'SS400'}
                             </span>
                           </td>
-                          <td className="py-2 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                          <td className="py-2 pl-4 pr-2 text-center" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-2 justify-center max-w-[185px] mx-auto">
                               <div className="relative inline-flex items-center shrink-0">
                                 <select
@@ -2259,11 +2259,12 @@ export default function MasterDataManagerPage() {
                   />
                 </div>
                 <div>
-                  <label className="font-medium text-slate-700 block mb-1">표준 재질</label>
+                  <label className="font-medium text-slate-700 block mb-1">표준 재질 (최대 30자)</label>
                   <input
                     type="text"
-                    placeholder="예: SS400, AL6061, S45C"
+                    placeholder="예: SS400, AL6061-T651, SUS304, MC NYLON"
                     value={newMaterial}
+                    maxLength={30}
                     onChange={(e) => setNewMaterial(e.target.value)}
                     className="w-full border border-slate-200 rounded-lg p-2 font-mono uppercase"
                   />
