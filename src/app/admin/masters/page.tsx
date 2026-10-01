@@ -16,6 +16,7 @@ import {
   PART_CATEGORIES,
   getPartCategoryLabel,
   getPartCategoryBadgeClass,
+  getPartCategoryTextClass,
   normalizePartCategoryFromText
 } from '@/lib/part-categories';
 import PartCategoryPickerModal from '@/components/common/PartCategoryPickerModal';
@@ -1212,14 +1213,12 @@ export default function MasterDataManagerPage() {
                           <td className="py-2 px-3 font-mono text-slate-600 truncate" title={it.specification || '-'}>
                             {it.specification || '-'}
                           </td>
-                          <td className="py-2 pl-2 pr-3 text-center font-mono">
-                            <span className="px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px] truncate max-w-[160px] inline-block" title={it.material || 'SS400'}>
-                              {it.material || 'SS400'}
-                            </span>
+                          <td className="py-2 pl-2 pr-3 text-center font-mono font-medium text-slate-700 text-xs truncate" title={it.material || 'SS400'}>
+                            {it.material || 'SS400'}
                           </td>
                           <td className="py-2 pl-4 pr-2 text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center gap-2 justify-center max-w-[185px] mx-auto">
-                              <div className="relative inline-flex items-center shrink-0">
+                            <div className="flex items-center gap-1.5 justify-center max-w-[185px] mx-auto">
+                              <div className="relative inline-flex items-center group">
                                 <select
                                   value={it.category || 'MACHINING'}
                                   onChange={(e) => {
@@ -1236,7 +1235,7 @@ export default function MasterDataManagerPage() {
                                     }
                                     handleInlineCategoryChange(it.id, val);
                                   }}
-                                  className={`appearance-none pl-2.5 pr-5 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all border outline-none shadow-2xs hover:brightness-95 ${getPartCategoryBadgeClass(it.category)}`}
+                                  className={`appearance-none bg-transparent hover:bg-slate-100/80 focus:bg-slate-100/90 pl-1.5 pr-4 py-0.5 rounded text-xs font-bold cursor-pointer transition-all border-none outline-none ${getPartCategoryTextClass(it.category)}`}
                                   title="클릭하여 부품 유형 변경 (선택 시 즉시 저장)"
                                 >
                                   <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1">
@@ -1251,7 +1250,7 @@ export default function MasterDataManagerPage() {
                                     </option>
                                   ))}
                                 </select>
-                                <ChevronDown className="w-3 h-3 text-current opacity-60 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-colors absolute right-0.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                               </div>
                               <button
                                 type="button"
@@ -1262,7 +1261,7 @@ export default function MasterDataManagerPage() {
                                   targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
                                   currentCategory: it.category || 'MACHINING'
                                 })}
-                                className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer shrink-0"
+                                className="p-1 rounded-md text-slate-300 hover:text-amber-500 hover:bg-amber-50/70 transition-colors cursor-pointer shrink-0"
                                 title="10대 부품 분류 & 실무 품목(샤프트, 베어링, LM가이드 등) 스마트 피커 열기"
                               >
                                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />

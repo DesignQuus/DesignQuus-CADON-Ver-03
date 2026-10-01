@@ -188,6 +188,14 @@ export function getPartCategoryBadgeClass(catId?: string): string {
   return 'bg-slate-100 text-slate-700 border-slate-300';
 }
 
+export function getPartCategoryTextClass(catId?: string): string {
+  if (!catId) return 'text-slate-700';
+  const found = PART_CATEGORIES.find(c => c.id === catId);
+  if (found) return found.textClass;
+  if (catId === 'FASTENER') return 'text-emerald-700';
+  return 'text-slate-700';
+}
+
 export function normalizePartCategoryFromText(rawText: string): string {
   if (!rawText) return 'MACHINING';
   const t = rawText.toString().trim();
