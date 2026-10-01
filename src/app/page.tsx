@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
 import {
   Layers,
+  Home,
   FileText,
   Building2,
   Users,
@@ -904,14 +905,14 @@ export default function HomePage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 w-full px-2.5 sm:px-3 py-3 relative">
-      {/* 버티컬 북마크 견출 탭 (펼치기) - 전체보기 */}
+      {/* 버티컬 북마크 견출 탭 (펼치기) - 홈 */}
       {!isSidebarOpen && (
         <SidebarBookmarkTab
           mode="expand"
           onClick={handleToggleSidebar}
-          label="전체보기"
-          icon={Layers}
-          title="스마트 견적 전체보기 (파이프라인 및 현황 요약 열기)"
+          label="홈"
+          icon={Home}
+          title="스마트 견적 홈 (파이프라인 및 현황 요약 열기)"
         />
       )}
 
@@ -935,7 +936,7 @@ export default function HomePage() {
                   <Layers className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <span className="text-xs font-black text-slate-900 tracking-tight block">스마트 견적 전체보기</span>
+                  <span className="text-xs font-black text-slate-900 tracking-tight block">스마트 견적 홈</span>
                   <span className="text-[10px] text-slate-400 font-semibold">AutoCAD 실무 파이프라인</span>
                 </div>
               </div>
@@ -1851,9 +1852,9 @@ export default function HomePage() {
             href="/quotes"
             prefetch={true}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all cursor-pointer shadow-2xs"
-            title="발행된 모든 견적서 전체 관리 대장으로 이동"
+            title="발행된 모든 견적서 관리 대장으로 이동"
           >
-            <span>견적서대장 전체보기</span>
+            <span>견적서대장 바로가기</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>

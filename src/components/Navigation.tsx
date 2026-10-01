@@ -135,7 +135,7 @@ export default function Navigation() {
             onTouchStart={() => handleLinkWarmup('/')}
             onFocus={() => handleLinkWarmup('/')}
             className="flex items-center space-x-2"
-            title="CADON 홈 전체보기로 이동"
+            title="CADON 홈으로 이동"
           >
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white shadow-sm font-bold ${
               isSuperAdmin ? 'bg-indigo-600' : 'bg-blue-600'
@@ -153,7 +153,7 @@ export default function Navigation() {
           </Link>
 
           <nav className="hidden md:flex items-center space-x-0.5 lg:space-x-1 pl-3 lg:pl-4 border-l border-slate-200 overflow-x-auto no-scrollbar">
-            {/* 1. 전체보기 */}
+            {/* 1. 홈 */}
             <Link
               href="/"
               prefetch={true}
@@ -166,8 +166,8 @@ export default function Navigation() {
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <LayoutDashboard className="w-4 h-4 text-blue-600" />
-              <span suppressHydrationWarning={true}>전체보기</span>
+              <Home className="w-4 h-4 text-blue-600" />
+              <span suppressHydrationWarning={true}>홈</span>
             </Link>
 
             {/* 2. 견적의뢰 */}
