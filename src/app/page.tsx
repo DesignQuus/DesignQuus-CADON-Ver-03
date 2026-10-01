@@ -145,12 +145,12 @@ export default function HomePage() {
     }
   }, [deleteToast]);
 
-  // Persistent Sidebar Collapsed State: 기본 상태는 '넓게 보기(사이드바 접힘: false)'
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Persistent Sidebar State: 전체보기 첫 화면 기본 상태는 '사이드 탭이 열린 상태(true)'
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('cadon_dashboard_sidebar_v2');
+      const saved = localStorage.getItem('cadon_dashboard_sidebar_open_v3');
       if (saved !== null) {
         setIsSidebarOpen(saved === 'true');
       }
@@ -161,7 +161,7 @@ export default function HomePage() {
     setIsSidebarOpen((prev) => {
       const next = !prev;
       try {
-        localStorage.setItem('cadon_dashboard_sidebar_v2', String(next));
+        localStorage.setItem('cadon_dashboard_sidebar_open_v3', String(next));
       } catch {}
       return next;
     });
@@ -925,7 +925,7 @@ export default function HomePage() {
               title="사이드바 접기 (넓게 보기)"
             />
 
-            {/* Sidebar Header */}
+            {/* Sidebar Header with Unified Tab Style Collapse Button */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black shadow-2xs">
@@ -936,6 +936,16 @@ export default function HomePage() {
                   <span className="text-[10px] text-slate-400 font-semibold">AutoCAD 실무 파이프라인</span>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={handleToggleSidebar}
+                className="group flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-600 border border-slate-200 hover:border-blue-300 transition-all duration-120 cursor-pointer text-xs font-bold shadow-2xs"
+                title="사이드바 접기 (도면 및 견적 목록 넓게 보기)"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-600 group-hover:-translate-x-0.5 transition-transform" />
+                <span>접기</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              </button>
             </div>
 
             {/* Scrollable Sidebar Body */}
