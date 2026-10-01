@@ -1224,10 +1224,29 @@ export default function MasterDataManagerPage() {
                               <div className="relative inline-flex items-center">
                                 <select
                                   value={it.category || 'MACHINING'}
-                                  onChange={(e) => handleInlineCategoryChange(it.id, e.target.value)}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '__OPEN_PICKER__') {
+                                      setCategoryPickerState({
+                                        isOpen: true,
+                                        mode: 'inline',
+                                        targetId: it.id,
+                                        targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
+                                        currentCategory: it.category || 'MACHINING'
+                                      });
+                                      return;
+                                    }
+                                    handleInlineCategoryChange(it.id, val);
+                                  }}
                                   className={`appearance-none pl-2.5 pr-6 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-all border outline-none shadow-2xs hover:brightness-95 ${getPartCategoryBadgeClass(it.category)}`}
                                   title="클릭하여 부품 유형 변경 (선택 시 즉시 저장)"
                                 >
+                                  <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1">
+                                    ✨ 스마트피커 열기...
+                                  </option>
+                                  <option disabled className="text-slate-400 bg-slate-100 font-semibold text-[10px]">
+                                    ──────── 10대 분류 ────────
+                                  </option>
                                   {PART_CATEGORIES.map(c => (
                                     <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
                                       {c.label}
@@ -1474,10 +1493,27 @@ export default function MasterDataManagerPage() {
                   </span>
                   <select
                     value={bulkCategory}
-                    onChange={(e) => setBulkCategory(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '__OPEN_PICKER__') {
+                        setCategoryPickerState({
+                          isOpen: true,
+                          mode: 'bulk',
+                          currentCategory: bulkCategory
+                        });
+                        return;
+                      }
+                      setBulkCategory(val);
+                    }}
                     className="bg-slate-900 border border-slate-600 rounded-lg px-2 py-0.5 text-xs text-white outline-none cursor-pointer font-medium"
                     title="선택된 품목들에 일괄 적용할 부품 유형 선택"
                   >
+                    <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold">
+                      ✨ 스마트피커 열기...
+                    </option>
+                    <option disabled className="text-slate-500">
+                      ────── 10대 분류 ──────
+                    </option>
                     {PART_CATEGORIES.map(c => (
                       <option key={c.id} value={c.id}>
                         {c.label} ({c.fullLabel.split('(')[1]?.replace(')', '') || c.id})
@@ -2158,9 +2194,24 @@ export default function MasterDataManagerPage() {
                   </div>
                   <select
                     value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '__OPEN_PICKER__') {
+                        setCategoryPickerState({
+                          isOpen: true,
+                          mode: 'add',
+                          targetInfo: { code: newCode, name: newName, spec: newSpec },
+                          currentCategory: newCategory
+                        });
+                        return;
+                      }
+                      setNewCategory(val);
+                    }}
                     className="w-full border border-slate-200 rounded-lg p-2 text-xs"
                   >
+                    <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold">
+                      ✨ 스마트피커 열기 (실무 대표 품목 검색/선택)...
+                    </option>
                     <optgroup label="── 도면 기반 가공/제작품 ──">
                       <option value="MACHINING">기계 가공품 (Machining - 절삭/선반/밀링)</option>
                       <option value="SHEET_METAL">판금/제관품 (Sheet Metal / Weldment)</option>
