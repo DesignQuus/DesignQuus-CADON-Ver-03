@@ -1133,7 +1133,7 @@ export default function MasterDataManagerPage() {
                   <col style={{ width: '48px' }} />
                   <col style={{ width: '130px' }} />
                   <col style={{ minWidth: '150px' }} />
-                  <col style={{ width: '95px' }} />
+                  <col style={{ width: '135px' }} />
                   <col style={{ width: '170px' }} />
                   <col style={{ width: '205px' }} />
                   <col style={{ width: '165px' }} />
@@ -1154,8 +1154,8 @@ export default function MasterDataManagerPage() {
                     <th className="py-2.5 px-2 text-center font-mono">No</th>
                     <th className="py-2.5 px-3">마스터 코드</th>
                     <th className="py-2.5 px-3">표준 품명</th>
-                    <th className="py-2.5 px-3">규격 (Spec)</th>
-                    <th className="py-2.5 px-3 text-left">재질</th>
+                    <th className="py-2.5 pl-3 pr-4 text-left">규격 (Spec)</th>
+                    <th className="py-2.5 pl-6 pr-3 text-left">재질</th>
                     <th className="py-2.5 px-3 text-left">부품 유형</th>
                     <th className="py-2.5 px-3 text-right">공인 기준단가</th>
                     <th className="py-2.5 px-2 text-center">관리</th>
@@ -1210,10 +1210,10 @@ export default function MasterDataManagerPage() {
                           <td className="py-2 px-3 font-medium text-slate-900 truncate" title={it.standard_name}>
                             {it.standard_name}
                           </td>
-                          <td className="py-2 px-3 font-mono text-slate-600 truncate" title={it.specification || '-'}>
+                          <td className="py-2 pl-3 pr-4 text-left font-mono text-slate-600 truncate" title={it.specification || '-'}>
                             {it.specification || '-'}
                           </td>
-                          <td className="py-2 px-3 text-left font-mono font-medium text-slate-700 text-xs truncate" title={it.material || 'SS400'}>
+                          <td className="py-2 pl-6 pr-3 text-left font-mono font-medium text-slate-700 text-xs truncate" title={it.material || 'SS400'}>
                             {it.material || 'SS400'}
                           </td>
                           <td className="py-2 px-3 text-left" onClick={(e) => e.stopPropagation()}>
