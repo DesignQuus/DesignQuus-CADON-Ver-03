@@ -529,9 +529,11 @@ export default function MasterDataManagerPage() {
     }
   };
 
-  // 1. 인라인 셀 단가 직접 타이핑 핸들러 (Excel/Notion 스프레드시트 방식)
+  // 1. 인라인 셀 단가 직접 타이핑 핸들러 (Excel/Notion 스프레드시트 방식 - 최대 백억 원대 지원)
   const handleInlinePriceChange = (id: string, valStr: string) => {
-    const rawVal = parseInt(valStr.replace(/[^0-9]/g, ''), 10) || 0;
+    // 최대 백억 원대(11자리: 99,999,999,999)까지 안전하게 처리
+    const cleaned = valStr.replace(/[^0-9]/g, '').slice(0, 11);
+    const rawVal = parseInt(cleaned, 10) || 0;
     setModifiedItems((prev) => ({ ...prev, [id]: rawVal }));
     setItems((prev) =>
       prev.map((it) => (it.id === id ? { ...it, unit_price: rawVal } : it))
@@ -1129,11 +1131,11 @@ export default function MasterDataManagerPage() {
                   <col style={{ width: '44px' }} />
                   <col style={{ width: '48px' }} />
                   <col style={{ width: '130px' }} />
-                  <col style={{ minWidth: '180px' }} />
-                  <col style={{ width: '120px' }} />
-                  <col style={{ width: '90px' }} />
-                  <col style={{ width: '185px' }} />
-                  <col style={{ width: '140px' }} />
+                  <col style={{ minWidth: '160px' }} />
+                  <col style={{ width: '100px' }} />
+                  <col style={{ width: '100px' }} />
+                  <col style={{ width: '200px' }} />
+                  <col style={{ width: '165px' }} />
                   <col style={{ width: '52px' }} />
                 </colgroup>
                 <thead>
@@ -1154,7 +1156,7 @@ export default function MasterDataManagerPage() {
                     <th className="py-2.5 px-3">규격 (Spec)</th>
                     <th className="py-2.5 px-2 text-center">재질</th>
                     <th className="py-2.5 px-2 text-center">부품 유형</th>
-                    <th className="py-2.5 px-4 text-right">공인 기준단가</th>
+                    <th className="py-2.5 px-3 text-right">공인 기준단가</th>
                     <th className="py-2.5 px-2 text-center">관리</th>
                   </tr>
                 </thead>
@@ -1211,12 +1213,12 @@ export default function MasterDataManagerPage() {
                             {it.specification || '-'}
                           </td>
                           <td className="py-2 px-2 text-center font-mono">
-                            <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px] truncate max-w-[70px] inline-block" title={it.material || 'SS400'}>
+                            <span className="px-2.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[11px] truncate max-w-[80px] inline-block" title={it.material || 'SS400'}>
                               {it.material || 'SS400'}
                             </span>
                           </td>
                           <td className="py-2 px-2 text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center gap-1.5 justify-center max-w-[170px] mx-auto">
+                            <div className="flex items-center gap-2 justify-center max-w-[185px] mx-auto">
                               <div className="relative inline-flex items-center shrink-0">
                                 <select
                                   value={it.category || 'MACHINING'}
@@ -1268,9 +1270,9 @@ export default function MasterDataManagerPage() {
                             </div>
                           </td>
                           {isSelected ? (
-                            <td className="py-1 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                              <div className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.5 shadow-2xs ring-2 ring-blue-100 justify-end">
-                                <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                            <td className="py-1 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.5 shadow-2xs ring-2 ring-blue-100 justify-end w-full max-w-[155px]">
+                                <span className="text-slate-400 font-mono text-[11px] shrink-0">₩</span>
                                 <input
                                   type="text"
                                   value={
@@ -1279,8 +1281,9 @@ export default function MasterDataManagerPage() {
                                       : ''
                                   }
                                   placeholder="0"
+                                  maxLength={15}
                                   onChange={(e) => handleInlinePriceChange(it.id, e.target.value)}
-                                  className="w-20 text-right font-mono font-bold text-xs text-blue-700 outline-none bg-transparent"
+                                  className="w-full text-right font-mono font-bold text-xs text-blue-700 outline-none bg-transparent"
                                 />
                                 {modifiedItems[it.id] !== undefined && (
                                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="수정됨 (저장 대기)" />
@@ -1289,7 +1292,7 @@ export default function MasterDataManagerPage() {
                             </td>
                           ) : (
                             <td
-                              className="py-2 px-4 text-right font-mono font-bold text-blue-700 text-xs hover:bg-blue-50/50 cursor-pointer truncate"
+                              className="py-2 px-3 text-right font-mono font-bold text-blue-700 text-xs hover:bg-blue-50/50 cursor-pointer whitespace-nowrap"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleToggleSelect(it.id);
@@ -1463,10 +1466,14 @@ export default function MasterDataManagerPage() {
                   <div className="flex items-center gap-1 ml-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-0.5">
                     <input
                       type="text"
-                      value={bulkCustomPriceInput}
-                      onChange={(e) => setBulkCustomPriceInput(e.target.value.replace(/[^0-9]/g, ''))}
+                      value={bulkCustomPriceInput ? Number(bulkCustomPriceInput.replace(/[^0-9]/g, '')).toLocaleString() : ''}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^0-9]/g, '').slice(0, 11);
+                        setBulkCustomPriceInput(cleaned);
+                      }}
+                      maxLength={15}
                       placeholder="단가직접입력"
-                      className="w-20 text-[11px] font-mono font-bold text-white bg-transparent outline-none placeholder:text-slate-500 text-right"
+                      className="w-24 text-[11px] font-mono font-bold text-white bg-transparent outline-none placeholder:text-slate-500 text-right"
                     />
                     <span className="text-[10px] text-slate-400">원</span>
                     <button
@@ -2264,14 +2271,21 @@ export default function MasterDataManagerPage() {
               </div>
 
               <div>
-                <label className="font-medium text-slate-700 block mb-1">공인 기준단가 (원)</label>
-                <input
-                  type="number"
-                  placeholder="예: 45000"
-                  value={newPrice}
-                  onChange={(e) => setNewPrice(Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-lg p-2 font-mono text-blue-700 font-bold"
-                />
+                <label className="font-medium text-slate-700 block mb-1">공인 기준단가 (원 - 최대 백억 원대)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xs">₩</span>
+                  <input
+                    type="text"
+                    placeholder="예: 45,000 (최대 백억 원 단위)"
+                    value={newPrice > 0 ? newPrice.toLocaleString() : ''}
+                    maxLength={15}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/[^0-9]/g, '').slice(0, 11);
+                      setNewPrice(parseInt(cleaned, 10) || 0);
+                    }}
+                    className="w-full border border-slate-200 rounded-lg p-2 pl-7 font-mono text-blue-700 font-bold text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-200">
