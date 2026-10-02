@@ -54,18 +54,16 @@ export async function middleware(request: NextRequest) {
       const body = await request.text();
 
       // Read API key and URL from environment
-      const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY || '48632c34-0fd1-4b53-b448-b8162e19b925';
-      let apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
-      if (!apiUrl || apiUrl.includes('tunneling-service.onrender.com')) {
-        apiUrl = 'http://localhost:8080';
-      }
+      const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
+      const apiUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080';
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
-        'X-Api-Key': apiKey,
-        'X-EGDesk-Project-Id': process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID || '8dd35536-8cbb-4e1c-bb65-b35f2920cb03',
-        'X-EGDesk-Env': 'development',
       };
+
+      if (apiKey) {
+        headers['X-Api-Key'] = apiKey;
+      }
 
       // Forward to EGDesk MCP server
       const response = await fetch(`${apiUrl}/user-data/tools/call`, {

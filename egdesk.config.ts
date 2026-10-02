@@ -1,6 +1,6 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-10-02T13:47:33.996Z
+ * Generated at: 2026-10-02T20:47:25.186Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
@@ -26,14 +26,14 @@ export const TABLES = {
     name: 'cad_rag_chunks',
     displayName: 'CAD 도면 시맨틱 RAG 청크 대장',
     description: 'LangChain 청킹 기반 CAD 도면 표제란, BOM 부품, 시방서, 가공특성 지식 벡터 저장소',
-    rowCount: 13,
+    rowCount: 26,
     columnCount: 13,
     columns: ['id', '_version', 'chunk_id', 'case_id', 'company_name', 'drawing_no', 'chunk_type', 'chunk_title', 'chunk_text', 'parent_chunk_id', 'metadata_json', 'embedding_json', 'created_at']
   } as TableDefinition,
   table2: {
     name: 'cad_drawing_patterns',
     displayName: 'CAD 도면 AI 교육 패턴 대장',
-    rowCount: 2,
+    rowCount: 3,
     columnCount: 22,
     columns: ['id', '_version', 'company_id', 'company_name', 'pattern_name', 'pattern_type', 'source_case_id', 'source_drawing_no', 'title_block_layout_json', 'bom_layout_json', 'raw_sample_texts_json', 'sample_summary_text', 'approval_count', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,
@@ -131,7 +131,7 @@ export const TABLES = {
   table16: {
     name: 'user_activity_logs',
     displayName: '사용자 감사 활동 로그',
-    rowCount: 477,
+    rowCount: 478,
     columnCount: 20,
     columns: ['id', '_version', 'user_id', 'user_name', 'user_login_id', 'user_role', 'activity_type', 'quotation_case_id', 'case_name', 'details', 'ip_address', 'created_at', 'tenant_id', 'uuid', 'updated_at', 'updated_by', 'deleted_at', 'deleted_by', 'restored_at', 'restored_by']
   } as TableDefinition,

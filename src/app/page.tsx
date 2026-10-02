@@ -197,7 +197,7 @@ export default function HomePage() {
     el.style.opacity = '1';
     updateCursorTooltipPos(e.clientX, e.clientY);
 
-    // 💡 1초 후에 자동으로 사라지게 처리
+    // 💡 2초 후에 자동으로 사라지게 처리
     cursorTooltipTimerRef.current = setTimeout(() => {
       if (cursorTooltipRef.current) {
         cursorTooltipRef.current.style.opacity = '0';
@@ -208,7 +208,7 @@ export default function HomePage() {
         }, 200);
       }
       cursorTooltipTimerRef.current = null;
-    }, 1000);
+    }, 2000);
   }, [updateCursorTooltipPos]);
 
   const handleRowMouseMove = useCallback((e: React.MouseEvent) => {
