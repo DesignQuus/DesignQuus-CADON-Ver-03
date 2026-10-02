@@ -26,7 +26,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'MACHINING',
     label: '가공품',
-    subDetail: '절삭·선반·밀링',
+    subDetail: '샤프트·롤러·블록',
     fullLabel: '기계 가공품 (절삭/선반/밀링)',
     badgeClass: 'bg-blue-100 text-blue-800 border-blue-300',
     borderClass: 'border-blue-300',
@@ -41,7 +41,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'SHEET_METAL',
     label: '판금/제관',
-    subDetail: '레이저·절곡·용접',
+    subDetail: '브라켓·커버·베이스',
     fullLabel: '판금 / 제관품 (레이저/절곡/용접)',
     badgeClass: 'bg-cyan-100 text-cyan-800 border-cyan-300',
     borderClass: 'border-cyan-300',
@@ -56,7 +56,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'INJECTION',
     label: '사출/성형',
-    subDetail: '플라스틱·압출',
+    subDetail: '사출품·엔프라·압출',
     fullLabel: '사출 / 성형품 (플라스틱/고무/압출)',
     badgeClass: 'bg-pink-100 text-pink-800 border-pink-300',
     borderClass: 'border-pink-300',
@@ -101,7 +101,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'ELECTRICAL',
     label: '전장/공압',
-    subDetail: '모터·실린더·PLC',
+    subDetail: '모터·실린더·센서',
     fullLabel: '전장 / 공압 / 제어품 (모터/실린더/센서/PLC)',
     badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
     borderClass: 'border-amber-300',
@@ -116,7 +116,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'CASTING',
     label: '주조품',
-    subDetail: '형상주물·단조',
+    subDetail: '하우징·주물베이스',
     fullLabel: '주조 / 주물 / 단조품 (Casting / Forging)',
     badgeClass: 'bg-orange-100 text-orange-800 border-orange-300',
     borderClass: 'border-orange-300',
@@ -131,7 +131,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'IMPORTED',
     label: '해외수입',
-    subDetail: '외산 직수입',
+    subDetail: '외산품·직수입자재',
     fullLabel: '해외 직수입품 (미스미 일본/독일/미국 외산)',
     badgeClass: 'bg-violet-100 text-violet-800 border-violet-300',
     borderClass: 'border-violet-300',
@@ -146,7 +146,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'SUPPLIED',
     label: '고객사급',
-    subDetail: '사급 자재',
+    subDetail: '사급모터·센서류',
     fullLabel: '고객 지급품 (발주처 무상/유상 지급자재)',
     badgeClass: 'bg-slate-200 text-slate-800 border-slate-400',
     borderClass: 'border-slate-400',
@@ -161,7 +161,7 @@ export const PART_CATEGORIES: PartCategoryDef[] = [
   {
     id: 'ASSEMBLY',
     label: '조립품',
-    subDetail: '서브 모듈',
+    subDetail: '서브모듈·유닛조립',
     fullLabel: '조립품 / 모듈 (Sub-Assembly / Module)',
     badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-300',
     borderClass: 'border-indigo-300',

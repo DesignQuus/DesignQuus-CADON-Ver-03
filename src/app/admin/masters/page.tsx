@@ -1219,8 +1219,8 @@ export default function MasterDataManagerPage() {
                             {it.material || 'SS400'}
                           </td>
                           <td className="py-2 px-3 text-left" onClick={(e) => e.stopPropagation()}>
-                            <div className="relative inline-flex items-center group max-w-[215px]">
-                              {/* 시각 레이어 (대분류 볼드 컬러 + 공정 세부사항 미니멀 슬레이트 + 드롭다운 화살표) */}
+                            <div className="relative inline-flex items-center group max-w-[225px]">
+                              {/* 시각 레이어 (대분류 볼드 컬러 + 실무 대표 품목 미니멀 슬레이트 + 드롭다운 화살표) */}
                               <div className="flex items-center gap-1.5 py-0.5 px-1.5 rounded hover:bg-slate-100/80 transition-colors pointer-events-none">
                                 <span className={`text-xs font-bold whitespace-nowrap ${getPartCategoryTextClass(it.category)}`}>
                                   {getPartCategoryLabel(it.category)}
@@ -1257,7 +1257,7 @@ export default function MasterDataManagerPage() {
                                   ✨ 스마트피커 열기...
                                 </option>
                                 <option disabled className="text-slate-400 bg-slate-100 font-semibold text-[10px]">
-                                  ──────── 10대 분류 및 공정 세부사항 ────────
+                                  ──────── 10대 분류 및 실무 대표 품목 ────────
                                 </option>
                                 {PART_CATEGORIES.map(c => (
                                   <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
