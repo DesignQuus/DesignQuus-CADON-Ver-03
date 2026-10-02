@@ -6780,24 +6780,25 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
       {/* 🎓 도면 AI 패턴 학습 (Pattern Learning & Vector RAG) Modal - Claude Palette Edition */}
       {showPatternModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3 bg-stone-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 w-[98vw] max-w-[1760px] h-[93vh] max-h-[95vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
             {/* Header: Claude Signature Terracotta */}
-            <div className="p-5 bg-gradient-to-r from-[#D97757] via-[#CF6C4B] to-[#C25E3E] text-white flex items-center justify-between shrink-0 shadow-sm border-b border-[#B85435]">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/25 shadow-xs">
-                  <GraduationCap className="w-6 h-6 text-white" />
+            <div className="py-3 px-5 bg-gradient-to-r from-[#D97757] via-[#CF6C4B] to-[#C25E3E] text-white flex items-center justify-between shrink-0 shadow-sm border-b border-[#B85435]">
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/25 shadow-xs shrink-0">
+                  <GraduationCap className="w-5 h-5 text-white" />
                 </div>
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <h3 className="text-base font-bold text-white tracking-tight">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <h3 className="text-base font-bold text-white tracking-tight whitespace-nowrap">
                       도면 AI 패턴 학습 & 지식 베이스 등록
                     </h3>
-                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-white/20 text-white tracking-wider uppercase border border-white/25 font-mono">
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-white/20 text-white tracking-wider uppercase border border-white/25 font-mono whitespace-nowrap">
                       RAG Vector Engine
                     </span>
                   </div>
-                  <p className="text-xs text-stone-100/90 mt-0.5">
+                  <span className="hidden xl:inline-block text-white/40 text-xs">|</span>
+                  <p className="text-xs text-stone-100/90 whitespace-nowrap truncate hidden md:block">
                     현재 도면의 표제란 배치, 도곽 구조, BOM 헤더를 AI에게 교육하여 동일 서식 도면을 100% 자동 인식합니다.
                   </p>
                 </div>
@@ -6805,20 +6806,20 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               <button
                 type="button"
                 onClick={() => setShowPatternModal(false)}
-                className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer shrink-0 ml-3"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Content: Claude Warm Ivory Canvas */}
-            <div className="p-6 overflow-y-auto space-y-5 flex-1 bg-[#FAF8F5]">
+            <div className="p-5 overflow-y-auto space-y-4 flex-1 bg-[#FAF8F5]">
               {/* 5단계 분석 스튜디오 탭 네비게이터 */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-[#E8E2D9]">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1.5 border-b border-[#E8E2D9] shrink-0">
                 <button
                   type="button"
                   onClick={() => setActivePatternStep('ALL')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activePatternStep === 'ALL'
                       ? 'bg-stone-900 text-white shadow-xs'
                       : 'bg-white text-stone-600 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
@@ -6829,15 +6830,15 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 <button
                   type="button"
                   onClick={() => setActivePatternStep('STEP1')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activePatternStep === 'STEP1'
                       ? 'bg-[#D97757] text-white shadow-xs'
                       : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
                   }`}
                 >
-                  <span>1. 표제란 검증</span>
+                  <span className="whitespace-nowrap">1. 표제란 검증</span>
                   {dryRunData && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono whitespace-nowrap shrink-0">
                       {dryRunData.step1_titleBlock.qualityScore}점
                     </span>
                   )}
@@ -6845,15 +6846,15 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 <button
                   type="button"
                   onClick={() => setActivePatternStep('STEP2')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activePatternStep === 'STEP2'
                       ? 'bg-[#D97757] text-white shadow-xs'
                       : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
                   }`}
                 >
-                  <span>2. BOM 부품표</span>
+                  <span className="whitespace-nowrap">2. BOM 부품표</span>
                   {dryRunData?.step2_bomTable && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono whitespace-nowrap shrink-0">
                       {dryRunData.step2_bomTable.rowCount}건
                     </span>
                   )}
@@ -6861,15 +6862,15 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 <button
                   type="button"
                   onClick={() => setActivePatternStep('STEP3')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activePatternStep === 'STEP3'
                       ? 'bg-[#D97757] text-white shadow-xs'
                       : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
                   }`}
                 >
-                  <span>3. 특기시방·세트룰</span>
+                  <span className="whitespace-nowrap">3. 특기시방·세트룰</span>
                   {dryRunData?.step3_notesAndRules && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono whitespace-nowrap shrink-0">
                       {dryRunData.step3_notesAndRules.setMultiplier} SET
                     </span>
                   )}
@@ -6877,15 +6878,15 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 <button
                   type="button"
                   onClick={() => setActivePatternStep('STEP4')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activePatternStep === 'STEP4'
                       ? 'bg-[#D97757] text-white shadow-xs'
                       : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
                   }`}
                 >
-                  <span>4. 소재·재질매핑</span>
+                  <span className="whitespace-nowrap">4. 소재·재질매핑</span>
                   {dryRunData?.step4_stockAndMaterial && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono whitespace-nowrap shrink-0">
                       {dryRunData.step4_stockAndMaterial.sampleMaterials.length}종
                     </span>
                   )}
@@ -6893,15 +6894,15 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 <button
                   type="button"
                   onClick={() => setActivePatternStep('STEP5')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activePatternStep === 'STEP5'
                       ? 'bg-[#D97757] text-white shadow-xs'
                       : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
                   }`}
                 >
-                  <span>5. 공차·가공특성</span>
+                  <span className="whitespace-nowrap">5. 공차·가공특성</span>
                   {dryRunData?.step5_machiningFeatures && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono whitespace-nowrap shrink-0">
                       {dryRunData.step5_machiningFeatures.precisionTolerances.length}개
                     </span>
                   )}
@@ -6909,16 +6910,16 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 <button
                   type="button"
                   onClick={() => setActivePatternStep('RAG_STUDIO')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activePatternStep === 'RAG_STUDIO'
                       ? 'bg-[#D97757] text-white shadow-xs'
                       : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
                   }`}
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  <span>6. 랭체인 청킹 & RAG 검색</span>
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span className="whitespace-nowrap">6. 랭체인 청킹 & RAG 검색</span>
                   {ragChunks.length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono whitespace-nowrap shrink-0">
                       {ragChunks.length}청크
                     </span>
                   )}
