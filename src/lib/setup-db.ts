@@ -641,6 +641,27 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
     uniqueKeyColumns: ['id']
   },
   {
+    name: 'cad_drawing_patterns',
+    displayName: 'CAD 도면 AI 교육 패턴 대장',
+    description: '고객사별 표제란 및 BOM 테이블 레이아웃/텍스트 패턴 RAG 지식 베이스',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'company_id', type: 'TEXT' },
+      { name: 'company_name', type: 'TEXT' },
+      { name: 'pattern_name', type: 'TEXT', notNull: true },
+      { name: 'pattern_type', type: 'TEXT' },
+      { name: 'source_case_id', type: 'TEXT' },
+      { name: 'source_drawing_no', type: 'TEXT' },
+      { name: 'title_block_layout_json', type: 'TEXT' },
+      { name: 'bom_layout_json', type: 'TEXT' },
+      { name: 'raw_sample_texts_json', type: 'TEXT' },
+      { name: 'sample_summary_text', type: 'TEXT' },
+      { name: 'approval_count', type: 'INTEGER' },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
+  },
+  {
     name: 'user_activity_logs',
     displayName: '사용자 감사 활동 로그',
     description: '작업자별 로그인/견적수정/승인/파일업로드 이력',

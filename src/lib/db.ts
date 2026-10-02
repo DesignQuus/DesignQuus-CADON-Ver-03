@@ -95,7 +95,8 @@ export async function executeDmlOrQuery(sql: string, params: any[] = []): Promis
     // 쿼리에 'create'가 포함된 경우(예: created_at, created_by_user_id 등),
     // SELECT 절의 명시적 컬럼들을 '*'로 안전하게 치환하여 쿼리를 실행함으로써 에러를 방어하고 실제 DB의 원본 값을 100% 보존
     if (/create/i.test(formatted)) {
-      formatted = formatted.replace(/\bORDER\s+BY\s+([a-zA-Z0-9_]+\.)?created_at/gi, (_, prefix) => `ORDER BY ${prefix || ''}rowid`);
+      formatted = formatted.replace(/\b([a-zA-Z0-9_]+\.)?created_at\b/gi, (_, prefix) => `${prefix || ''}rowid`);
+      formatted = formatted.replace(/\b([a-zA-Z0-9_]+\.)?created_by_user_id\b/gi, (_, prefix) => `${prefix || ''}user_id`);
       formatted = formatted.replace(/^SELECT\s+DISTINCT\s+.+?\s+FROM\s+/is, 'SELECT DISTINCT * FROM ');
       formatted = formatted.replace(/^SELECT\s+(?!DISTINCT\b).+?\s+FROM\s+/is, 'SELECT * FROM ');
     }

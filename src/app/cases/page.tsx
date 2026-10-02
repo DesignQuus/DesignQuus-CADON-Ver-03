@@ -2227,10 +2227,10 @@ export default function CasesPage() {
                             {(() => {
                               const mgrInfo = uniqueManagers.find(m => m.id === c.created_by_user_id);
                               const managerDisplayName = c.created_by_name || mgrInfo?.name || (c.created_by_user_id === user?.userId ? user?.name : null) || '담당자 미지정';
+                              const theme = getManagerTheme(c.created_by_user_id, managerDisplayName);
                               const roleLabel = (c.created_by_user_id === user?.userId && user?.role)
                                 ? getRoleBadgeLabel(user.role)
                                 : (mgrInfo?.dept || theme.dept || '영업 실무');
-                              const theme = getManagerTheme(c.created_by_user_id, managerDisplayName);
                               const isFiltered = filterManager === c.created_by_user_id;
                               return (
                                 <button

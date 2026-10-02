@@ -9,6 +9,7 @@ import { callAiCaller } from '../../egdesk-helpers';
 import fs from 'fs';
 import path from 'path';
 import { getStorageSubdir } from './storage';
+import { findMatchingCadPattern } from './cad-pattern-learning';
 
 export interface AiCadAnalysisResult {
   projectName: string;
@@ -101,6 +102,8 @@ export async function analyzeCadCaseWithAi(caseId: string): Promise<AiCadAnalysi
   const partTitles = cadTexts.filter(t => /SHAFT|PLATE|ROLLER|COVER|PIN|FRAME|BODY|WASHER|FLANGE|KIT|CAP/i.test(t));
   const scalesAndRevs = cadTexts.filter(t => /SCALE|REV|PLOT\s*DATE/i.test(t));
 
+  const matchedRag = await findMatchingCadPattern(cadTexts, qc.case_name);
+
   const promptContext = {
     caseNo: qc.case_no,
     currentCaseName: qc.case_name,
@@ -119,7 +122,15 @@ export async function analyzeCadCaseWithAi(caseId: string): Promise<AiCadAnalysi
       scalesAndRevs: scalesAndRevs,
       manufacturingNotes: specNotes,
       detectedPartKeywordsSample: partTitles.slice(0, 40)
-    }
+    },
+    ragLearnedPattern: matchedRag.matched ? {
+      matchedPatternName: matchedRag.pattern?.pattern_name,
+      matchedCompany: matchedRag.pattern?.company_name,
+      similarityScore: matchedRag.similarityScore,
+      titleBlockLayout: matchedRag.pattern?.title_block_layout,
+      bomLayout: matchedRag.pattern?.bom_layout,
+      summary: matchedRag.pattern?.sample_summary_text
+    } : null
   };
 
   const systemInstruction = `당신은 대한민국 최고 수준의 2D CAD 도면 표제란 분석 및 기계가공/판금/제관 원가 견적 자동화 전문 AI(CADON-BOM AI)입니다.
@@ -127,9 +138,8 @@ export async function analyzeCadCaseWithAi(caseId: string): Promise<AiCadAnalysi
 
 [핵심 도면 및 회사 관계 규칙]:
 1. '세창' (세창인터내쇼날(주) / SECHANG INTERNATIONAL CO., LTD.)은 도면을 설계하고 CADON 시스템을 운영하여 견적을 산출·발행하는 '설계 및 견적 공급사 (자사 / 공급자)'입니다.
-2. '엠브이텍' (MVTECH)은 세창에 도면 부품 제작 및 가공 견적을 의뢰한 '견적의뢰 고객사 / 발주처 (거래처 / Customer)'입니다.
-따라서 본 견적 건의 고객사(발주처)는 '엠브이텍'으로 식별해야 합니다.
-
+2. 기학습된 고객사 패턴 또는 도면 내 발주처 텍스트를 분석하여 외부 의뢰 고객사(거래처 / Customer)를 정확히 판별하세요.
+${matchedRag.matched ? `\n[★ RAG 지식 베이스 - 기학습된 도면 골든 패턴 매칭 (유사도 ${Math.round(matchedRag.similarityScore * 100)}%)]:\n과거 교육된 '${matchedRag.pattern?.company_name}' 표준 양식('${matchedRag.pattern?.pattern_name}')이 검색되었습니다.\n- 표제란 필드 배치: ${JSON.stringify(matchedRag.pattern?.title_block_layout?.fields || [])}\n- BOM 테이블 헤더: ${JSON.stringify(matchedRag.pattern?.bom_layout?.headers || [])}\n- 기준 요약: ${matchedRag.pattern?.sample_summary_text}\n위 기학습된 검증 패턴을 최우선 기준으로 준용하여 표제란과 BOM을 판독하세요.\n` : ''}
 반드시 아래 JSON 스키마를 준수하여 순수 JSON만 반환해야 합니다:
 {
   "titleBlockAnalysis": {
