@@ -1261,11 +1261,15 @@ export default function MasterDataManagerPage() {
                                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                                     title={`클릭하여 부품 유형 변경 (현재: ${getPartCategoryLabel(it.category)}${subItem ? ` · ${subItem}` : ''})`}
                                   >
-                                    <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1">
-                                      ✨ 스마트피커 열기 (세부 대표품목 선택)...
+                                    <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1.5">
+                                      스마트피커 열기 (세부 대표품목 선택)...
                                     </option>
-                                    <option disabled className="text-slate-400 bg-slate-100 font-semibold text-[10px]">
-                                      ──────── 10대 분류 및 실무 대표 품목 ────────
+                                    <option
+                                      disabled
+                                      className="text-slate-600 bg-slate-100 font-bold text-[13px] text-center py-1.5"
+                                      style={{ textAlign: 'center', fontSize: '13px' }}
+                                    >
+                                      10대 분류 및 실무 대표 품목
                                     </option>
                                     {PART_CATEGORIES.map(c => (
                                       <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
@@ -1534,11 +1538,15 @@ export default function MasterDataManagerPage() {
                     className="bg-slate-900 border border-slate-600 rounded-lg px-2 py-0.5 text-xs text-white outline-none cursor-pointer font-medium"
                     title="선택된 품목들에 일괄 적용할 부품 유형 선택"
                   >
-                    <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold">
-                      ✨ 스마트피커 열기...
+                    <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1">
+                      스마트피커 열기...
                     </option>
-                    <option disabled className="text-slate-500">
-                      ────── 10대 분류 ──────
+                    <option
+                      disabled
+                      className="text-slate-400 bg-slate-800 font-bold text-[13px] text-center py-1"
+                      style={{ textAlign: 'center', fontSize: '13px' }}
+                    >
+                      10대 분류 및 실무 대표 품목
                     </option>
                     {PART_CATEGORIES.map(c => (
                       <option key={c.id} value={c.id}>
@@ -2237,7 +2245,7 @@ export default function MasterDataManagerPage() {
                     className="w-full border border-slate-200 rounded-lg p-2 text-xs"
                   >
                     <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold">
-                      ✨ 스마트피커 열기 (실무 대표 품목 검색/선택)...
+                      스마트피커 열기 (실무 대표 품목 검색/선택)...
                     </option>
                     <optgroup label="── 도면 기반 가공/제작품 ──">
                       <option value="MACHINING">기계 가공품 (Machining - 절삭/선반/밀링)</option>
