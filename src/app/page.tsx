@@ -1457,44 +1457,49 @@ export default function HomePage() {
                       }`}
                     >
                       {/* 0. No. 순번 */}
-                      <td className="py-3 px-4 text-center font-mono font-bold text-xs text-slate-400 group-hover:text-blue-600 transition-colors w-16">
+                      <td className="py-2.5 px-4 text-center font-mono font-bold text-xs text-slate-400 group-hover:text-blue-600 transition-colors w-16 whitespace-nowrap">
                         {String(globalIdx).padStart(2, '0')}
                       </td>
-                      {/* 1. 의뢰번호 / 명칭 */}
-                      <td className="py-3 px-4">
-                        <span className="font-mono text-[11px] text-slate-500 group-hover:text-blue-700 font-bold block transition-colors">{c.case_no}</span>
-                        <div className="mt-1 flex items-center gap-1.5 min-w-0">
-                          {c.primary_file_name?.toLowerCase().endsWith('.dwg') ? (
-                            <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
-                              DWG
-                            </span>
-                          ) : c.primary_file_name?.toLowerCase().endsWith('.dxf') ? (
-                            <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                              DXF
-                            </span>
-                          ) : null}
-                          <SmartTruncateTooltip
-                            text={
-                              c.primary_file_name
-                                ? (c.files_count && c.files_count > 1 ? `${c.primary_file_name} 외 ${c.files_count - 1}건` : c.primary_file_name)
-                                : (c.case_name || '도면 견적의뢰')
-                            }
-                            className={`font-bold text-xs ${
-                              isDeleted ? 'text-slate-500 line-through' : 'text-slate-800 group-hover:text-blue-700'
-                            }`}
-                            maxWidthClass="max-w-[280px] 2xl:max-w-[380px]"
-                            showCopy={true}
-                          />
+                      {/* 1. 의뢰번호 / 명칭 (1행 가로 통합 + SmartTruncateTooltip) */}
+                      <td className="py-2.5 px-4">
+                        <div className="flex items-center gap-2 min-w-0 whitespace-nowrap">
+                          <span className="font-mono text-xs text-slate-500 group-hover:text-blue-700 font-bold shrink-0 transition-colors">
+                            {c.case_no}
+                          </span>
+                          <span className="text-slate-300 shrink-0 font-light">|</span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {c.primary_file_name?.toLowerCase().endsWith('.dwg') ? (
+                              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                                DWG
+                              </span>
+                            ) : c.primary_file_name?.toLowerCase().endsWith('.dxf') ? (
+                              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                DXF
+                              </span>
+                            ) : null}
+                            <SmartTruncateTooltip
+                              text={
+                                c.primary_file_name
+                                  ? (c.files_count && c.files_count > 1 ? `${c.primary_file_name} 외 ${c.files_count - 1}건` : c.primary_file_name)
+                                  : (c.case_name || '도면 견적의뢰')
+                              }
+                              className={`font-bold text-xs ${
+                                isDeleted ? 'text-slate-500 line-through' : 'text-slate-800 group-hover:text-blue-700'
+                              }`}
+                              maxWidthClass="max-w-[200px] xl:max-w-[280px] 2xl:max-w-[380px]"
+                              showCopy={true}
+                            />
+                          </div>
                         </div>
                       </td>
 
                       {/* 2. 고객사 */}
-                      <td className="py-3 px-3.5 text-slate-700 font-medium">
+                      <td className="py-2.5 px-3.5 text-slate-700 font-medium whitespace-nowrap">
                         {companyDisplay}
                       </td>
 
                       {/* 3. 견적 담당자 */}
-                      <td className="py-3 px-3.5">
+                      <td className="py-2.5 px-3.5 whitespace-nowrap">
                         {isOwner ? (
                           <span className="inline-flex items-center gap-1.5 font-semibold text-slate-900 text-xs">
                             <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 flex items-center justify-center text-[10px] font-bold shrink-0">
@@ -1512,19 +1517,18 @@ export default function HomePage() {
                         )}
                       </td>
 
-                      {/* 4. 도면 구조 / BOM (다품일도) */}
-                      <td className="py-3 px-4">
+                      {/* 4. 도면 구조 / BOM (다품일도 1행 통합) */}
+                      <td className="py-2.5 px-4 whitespace-nowrap">
                         {c.drawings_count > 1 ? (
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-1.5">
-                              <span className="px-1.5 py-0.2 rounded font-bold text-[10px] bg-slate-100 text-slate-700 border border-slate-300 shrink-0">
-                                다품일도
-                              </span>
-                              <span className="font-bold text-slate-800 font-mono text-xs">
-                                {c.drawings_count}개 시트 분할
-                              </span>
-                            </div>
-                            <span className="text-[11px] text-slate-600 font-medium mt-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-1.5 py-0.2 rounded font-bold text-[10px] bg-slate-100 text-slate-700 border border-slate-300 shrink-0">
+                              다품일도
+                            </span>
+                            <span className="font-bold text-slate-800 font-mono text-xs">
+                              {c.drawings_count}시트
+                            </span>
+                            <span className="text-slate-300 text-xs font-light">·</span>
+                            <span className="text-xs text-slate-600 font-medium">
                               {c.bom_items_count > 0 ? (
                                 <span>{c.bom_items_count}품목 전개</span>
                               ) : (
@@ -1533,73 +1537,64 @@ export default function HomePage() {
                             </span>
                           </div>
                         ) : c.drawings_count === 1 ? (
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-1.5">
-                              <span className="px-1.5 py-0.2 rounded font-medium text-[10px] bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
-                                단품일도
-                              </span>
-                              <span className="font-bold text-slate-800 font-mono text-xs">
-                                1개 도곽
-                              </span>
-                            </div>
-                            <span className="text-[11px] text-slate-500 font-medium mt-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-1.5 py-0.2 rounded font-medium text-[10px] bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+                              단품일도
+                            </span>
+                            <span className="font-bold text-slate-800 font-mono text-xs">
+                              1시트
+                            </span>
+                            <span className="text-slate-300 text-xs font-light">·</span>
+                            <span className="text-xs text-slate-500 font-medium">
                               {c.bom_items_count}품목 전개
                             </span>
                           </div>
                         ) : (
-                          <div className="flex flex-col">
-                            <span className="inline-flex items-center gap-1 text-amber-700 font-bold text-[11px]">
-                              <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />
-                              도면 미첨부 (0매)
-                            </span>
-                            <span className="text-[10px] text-slate-400 mt-0.5">DWG/DXF 파일 등록 필요</span>
+                          <div className="flex items-center gap-1.5 text-amber-700 font-bold text-xs">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span>도면 미첨부 (0매)</span>
                           </div>
                         )}
                       </td>
 
                       {/* 5. 견적금액 */}
-                      <td className="py-3 px-3.5 text-right font-extrabold text-slate-900 font-mono">
+                      <td className="py-2.5 px-3.5 text-right font-extrabold text-slate-900 font-mono whitespace-nowrap">
                         {c.quote_total_amount
                           ? `₩${Number(c.quote_total_amount).toLocaleString()}`
                           : '-'}
                       </td>
 
-                      {/* 6. 파이프라인 진행 상태 (상단 5단계 파이프라인과 1:1 일치) */}
-                      <td className="py-3 px-3.5 text-center">
+                      {/* 6. 파이프라인 진행 상태 (1행 가로 뱃지형) */}
+                      <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
                         {isDeleted ? (
-                          <div className="flex flex-col items-center">
+                          <div className="flex items-center justify-center gap-1">
                             <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                               삭제보관
                             </span>
-                            <span className="text-[10px] text-rose-500 font-medium mt-0.5">
+                            <span className="text-[10px] text-rose-500 font-medium">
                               {typeof c.remaining_days === 'number'
-                                ? `D-${c.remaining_days}일 후 완전삭제`
-                                : '보관 만료 임박'}
+                                ? `(D-${c.remaining_days})`
+                                : '(만료 임박)'}
                             </span>
                           </div>
                         ) : isArchived ? (
-                          <div className="flex flex-col items-center">
+                          <div className="flex items-center justify-center gap-1">
                             <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
                               보관완료
                             </span>
-                            <span className="text-[10px] text-slate-500 font-medium mt-0.5">
-                              보관함 격리
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              (격리)
                             </span>
                           </div>
                         ) : c.quote_total_amount && Number(c.quote_total_amount) > 0 ? (
-                          <div className="relative group/status flex flex-col items-center">
+                          <div className="relative group/status flex items-center justify-center">
                             <Link
                               href="/quotes"
-                              className="flex flex-col items-center group cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-extrabold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition-colors cursor-pointer"
                             >
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-extrabold bg-emerald-50 group-hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition-colors">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                5/5 견적발행
-                              </span>
-                              <span className="text-[10px] text-emerald-600 font-bold mt-0.5 group-hover:underline flex items-center gap-0.5">
-                                <span>공식 견적서 채번</span>
-                                <ChevronRight className="w-2.5 h-2.5" />
-                              </span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              <span>5/5 견적발행 완료</span>
+                              <ChevronRight className="w-3 h-3 text-emerald-600" />
                             </Link>
 
                             {/* 💡 호버 안내 카드 */}
@@ -1620,19 +1615,15 @@ export default function HomePage() {
                             </div>
                           </div>
                         ) : c.bom_items_count > 0 ? (
-                          <div className="relative group/status flex flex-col items-center">
+                          <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/quotes/${c.id}/review`}
-                              className="flex flex-col items-center group cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs transition-colors cursor-pointer"
                             >
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 group-hover:bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs transition-colors">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                4/5 단가검토 대기
-                              </span>
-                              <span className="text-[10px] text-amber-700 font-semibold mt-0.5 group-hover:underline flex items-center gap-0.5">
-                                <span>단가 확정 필요 ({c.bom_items_count}건)</span>
-                                <ChevronRight className="w-2.5 h-2.5" />
-                              </span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                              <span>4/5 단가검토</span>
+                              <span className="text-[10.5px] font-semibold text-amber-700">({c.bom_items_count}건 대기)</span>
+                              <ChevronRight className="w-3 h-3 text-amber-600" />
                             </Link>
 
                             {/* 💡 마우스 호버 시 다음 단계 안내 카드 */}
@@ -1669,19 +1660,15 @@ export default function HomePage() {
                             </div>
                           </div>
                         ) : c.drawings_count > 0 ? (
-                          <div className="relative group/status flex flex-col items-center">
+                          <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/cases/${c.id}`}
-                              className="flex flex-col items-center group cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 shadow-2xs transition-colors cursor-pointer"
                             >
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-50 group-hover:bg-indigo-100 text-indigo-800 border border-indigo-200 shadow-2xs transition-colors">
-                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                                2/5 AI파싱
-                              </span>
-                              <span className="text-[10px] text-indigo-600 font-medium mt-0.5 group-hover:underline flex items-center gap-0.5">
-                                <span>도면 {c.drawings_count}매 추출</span>
-                                <ChevronRight className="w-2.5 h-2.5" />
-                              </span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                              <span>2/5 AI파싱</span>
+                              <span className="text-[10px] text-indigo-600 font-medium">({c.drawings_count}매)</span>
+                              <ChevronRight className="w-3 h-3 text-indigo-600" />
                             </Link>
 
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
@@ -1701,19 +1688,14 @@ export default function HomePage() {
                             </div>
                           </div>
                         ) : c.files_count && c.files_count > 0 ? (
-                          <div className="relative group/status flex flex-col items-center">
+                          <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/cases/${c.id}`}
-                              className="flex flex-col items-center group cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors cursor-pointer"
                             >
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 group-hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                1/5 도면접수
-                              </span>
-                              <span className="text-[10px] text-blue-600 font-medium mt-0.5 group-hover:underline flex items-center gap-0.5">
-                                <span>AI 분석 대기중</span>
-                                <ChevronRight className="w-2.5 h-2.5" />
-                              </span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                              <span>1/5 도면접수 대기</span>
+                              <ChevronRight className="w-3 h-3 text-blue-600" />
                             </Link>
 
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
@@ -1733,19 +1715,14 @@ export default function HomePage() {
                             </div>
                           </div>
                         ) : (
-                          <div className="relative group/status flex flex-col items-center">
+                          <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/cases/${c.id}?step=1`}
-                              className="flex flex-col items-center group cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors cursor-pointer"
                             >
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 group-hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                                사전접수 (도면대기)
-                              </span>
-                              <span className="text-[10px] text-amber-600 font-medium mt-0.5 group-hover:underline flex items-center gap-0.5">
-                                <span>도면 미첨부 상태</span>
-                                <ChevronRight className="w-2.5 h-2.5" />
-                              </span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                              <span>사전접수 (도면대기)</span>
+                              <ChevronRight className="w-3 h-3 text-amber-600" />
                             </Link>
 
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
@@ -1768,7 +1745,7 @@ export default function HomePage() {
                       </td>
 
                       {/* 7. 관리 / 이동 */}
-                      <td className="py-3 px-3.5 text-center">
+                      <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
                         {isDeleted ? (
                           <button
                             type="button"
