@@ -220,10 +220,11 @@ export async function processCadFilePipeline(
     'SUCCESS', pipelineResult.total_duration_ms, now
   );
 
-  // Fast indexing of text-like objects for full-text CAD search without DB locking
+  // Fast indexing of text-like objects for full-text CAD search in parallel background
   const textObjs = pipelineResult.text_objects || [];
   if (textObjs.length > 0) {
     const batchSize = 1000;
+    const insertPromises: Promise<any>[] = [];
     for (let b = 0; b < textObjs.length; b += batchSize) {
       const chunk = textObjs.slice(b, b + batchSize).map((o: any, idx: number) => ({
         id: `cad_obj_${parseRunId}_${b + idx + 1}`,
@@ -237,8 +238,9 @@ export async function processCadFilePipeline(
         geometry_data_json: JSON.stringify(o.geometry_data),
         created_at: now
       }));
-      await insertRows('cad_objects', chunk);
+      insertPromises.push(insertRows('cad_objects', chunk));
     }
+    Promise.all(insertPromises).catch((err) => console.warn('[cad-pipeline] cad_objects bulk insert warning:', err));
   }
 
   const structureResult = pipelineResult;

@@ -4,6 +4,9 @@ import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
 import { processCadFilePipeline } from '@/lib/cad-pipeline';
 
+// Concurrency mutex per case to prevent duplicate AutoCAD / Python pipeline runs
+const activePipelines = new Map<string, Promise<{ success: boolean; error?: string }>>();
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,6 +20,19 @@ export async function POST(
   const qc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
+  }
+
+  // If already running for this case, join and await the active run
+  if (activePipelines.has(id)) {
+    try {
+      const res = await activePipelines.get(id)!;
+      if (!res.success) {
+        return NextResponse.json({ error: res.error || 'CAD 분석 파이프라인 실행 중 오류 발생' }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, message: '분석이 성공적으로 완료되었습니다.', isSharedRun: true });
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message || '분석 실패' }, { status: 500 });
+    }
   }
 
   try {
@@ -46,7 +62,15 @@ export async function POST(
       return NextResponse.json({ error: '분석할 CAD (DWG 또는 DXF) 파일이 없습니다.' }, { status: 400 });
     }
 
-    const res = await processCadFilePipeline(id, targetFile.id, session.userId);
+    const pipelinePromise = processCadFilePipeline(id, targetFile.id, session.userId);
+    activePipelines.set(id, pipelinePromise);
+    let res: { success: boolean; error?: string };
+    try {
+      res = await pipelinePromise;
+    } finally {
+      activePipelines.delete(id);
+    }
+
     if (!res.success) {
       return NextResponse.json({ error: res.error || 'CAD 분석 파이프라인 실행 중 오류 발생' }, { status: 500 });
     }

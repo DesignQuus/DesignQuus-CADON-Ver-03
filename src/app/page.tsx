@@ -300,23 +300,21 @@ export default function HomePage() {
         if (!uploadRes.ok) {
           console.warn('파일 업로드 경고:', uploadData.error);
         } else if (uploadData?.file?.id) {
-          // CAD 도면(.dwg, .dxf)인 경우 AI 도면 분석 파이프라인(도곽 분할, 표제란 판독, 가상 BOM 전개) 즉시 실행!
+          // CAD 도면(.dwg, .dxf)인 경우 백그라운드에서 AI 도면 분석 파이프라인 트리거 (Non-blocking)
           const ext = selectedFile.name.slice(selectedFile.name.lastIndexOf('.')).toLowerCase();
           if (['.dwg', '.dxf'].includes(ext)) {
-            try {
-              await apiFetch(`/api/quotation-cases/${newCaseId}/analyze`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fileId: uploadData.file.id })
-              });
-            } catch (analyzeErr) {
-              console.warn('자동 도면 분석 경고:', analyzeErr);
-            }
+            apiFetch(`/api/quotation-cases/${newCaseId}/analyze`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fileId: uploadData.file.id })
+            }).catch((analyzeErr) => {
+              console.warn('자동 도면 분석 비동기 백그라운드 알림:', analyzeErr);
+            });
           }
         }
       }
 
-      // 3. 완료 후 해당 건 상세 페이지로 즉시 이동
+      // 3. 파일 업로드 완료 즉시 모달 닫고 워크벤치 상세 페이지로 1초 만에 전환!
       setIsUploadModalOpen(false);
       setIsSubmitting(false);
       window.location.href = `/cases/${newCaseId}`;
