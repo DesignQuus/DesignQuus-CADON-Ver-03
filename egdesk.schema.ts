@@ -87,7 +87,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 20,
-    "rowCount": 0
+    "rowCount": 251
   },
   "bom_areas": {
     "name": "bom_areas",
@@ -114,7 +114,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 18,
-    "rowCount": 74
+    "rowCount": 271
   },
   "cad_app_settings": {
     "name": "cad_app_settings",
@@ -136,6 +136,37 @@ export const TABLES = {
     ],
     "columnCount": 12,
     "rowCount": 0
+  },
+  "cad_drawing_patterns": {
+    "name": "cad_drawing_patterns",
+    "displayName": "CAD 도면 AI 교육 패턴 대장",
+    "description": "고객사별 표제란 및 BOM 테이블 레이아웃/텍스트 패턴 RAG 지식 베이스",
+    "columns": [
+      "id",
+      "_version",
+      "company_id",
+      "company_name",
+      "pattern_name",
+      "pattern_type",
+      "source_case_id",
+      "source_drawing_no",
+      "title_block_layout_json",
+      "bom_layout_json",
+      "raw_sample_texts_json",
+      "sample_summary_text",
+      "approval_count",
+      "created_at",
+      "tenant_id",
+      "uuid",
+      "updated_at",
+      "updated_by",
+      "deleted_at",
+      "deleted_by",
+      "restored_at",
+      "restored_by"
+    ],
+    "columnCount": 22,
+    "rowCount": 2
   },
   "cad_objects": {
     "name": "cad_objects",
@@ -163,7 +194,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 19,
-    "rowCount": 40002
+    "rowCount": 284591
   },
   "cad_parse_runs": {
     "name": "cad_parse_runs",
@@ -190,7 +221,36 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 18,
-    "rowCount": 2
+    "rowCount": 27
+  },
+  "cad_rag_chunks": {
+    "name": "cad_rag_chunks",
+    "displayName": "CAD 도면 시맨틱 RAG 청크 대장",
+    "description": "LangChain 청킹 기반 CAD 도면 표제란, BOM 부품, 시방서, 가공특성 지식 벡터 저장소",
+    "columns": [
+      "id",
+      "_version",
+      "case_id",
+      "company_name",
+      "drawing_no",
+      "chunk_type",
+      "chunk_title",
+      "chunk_text",
+      "parent_chunk_id",
+      "metadata_json",
+      "embedding_json",
+      "created_at",
+      "tenant_id",
+      "uuid",
+      "updated_at",
+      "updated_by",
+      "deleted_at",
+      "deleted_by",
+      "restored_at",
+      "restored_by"
+    ],
+    "columnCount": 20,
+    "rowCount": 0
   },
   "case_archives": {
     "name": "case_archives",
@@ -241,7 +301,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 15,
-    "rowCount": 1
+    "rowCount": 5
   },
   "drawing_relationships": {
     "name": "drawing_relationships",
@@ -266,7 +326,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 16,
-    "rowCount": 242
+    "rowCount": 1383
   },
   "drawings": {
     "name": "drawings",
@@ -303,7 +363,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 28,
-    "rowCount": 246
+    "rowCount": 1518
   },
   "dwg_conversion_runs": {
     "name": "dwg_conversion_runs",
@@ -339,7 +399,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 27,
-    "rowCount": 2
+    "rowCount": 30
   },
   "excel_templates": {
     "name": "excel_templates",
@@ -400,7 +460,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 23,
-    "rowCount": 0
+    "rowCount": 396
   },
   "flattened_bom_items": {
     "name": "flattened_bom_items",
@@ -430,7 +490,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 21,
-    "rowCount": 250
+    "rowCount": 1620
   },
   "golden_cases": {
     "name": "golden_cases",
@@ -495,7 +555,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 24,
-    "rowCount": 0
+    "rowCount": 4
   },
   "master_aliases": {
     "name": "master_aliases",
@@ -522,7 +582,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 18,
-    "rowCount": 0
+    "rowCount": 59
   },
   "master_candidates": {
     "name": "master_candidates",
@@ -553,7 +613,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 22,
-    "rowCount": 0
+    "rowCount": 1073
   },
   "material_rates": {
     "name": "material_rates",
@@ -579,7 +639,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 17,
-    "rowCount": 0
+    "rowCount": 13
   },
   "normalized_bom_items": {
     "name": "normalized_bom_items",
@@ -612,7 +672,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 24,
-    "rowCount": 0
+    "rowCount": 1620
   },
   "order_results": {
     "name": "order_results",
@@ -674,7 +734,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 23,
-    "rowCount": 0
+    "rowCount": 163
   },
   "part_fabrication_features": {
     "name": "part_fabrication_features",
@@ -713,7 +773,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 30,
-    "rowCount": 0
+    "rowCount": 163
   },
   "part_masters_v2": {
     "name": "part_masters_v2",
@@ -783,7 +843,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 29,
-    "rowCount": 0
+    "rowCount": 514
   },
   "price_masters": {
     "name": "price_masters",
@@ -811,7 +871,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 19,
-    "rowCount": 0
+    "rowCount": 4
   },
   "process_rates": {
     "name": "process_rates",
@@ -836,7 +896,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 16,
-    "rowCount": 0
+    "rowCount": 16
   },
   "product_masters": {
     "name": "product_masters",
@@ -864,7 +924,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 19,
-    "rowCount": 0
+    "rowCount": 59
   },
   "projects": {
     "name": "projects",
@@ -915,16 +975,10 @@ export const TABLES = {
       "deleted_at",
       "deleted_by",
       "restored_at",
-      "restored_by",
-      "lifecycle_status",
-      "trashed_at",
-      "trashed_by_user_id",
-      "archived_at",
-      "archive_reason",
-      "visibility"
+      "restored_by"
     ],
-    "columnCount": 26,
-    "rowCount": 2
+    "columnCount": 20,
+    "rowCount": 25
   },
   "quote_exports": {
     "name": "quote_exports",
@@ -953,7 +1007,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 20,
-    "rowCount": 0
+    "rowCount": 2
   },
   "quote_items": {
     "name": "quote_items",
@@ -990,7 +1044,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 28,
-    "rowCount": 0
+    "rowCount": 1
   },
   "quotes": {
     "name": "quotes",
@@ -1065,7 +1119,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 26,
-    "rowCount": 1244
+    "rowCount": 4243
   },
   "system_approval_settings": {
     "name": "system_approval_settings",
@@ -1137,7 +1191,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 13,
-    "rowCount": 1
+    "rowCount": 4
   },
   "uploaded_files": {
     "name": "uploaded_files",
@@ -1168,7 +1222,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 22,
-    "rowCount": 6
+    "rowCount": 58
   },
   "user_activity_logs": {
     "name": "user_activity_logs",
@@ -1197,7 +1251,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 20,
-    "rowCount": 49
+    "rowCount": 477
   },
   "user_approval_permissions": {
     "name": "user_approval_permissions",
@@ -1223,7 +1277,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 17,
-    "rowCount": 1
+    "rowCount": 5
   },
   "user_company_access": {
     "name": "user_company_access",
@@ -1246,7 +1300,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 14,
-    "rowCount": 4
+    "rowCount": 5
   },
   "users": {
     "name": "users",
@@ -1275,7 +1329,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 20,
-    "rowCount": 5
+    "rowCount": 4
   }
 } as const;
 

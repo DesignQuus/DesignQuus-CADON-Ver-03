@@ -11,6 +11,8 @@
     "test:all": "tsx scripts/test-cadon-system.ts"
   },
   "dependencies": {
+    "@langchain/core": "^1.2.14",
+    "@langchain/textsplitters": "^1.0.2",
     "@types/three": "^0.185.4",
     "bcryptjs": "^3.0.2",
     "jose": "^6.0.8",

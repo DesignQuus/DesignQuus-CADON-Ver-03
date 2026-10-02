@@ -662,6 +662,26 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
     uniqueKeyColumns: ['id']
   },
   {
+    name: 'cad_rag_chunks',
+    displayName: 'CAD 도면 시맨틱 RAG 청크 대장',
+    description: 'LangChain 청킹 기반 CAD 도면 표제란, BOM 부품, 시방서, 가공특성 지식 벡터 저장소',
+    columns: [
+      { name: 'id', type: 'INTEGER', notNull: true },
+      { name: 'chunk_id', type: 'TEXT' },
+      { name: 'case_id', type: 'TEXT' },
+      { name: 'company_name', type: 'TEXT' },
+      { name: 'drawing_no', type: 'TEXT' },
+      { name: 'chunk_type', type: 'TEXT' },
+      { name: 'chunk_title', type: 'TEXT' },
+      { name: 'chunk_text', type: 'TEXT' },
+      { name: 'parent_chunk_id', type: 'TEXT' },
+      { name: 'metadata_json', type: 'TEXT' },
+      { name: 'embedding_json', type: 'TEXT' },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['chunk_id']
+  },
+  {
     name: 'user_activity_logs',
     displayName: '사용자 감사 활동 로그',
     description: '작업자별 로그인/견적수정/승인/파일업로드 이력',

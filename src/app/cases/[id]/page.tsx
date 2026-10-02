@@ -465,7 +465,84 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const [dryRunLoading, setDryRunLoading] = useState(false);
   const [dryRunData, setDryRunData] = useState<any>(null);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
-  const [activePatternStep, setActivePatternStep] = useState<'ALL' | 'STEP1' | 'STEP2' | 'STEP3' | 'STEP4' | 'STEP5'>('ALL');
+  const [activePatternStep, setActivePatternStep] = useState<'ALL' | 'STEP1' | 'STEP2' | 'STEP3' | 'STEP4' | 'STEP5' | 'RAG_STUDIO'>('ALL');
+
+  // 🧩 랭체인 시맨틱 청킹 & RAG 지식 검색 States
+  const [ragChunks, setRagChunks] = useState<any[]>([]);
+  const [loadingRagChunks, setLoadingRagChunks] = useState(false);
+  const [generatingChunks, setGeneratingChunks] = useState(false);
+  const [ragSearchQuery, setRagSearchQuery] = useState('');
+  const [ragSearching, setRagSearching] = useState(false);
+  const [ragSearchResults, setRagSearchResults] = useState<any[]>([]);
+  const [selectedChunkTypeFilter, setSelectedChunkTypeFilter] = useState<string>('ALL');
+
+  const fetchRagChunks = async () => {
+    if (!id) return;
+    setLoadingRagChunks(true);
+    try {
+      const res = await apiFetch(`/api/patterns/chunks?caseId=${id}`);
+      const json = await res.json();
+      if (res.ok && json.chunks) {
+        setRagChunks(json.chunks);
+      }
+    } catch (err) {
+      console.error('Failed to fetch RAG chunks:', err);
+    } finally {
+      setLoadingRagChunks(false);
+    }
+  };
+
+  const handleGenerateAndSaveChunks = async () => {
+    if (!id) return;
+    setGeneratingChunks(true);
+    try {
+      const res = await apiFetch('/api/patterns/chunks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caseId: id, autoSave: true })
+      });
+      const json = await res.json();
+      if (res.ok && json.chunks) {
+        setRagChunks(json.chunks);
+        showToast(`✓ 도면 랭체인 시맨틱 청킹 완료 (${json.savedCount || json.chunks.length}개 청크 저장)`, 'success');
+      } else {
+        alert(json.error || '청크 생성 실패');
+      }
+    } catch (err: any) {
+      alert('청킹 생성 중 통신 오류: ' + err.message);
+    } finally {
+      setGeneratingChunks(false);
+    }
+  };
+
+  const handleRagSearch = async (queryText?: string) => {
+    const q = (queryText !== undefined ? queryText : ragSearchQuery).trim();
+    if (!q) {
+      setRagSearchResults([]);
+      return;
+    }
+    setRagSearching(true);
+    try {
+      const res = await apiFetch('/api/patterns/rag-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: q,
+          caseId: id,
+          chunkType: selectedChunkTypeFilter !== 'ALL' ? selectedChunkTypeFilter : undefined,
+          limit: 10
+        })
+      });
+      const json = await res.json();
+      if (res.ok && json.results) {
+        setRagSearchResults(json.results);
+      }
+    } catch (err) {
+      console.error('RAG search error:', err);
+    } finally {
+      setRagSearching(false);
+    }
+  };
 
   const runTitleBlockDryRun = async () => {
     if (!id) return;
@@ -496,6 +573,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
     setShowPatternModal(true);
     fetchPatterns();
     runTitleBlockDryRun();
+    fetchRagChunks();
   };
 
   const handleLearnPattern = async () => {
@@ -518,6 +596,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         const compName = data?.case?.company_name || '해당 업체';
         showToast(`✓ [${compName}] 도면 표제란 및 BOM 양식이 AI 지식 베이스로 학습되었습니다.`, 'success');
         await fetchPatterns();
+        handleGenerateAndSaveChunks();
       } else {
         alert(json.error || '패턴 학습 실패');
       }
@@ -6827,6 +6906,23 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                     </span>
                   )}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePatternStep('RAG_STUDIO')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                    activePatternStep === 'RAG_STUDIO'
+                      ? 'bg-[#D97757] text-white shadow-xs'
+                      : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>6. 랭체인 청킹 & RAG 검색</span>
+                  {ragChunks.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                      {ragChunks.length}청크
+                    </span>
+                  )}
+                </button>
               </div>
 
               {/* 1. 표제란 & 도곽 사전 검증 (Dry-run) 리포트 카드 */}
@@ -7226,6 +7322,327 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                         ))}
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 6. 랭체인(LangChain) 도메인 시맨틱 청킹 & 하이브리드 RAG 스튜디오 */}
+              {(activePatternStep === 'ALL' || activePatternStep === 'RAG_STUDIO') && (
+                <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-5 h-5 rounded-md bg-[#D97757] text-white flex items-center justify-center font-bold text-[11px] shadow-2xs">
+                        6
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-stone-900 flex items-center space-x-1.5">
+                          <span>6단계: 랭체인(LangChain) 도메인 시맨틱 청킹 & 하이브리드 RAG 스튜디오</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FAF3EE] text-[#D97757] border border-[#E8D0C5]">
+                            RecursiveTextSplitter + Dense Vector + BM25
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-stone-500 mt-0.5">
+                          도면의 5대 분석 리포트를 부모-자식(Parent-Document) 계층형 청크로 구조화하고 64차원 벡터 및 한/영 제조 유사어 엔진으로 검색합니다.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={handleGenerateAndSaveChunks}
+                        disabled={generatingChunks}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#D97757] text-white hover:bg-[#C25E3E] transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                      >
+                        {generatingChunks ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>시맨틱 청킹 생성 중...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            <span>⚡ 랭체인 청킹 생성 & RAG 등록</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={fetchRagChunks}
+                        disabled={loadingRagChunks}
+                        className="p-1.5 rounded-lg border border-[#E8E2D9] text-stone-600 hover:bg-[#FAF3EE] transition-all cursor-pointer"
+                        title="청크 목록 새로고침"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingRagChunks ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 4대 계층 청크 요약 카드 */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-100 flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-blue-900">1. 표제란(모도면)</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 font-mono">
+                          Parent
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-baseline justify-between">
+                        <span className="text-[10px] text-blue-700">TITLE_BLOCK</span>
+                        <span className="text-base font-extrabold text-blue-950 font-mono">
+                          {ragChunks.filter(c => c.chunkType === 'TITLE_BLOCK').length}개
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100 flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-emerald-900">2. BOM 단품부품</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 font-mono">
+                          Child
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-baseline justify-between">
+                        <span className="text-[10px] text-emerald-700">BOM_PART</span>
+                        <span className="text-base font-extrabold text-emerald-950 font-mono">
+                          {ragChunks.filter(c => c.chunkType === 'BOM_PART').length}개
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-100 flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-purple-900">3. 가공시방·룰</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 font-mono">
+                          Child
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-baseline justify-between">
+                        <span className="text-[10px] text-purple-700">NOTES_RULE</span>
+                        <span className="text-base font-extrabold text-purple-950 font-mono">
+                          {ragChunks.filter(c => c.chunkType === 'NOTES_RULE').length}개
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-100 flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-amber-900">4. 정밀가공특성</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 font-mono">
+                          Child
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-baseline justify-between">
+                        <span className="text-[10px] text-amber-700">MACHINING_FEATURE</span>
+                        <span className="text-base font-extrabold text-amber-950 font-mono">
+                          {ragChunks.filter(c => c.chunkType === 'MACHINING_FEATURE').length}개
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 대화형 하이브리드 RAG 검색 인터페이스 */}
+                  <div className="p-4 rounded-xl bg-[#FAF8F5] border border-[#E8E2D9] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-1.5">
+                        <Search className="w-4 h-4 text-[#D97757]" />
+                        <span className="text-xs font-bold text-stone-900">
+                          실시간 하이브리드 RAG 지식 검색기
+                        </span>
+                        <span className="text-[10px] text-stone-500 font-normal">
+                          (키워드 어휘확장 40% + 벡터 코사인 유사도 60%)
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center space-x-1">
+                        <span className="text-[11px] text-stone-500">필터:</span>
+                        <select
+                          value={selectedChunkTypeFilter}
+                          onChange={(e) => {
+                            setSelectedChunkTypeFilter(e.target.value);
+                            if (ragSearchQuery) handleRagSearch();
+                          }}
+                          className="text-[11px] px-2 py-1 rounded-md border border-[#D5CDC2] bg-white text-stone-800"
+                        >
+                          <option value="ALL">전체 청크 유형</option>
+                          <option value="TITLE_BLOCK">표제란 (TITLE_BLOCK)</option>
+                          <option value="BOM_PART">BOM 부품 (BOM_PART)</option>
+                          <option value="NOTES_RULE">가공시방/룰 (NOTES_RULE)</option>
+                          <option value="MACHINING_FEATURE">가공특성 (MACHINING_FEATURE)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* 검색 인풋 & 버튼 */}
+                    <div className="flex items-center space-x-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={ragSearchQuery}
+                          onChange={(e) => setRagSearchQuery(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRagSearch();
+                          }}
+                          placeholder="검색할 도면 부품명, 재질, 공차, 가공규격 입력 (예: 샤프트, S45C 크롬도금, 13 SET, Ø28 f6)"
+                          className="w-full text-xs pl-8 pr-3 py-2 rounded-lg border border-[#D5CDC2] focus:outline-hidden focus:ring-2 focus:ring-[#D97757]/20 focus:border-[#D97757] bg-white text-stone-900"
+                        />
+                        <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRagSearch()}
+                        disabled={ragSearching}
+                        className="px-4 py-2 rounded-lg text-xs font-bold bg-stone-900 text-white hover:bg-stone-800 transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                      >
+                        {ragSearching ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Search className="w-3.5 h-3.5" />
+                        )}
+                        <span>RAG 검색</span>
+                      </button>
+                    </div>
+
+                    {/* 추천 키워드 칩 */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-[10px] font-semibold text-stone-400">빠른 테스트 키워드:</span>
+                      {['샤프트', 'S45C 크롬도금', '13 SET', 'Ø28 f6', 'END CAP', 'AL6061-T6'].map((keyword) => (
+                        <button
+                          key={keyword}
+                          type="button"
+                          onClick={() => {
+                            setRagSearchQuery(keyword);
+                            handleRagSearch(keyword);
+                          }}
+                          className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE] hover:text-[#D97757] hover:border-[#D97757] transition-all cursor-pointer"
+                        >
+                          {keyword}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* 검색 결과 목록 */}
+                    {ragSearchResults.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-[#E8E2D9] space-y-2.5 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-stone-800">
+                            🎯 RAG 검색 결과 ({ragSearchResults.length}건 매칭)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setRagSearchResults([])}
+                            className="text-[10px] text-stone-400 hover:text-stone-600 underline cursor-pointer"
+                          >
+                            결과 닫기
+                          </button>
+                        </div>
+
+                        <div className="space-y-2">
+                          {ragSearchResults.map((res: any, idx: number) => (
+                            <div
+                              key={idx}
+                              className="p-3 rounded-lg bg-white border border-[#E8E2D9] hover:border-[#D97757] transition-all shadow-2xs space-y-2"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                                    res.chunk.chunkType === 'TITLE_BLOCK'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : res.chunk.chunkType === 'BOM_PART'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : res.chunk.chunkType === 'NOTES_RULE'
+                                      ? 'bg-purple-100 text-purple-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {res.chunk.chunkType}
+                                  </span>
+                                  <h5 className="text-xs font-bold text-stone-900">
+                                    {res.chunk.chunkTitle}
+                                  </h5>
+                                </div>
+
+                                {/* 종합 점수 뱃지 */}
+                                <div className="flex items-center space-x-1.5">
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#D97757] text-white font-mono shadow-2xs">
+                                    하이브리드 {Math.round(res.hybridScore * 100)}%
+                                  </span>
+                                  <span className="text-[10px] text-stone-400 font-mono">
+                                    (벡터 {Math.round(res.vectorScore * 100)}% / 어휘 {Math.round(res.keywordScore * 100)}%)
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* 모도면 상속 정보 표기 */}
+                              {res.parentChunk && (
+                                <div className="text-[10px] font-semibold text-blue-800 bg-blue-50/80 px-2 py-1 rounded border border-blue-100 flex items-center space-x-1">
+                                  <span>🔗 소속 모도면(Parent):</span>
+                                  <span className="font-bold">{res.parentChunk.chunkTitle}</span>
+                                </div>
+                              )}
+
+                              {/* 청크 내용 프리뷰 */}
+                              <pre className="text-[11px] bg-[#FAF8F5] p-2.5 rounded-md border border-[#E8E2D9] text-stone-700 font-sans whitespace-pre-wrap leading-relaxed">
+                                {res.chunk.chunkContent}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 등록된 청크 전체 트리 뷰어 (탐색기) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-900 flex items-center space-x-1.5">
+                        <Database className="w-3.5 h-3.5 text-[#D97757]" />
+                        <span>영구 저장된 도면 지식 청크 대장 ({ragChunks.length}건)</span>
+                      </span>
+                      {ragChunks.length === 0 && (
+                        <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          아직 청크가 생성되지 않았습니다. 상단의 '⚡ 랭체인 청킹 생성 & RAG 등록' 버튼을 눌러주세요.
+                        </span>
+                      )}
+                    </div>
+
+                    {ragChunks.length > 0 && (
+                      <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                        {ragChunks.map((c: any) => (
+                          <div
+                            key={c.id}
+                            className="p-2.5 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9] hover:bg-white transition-all flex items-start justify-between text-xs"
+                          >
+                            <div className="space-y-1 flex-1">
+                              <div className="flex items-center space-x-2">
+                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold font-mono ${
+                                  c.chunkType === 'TITLE_BLOCK'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : c.chunkType === 'BOM_PART'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : c.chunkType === 'NOTES_RULE'
+                                    ? 'bg-purple-100 text-purple-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                  {c.chunkType}
+                                </span>
+                                <span className="font-bold text-stone-800 text-[11px]">{c.chunkTitle}</span>
+                                {c.parentChunkId && (
+                                  <span className="text-[10px] text-stone-400 font-mono">
+                                    [Parent: {c.parentChunkId.slice(0, 16)}...]
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-stone-600 line-clamp-1">
+                                {c.chunkContent.replace(/\n/g, ' · ')}
+                              </p>
+                            </div>
+                            <span className="text-[10px] text-stone-400 font-mono ml-2 shrink-0">
+                              {c.chunkContent.length}자
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
