@@ -2606,7 +2606,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             <button
               type="button"
               onClick={handleOpenPatternModal}
-              className="inline-flex items-center space-x-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 hover:from-amber-700 hover:via-orange-700 hover:to-rose-700 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95"
+              className="inline-flex items-center space-x-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-[#D97757] hover:bg-[#C25E3E] text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-[#C25E3E]/40"
               title="현재 도면의 표제란 및 BOM 양식을 학습하여 동일 서식의 도면을 100% 자동 인식하도록 AI 지식 베이스(RAG)에 등록합니다"
             >
               <GraduationCap className="w-3.5 h-3.5" />
@@ -6669,14 +6669,14 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {/* 🎓 도면 AI 패턴 학습 (Pattern Learning & Vector RAG) Modal */}
+      {/* 🎓 도면 AI 패턴 학습 (Pattern Learning & Vector RAG) Modal - Claude Palette Edition */}
       {showPatternModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
-            {/* Header */}
-            <div className="p-5 bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 text-white flex items-center justify-between shrink-0 shadow-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
+            {/* Header: Claude Signature Terracotta */}
+            <div className="p-5 bg-gradient-to-r from-[#D97757] via-[#CF6C4B] to-[#C25E3E] text-white flex items-center justify-between shrink-0 shadow-sm border-b border-[#B85435]">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-xs">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/25 shadow-xs">
                   <GraduationCap className="w-6 h-6 text-white" />
                 </div>
                 <div>
@@ -6684,11 +6684,11 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                     <h3 className="text-base font-bold text-white tracking-tight">
                       도면 AI 패턴 학습 & 지식 베이스 등록
                     </h3>
-                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-white/25 text-white tracking-wider uppercase border border-white/20">
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-white/20 text-white tracking-wider uppercase border border-white/25 font-mono">
                       RAG Vector Engine
                     </span>
                   </div>
-                  <p className="text-xs text-amber-100 mt-0.5">
+                  <p className="text-xs text-stone-100/90 mt-0.5">
                     현재 도면의 표제란 배치, 도곽 구조, BOM 헤더를 AI에게 교육하여 동일 서식 도면을 100% 자동 인식합니다.
                   </p>
                 </div>
@@ -6702,37 +6702,37 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               </button>
             </div>
 
-            {/* Modal Content */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
+            {/* Modal Content: Claude Warm Ivory Canvas */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1 bg-[#FAF8F5]">
               {/* 1. 현재 도면 분석 정보 요약 카드 */}
-              <div className="bg-white p-5 rounded-xl border border-amber-200/80 shadow-xs space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
-                    <FileText className="w-4 h-4 text-amber-600" />
+              <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
+                  <span className="text-xs font-bold text-stone-800 flex items-center space-x-1.5">
+                    <FileText className="w-4 h-4 text-[#D97757]" />
                     <span>현재 학습 대상 도면 정보</span>
                   </span>
-                  <span className="text-[11px] font-mono font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-mono font-medium text-stone-500 bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E8E2D9]">
                     의뢰번호: {data?.case?.case_no || id}
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/70">
-                    <span className="text-[11px] text-slate-500 block">인식 고객사</span>
-                    <strong className="text-slate-900 text-sm flex items-center space-x-1 mt-0.5">
-                      <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                  <div className="p-3 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9]">
+                    <span className="text-[11px] text-stone-500 block">인식 고객사</span>
+                    <strong className="text-stone-900 text-sm flex items-center space-x-1.5 mt-0.5">
+                      <Building2 className="w-3.5 h-3.5 text-[#D97757]" />
                       <span>{data?.case?.company_name || '미지정'}</span>
                     </strong>
                   </div>
-                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/70">
-                    <span className="text-[11px] text-slate-500 block">도면 시트 수</span>
-                    <strong className="text-slate-900 text-sm flex items-center space-x-1 mt-0.5">
-                      <Layers className="w-3.5 h-3.5 text-amber-600" />
+                  <div className="p-3 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9]">
+                    <span className="text-[11px] text-stone-500 block">도면 시트 수</span>
+                    <strong className="text-stone-900 text-sm flex items-center space-x-1.5 mt-0.5">
+                      <Layers className="w-3.5 h-3.5 text-[#D97757]" />
                       <span>{drawings.length}개 시트</span>
                     </strong>
                   </div>
-                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/70">
-                    <span className="text-[11px] text-slate-500 block">학습 상태</span>
-                    <strong className="text-emerald-700 text-sm flex items-center space-x-1 mt-0.5">
+                  <div className="p-3 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9]">
+                    <span className="text-[11px] text-stone-500 block">학습 상태</span>
+                    <strong className="text-emerald-700 text-sm flex items-center space-x-1.5 mt-0.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                       <span>추출 준비 완료</span>
                     </strong>
@@ -6741,15 +6741,15 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               </div>
 
               {/* 2. 신규 패턴 학습 입력 폼 */}
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
-                <h4 className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
-                  <Brain className="w-4 h-4 text-rose-600" />
+              <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-4">
+                <h4 className="text-xs font-bold text-stone-900 flex items-center space-x-1.5">
+                  <Brain className="w-4 h-4 text-[#D97757]" />
                   <span>새로운 도면 AI 지식 패턴으로 학습 및 등록</span>
                 </h4>
                 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
                       패턴 명칭 (고객사명 또는 도면 서식명)
                     </label>
                     <input
@@ -6757,54 +6757,54 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                       value={patternName}
                       onChange={(e) => setPatternName(e.target.value)}
                       placeholder="예: 엠브이텍 표준 조립도/가공도 표제란 & BOM 서식"
-                      className="w-full text-xs px-3 py-2.5 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 bg-white"
+                      className="w-full text-xs px-3 py-2.5 rounded-lg border border-[#D5CDC2] focus:outline-hidden focus:ring-2 focus:ring-[#D97757]/20 focus:border-[#D97757] bg-white text-stone-900"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    <label className="block text-xs font-semibold text-stone-700 mb-1.5">
                       학습 범위 선택
                     </label>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <label className={`flex items-center space-x-2 p-2.5 rounded-lg border cursor-pointer text-xs transition-all ${
                         patternType === 'ALL'
-                          ? 'border-amber-600 bg-amber-50/50 text-amber-950 font-bold'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                          ? 'border-[#D97757] bg-[#FAF3EE] text-stone-900 font-bold shadow-2xs'
+                          : 'border-[#E8E2D9] hover:bg-[#FAF8F5] text-stone-700'
                       }`}>
                         <input
                           type="radio"
                           name="patternType"
                           checked={patternType === 'ALL'}
                           onChange={() => setPatternType('ALL')}
-                          className="text-amber-600 focus:ring-amber-500"
+                          className="text-[#D97757] focus:ring-[#D97757] accent-[#D97757]"
                         />
                         <span>표제란 + BOM 통합 (추천)</span>
                       </label>
                       <label className={`flex items-center space-x-2 p-2.5 rounded-lg border cursor-pointer text-xs transition-all ${
                         patternType === 'TITLE_BLOCK'
-                          ? 'border-amber-600 bg-amber-50/50 text-amber-950 font-bold'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                          ? 'border-[#D97757] bg-[#FAF3EE] text-stone-900 font-bold shadow-2xs'
+                          : 'border-[#E8E2D9] hover:bg-[#FAF8F5] text-stone-700'
                       }`}>
                         <input
                           type="radio"
                           name="patternType"
                           checked={patternType === 'TITLE_BLOCK'}
                           onChange={() => setPatternType('TITLE_BLOCK')}
-                          className="text-amber-600 focus:ring-amber-500"
+                          className="text-[#D97757] focus:ring-[#D97757] accent-[#D97757]"
                         />
                         <span>표제란 서식만</span>
                       </label>
                       <label className={`flex items-center space-x-2 p-2.5 rounded-lg border cursor-pointer text-xs transition-all ${
                         patternType === 'BOM_TABLE'
-                          ? 'border-amber-600 bg-amber-50/50 text-amber-950 font-bold'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                          ? 'border-[#D97757] bg-[#FAF3EE] text-stone-900 font-bold shadow-2xs'
+                          : 'border-[#E8E2D9] hover:bg-[#FAF8F5] text-stone-700'
                       }`}>
                         <input
                           type="radio"
                           name="patternType"
                           checked={patternType === 'BOM_TABLE'}
                           onChange={() => setPatternType('BOM_TABLE')}
-                          className="text-amber-600 focus:ring-amber-500"
+                          className="text-[#D97757] focus:ring-[#D97757] accent-[#D97757]"
                         />
                         <span>BOM 부품표 서식만</span>
                       </label>
@@ -6815,7 +6815,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                     type="button"
                     onClick={handleLearnPattern}
                     disabled={learningPattern || !patternName.trim()}
-                    className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 hover:from-amber-700 hover:via-orange-700 hover:to-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                    className="w-full py-2.5 px-4 bg-[#D97757] hover:bg-[#C25E3E] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 active:scale-[0.99]"
                   >
                     {learningPattern ? (
                       <>
@@ -6833,17 +6833,17 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               </div>
 
               {/* 3. 기등록된 도면 AI 패턴 목록 (Knowledge Base) */}
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <h4 className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
-                    <Database className="w-4 h-4 text-indigo-600" />
+              <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2">
+                  <h4 className="text-xs font-bold text-stone-900 flex items-center space-x-1.5">
+                    <Database className="w-4 h-4 text-[#D97757]" />
                     <span>학습 완료된 도면 패턴 지식베이스 ({learnedPatterns.length}건)</span>
                   </h4>
                   <button
                     type="button"
                     onClick={fetchPatterns}
                     disabled={loadingPatterns}
-                    className="text-[11px] text-slate-500 hover:text-indigo-600 flex items-center space-x-1 cursor-pointer"
+                    className="text-[11px] text-stone-500 hover:text-[#D97757] flex items-center space-x-1 cursor-pointer transition-colors"
                   >
                     <RefreshCw className={`w-3 h-3 ${loadingPatterns ? 'animate-spin' : ''}`} />
                     <span>새로고침</span>
@@ -6851,11 +6851,11 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                 </div>
 
                 {loadingPatterns ? (
-                  <div className="py-8 text-center text-xs text-slate-400">
+                  <div className="py-8 text-center text-xs text-stone-400">
                     패턴 목록을 조회 중입니다...
                   </div>
                 ) : learnedPatterns.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-slate-400">
+                  <div className="py-8 text-center text-xs text-stone-400">
                     아직 등록된 도면 패턴이 없습니다. 위 폼에서 현재 도면의 양식을 첫 번째 AI 지식으로 학습시켜 보세요!
                   </div>
                 ) : (
@@ -6874,32 +6874,32 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                       return (
                         <div
                           key={pat.id}
-                          className="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-50 transition-colors flex items-start justify-between gap-3 text-xs"
+                          className="p-3.5 rounded-lg border border-[#E8E2D9] bg-[#FAF8F5] hover:bg-stone-100/70 transition-colors flex items-start justify-between gap-3 text-xs"
                         >
                           <div className="space-y-1.5 flex-1 min-w-0">
                             <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                              <span className="px-2 py-0.5 rounded-md font-bold text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              <span className="px-2 py-0.5 rounded-md font-bold text-[11px] bg-[#FAF3EE] text-[#D97757] border border-[#EED9CC]">
                                 {pat.company_name || '범용 도면'}
                               </span>
-                              <strong className="text-slate-900 font-semibold truncate">
+                              <strong className="text-stone-900 font-semibold truncate">
                                 {pat.pattern_name}
                               </strong>
-                              <span className="text-[10px] text-slate-400 font-mono">
+                              <span className="text-[10px] text-stone-400 font-mono">
                                 ({pat.pattern_type})
                               </span>
                             </div>
-                            <div className="flex items-center space-x-3 text-[11px] text-slate-600 flex-wrap gap-y-1">
+                            <div className="flex items-center space-x-3 text-[11px] text-stone-600 flex-wrap gap-y-1">
                               {fieldCount > 0 && (
-                                <span className="bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200/60 font-mono">
+                                <span className="bg-white text-stone-700 px-1.5 py-0.5 rounded border border-[#E8E2D9] font-mono">
                                   표제란 필드: {fieldCount}개 ({Object.keys(titleLayout.fields).join(', ')})
                                 </span>
                               )}
                               {bomColCount > 0 && (
-                                <span className="bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200/60 font-mono">
+                                <span className="bg-[#FAF3EE] text-stone-800 px-1.5 py-0.5 rounded border border-[#EED9CC] font-mono">
                                   BOM 컬럼: {bomColCount}개
                                 </span>
                               )}
-                              <span className="text-slate-400 text-[10px]">
+                              <span className="text-stone-400 text-[10px]">
                                 등록: {pat.created_at ? new Date(pat.created_at).toLocaleDateString('ko-KR') : '-'}
                               </span>
                             </div>
@@ -6908,7 +6908,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                             type="button"
                             onClick={() => handleDeletePattern(pat.id)}
                             disabled={deletingPatternId === pat.id}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-white transition-colors cursor-pointer shrink-0"
+                            className="p-1.5 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-white transition-colors cursor-pointer shrink-0"
                             title="패턴 삭제"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -6922,14 +6922,14 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between shrink-0">
-              <span className="text-xs text-slate-500">
+            <div className="p-4 bg-white border-t border-[#E8E2D9] flex items-center justify-between shrink-0">
+              <span className="text-xs text-stone-500">
                 학습된 패턴은 Gemini 2.5 Flash 및 벡터 RAG 프롬프트에 자동 Few-Shot 주입됩니다.
               </span>
               <button
                 type="button"
                 onClick={() => setShowPatternModal(false)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                className="px-4 py-2 bg-stone-800 hover:bg-stone-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
               >
                 닫기
               </button>
