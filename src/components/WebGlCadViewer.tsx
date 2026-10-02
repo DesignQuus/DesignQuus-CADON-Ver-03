@@ -282,16 +282,16 @@ export default function WebGlCadViewer({
       return;
     }
 
-    const margin = 1.22; // 22% margin for spacious AutoCAD look & HUD breathing room
+    const margin = 1.15; // Balanced margin for spacious AutoCAD look & HUD breathing room
     const spanX = Math.max(maxX - minX, 50);
     const spanY = Math.max(maxY - minY, 50);
-    // Add extra top breathing room (14% of spanY) so HUD badges never overlap drawing content
-    const topPadding = spanY * 0.14;
+    // Add balanced top breathing room (5% of spanY) so HUD badges never overlap drawing content
+    const topPadding = spanY * 0.05;
     const dx = spanX * margin;
     const dy = (spanY + topPadding) * margin;
 
     const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY + topPadding * 0.45) / 2;
+    const centerY = (minY + maxY + topPadding * 0.15) / 2;
 
     const frustumSize = 1000;
     const aspect = w / h;
@@ -463,6 +463,12 @@ export default function WebGlCadViewer({
 
       const isInteracting = isMoving || isDraggingRef.current || !!panVelocityRef.current;
 
+      // ⚡ 조작이 멈추는 첫 프레임 감지 (반드시 조기 return 전에 실행되어야 멈춤 즉시 최종 렌더링이 보장됨!)
+      if (wasInteractingRef.current && !isInteracting) {
+        needsRenderRef.current = true;
+      }
+      wasInteractingRef.current = isInteracting;
+
       // 🛑 If no motion and not marked dirty, skip GPU draw calls entirely (0% GPU idle)
       if (!needsRenderRef.current && !isInteracting) {
         animationFrameIdRef.current = requestAnimationFrame(animate);
@@ -470,40 +476,13 @@ export default function WebGlCadViewer({
       }
       needsRenderRef.current = false;
 
-      // 조작이 멈추는 첫 프레임: 원경 축소에서도 100% 전량 무손실 디테일 복원 렌더링 1회 예약
-      if (wasInteractingRef.current && !isInteracting) {
-        needsRenderRef.current = true;
+      // ⚡ CADON 4대 렌더링 표준 기술: 선분 누락 제로 & 100% 무손실 표출 원칙
+      // 축소 화면에서도 기계 부품선이 뚝뚝 끊겨 뼈대만 남지 않도록 항상 100% 온전하게 렌더링
+      if (lineSegmentsRef.current && totalLineIndicesRef.current > 0) {
+        lineSegmentsRef.current.geometry.setDrawRange(0, totalLineIndicesRef.current);
       }
-      wasInteractingRef.current = isInteracting;
-
-      // ⚡ Stratified Sub-pixel Decimation LOD (DWG FastView / AutoCAD Interactive Rendering)
-      // 전체 화면 축소 조작 시 수백만 개 선분을 60 FPS로 가볍게 렌더링하고, 정지 시 100% 전량 무손실 복원
-      if (lineSegmentsRef.current && totalLineIndicesRef.current > 0 && cameraRef.current) {
-        const geom = lineSegmentsRef.current.geometry;
-        const total = totalLineIndicesRef.current;
-        const frustumW = (cameraRef.current.right - cameraRef.current.left) / cameraRef.current.zoom;
-        const currentScale = (container.clientWidth || 800) / frustumW;
-
-        if (isInteracting) {
-          let count = total;
-          if (currentScale < 0.02) {
-            count = Math.floor(total * 0.125); // 1/8 선분 (약 28만 개) -> 초당 60 FPS 절대 고정
-          } else if (currentScale < 0.04) {
-            count = Math.floor(total * 0.25);  // 1/4 선분 (약 57만 개)
-          } else if (currentScale < 0.08) {
-            count = Math.floor(total * 0.5);   // 1/2 선분 (약 114만 개)
-          }
-          count = Math.max(Math.floor(count / 2) * 2, 2);
-          geom.setDrawRange(0, count);
-        } else {
-          // 정지 시: 도면 렌더링 기술 보존 원칙에 따라 100% 원본 무손실 표출
-          geom.setDrawRange(0, total);
-        }
-
-        // Heavy Lines LOD
-        if (heavyGroupRef.current) {
-          heavyGroupRef.current.visible = currentScale >= 0.035 || !isInteracting;
-        }
+      if (heavyGroupRef.current) {
+        heavyGroupRef.current.visible = true;
       }
 
       renderer.render(scene, camera);
@@ -1025,12 +1004,10 @@ export default function WebGlCadViewer({
           vertexColors: true,
           side: THREE.DoubleSide,
           depthWrite: false,
-          polygonOffset: true,
-          polygonOffsetFactor: 2.0,
-          polygonOffsetUnits: 2.0
+          depthTest: false
         });
         triMesh = new THREE.Mesh(triGeometry, triMaterial);
-        triMesh.position.set(0, 0, -0.5);
+        triMesh.position.set(0, 0, -0.01);
         triMesh.renderOrder = -1;
       }
 
