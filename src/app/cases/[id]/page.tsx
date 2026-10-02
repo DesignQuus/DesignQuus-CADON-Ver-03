@@ -461,11 +461,41 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  // Step 1~5 도면 AI 패턴 종합 사전 검증 (Dry-run) States
+  const [dryRunLoading, setDryRunLoading] = useState(false);
+  const [dryRunData, setDryRunData] = useState<any>(null);
+  const [dryRunError, setDryRunError] = useState<string | null>(null);
+  const [activePatternStep, setActivePatternStep] = useState<'ALL' | 'STEP1' | 'STEP2' | 'STEP3' | 'STEP4' | 'STEP5'>('ALL');
+
+  const runTitleBlockDryRun = async () => {
+    if (!id) return;
+    setDryRunLoading(true);
+    setDryRunError(null);
+    try {
+      const res = await apiFetch('/api/patterns/dry-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caseId: id })
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setDryRunData(json.data);
+      } else {
+        setDryRunError(json.error || '사전 검증 실패');
+      }
+    } catch (err: any) {
+      setDryRunError(err.message || '통신 오류');
+    } finally {
+      setDryRunLoading(false);
+    }
+  };
+
   const handleOpenPatternModal = async () => {
     const currentCompName = data?.case?.company_name || '고객사';
     setPatternName(`${currentCompName} 표준 도면 서식 (표제란 & BOM)`);
     setShowPatternModal(true);
-    await fetchPatterns();
+    fetchPatterns();
+    runTitleBlockDryRun();
   };
 
   const handleLearnPattern = async () => {
@@ -6704,41 +6734,501 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
             {/* Modal Content: Claude Warm Ivory Canvas */}
             <div className="p-6 overflow-y-auto space-y-5 flex-1 bg-[#FAF8F5]">
-              {/* 1. 현재 도면 분석 정보 요약 카드 */}
-              <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-3">
-                <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
-                  <span className="text-xs font-bold text-stone-800 flex items-center space-x-1.5">
-                    <FileText className="w-4 h-4 text-[#D97757]" />
-                    <span>현재 학습 대상 도면 정보</span>
-                  </span>
-                  <span className="text-[11px] font-mono font-medium text-stone-500 bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E8E2D9]">
-                    의뢰번호: {data?.case?.case_no || id}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9]">
-                    <span className="text-[11px] text-stone-500 block">인식 고객사</span>
-                    <strong className="text-stone-900 text-sm flex items-center space-x-1.5 mt-0.5">
-                      <Building2 className="w-3.5 h-3.5 text-[#D97757]" />
-                      <span>{data?.case?.company_name || '미지정'}</span>
-                    </strong>
-                  </div>
-                  <div className="p-3 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9]">
-                    <span className="text-[11px] text-stone-500 block">도면 시트 수</span>
-                    <strong className="text-stone-900 text-sm flex items-center space-x-1.5 mt-0.5">
-                      <Layers className="w-3.5 h-3.5 text-[#D97757]" />
-                      <span>{drawings.length}개 시트</span>
-                    </strong>
-                  </div>
-                  <div className="p-3 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9]">
-                    <span className="text-[11px] text-stone-500 block">학습 상태</span>
-                    <strong className="text-emerald-700 text-sm flex items-center space-x-1.5 mt-0.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>추출 준비 완료</span>
-                    </strong>
-                  </div>
-                </div>
+              {/* 5단계 분석 스튜디오 탭 네비게이터 */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-[#E8E2D9]">
+                <button
+                  type="button"
+                  onClick={() => setActivePatternStep('ALL')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activePatternStep === 'ALL'
+                      ? 'bg-stone-900 text-white shadow-xs'
+                      : 'bg-white text-stone-600 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
+                  }`}
+                >
+                  전체 5단계 통합 보기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePatternStep('STEP1')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                    activePatternStep === 'STEP1'
+                      ? 'bg-[#D97757] text-white shadow-xs'
+                      : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
+                  }`}
+                >
+                  <span>1. 표제란 검증</span>
+                  {dryRunData && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                      {dryRunData.step1_titleBlock.qualityScore}점
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePatternStep('STEP2')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                    activePatternStep === 'STEP2'
+                      ? 'bg-[#D97757] text-white shadow-xs'
+                      : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
+                  }`}
+                >
+                  <span>2. BOM 부품표</span>
+                  {dryRunData?.step2_bomTable && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                      {dryRunData.step2_bomTable.rowCount}건
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePatternStep('STEP3')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                    activePatternStep === 'STEP3'
+                      ? 'bg-[#D97757] text-white shadow-xs'
+                      : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
+                  }`}
+                >
+                  <span>3. 특기시방·세트룰</span>
+                  {dryRunData?.step3_notesAndRules && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                      {dryRunData.step3_notesAndRules.setMultiplier} SET
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePatternStep('STEP4')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                    activePatternStep === 'STEP4'
+                      ? 'bg-[#D97757] text-white shadow-xs'
+                      : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
+                  }`}
+                >
+                  <span>4. 소재·재질매핑</span>
+                  {dryRunData?.step4_stockAndMaterial && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                      {dryRunData.step4_stockAndMaterial.sampleMaterials.length}종
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePatternStep('STEP5')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                    activePatternStep === 'STEP5'
+                      ? 'bg-[#D97757] text-white shadow-xs'
+                      : 'bg-white text-stone-700 border border-[#E8E2D9] hover:bg-[#FAF3EE]'
+                  }`}
+                >
+                  <span>5. 공차·가공특성</span>
+                  {dryRunData?.step5_machiningFeatures && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                      {dryRunData.step5_machiningFeatures.precisionTolerances.length}개
+                    </span>
+                  )}
+                </button>
               </div>
+
+              {/* 1. 표제란 & 도곽 사전 검증 (Dry-run) 리포트 카드 */}
+              {(activePatternStep === 'ALL' || activePatternStep === 'STEP1') && (
+                <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-5 h-5 rounded-md bg-[#D97757] text-white flex items-center justify-center font-bold text-[11px] shadow-2xs">
+                        1
+                      </div>
+                      <span className="text-xs font-bold text-stone-900">
+                        1단계: 표제란 & 도곽 사전 검증 (Dry-Run 리포트)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      {dryRunLoading ? (
+                        <span className="inline-flex items-center space-x-1 text-[11px] text-[#D97757] font-medium bg-[#FAF3EE] px-2 py-0.5 rounded-full border border-[#EED9CC]">
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>사전 무결성 진단 중...</span>
+                        </span>
+                      ) : dryRunData ? (
+                        <div className="flex items-center space-x-1.5">
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                            dryRunData.step1_titleBlock.status === 'EXCELLENT'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : dryRunData.step1_titleBlock.status === 'GOOD'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : 'bg-rose-50 text-rose-700 border-rose-200'
+                          }`}>
+                            무결성 {dryRunData.step1_titleBlock.qualityScore}점 ({dryRunData.step1_titleBlock.status})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={runTitleBlockDryRun}
+                            className="p-1 text-stone-400 hover:text-[#D97757] rounded hover:bg-stone-50 transition-colors"
+                            title="다시 진단"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] font-mono font-medium text-stone-500 bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E8E2D9]">
+                          의뢰번호: {data?.case?.case_no || id}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {dryRunLoading ? (
+                    <div className="py-6 text-center space-y-2">
+                      <RefreshCw className="w-6 h-6 animate-spin text-[#D97757] mx-auto opacity-80" />
+                      <p className="text-xs text-stone-600 font-medium">
+                        도면 텍스트와 표제란 사각 박스 좌표를 대조하여 사전 무결성을 검증하고 있습니다...
+                      </p>
+                    </div>
+                  ) : dryRunError ? (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs flex items-center justify-between">
+                      <span>⚠️ 사전 검증 실패: {dryRunError}</span>
+                      <button
+                        type="button"
+                        onClick={runTitleBlockDryRun}
+                        className="px-2 py-1 bg-rose-600 text-white rounded font-bold text-[11px]"
+                      >
+                        재시도
+                      </button>
+                    </div>
+                  ) : dryRunData ? (
+                    <div className="space-y-3">
+                      {/* 상단 3개 요약 블록 */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                        <div className="p-2.5 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9]">
+                          <span className="text-[10px] text-stone-500 block">검출 고객사</span>
+                          <strong className="text-stone-900 text-xs flex items-center space-x-1.5 mt-0.5 truncate">
+                            <Building2 className="w-3.5 h-3.5 text-[#D97757] shrink-0" />
+                            <span className="truncate">{dryRunData.companyName}</span>
+                          </strong>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9]">
+                          <span className="text-[10px] text-stone-500 block">대표 검증 도면</span>
+                          <strong className="text-stone-900 text-xs flex items-center space-x-1.5 mt-0.5 truncate">
+                            <FileText className="w-3.5 h-3.5 text-[#D97757] shrink-0" />
+                            <span className="truncate">{dryRunData.primaryDrawingNo}</span>
+                          </strong>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9]">
+                          <span className="text-[10px] text-stone-500 block">핵심 필드 검출</span>
+                          <strong className="text-emerald-700 text-xs flex items-center space-x-1.5 mt-0.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>{dryRunData.step1_titleBlock.fieldsFoundCount}개 필드 정상 식별</span>
+                          </strong>
+                        </div>
+                      </div>
+
+                      {/* 검출된 7대 핵심 필드 미리보기 태그 */}
+                      {dryRunData.step1_titleBlock.fieldsFoundCount > 0 && (
+                        <div className="p-3 rounded-lg bg-[#FAF3EE]/60 border border-[#EED9CC] space-y-1.5">
+                          <span className="text-[11px] font-bold text-stone-700 block">
+                            🎯 표제란 자동 인식 필드 미리보기 (RAG 학습 대상):
+                          </span>
+                          <div className="flex flex-wrap gap-1.5 text-[11px]">
+                            {Object.entries(dryRunData.step1_titleBlock.detectedFields).map(([k, f]: [string, any]) => (
+                              <span
+                                key={k}
+                                className="inline-flex items-center space-x-1 px-2 py-0.5 bg-white rounded border border-[#E2D8CC] text-stone-800 shadow-2xs"
+                              >
+                                <strong className="text-[#D97757] font-mono text-[10px]">{f.label}:</strong>
+                                <span className="font-semibold">{f.valueSample || '-'}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 기존 패턴과의 중복/충돌 예측 경고 배너 */}
+                      {dryRunData.overlapCheck.hasExistingPattern && (
+                        <div className="p-2.5 rounded-lg bg-amber-50/80 border border-amber-200/80 text-amber-900 text-[11px] flex items-start space-x-2">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <strong>중복/충돌 사전 예측 안내: </strong>
+                            <span>{dryRunData.overlapCheck.recommendation}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 잠재적 결함 경고 목록 (Warnings) */}
+                      {dryRunData.warnings && dryRunData.warnings.length > 0 && (
+                        <div className="space-y-1">
+                          {dryRunData.warnings.map((w: string, i: number) => (
+                            <div key={i} className="text-[11px] text-amber-700 flex items-center space-x-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                              <span>{w}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              {/* 2. BOM 부품 목록표(Table) 무결성 & 적층 방향 검증 카드 */}
+              {(activePatternStep === 'ALL' || activePatternStep === 'STEP2') && dryRunData?.step2_bomTable && (
+                <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-5 h-5 rounded-md bg-[#D97757] text-white flex items-center justify-center font-bold text-[11px] shadow-2xs">
+                        2
+                      </div>
+                      <span className="text-xs font-bold text-stone-900">
+                        2단계: BOM 부품 목록표(Table) 무결성 & 컬럼 매핑 리포트
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                        dryRunData.step2_bomTable.status === 'EXCELLENT'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : dryRunData.step2_bomTable.status === 'GOOD'
+                          ? 'bg-amber-50 text-amber-700 border-amber-200'
+                          : 'bg-rose-50 text-rose-700 border-rose-200'
+                      }`}>
+                        BOM 무결성 {dryRunData.step2_bomTable.bomScore}점 ({dryRunData.step2_bomTable.status})
+                      </span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 border border-stone-200 font-medium">
+                        {dryRunData.step2_bomTable.direction === 'BOTTOM_UP' ? '▲ 상향 적층 (AutoCAD 표준)' : '▼ 하향 적층'}
+                      </span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#FAF3EE] text-[#D97757] border border-[#EED9CC] font-bold">
+                        총 {dryRunData.step2_bomTable.rowCount}건 감지
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* 6대 컬럼 매핑 배지 */}
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-bold text-stone-700 block">
+                        📋 감지된 BOM 테이블 헤더 컬럼:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5 text-[11px]">
+                        {Object.entries(dryRunData.step2_bomTable.detectedColumns).map(([colKey, colInfo]: [string, any]) => (
+                          <span
+                            key={colKey}
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 bg-[#FAF8F5] rounded border border-[#E8E2D9] text-stone-800"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <span className="font-semibold">{colInfo.label}</span>
+                            <span className="text-[10px] text-stone-400 font-mono">({colKey})</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 실물 BOM 부품 데이터 미리보기 테이블 */}
+                    {dryRunData.step2_bomTable.sampleRows && dryRunData.step2_bomTable.sampleRows.length > 0 && (
+                      <div className="border border-[#E8E2D9] rounded-lg overflow-hidden bg-[#FAF8F5]/40">
+                        <div className="bg-[#FAF3EE] px-3 py-1.5 border-b border-[#EED9CC] flex items-center justify-between text-[11px] font-bold text-stone-800">
+                          <span>🔍 추출된 실물 BOM 부품 데이터 미리보기 (상위 {Math.min(5, dryRunData.step2_bomTable.sampleRows.length)}건)</span>
+                          <span className="text-[10px] text-[#D97757] font-medium">전체 {dryRunData.step2_bomTable.rowCount}건 파싱됨</span>
+                        </div>
+                        <table className="w-full text-left text-[11px]">
+                          <thead className="bg-[#FAF8F5] text-stone-600 border-b border-[#E8E2D9] font-semibold">
+                            <tr>
+                              <th className="py-1.5 px-3 w-14">순번</th>
+                              <th className="py-1.5 px-3">품명 (Description)</th>
+                              <th className="py-1.5 px-3 w-20">규격</th>
+                              <th className="py-1.5 px-3 w-16 text-center">수량</th>
+                              <th className="py-1.5 px-3 w-28">재질 (Material)</th>
+                              <th className="py-1.5 px-3">비고 / 후처리</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#F0EBE1] bg-white">
+                            {dryRunData.step2_bomTable.sampleRows.slice(0, 5).map((row: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-[#FAF8F5]">
+                                <td className="py-1.5 px-3 font-mono text-stone-500">{row.no || String(idx + 1).padStart(3, '0')}</td>
+                                <td className="py-1.5 px-3 font-semibold text-stone-900">{row.partName}</td>
+                                <td className="py-1.5 px-3 text-stone-600 font-mono text-[10px]">{row.spec || '-'}</td>
+                                <td className="py-1.5 px-3 text-center font-bold text-[#D97757] font-mono">{row.qty || '1'}</td>
+                                <td className="py-1.5 px-3 font-medium text-stone-800">{row.material || '-'}</td>
+                                <td className="py-1.5 px-3 text-stone-600 text-[10px]">{row.remark || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 3. 특기 시방서(Notes) 및 세트 수량 승수, 대칭 가공 룰 카드 */}
+              {(activePatternStep === 'ALL' || activePatternStep === 'STEP3') && dryRunData?.step3_notesAndRules && (
+                <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-5 h-5 rounded-md bg-[#D97757] text-white flex items-center justify-center font-bold text-[11px] shadow-2xs">
+                        3
+                      </div>
+                      <span className="text-xs font-bold text-stone-900">
+                        3단계: 특기 시방서(Notes) 및 세트 수량 승수, 대칭 가공 룰 엔진
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      {dryRunData.step3_notesAndRules.setMultiplier > 1 && (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                          ⚡ {dryRunData.step3_notesAndRules.setMultiplier} SET 승수 규칙 감지
+                        </span>
+                      )}
+                      {dryRunData.step3_notesAndRules.hasMirrorSymmetry && (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                          ⇄ 좌우 대칭(LH/RH) 감지
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {/* 세트 승수 룰 배너 */}
+                    <div className="p-2.5 rounded-lg bg-[#FAF3EE] border border-[#EED9CC] flex items-center justify-between text-xs">
+                      <div className="flex items-center space-x-2">
+                        <Sparkles className="w-4 h-4 text-[#D97757] shrink-0" />
+                        <span className="text-stone-800 font-medium">
+                          <strong>자동 승수 규칙: </strong>
+                          {dryRunData.step3_notesAndRules.multiplierRule}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-stone-500">도면 주기 텍스트 분석 완료</span>
+                    </div>
+
+                    {/* 시방서/주기 텍스트 목록 */}
+                    {dryRunData.step3_notesAndRules.notes && dryRunData.step3_notesAndRules.notes.length > 0 && (
+                      <div className="p-3 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9] space-y-1.5">
+                        <span className="text-[11px] font-bold text-stone-700 block">
+                          📝 도면 특기 시방서(NOTE) 원문:
+                        </span>
+                        <div className="space-y-1">
+                          {dryRunData.step3_notesAndRules.notes.map((n: string, idx: number) => (
+                            <div key={idx} className="text-[11px] text-stone-700 bg-white p-2 rounded border border-[#E8E2D9] font-mono leading-relaxed whitespace-pre-line">
+                              {n}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 4. 원소재 규격 체적 & 재질 정규화 매핑 인터랙션 카드 */}
+              {(activePatternStep === 'ALL' || activePatternStep === 'STEP4') && dryRunData?.step4_stockAndMaterial && (
+                <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-5 h-5 rounded-md bg-[#D97757] text-white flex items-center justify-center font-bold text-[11px] shadow-2xs">
+                        4
+                      </div>
+                      <span className="text-xs font-bold text-stone-900">
+                        4단계: 원소재 규격 체적 계산 & 재질 표준 정규화 매핑
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
+                        재질 {dryRunData.step4_stockAndMaterial.sampleMaterials.length}종 식별
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* 감지된 원소재 형태 */}
+                    <div className="flex items-center space-x-2 text-xs">
+                      <span className="text-stone-500 font-medium">원소재 형태 분류:</span>
+                      {dryRunData.step4_stockAndMaterial.stockDimensionTypes.map((st: string, idx: number) => (
+                        <span key={idx} className="px-2 py-0.5 rounded-full bg-[#FAF3EE] text-[#D97757] border border-[#EED9CC] font-bold text-[11px]">
+                          {st}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* 재질 정규화 매핑 그리드 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {dryRunData.step4_stockAndMaterial.sampleMaterials.map((m: any, idx: number) => (
+                        <div key={idx} className="p-2.5 rounded-lg bg-[#FAF8F5] border border-[#E8E2D9] flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-[10px] text-stone-400 block font-mono">도면 표기: {m.raw}</span>
+                            <strong className="text-stone-900 font-mono text-xs flex items-center space-x-1 mt-0.5">
+                              {m.isNormalized ? (
+                                <>
+                                  <span className="text-stone-500 line-through text-[10px] mr-1">{m.raw}</span>
+                                  <span className="text-[#D97757] font-bold">{m.standard}</span>
+                                </>
+                              ) : (
+                                <span>{m.standard}</span>
+                              )}
+                            </strong>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                            m.isNormalized
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-stone-100 text-stone-600'
+                          }`}>
+                            {m.group}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. 가공 특성(정밀 공차 & 후처리) 및 RAG 패턴 충돌 검사 카드 */}
+              {(activePatternStep === 'ALL' || activePatternStep === 'STEP5') && dryRunData?.step5_machiningFeatures && (
+                <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-[#F0EBE1] pb-2.5">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-5 h-5 rounded-md bg-[#D97757] text-white flex items-center justify-center font-bold text-[11px] shadow-2xs">
+                        5
+                      </div>
+                      <span className="text-xs font-bold text-stone-900">
+                        5단계: 가공 특성(정밀 공차, 열처리, 표면도금) & RAG 충돌 검사
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
+                        ✓ 안전 검증 완료
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* 끼워맞춤 정밀 공차 태그 */}
+                    <div>
+                      <span className="text-[11px] font-bold text-stone-700 block mb-1.5">
+                        🎯 끼워맞춤 정밀 공차 (CNC 밀링/선반 정밀 가공 대상):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {dryRunData.step5_machiningFeatures.precisionTolerances.map((tol: string, idx: number) => (
+                          <span key={idx} className="px-2 py-0.5 rounded-md bg-[#FAF3EE] border border-[#EED9CC] text-stone-800 text-[11px] font-mono font-semibold">
+                            {tol}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 열처리 및 표면도금 태그 */}
+                    <div>
+                      <span className="text-[11px] font-bold text-stone-700 block mb-1.5">
+                        ✨ 열처리 및 표면처리(도금/아노다이징) 사양:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {dryRunData.step5_machiningFeatures.surfaceTreatments.map((treat: string, idx: number) => (
+                          <span key={idx} className="px-2 py-0.5 rounded-md bg-stone-100 border border-stone-200 text-stone-800 text-[11px] font-medium">
+                            {treat}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* 2. 신규 패턴 학습 입력 폼 */}
               <div className="bg-white p-5 rounded-xl border border-[#E8E2D9] shadow-xs space-y-4">
@@ -6814,13 +7304,22 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
                   <button
                     type="button"
                     onClick={handleLearnPattern}
-                    disabled={learningPattern || !patternName.trim()}
-                    className="w-full py-2.5 px-4 bg-[#D97757] hover:bg-[#C25E3E] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 active:scale-[0.99]"
+                    disabled={learningPattern || !patternName.trim() || (dryRunData && !dryRunData.isSafeToSave)}
+                    className={`w-full py-2.5 px-4 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-[0.99] ${
+                      dryRunData && !dryRunData.isSafeToSave
+                        ? 'bg-stone-300 text-stone-500 cursor-not-allowed'
+                        : 'bg-[#D97757] hover:bg-[#C25E3E] text-white disabled:opacity-50'
+                    }`}
                   >
                     {learningPattern ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin" />
                         <span>도면 패턴 추출 및 벡터 RAG 임베딩 학습 중...</span>
+                      </>
+                    ) : dryRunData && !dryRunData.isSafeToSave ? (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-stone-500" />
+                        <span>표제란 결함 감지로 등록이 제한됩니다 (경고 확인 요망)</span>
                       </>
                     ) : (
                       <>
