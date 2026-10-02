@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { ZoomIn, ZoomOut, RotateCcw, Sparkles, RefreshCw, Layers, Scan, CheckCircle2, Crosshair, FileText, ExternalLink, AlertTriangle, X, Check, Info, ShieldCheck, ChevronRight } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Sparkles, RefreshCw, Layers, Scan, CheckCircle2, Crosshair, FileText, ExternalLink, AlertTriangle, X, Check, Info, ShieldCheck, ChevronRight, SquareDashed } from 'lucide-react';
 
 interface WebGlCadViewerProps {
   caseId: string;
@@ -60,6 +60,14 @@ export default function WebGlCadViewer({
   const [selectedVirtualIndices, setSelectedVirtualIndices] = useState<Set<number>>(new Set());
   const [applyingVirtualBom, setApplyingVirtualBom] = useState<boolean>(false);
   const [virtualBomAppliedSuccess, setVirtualBomAppliedSuccess] = useState<boolean>(false);
+  
+  // ⚡ 1단계: 영역 박스 줌 (Window Zoom / Box Zoom) 상태
+  const [isBoxZoomMode, setIsBoxZoomMode] = useState<boolean>(false);
+  const isBoxZoomModeRef = useRef<boolean>(false);
+  isBoxZoomModeRef.current = isBoxZoomMode;
+  const [boxDragRect, setBoxDragRect] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
+  const isBoxDraggingRef = useRef<boolean>(false);
+  const boxStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const cadTextsRef = useRef<Array<{ t: string; x: number; y: number; h: number; r: number; c?: string }>>([]);
   cadTextsRef.current = cadTexts;
@@ -158,8 +166,8 @@ export default function WebGlCadViewer({
   const lastMousePosRef = useRef({ x: 0, y: 0 });
   const lastMiddleClickTimeRef = useRef<number>(0);
 
-  // Smooth fly-to animation ref
-  const targetCamRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
+  // Smooth fly-to animation & kinetic momentum zoom ref
+  const targetCamRef = useRef<{ x: number; y: number; zoom: number; lerpSpeed?: number } | null>(null);
 
   // 💡 On-demand rendering control: Only render when dirty (0% GPU idle)
   const needsRenderRef = useRef(true);
@@ -285,7 +293,7 @@ export default function WebGlCadViewer({
     }
 
     if (animate) {
-      targetCamRef.current = { x: centerX, y: centerY, zoom: targetZoom };
+      targetCamRef.current = { x: centerX, y: centerY, zoom: targetZoom, lerpSpeed: 0.22 };
     } else {
       targetCamRef.current = null;
       camera.position.x = centerX;
@@ -357,20 +365,21 @@ export default function WebGlCadViewer({
     const animate = () => {
       let isMoving = false;
 
-      // Smooth camera interpolation (Fly-to)
+      // Smooth camera interpolation (Fly-to & Kinetic Momentum Zoom)
       if (targetCamRef.current && cameraRef.current) {
         isMoving = true;
         const cam = cameraRef.current;
         const target = targetCamRef.current;
-        cam.position.x += (target.x - cam.position.x) * 0.15;
-        cam.position.y += (target.y - cam.position.y) * 0.15;
-        cam.zoom += (target.zoom - cam.zoom) * 0.15;
+        const speed = target.lerpSpeed ?? 0.32;
+        cam.position.x += (target.x - cam.position.x) * speed;
+        cam.position.y += (target.y - cam.position.y) * speed;
+        cam.zoom += (target.zoom - cam.zoom) * speed;
         cam.updateProjectionMatrix();
 
         if (
-          Math.abs(cam.position.x - target.x) < 0.5 &&
-          Math.abs(cam.position.y - target.y) < 0.5 &&
-          Math.abs(cam.zoom - target.zoom) < 0.001
+          Math.abs(cam.position.x - target.x) < 0.2 &&
+          Math.abs(cam.position.y - target.y) < 0.2 &&
+          Math.abs(cam.zoom - target.zoom) / Math.max(cam.zoom, 0.0001) < 0.002
         ) {
           cam.position.x = target.x;
           cam.position.y = target.y;
@@ -1468,7 +1477,7 @@ export default function WebGlCadViewer({
     fitToExtents(focusBbox.min_x, focusBbox.min_y, focusBbox.max_x, focusBbox.max_y, true);
   }, [focusBbox, fitToExtents, getEffectiveOverviewBounds]);
 
-  // 5. Mouse Interaction: 60 FPS Zoom on Wheel (Native non-passive listener to block page scroll 100%)
+  // 5. Mouse Interaction: 60 FPS Zoom on Wheel (Logarithmic Dynamic Scale + Kinetic Momentum Physics)
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -1489,30 +1498,58 @@ export default function WebGlCadViewer({
       // Convert mouse screen coordinates to world coordinates
       const aspect = container.clientWidth / container.clientHeight;
       const frustumSize = 1000;
+
+      // ⚡ 1단계: 지수형 다이나믹 줌 배율 (Logarithmic Adaptive Zoom)
+      // 전체 도면 크기 대비 현재 줌 배율 비율(zoomRatio)을 실시간 산출
+      const eff = getEffectiveOverviewBounds();
+      const spanMax = Math.max(eff.maxX - eff.minX, eff.maxY - eff.minY, 200);
+      const camW = frustumSize * aspect;
+      const camH = frustumSize;
+      const overviewZoom = Math.min(camW / (spanMax * 1.18), camH / (spanMax * 1.18));
+
+      // 연속 휠 조작 중에는 기존 목표 줌(targetCam)을 기준으로 배율을 축적하여 지연 없는 쾌속 가속 구현
+      const activeZoom = targetCamRef.current ? targetCamRef.current.zoom : camera.zoom;
+      const zoomRatio = activeZoom / Math.max(overviewZoom, 0.00001);
+
+      const isZoomIn = e.deltaY < 0;
+      let baseFactor: number;
+      if (zoomRatio <= 2.5) {
+        // [원경 모드 (Overview)]: 휠 1틱당 2.2배 고속 확대 / 0.45배 고속 축소 (3~4번만에 전체 도면에서 부품까지 도달)
+        baseFactor = isZoomIn ? 2.2 : 0.45;
+      } else if (zoomRatio <= 12) {
+        // [중경 모드 (Sub-assembly)]: 휠 1틱당 1.65배 중간 확대 / 0.60배 축소
+        baseFactor = isZoomIn ? 1.65 : 0.60;
+      } else {
+        // [근경 모드 (Micro detail)]: 휠 1틱당 1.25배 정밀 확대 / 0.80배 축소
+        baseFactor = isZoomIn ? 1.25 : 0.80;
+      }
+
+      // 휠 회전 속도 및 delta 강도에 따른 가속도
+      const deltaMag = Math.min(Math.max(Math.abs(e.deltaY), 40), 300);
+      const accel = 1 + ((deltaMag - 40) / 260) * 0.4;
+      const zoomFactor = Math.pow(baseFactor, accel);
+      const newZoom = Math.min(Math.max(activeZoom * zoomFactor, 0.00001), 10000);
+
+      // 마우스 커서 위치를 월드 좌표의 기준점으로 고정
       const worldW = (frustumSize * aspect) / camera.zoom;
       const worldH = frustumSize / camera.zoom;
-
       const worldMouseX = camera.position.x + (mouseX / container.clientWidth - 0.5) * worldW;
       const worldMouseY = camera.position.y - (mouseY / container.clientHeight - 0.5) * worldH;
 
-      // ⚡ 1순위: 적응형 가속 줌 (AutoCAD & Figma 표준 가속 곡선)
-      // 휠 회전 속도 및 delta 강도에 따라 1.30배(정밀 미세 확대) ~ 1.60배(초고속 확대)로 자동 가속
-      const deltaMag = Math.min(Math.max(Math.abs(e.deltaY), 40), 300);
-      const accel = 1 + ((deltaMag - 40) / 260) * 0.35; // 1.0 ~ 1.35
-      const isZoomIn = e.deltaY < 0;
-      const baseFactor = isZoomIn ? 1.35 : 0.74; // 기본 스텝: 확대 1.35배, 축소 0.74배
-      const zoomFactor = isZoomIn ? Math.pow(baseFactor, accel) : Math.pow(baseFactor, accel);
-      const newZoom = Math.min(Math.max(camera.zoom * zoomFactor, 0.00001), 5000);
-
-      // Zoom centered towards mouse cursor
+      // 목표 줌 배율에서의 뷰포트 크기 및 목표 카메라 중심점
       const newWorldW = (frustumSize * aspect) / newZoom;
       const newWorldH = frustumSize / newZoom;
+      const targetX = worldMouseX - (mouseX / container.clientWidth - 0.5) * newWorldW;
+      const targetY = worldMouseY + (mouseY / container.clientHeight - 0.5) * newWorldH;
 
-      camera.position.x = worldMouseX - (mouseX / container.clientWidth - 0.5) * newWorldW;
-      camera.position.y = worldMouseY + (mouseY / container.clientHeight - 0.5) * newWorldH;
-      camera.zoom = newZoom;
-      camera.updateProjectionMatrix();
-      targetCamRef.current = null; // Cancel any ongoing fly-to
+      // ⚡ 1단계: 연속 관성 물리 줌 (Kinetic Momentum Zoom)
+      // 뚝뚝 끊기지 않고 60/120 FPS에서 비행하듯 부드럽고 시원하게 감속 미끄러짐
+      targetCamRef.current = {
+        x: targetX,
+        y: targetY,
+        zoom: newZoom,
+        lerpSpeed: 0.34
+      };
 
       // 60 FPS Responsive LOD trigger: prioritize responsiveness while wheeling
       isInteractingRef.current = true;
@@ -1530,9 +1567,25 @@ export default function WebGlCadViewer({
     return () => {
       canvas.removeEventListener('wheel', onNativeWheel);
     };
+  }, [getEffectiveOverviewBounds]);
+
+  // ⌨️ 단축키 리스너: 'Z' 키는 영역 박스 줌 토글, 'Escape' 키는 박스 줌 취소
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return;
+      if (e.key === 'z' || e.key === 'Z') {
+        setIsBoxZoomMode(prev => !prev);
+      } else if (e.key === 'Escape') {
+        setIsBoxZoomMode(false);
+        setBoxDragRect(null);
+        isBoxDraggingRef.current = false;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // 6. Mouse Interaction: 60 FPS Pan on Drag & AutoCAD Middle-Click Double Click
+  // 6. Mouse Interaction: 60 FPS Pan on Drag, Box Zoom, & AutoCAD Middle-Click Double Click
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     // ⚡ 4순위: 마우스 휠 버튼(가운데 버튼) 더블클릭 시 전체 도면 맞춤 (AutoCAD 표준 Zoom Extents)
     if (e.button === 1) {
@@ -1545,6 +1598,22 @@ export default function WebGlCadViewer({
       lastMiddleClickTimeRef.current = now;
     }
 
+    // ⚡ 1단계: 영역 박스 줌 (Window Zoom / Box Zoom) - 'Z' 모드 활성화 또는 Shift 키 누른 상태
+    const isBoxZoom = isBoxZoomModeRef.current || e.shiftKey;
+    if (isBoxZoom && e.button === 0) {
+      const container = containerRef.current;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        isBoxDraggingRef.current = true;
+        boxStartRef.current = { x, y };
+        setBoxDragRect({ startX: x, startY: y, currentX: x, currentY: y });
+        targetCamRef.current = null;
+        return;
+      }
+    }
+
     isDraggingRef.current = true;
     lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     targetCamRef.current = null;
@@ -1552,6 +1621,18 @@ export default function WebGlCadViewer({
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    // 영역 박스 줌 드래그 중인 경우 사각형 갱신
+    if (isBoxDraggingRef.current) {
+      const container = containerRef.current;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const x = Math.max(0, Math.min(e.clientX - rect.left, container.clientWidth));
+        const y = Math.max(0, Math.min(e.clientY - rect.top, container.clientHeight));
+        setBoxDragRect(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
+      }
+      return;
+    }
+
     if (!isDraggingRef.current) return;
     const camera = cameraRef.current;
     const container = containerRef.current;
@@ -1581,6 +1662,44 @@ export default function WebGlCadViewer({
   };
 
   const handleMouseUp = () => {
+    // ⚡ 1단계: 영역 박스 줌 완료 처리 (0.2초 부품 집중 확대)
+    if (isBoxDraggingRef.current) {
+      isBoxDraggingRef.current = false;
+      const rect = boxDragRect;
+      setBoxDragRect(null);
+
+      if (rect) {
+        const dx = Math.abs(rect.currentX - rect.startX);
+        const dy = Math.abs(rect.currentY - rect.startY);
+        if (dx >= 15 && dy >= 15) {
+          const container = containerRef.current;
+          const camera = cameraRef.current;
+          if (container && camera) {
+            const aspect = container.clientWidth / container.clientHeight;
+            const frustumSize = 1000;
+            const worldW = (frustumSize * aspect) / camera.zoom;
+            const worldH = frustumSize / camera.zoom;
+
+            const minScreenX = Math.min(rect.startX, rect.currentX);
+            const maxScreenX = Math.max(rect.startX, rect.currentX);
+            const minScreenY = Math.min(rect.startY, rect.currentY);
+            const maxScreenY = Math.max(rect.startY, rect.currentY);
+
+            const worldMinX = camera.position.x + (minScreenX / container.clientWidth - 0.5) * worldW;
+            const worldMaxX = camera.position.x + (maxScreenX / container.clientWidth - 0.5) * worldW;
+            const worldMaxY = camera.position.y - (minScreenY / container.clientHeight - 0.5) * worldH;
+            const worldMinY = camera.position.y - (maxScreenY / container.clientHeight - 0.5) * worldH;
+
+            fitToExtents(worldMinX, worldMinY, worldMaxX, worldMaxY, true);
+            setIsBoxZoomMode(false);
+            return;
+          }
+        }
+      }
+      setIsBoxZoomMode(false);
+      return;
+    }
+
     isDraggingRef.current = false;
     isInteractingRef.current = false;
     needsRenderRef.current = true;
@@ -1637,18 +1756,32 @@ export default function WebGlCadViewer({
     }
   };
 
-  // Zoom Button Handlers
+  // Zoom Button Handlers with Smooth Momentum
   const handleZoomIn = () => {
     if (!cameraRef.current) return;
-    cameraRef.current.zoom *= 1.35;
-    cameraRef.current.updateProjectionMatrix();
+    const cam = cameraRef.current;
+    const baseZoom = targetCamRef.current ? targetCamRef.current.zoom : cam.zoom;
+    const targetZoom = Math.min(baseZoom * 1.6, 10000);
+    targetCamRef.current = {
+      x: cam.position.x,
+      y: cam.position.y,
+      zoom: targetZoom,
+      lerpSpeed: 0.35
+    };
     needsRenderRef.current = true;
   };
 
   const handleZoomOut = () => {
     if (!cameraRef.current) return;
-    cameraRef.current.zoom *= 0.74;
-    cameraRef.current.updateProjectionMatrix();
+    const cam = cameraRef.current;
+    const baseZoom = targetCamRef.current ? targetCamRef.current.zoom : cam.zoom;
+    const targetZoom = Math.max(baseZoom * 0.62, 0.00001);
+    targetCamRef.current = {
+      x: cam.position.x,
+      y: cam.position.y,
+      zoom: targetZoom,
+      lerpSpeed: 0.35
+    };
     needsRenderRef.current = true;
   };
 
@@ -1662,7 +1795,9 @@ export default function WebGlCadViewer({
     <div
       ref={containerRef}
       style={{ overscrollBehavior: 'contain' }}
-      className="relative w-full h-[680px] bg-black rounded-2xl overflow-hidden border border-slate-800 select-none cursor-grab active:cursor-grabbing shadow-inner overscroll-contain"
+      className={`relative w-full h-[680px] bg-black rounded-2xl overflow-hidden border border-slate-800 select-none shadow-inner overscroll-contain ${
+        isBoxZoomMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
+      }`}
     >
       <canvas
         ref={canvasRef}
@@ -1671,7 +1806,7 @@ export default function WebGlCadViewer({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onDoubleClick={handleDoubleClick}
-        className="w-full h-full block touch-none"
+        className={`w-full h-full block touch-none ${isBoxZoomMode ? 'cursor-crosshair' : ''}`}
       />
 
       {/* 2D Text Overlay Layer (Synchronized with 3D Camera at 60 FPS) */}
@@ -1679,6 +1814,32 @@ export default function WebGlCadViewer({
         ref={textCanvasRef}
         className="absolute inset-0 w-full h-full pointer-events-none"
       />
+
+      {/* ⚡ 1단계: 영역 박스 줌 (Window Zoom) 드래그 가이드 사각형 */}
+      {boxDragRect && (
+        <div
+          className="absolute border-2 border-dashed border-cyan-400 bg-cyan-500/20 pointer-events-none rounded-xs z-30 shadow-lg animate-in fade-in"
+          style={{
+            left: Math.min(boxDragRect.startX, boxDragRect.currentX),
+            top: Math.min(boxDragRect.startY, boxDragRect.currentY),
+            width: Math.abs(boxDragRect.currentX - boxDragRect.startX),
+            height: Math.abs(boxDragRect.currentY - boxDragRect.startY),
+          }}
+        >
+          <div className="absolute -bottom-6 right-0 px-2 py-0.5 bg-slate-950/95 border border-cyan-400/80 rounded text-[11px] font-bold text-cyan-300 font-mono shadow-md whitespace-nowrap">
+            영역 즉시 맞춤 (0.2s)
+          </div>
+        </div>
+      )}
+
+      {/* ⚡ 1단계: 영역 박스 줌 모드 활성화 알림 배너 */}
+      {isBoxZoomMode && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-cyan-950/95 text-cyan-200 border border-cyan-500/60 px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 shadow-xl z-30 pointer-events-none animate-in fade-in slide-in-from-top-2">
+          <SquareDashed className="w-4 h-4 text-cyan-400 animate-pulse shrink-0" />
+          <span>영역 박스 줌: 확대할 부품 영역을 마우스로 드래그하세요</span>
+          <span className="text-[10px] bg-cyan-900/80 px-1.5 py-0.5 rounded text-cyan-300 border border-cyan-500/30">ESC / Z: 취소</span>
+        </div>
+      )}
 
       {/* Loading Overlay with Live Progress Bar */}
       {loading && (
@@ -1791,6 +1952,19 @@ export default function WebGlCadViewer({
 
       {/* Bottom Right: Floating Zoom/Fit Controls */}
       <div className="absolute bottom-4 right-4 flex items-center space-x-1 bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-700 z-20 shadow-xl">
+        <button
+          onClick={() => setIsBoxZoomMode(!isBoxZoomMode)}
+          className={`p-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1 ${
+            isBoxZoomMode
+              ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800'
+          }`}
+          title="영역 박스 줌 (단축키: Z 또는 Shift+드래그): 원하는 영역을 네모로 드래그하여 0.2초 즉시 확대"
+        >
+          <SquareDashed className="w-4 h-4" />
+          {isBoxZoomMode && <span className="text-[10px] font-bold pr-0.5">박스 줌 ON</span>}
+        </button>
+        <div className="w-px h-4 bg-slate-700 mx-0.5"></div>
         <button
           onClick={handleZoomIn}
           className="p-2 hover:bg-slate-800 rounded-lg text-slate-300 hover:text-white transition-colors cursor-pointer"
