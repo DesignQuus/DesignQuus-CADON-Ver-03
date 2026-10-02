@@ -1449,7 +1449,6 @@ export default function HomePage() {
                       key={c.id}
                       onClick={() => !isDeleted && router.push(`/cases/${c.id}`)}
                       onDoubleClick={() => !isDeleted && router.push(`/cases/${c.id}`)}
-                      title={!isDeleted ? "더블 클릭하면 AI 도면 파싱으로 넘어갑니다" : undefined}
                       className={`relative transition-all duration-150 cursor-pointer group border-l-4 ${
                         isDeleted || isArchived
                           ? 'bg-slate-50/50 hover:bg-slate-100/80 border-l-transparent text-slate-500'

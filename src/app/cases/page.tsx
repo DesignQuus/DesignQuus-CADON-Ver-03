@@ -2107,7 +2107,6 @@ export default function CasesPage() {
                           key={c.id}
                           onClick={() => router.push(`/cases/${c.id}`)}
                           onDoubleClick={() => router.push(`/cases/${c.id}`)}
-                          title="더블 클릭하면 AI 도면 파싱으로 넘어갑니다"
                           className={`transition-colors cursor-pointer group ${
                             isSelected
                               ? 'bg-blue-50/70 hover:bg-blue-50'
