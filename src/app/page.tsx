@@ -168,8 +168,9 @@ export default function HomePage() {
     });
   };
 
-  // 💡 마우스 커서 위치 추적 도면 파싱 안내 말풍선 (먹 10%)
+  // 💡 마우스 커서 위치 추적 도면 파싱 안내 말풍선 (먹 10% & 2초 후 자동 소멸)
   const cursorTooltipRef = useRef<HTMLDivElement | null>(null);
+  const cursorTooltipTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const updateCursorTooltipPos = useCallback((clientX: number, clientY: number) => {
     const el = cursorTooltipRef.current;
@@ -186,8 +187,28 @@ export default function HomePage() {
   const handleRowMouseEnter = useCallback((e: React.MouseEvent) => {
     const el = cursorTooltipRef.current;
     if (!el) return;
+
+    if (cursorTooltipTimerRef.current) {
+      clearTimeout(cursorTooltipTimerRef.current);
+      cursorTooltipTimerRef.current = null;
+    }
+
     el.style.display = 'flex';
+    el.style.opacity = '1';
     updateCursorTooltipPos(e.clientX, e.clientY);
+
+    // 💡 2초 후에 자동으로 사라지게 처리
+    cursorTooltipTimerRef.current = setTimeout(() => {
+      if (cursorTooltipRef.current) {
+        cursorTooltipRef.current.style.opacity = '0';
+        setTimeout(() => {
+          if (cursorTooltipRef.current && cursorTooltipRef.current.style.opacity === '0') {
+            cursorTooltipRef.current.style.display = 'none';
+          }
+        }, 200);
+      }
+      cursorTooltipTimerRef.current = null;
+    }, 2000);
   }, [updateCursorTooltipPos]);
 
   const handleRowMouseMove = useCallback((e: React.MouseEvent) => {
@@ -195,8 +216,13 @@ export default function HomePage() {
   }, [updateCursorTooltipPos]);
 
   const handleRowMouseLeave = useCallback(() => {
+    if (cursorTooltipTimerRef.current) {
+      clearTimeout(cursorTooltipTimerRef.current);
+      cursorTooltipTimerRef.current = null;
+    }
     const el = cursorTooltipRef.current;
     if (!el) return;
+    el.style.opacity = '0';
     el.style.display = 'none';
   }, []);
 
@@ -2489,7 +2515,7 @@ export default function HomePage() {
       <div
         ref={cursorTooltipRef}
         style={{ display: 'none', position: 'fixed', zIndex: 9999, pointerEvents: 'none', top: 0, left: 0 }}
-        className="items-center gap-1.5 px-2.5 py-1 bg-[#E6E6E6] text-slate-900 rounded-md text-[11px] font-bold shadow-md border border-neutral-300 whitespace-nowrap"
+        className="items-center gap-1.5 px-2.5 py-1 bg-[#E6E6E6] text-slate-900 rounded-md text-[11px] font-bold shadow-md border border-neutral-300 whitespace-nowrap transition-opacity duration-200"
       >
         <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse shrink-0"></span>
         <span>더블 클릭하면 AI 도면 파싱으로 넘어갑니다</span>
