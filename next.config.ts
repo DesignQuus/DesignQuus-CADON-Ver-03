@@ -31,8 +31,6 @@ const nextConfig: NextConfig = {
   // Only use basePath in production mode, not in dev mode
   basePath: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
   assetPrefix: process.env.NODE_ENV === 'development' ? '' : (process.env.EGDESK_BASE_PATH || ''),
-  // Allow LAN/IP access to the dev server (Next.js 15+)
-  allowedDevOrigins: getLocalIPs(),
   typescript: {
     // Always skip TypeScript errors to prevent blocking on auto-generated files
     ignoreBuildErrors: true,
@@ -42,6 +40,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
+    allowedDevOrigins: getLocalIPs(),
     serverActions: {
       bodySizeLimit: '10mb',
       allowedOrigins: [

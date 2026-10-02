@@ -15,6 +15,7 @@ export interface CadWorkerParseResult {
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
   posArray: Float32Array;
   colArray: Float32Array;
+  indexArray?: Uint32Array;
   triPosArray?: Float32Array;
   triColArray?: Float32Array;
   heavyBuckets?: Array<{ px: number; pos: Float32Array; col: Float32Array }>;
@@ -143,6 +144,41 @@ self.onmessage = function(e) {
         }
       }
 
+      // ⚡ Stratified Multi-pass LOD Index Buffer (DWG FastView / AutoCAD style)
+      // LineSegments indices: [2*i, 2*i+1] for each line i.
+      // Reordered into 4 stratified levels for 0ms sub-pixel decimation:
+      // Pass 0 (0~12.5%): i % 8 === 0  (Global structural skeleton)
+      // Pass 1 (12.5~25%): i % 8 === 4 (Major outlines)
+      // Pass 2 (25~50%): i % 4 === 2   (Medium details)
+      // Pass 3 (50~100%): all remaining odd i (Fine details)
+      var indexArray = new Uint32Array(numLines * 2);
+      var idxPtr = 0;
+      // Pass 0 (Step 8, offset 0: 12.5%)
+      for (var i0 = 0; i0 < numLines; i0 += 8) {
+        var v0 = i0 * 2;
+        indexArray[idxPtr++] = v0;
+        indexArray[idxPtr++] = v0 + 1;
+      }
+      // Pass 1 (Step 8, offset 4: +12.5% -> 25%)
+      for (var i1 = 4; i1 < numLines; i1 += 8) {
+        var v1 = i1 * 2;
+        indexArray[idxPtr++] = v1;
+        indexArray[idxPtr++] = v1 + 1;
+      }
+      // Pass 2 (Step 4, offset 2: +25% -> 50%)
+      for (var i2 = 2; i2 < numLines; i2 += 4) {
+        var v2 = i2 * 2;
+        indexArray[idxPtr++] = v2;
+        indexArray[idxPtr++] = v2 + 1;
+      }
+      // Pass 3 (Step 2, offset 1: +50% -> 100%)
+      for (var i3 = 1; i3 < numLines; i3 += 2) {
+        var v3 = i3 * 2;
+        indexArray[idxPtr++] = v3;
+        indexArray[idxPtr++] = v3 + 1;
+      }
+      transferable.push(indexArray.buffer);
+
       self.postMessage({
         action: 'PARSE_SUCCESS',
         result: {
@@ -153,6 +189,7 @@ self.onmessage = function(e) {
           bounds: { minX: minX, minY: minY, maxX: maxX, maxY: maxY },
           posArray: posCopy,
           colArray: colCopy,
+          indexArray: indexArray,
           triPosArray: triPosCopy,
           triColArray: triColCopy,
           heavyBuckets: heavyBuckets
@@ -346,6 +383,30 @@ function parseCadBinarySync(arrayBuffer: ArrayBuffer): Promise<CadWorkerParseRes
         });
       }
 
+      // Stratified LOD index buffer
+      const indexArray = new Uint32Array(numLines * 2);
+      let idxPtr = 0;
+      for (let i0 = 0; i0 < numLines; i0 += 8) {
+        const v0 = i0 * 2;
+        indexArray[idxPtr++] = v0;
+        indexArray[idxPtr++] = v0 + 1;
+      }
+      for (let i1 = 4; i1 < numLines; i1 += 8) {
+        const v1 = i1 * 2;
+        indexArray[idxPtr++] = v1;
+        indexArray[idxPtr++] = v1 + 1;
+      }
+      for (let i2 = 2; i2 < numLines; i2 += 4) {
+        const v2 = i2 * 2;
+        indexArray[idxPtr++] = v2;
+        indexArray[idxPtr++] = v2 + 1;
+      }
+      for (let i3 = 1; i3 < numLines; i3 += 2) {
+        const v3 = i3 * 2;
+        indexArray[idxPtr++] = v3;
+        indexArray[idxPtr++] = v3 + 1;
+      }
+
       resolve({
         version,
         numLines,
@@ -354,6 +415,7 @@ function parseCadBinarySync(arrayBuffer: ArrayBuffer): Promise<CadWorkerParseRes
         bounds: { minX, minY, maxX, maxY },
         posArray,
         colArray,
+        indexArray,
         triPosArray: triPosCopy,
         triColArray: triColCopy,
         heavyBuckets

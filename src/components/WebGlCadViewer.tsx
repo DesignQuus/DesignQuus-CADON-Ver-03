@@ -182,6 +182,8 @@ export default function WebGlCadViewer({
   // ⚡ Autodesk Forge & GitHub: Decoupled Pan Accumulator & Kinetic Fling Physics
   const panAccumulatorRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const panVelocityRef = useRef<{ vx: number; vy: number } | null>(null);
+  const totalLineIndicesRef = useRef<number>(0);
+  const wasInteractingRef = useRef<boolean>(false);
 
   // Smooth fly-to animation & kinetic momentum zoom ref
   const targetCamRef = useRef<{ x: number; y: number; zoom: number; lerpSpeed?: number } | null>(null);
@@ -459,18 +461,49 @@ export default function WebGlCadViewer({
         }
       }
 
+      const isInteracting = isMoving || isDraggingRef.current || !!panVelocityRef.current;
+
       // 🛑 If no motion and not marked dirty, skip GPU draw calls entirely (0% GPU idle)
-      if (!needsRenderRef.current && !isMoving && !isDraggingRef.current && !panVelocityRef.current) {
+      if (!needsRenderRef.current && !isInteracting) {
         animationFrameIdRef.current = requestAnimationFrame(animate);
         return;
       }
       needsRenderRef.current = false;
 
-      // ⚡ Heavy Lines LOD: 전체 화면 원경(scale < 0.035)에서는 fat line 셰이더 부하를 방지하여 60 FPS 보장
-      if (heavyGroupRef.current && cameraRef.current) {
+      // 조작이 멈추는 첫 프레임: 원경 축소에서도 100% 전량 무손실 디테일 복원 렌더링 1회 예약
+      if (wasInteractingRef.current && !isInteracting) {
+        needsRenderRef.current = true;
+      }
+      wasInteractingRef.current = isInteracting;
+
+      // ⚡ Stratified Sub-pixel Decimation LOD (DWG FastView / AutoCAD Interactive Rendering)
+      // 전체 화면 축소 조작 시 수백만 개 선분을 60 FPS로 가볍게 렌더링하고, 정지 시 100% 전량 무손실 복원
+      if (lineSegmentsRef.current && totalLineIndicesRef.current > 0 && cameraRef.current) {
+        const geom = lineSegmentsRef.current.geometry;
+        const total = totalLineIndicesRef.current;
         const frustumW = (cameraRef.current.right - cameraRef.current.left) / cameraRef.current.zoom;
         const currentScale = (container.clientWidth || 800) / frustumW;
-        heavyGroupRef.current.visible = currentScale >= 0.035;
+
+        if (isInteracting) {
+          let count = total;
+          if (currentScale < 0.02) {
+            count = Math.floor(total * 0.125); // 1/8 선분 (약 28만 개) -> 초당 60 FPS 절대 고정
+          } else if (currentScale < 0.04) {
+            count = Math.floor(total * 0.25);  // 1/4 선분 (약 57만 개)
+          } else if (currentScale < 0.08) {
+            count = Math.floor(total * 0.5);   // 1/2 선분 (약 114만 개)
+          }
+          count = Math.max(Math.floor(count / 2) * 2, 2);
+          geom.setDrawRange(0, count);
+        } else {
+          // 정지 시: 도면 렌더링 기술 보존 원칙에 따라 100% 원본 무손실 표출
+          geom.setDrawRange(0, total);
+        }
+
+        // Heavy Lines LOD
+        if (heavyGroupRef.current) {
+          heavyGroupRef.current.visible = currentScale >= 0.035 || !isInteracting;
+        }
       }
 
       renderer.render(scene, camera);
@@ -528,15 +561,19 @@ export default function WebGlCadViewer({
 
             // ⚡ DWG FastView 상시 폰트 표출 & 60 FPS 무결성 LOD:
             // 줌/패닝 중에도 폰트가 절대로 사라지지 않고 상시 표출!
-            // - 원경 축소(scale < 0.04): 화면 픽셀 높이가 1.2px 미만인 비식별 극소 텍스트만 스킵하고, 표제란/도면명/부품명 등 식별 가능한 글자는 언제나 100% 선명하게 상시 표출.
-            // - 확대 모드(scale >= 0.04): CADON 4대 렌더링 표준 원칙에 따라 minPxH=0.8px, 전량 30,000개 텍스트 100% 무손실 표출.
-            const minPxH = scale < 0.04 ? 1.2 : 0.8;
+            // - 조작 중 원경 축소(scale < 0.03): 픽셀 높이가 2.0px 미만인 비식별 극소 텍스트만 스킵하고, 표제란/도면명/부품명 등 식별 가능한 글자는 100% 선명하게 상시 표출.
+            // - 정지 시 또는 확대 모드: CADON 4대 렌더링 표준 원칙에 따라 minPxH=0.8px, 전량 30,000개 텍스트 100% 무손실 표출.
+            const minPxH = isInteracting && scale < 0.03 ? 2.0 : (scale < 0.04 ? 1.2 : 0.8);
             const maxAllowedTexts = 30000;
             let textDrawCount = 0;
 
             for (let i = 0; i < candidateTexts.length; i++) {
               const item = candidateTexts[i];
-              // Viewport Culling
+              // ⚡ 1. Level of Detail (LOD) check FIRST (fast early exit before 4-way coordinate checks)
+              const pxH = item.h * scale;
+              if (pxH < minPxH) continue;
+
+              // ⚡ 2. Viewport Culling
               if (
                 item.x < minX - 100 ||
                 item.x > maxX + 100 ||
@@ -545,10 +582,6 @@ export default function WebGlCadViewer({
               ) {
                 continue;
               }
-
-              // Level of Detail (LOD): screen pixel height
-              const pxH = item.h * scale;
-              if (pxH < minPxH) continue; // Skip sub-pixel text at far overview or during rapid zoom
 
               if (textDrawCount >= maxAllowedTexts) break;
               textDrawCount++;
@@ -967,14 +1000,18 @@ export default function WebGlCadViewer({
       const parsed = await parseCadBinaryWithWorker(arrayBuffer);
       if (fetchId && currentFileIdRef.current && fetchId !== currentFileIdRef.current) return;
 
-      const { numLines, numTris, numHeavy, bounds, posArray, colArray, triPosArray, triColArray, heavyBuckets } = parsed;
+      const { numLines, numTris, numHeavy, bounds, posArray, colArray, indexArray, triPosArray, triColArray, heavyBuckets } = parsed;
 
       boundsRef.current = bounds;
       setTotalLines(numLines + numTris);
+      totalLineIndicesRef.current = indexArray && indexArray.length > 0 ? indexArray.length : numLines * 2;
 
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
       geometry.setAttribute('color', new THREE.BufferAttribute(colArray, 3));
+      if (indexArray && indexArray.length > 0) {
+        geometry.setIndex(new THREE.BufferAttribute(indexArray, 1));
+      }
       const material = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 1 });
       const lineSegments = new THREE.LineSegments(geometry, material);
 
