@@ -83,12 +83,25 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
     LABEL_BLACKLIST = {
         "DWG NO.", "DWG NO", "DWG", "TITLE", "DESCRIPTION", "품명", "도명", "도번",
         "SPECIFICATION", "규격", "Q'TY", "QTY", "수량", "MATERIAL", "재질", "FINISH",
-        "REMARK", "FINISH / REMARK", "PAGE", "SCALE", "REV", "REV.", "DESIGN", "CHECK",
-        "APPROVE", "SUB SCRIPE", "REF NO.", "CUSTOMER", "PROJECT NO.", "PROJECT NO",
+        "REMARK", "FINISH / REMARK", "PAGE", "SCALE", "REV", "REV.", "REVISION", "DESIGN", "CHECK",
+        "APPROVE", "SUB SCRIPE", "REF NO.", "REF NO", "CUSTOMER", "PROJECT NO.", "PROJECT NO", "PROJECT NUMBER",
         "A3", "A4", "A2", "A1", "A0", "STANDARD", "NAME MARKING", "POSITION TYPE",
         "DATE", "UNIT", "SIZE", "SHEET", "PROJECT NAME", "CLIENT", "DRAWN", "CHECKED", "APPROVED", "DESIGNED",
-        "PLOT DATE", "일자", "척도", "설계", "검도", "승인", "고객사", "발주처", "발주사", "수요처", "납품처", "BUYER", "ORDERER", "고객사명", "발주처명"
+        "PLOT DATE", "일자", "척도", "설계", "검도", "승인", "고객사", "발주처", "발주사", "수요처", "납품처", "BUYER", "ORDERER", "고객사명", "발주처명",
+        "N0.", "N0", "NO.", "NO", "ITEM", "ITEM NO"
     }
+    LABEL_BLACKLIST_CLEAN = {
+        re.sub(r'[\s:._/-]', '', k).upper() for k in LABEL_BLACKLIST
+    }
+
+    def is_label_blacklisted(txt: str) -> bool:
+        if not txt:
+            return True
+        u = txt.strip().upper()
+        if u in LABEL_BLACKLIST:
+            return True
+        c = re.sub(r'[\s:._/-]', '', u)
+        return c in LABEL_BLACKLIST_CLEAN
 
     # 날짜(YYYY-MM-DD, YYMMDD-.. 등)는 도면번호 패턴과 겹치므로 명시적으로 배제
     DATE_PAT = re.compile(r'^\d{4}-\d{1,2}-\d{1,2}$')
@@ -195,8 +208,10 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                 if t != cl
                 and -35 * usc <= (t["y"] - cl["y"]) <= 10 * usc
                 and abs(t["x"] - cl["x"]) <= 120 * usc
-                and t["text"].strip().upper().replace(" ", "").replace(":", "") not in LABEL_BLACKLIST
+                and not is_label_blacklisted(t["text"])
                 and not is_supplier_like(t["text"].strip())
+                and not re.match(r'^\d{4}[-/.시]\d{1,2}[-/.월]\d{1,2}', t["text"].strip())
+                and not re.match(r'^\d{4}-\d{3}', t["text"].strip())
             ]
             if c_cands:
                 c_cands.sort(key=lambda t: (cl["y"] - t["y"])**2 + (cl["x"] - t["x"])**2)
@@ -259,7 +274,7 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                 return None
 
             desc_val = find_closest_text(header_labels.get("DESC"), data_row_candidates, max_dx=40)
-            if desc_val and len(desc_val) >= 2 and desc_val.upper() not in LABEL_BLACKLIST:
+            if desc_val and len(desc_val) >= 2 and not is_label_blacklisted(desc_val):
                 name = desc_val
 
             qty_val = find_closest_text(header_labels.get("QTY"), data_row_candidates, max_dx=25)
@@ -292,7 +307,7 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                     if t != dl
                     and abs(t["x"] - dl["x"]) <= 120 * usc
                     and abs(t["y"] - dl["y"]) <= 40 * usc
-                    and t["text"].strip().upper() not in LABEL_BLACKLIST
+                    and not is_label_blacklisted(t["text"])
                     and not t["text"].strip().startswith("PLOT DATE")
                     and not re.match(r'^[0-9.]+$', t["text"].strip())
                 ]
@@ -303,7 +318,7 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
         if not name:
             for t in tb_texts:
                 u = t["text"].strip().upper()
-                if u not in LABEL_BLACKLIST and not u.startswith("PLOT DATE") and len(u) >= 2:
+                if not is_label_blacklisted(u) and not u.startswith("PLOT DATE") and len(u) >= 2:
                     if not re.match(r'^[0-9.+-]+$', u) and u not in ["AL6061", "S45C", "SUS304", "SS400", "MC NYLON"]:
                         if not pat_full.search(u) and not pat_unit.search(u):
                             name = t["text"].strip()
@@ -411,6 +426,21 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                 "confidence_score": 0.95,
                 "status": "APPROVED"
             })
+
+    # Determine customer_global from detected customers
+    cust_counter = {}
+    for d in all_extracted:
+        c = d.get("customer")
+        if c and c != "-" and not is_label_blacklisted(c):
+            cust_counter[c] = cust_counter.get(c, 0) + 1
+    customer_global = None
+    if cust_counter:
+        customer_global = max(cust_counter.items(), key=lambda kv: kv[1])[0]
+
+    if customer_global:
+        for d in all_extracted:
+            if not d.get("customer") or d.get("customer") == "-":
+                d["customer"] = customer_global
 
     # Sort drawings logically: MAIN_ASSEMBLY first, then SUB_ASSEMBLY, then SUB_PART
     type_order = {"MAIN_ASSEMBLY": 1, "SUB_ASSEMBLY": 2, "SUB_PART": 3}

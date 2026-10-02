@@ -294,13 +294,18 @@ export async function processCadFilePipeline(
     });
     await insertRows('drawings', dwgRows);
 
-    // Auto-link Customer from Title Block to quotation_cases (Exclude supplier/tenant self-name)
+    // Auto-link Customer from Title Block to quotation_cases (Exclude supplier/tenant self-name & label headers)
     const detectedCustomer = structureResult.drawings.find((d: any) => d.customer && d.customer !== '-' && d.customer !== '')?.customer;
     if (detectedCustomer) {
       try {
-        const custClean = detectedCustomer.replace(/[\s()]/g, '').toLowerCase();
+        const custClean = detectedCustomer.replace(/[\s().:_-]/g, '').toLowerCase();
         const isSelfSupplier = custClean.includes('세창') || custClean.includes('sechang');
-        if (!isSelfSupplier) {
+        const isLabelHeader = [
+          'projectno', 'projectnumber', 'dwgno', 'drawingno', 'customer', 'title',
+          'description', 'scale', 'date', 'n0', 'no', 'finish', 'remark', 'revision', 'rev'
+        ].includes(custClean) || /^\d{4}[-/.시]\d{1,2}/.test(detectedCustomer) || /^\d{4}-\d{3}/.test(detectedCustomer);
+
+        if (!isSelfSupplier && !isLabelHeader) {
           const tenantComps = ((await db.prepare("SELECT company_name FROM companies WHERE company_type = 'TENANT'").all()) as any[]) || [];
           const isTenantName = tenantComps.some((t: any) => (t.company_name || '').replace(/[\s()]/g, '').toLowerCase() === custClean);
 
@@ -312,8 +317,7 @@ export async function processCadFilePipeline(
             } else {
               const currentComp = await db.prepare('SELECT company_name FROM companies WHERE id = ?').get(caseRow.company_id);
               const cName = (currentComp?.company_name || '').trim();
-              // 기존 연결 업체가 임시/플레이스홀더 명칭(예: "T1.xxx", 숫자만, 빈 값)일 때만 표제란 고객사로 교체
-              const isPlaceholder = cName === '' || /^T\d+\./i.test(cName) || /^\d+$/.test(cName);
+              const isPlaceholder = cName === '' || /^T\d+\./i.test(cName) || /^\d+$/.test(cName) || cName.toUpperCase().includes('PROJECT NO');
               if (isPlaceholder) {
                 shouldLink = true;
               }
