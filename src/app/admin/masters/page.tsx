@@ -18,7 +18,8 @@ import {
   getPartCategoryBadgeClass,
   getPartCategoryTextClass,
   getPartCategorySubDetail,
-  normalizePartCategoryFromText
+  normalizePartCategoryFromText,
+  detectPartSubItem
 } from '@/lib/part-categories';
 import PartCategoryPickerModal from '@/components/common/PartCategoryPickerModal';
 
@@ -146,6 +147,7 @@ export default function MasterDataManagerPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null); // 개별 단가 인라인 편집 상태 (다중 선택과 완전 분리)
   const [modifiedItems, setModifiedItems] = useState<Record<string, number>>({});
+  const [customSubItems, setCustomSubItems] = useState<Record<string, string>>({}); // 품목별 세부 대표 품목 수동 지정 매핑
   const [isSavingBatch, setIsSavingBatch] = useState(false);
   const [bulkCustomPriceInput, setBulkCustomPriceInput] = useState('');
   const [bulkCategory, setBulkCategory] = useState<string>('MACHINING');
@@ -1219,53 +1221,61 @@ export default function MasterDataManagerPage() {
                             {it.material || 'SS400'}
                           </td>
                           <td className="py-2 px-3 text-left" onClick={(e) => e.stopPropagation()}>
-                            <div className="relative inline-flex items-center group max-w-[225px]">
-                              {/* 시각 레이어 (대분류 볼드 컬러 + 실무 대표 품목 미니멀 슬레이트 + 드롭다운 화살표) */}
-                              <div className="flex items-center gap-1.5 py-0.5 px-1.5 rounded hover:bg-slate-100/80 transition-colors pointer-events-none">
-                                <span className={`text-xs font-bold whitespace-nowrap ${getPartCategoryTextClass(it.category)}`}>
-                                  {getPartCategoryLabel(it.category)}
-                                </span>
-                                {getPartCategorySubDetail(it.category) && (
-                                  <span className="text-[11px] text-slate-400 font-normal whitespace-nowrap">
-                                    ({getPartCategorySubDetail(it.category)})
-                                  </span>
-                                )}
-                                <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-colors shrink-0 ml-0.5" />
-                              </div>
+                            {(() => {
+                              const subItem = customSubItems[it.id] || detectPartSubItem(it.standard_name, it.category, it.master_code);
+                              return (
+                                <div className="relative inline-flex items-center group max-w-[225px]">
+                                  {/* 시각 레이어 (대분류 볼드 컬러 + 실무 대표 품목 1:1 매핑 뱃지 + 드롭다운 화살표) */}
+                                  <div className="flex items-center gap-1.5 py-0.5 px-1.5 rounded hover:bg-slate-100/80 transition-colors pointer-events-none">
+                                    <span className={`text-xs font-bold whitespace-nowrap ${getPartCategoryTextClass(it.category)}`}>
+                                      {getPartCategoryLabel(it.category)}
+                                    </span>
+                                    {subItem && (
+                                      <>
+                                        <span className="text-slate-300 font-bold text-xs select-none">·</span>
+                                        <span className="px-1.5 py-0.5 rounded bg-slate-100/90 text-slate-800 font-medium text-[11px] border border-slate-200/90 whitespace-nowrap shadow-2xs">
+                                          {subItem}
+                                        </span>
+                                      </>
+                                    )}
+                                    <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-colors shrink-0 ml-0.5" />
+                                  </div>
 
-                              {/* 1-클릭 풀다운 투명 오버레이 셀렉트 (네이티브 드롭다운 즉시 반응) */}
-                              <select
-                                value={it.category || 'MACHINING'}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  if (val === '__OPEN_PICKER__') {
-                                    setCategoryPickerState({
-                                      isOpen: true,
-                                      mode: 'inline',
-                                      targetId: it.id,
-                                      targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
-                                      currentCategory: it.category || 'MACHINING'
-                                    });
-                                    return;
-                                  }
-                                  handleInlineCategoryChange(it.id, val);
-                                }}
-                                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                title="클릭하여 부품 유형 변경 (선택 시 즉시 저장)"
-                              >
-                                <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1">
-                                  ✨ 스마트피커 열기...
-                                </option>
-                                <option disabled className="text-slate-400 bg-slate-100 font-semibold text-[10px]">
-                                  ──────── 10대 분류 및 실무 대표 품목 ────────
-                                </option>
-                                {PART_CATEGORIES.map(c => (
-                                  <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
-                                    {c.label} ({c.subDetail})
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                                  {/* 1-클릭 풀다운 투명 오버레이 셀렉트 (네이티브 드롭다운 즉시 반응) */}
+                                  <select
+                                    value={it.category || 'MACHINING'}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val === '__OPEN_PICKER__') {
+                                        setCategoryPickerState({
+                                          isOpen: true,
+                                          mode: 'inline',
+                                          targetId: it.id,
+                                          targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
+                                          currentCategory: it.category || 'MACHINING'
+                                        });
+                                        return;
+                                      }
+                                      handleInlineCategoryChange(it.id, val);
+                                    }}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                    title={`클릭하여 부품 유형 변경 (현재: ${getPartCategoryLabel(it.category)}${subItem ? ` · ${subItem}` : ''})`}
+                                  >
+                                    <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1">
+                                      ✨ 스마트피커 열기 (세부 대표품목 선택)...
+                                    </option>
+                                    <option disabled className="text-slate-400 bg-slate-100 font-semibold text-[10px]">
+                                      ──────── 10대 분류 및 실무 대표 품목 ────────
+                                    </option>
+                                    {PART_CATEGORIES.map(c => (
+                                      <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
+                                        {c.label} ({c.subDetail})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              );
+                            })()}
                           </td>
                           {editingPriceId === it.id ? (
                             <td className="py-1 px-3 text-right" onClick={(e) => e.stopPropagation()}>
@@ -2436,6 +2446,9 @@ export default function MasterDataManagerPage() {
         onSelect={(category, selectedSubItem) => {
           if (categoryPickerState.mode === 'inline' && categoryPickerState.targetId) {
             handleInlineCategoryChange(categoryPickerState.targetId, category);
+            if (selectedSubItem) {
+              setCustomSubItems(prev => ({ ...prev, [categoryPickerState.targetId!]: selectedSubItem }));
+            }
           } else if (categoryPickerState.mode === 'bulk') {
             setBulkCategory(category);
           } else if (categoryPickerState.mode === 'add') {

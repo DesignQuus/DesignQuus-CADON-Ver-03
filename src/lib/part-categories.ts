@@ -250,3 +250,105 @@ export function normalizePartCategoryFromText(rawText: string): string {
   }
   return 'MACHINING';
 }
+
+/**
+ * 품목명(standard_name) 및 마스터코드(master_code)에서 해당 부품분류의 실무 대표 품목(세부 품목)을 1:1 지능형 매핑
+ */
+export function detectPartSubItem(name?: string, category?: string, masterCode?: string): string {
+  const cat = category || 'MACHINING';
+  const text = `${masterCode || ''} ${name || ''}`.toUpperCase().trim();
+
+  if (cat === 'SHEET_METAL') {
+    if (text.includes('COVER') || text.includes('CVR') || text.includes('커버')) return '커버';
+    if (text.includes('BRACKET') || text.includes('BKT') || text.includes('브라켓') || text.includes('브래킷')) return '브라켓';
+    if (text.includes('BASE') || text.includes('PLATE') || text.includes('PLT') || text.includes('베이스') || text.includes('플레이트')) return '베이스';
+    if (text.includes('FRAME') || text.includes('FRM') || text.includes('프레임') || text.includes('용접') || text.includes('WELD')) return '프레임용접';
+    if (text.includes('DUCT') || text.includes('덕트')) return '덕트';
+    if (text.includes('HOPPER') || text.includes('HPR') || text.includes('호퍼')) return '호퍼';
+    if (text.includes('CASE') || text.includes('CHASSIS') || text.includes('케이스') || text.includes('샤시') || text.includes('BOX')) return '판금케이스';
+    if (text.includes('PANEL') || text.includes('PNL') || text.includes('패널') || text.includes('판넬')) return '패널';
+    return '브라켓';
+  }
+
+  if (cat === 'MACHINING') {
+    if (text.includes('SHAFT') || text.includes('SFT') || text.includes('샤프트') || text.includes('축') || text.includes('AXLE')) return '샤프트';
+    if (text.includes('ROLLER') || text.includes('RLL') || text.includes('롤러')) return '롤러';
+    if (text.includes('STOPPER') || text.includes('STP') || text.includes('BLOCK') || text.includes('BLK') || text.includes('스토퍼') || text.includes('블록') || text.includes('PAD')) return '블록';
+    if (text.includes('FLANGE') || text.includes('FLG') || text.includes('플랜지')) return '플랜지';
+    if (text.includes('BOSS') || text.includes('보스')) return '보스';
+    if (text.includes('PIN') || text.includes('POST') || text.includes('핀') || text.includes('포스트') || text.includes('다웰')) return '핀';
+    if (text.includes('BUSH') || text.includes('BUSHING') || text.includes('부싱') || text.includes('부시')) return '부싱';
+    if (text.includes('GEAR') || text.includes('기어') || text.includes('블랭크')) return '기어블랭크';
+    return '가공품';
+  }
+
+  if (cat === 'MECHANICAL') {
+    if (text.includes('LM') || text.includes('GUIDE') || text.includes('가이드')) return 'LM가이드';
+    if (text.includes('SCREW') || text.includes('BALL') || text.includes('스크류')) return '볼스크류';
+    if (text.includes('BEARING') || text.includes('BRG') || text.includes('베어링')) return '베어링';
+    if (text.includes('COUPLING') || text.includes('JOINT') || text.includes('JNT') || text.includes('커플링') || text.includes('조인트')) return '플렉시블커플링';
+    if (text.includes('GEAR') || text.includes('RACK') || text.includes('PINION') || text.includes('랙') || text.includes('피니언')) return '기어/랙';
+    if (text.includes('PULLEY') || text.includes('BELT') || text.includes('풀리') || text.includes('벨트')) return '타이밍풀리';
+    if (text.includes('CHAIN') || text.includes('SPROCKET') || text.includes('체인') || text.includes('스프라켓')) return '체인/스프라켓';
+    if (text.includes('DAMPER') || text.includes('SHOCK') || text.includes('쇼바') || text.includes('완충기')) return '완충기';
+    return '기계요소';
+  }
+
+  if (cat === 'COMMERCIAL' || cat === 'FASTENER') {
+    if (text.includes('NUT') || text.includes('너트')) return '육각너트';
+    if (text.includes('WASHER') || text.includes('WSH') || text.includes('와셔')) return '와셔';
+    if (text.includes('BOLT') || text.includes('BLT') || text.includes('볼트') || text.includes('CAP SCREW')) return '볼트';
+    if (text.includes('KEY') || text.includes('평행키')) return '평행키';
+    if (text.includes('RIVET') || text.includes('리벳')) return '리벳';
+    return '볼트/너트';
+  }
+
+  if (cat === 'INJECTION') {
+    if (text.includes('POM') || text.includes('아세탈')) return 'POM/아세탈';
+    if (text.includes('MC') || text.includes('나일론')) return 'MC나일론';
+    if (text.includes('PEEK')) return 'PEEK';
+    if (text.includes('O-RING') || text.includes('오링') || text.includes('MOLD') || text.includes('몰딩')) return '고무몰딩';
+    if (text.includes('URETHANE') || text.includes('우레탄')) return '우레탄';
+    if (text.includes('PROFILE') || text.includes('압출') || text.includes('프로파일')) return 'AL압출';
+    return '사출품';
+  }
+
+  if (cat === 'ELECTRICAL') {
+    if (text.includes('MOTOR') || text.includes('서보') || text.includes('모터')) return '서보모터';
+    if (text.includes('REDUCER') || text.includes('감속기')) return '감속기';
+    if (text.includes('CYLINDER') || text.includes('실린더')) return '에어실린더';
+    if (text.includes('VALVE') || text.includes('솔레노이드') || text.includes('밸브')) return '솔레노이드';
+    if (text.includes('SENSOR') || text.includes('센서')) return '센서';
+    if (text.includes('PLC') || text.includes('MODULE')) return 'PLC모듈';
+    if (text.includes('INVERTER') || text.includes('인버터')) return '인버터';
+    return '제어부품';
+  }
+
+  if (cat === 'CASTING') {
+    if (text.includes('HOUSING') || text.includes('하우징')) return '하우징';
+    if (text.includes('BASE') || text.includes('베이스')) return '주물베이스';
+    if (text.includes('FRAME') || text.includes('프레임')) return '대형프레임';
+    return '주물품';
+  }
+
+  if (cat === 'IMPORTED') {
+    if (text.includes('MISUMI') || text.includes('미스미')) return '미스미직수입';
+    if (text.includes('THK') || text.includes('SMC')) return '외산THK/SMC';
+    return '외산조달';
+  }
+
+  if (cat === 'SUPPLIED') {
+    if (text.includes('MOTOR') || text.includes('모터')) return '사급모터';
+    if (text.includes('SENSOR') || text.includes('센서')) return '사급센서';
+    return '고객사급';
+  }
+
+  if (cat === 'ASSEMBLY') {
+    if (text.includes('MODULE') || text.includes('모듈')) return '유닛모듈';
+    if (text.includes('FRAME') || text.includes('프레임')) return '메인프레임';
+    return '서브조립체';
+  }
+
+  return '가공품';
+}
+
