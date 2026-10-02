@@ -1014,6 +1014,7 @@ export default function WebGlCadViewer({
       }
       const material = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 1 });
       const lineSegments = new THREE.LineSegments(geometry, material);
+      lineSegments.renderOrder = 0;
 
       let triMesh: THREE.Mesh | null = null;
       if (numTris > 0 && triPosArray && triColArray) {
@@ -1023,10 +1024,13 @@ export default function WebGlCadViewer({
         const triMaterial = new THREE.MeshBasicMaterial({
           vertexColors: true,
           side: THREE.DoubleSide,
-          depthWrite: false
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: 2.0,
+          polygonOffsetUnits: 2.0
         });
         triMesh = new THREE.Mesh(triGeometry, triMaterial);
-        triMesh.position.set(0, 0, -0.1);
+        triMesh.position.set(0, 0, -0.5);
         triMesh.renderOrder = -1;
       }
 

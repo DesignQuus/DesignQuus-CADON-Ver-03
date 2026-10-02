@@ -286,7 +286,17 @@ def extract_ole_frames_from_dxf(dxf_path):
                 for (x1, y1, x2, y2), style in border_segments.items():
                     p1 = (x1, y1)
                     p2 = (x2, y2)
-                    col = BLACK if style in ['thick', 'medium', 'double'] else GREY
+                    # ⚡ AutoCAD / DWG FastViewer 표준 품질: 밝은 배경 위 100% 가독성을 위한 선명한 다크 콘트라스트 및 선가중치
+                    if style in ['thick', 'double']:
+                        col = (0.04, 0.05, 0.08) # 뚜렷한 블랙 테두리
+                        lw = 0.70                 # 3px 굵은선
+                    elif style == 'medium':
+                        col = (0.08, 0.10, 0.16) # 선명한 차콜 헤더 구분선
+                        lw = 0.50                 # 2.5px
+                    else:
+                        col = (0.16, 0.20, 0.28) # 선명한 다크 슬레이트 (노란색/흰색 위에서 끊김 없이 또렷한 2px 격자선)
+                        lw = 0.35
+
                     if style in ['hair', 'dotted', 'dashed']:
                         dx = x2 - x1
                         dy = y2 - y1
@@ -299,10 +309,19 @@ def extract_ole_frames_from_dxf(dxf_path):
                             ux, uy = dx / length, dy / length
                             while cur < length:
                                 seg_end = min(cur + dash_len, length)
-                                table_lines.append(((x1 + ux * cur, y1 + uy * cur), (x1 + ux * seg_end, y1 + uy * seg_end), col))
+                                table_lines.append(((x1 + ux * cur, y1 + uy * cur), (x1 + ux * seg_end, y1 + uy * seg_end), col, lw))
                                 cur += step
                     else:
-                        table_lines.append((p1, p2, col))
+                        table_lines.append((p1, p2, col, lw))
+
+                # 표 최외곽 4개 테두리는 다크 캔버스(#0e1117)와의 경계에서도 칼같이 선명하도록 3px 굵은 외곽선 보강
+                for (tr_start, tr_end) in table_ranges:
+                    top_y = row_ys[tr_start - 1]
+                    bot_y = row_ys[tr_end]
+                    table_lines.append(((min_x, top_y), (max_x, top_y), (0.04, 0.05, 0.08), 0.70))
+                    table_lines.append(((max_x, top_y), (max_x, bot_y), (0.04, 0.05, 0.08), 0.70))
+                    table_lines.append(((max_x, bot_y), (min_x, bot_y), (0.04, 0.05, 0.08), 0.70))
+                    table_lines.append(((min_x, bot_y), (min_x, top_y), (0.04, 0.05, 0.08), 0.70))
 
                 # Extract cell background fills (light blue header/section fills & yellow/gold subtotal rows)
                 for r in range(1, max_r + 1):
@@ -978,6 +997,9 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     rgb = get_rgb(col)
                     hex_col = f"#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}"
                 lw = 0.0
+                ent_lw = getattr(e.dxf, 'lineweight', -1)
+                if ent_lw > 0:
+                    lw = ent_lw / 100.0
 
                 if t in ['LINE', 'LWPOLYLINE', 'POLYLINE', 'SPLINE', 'SOLID', 'TRACE']:
                     if t == 'LINE':
@@ -986,6 +1008,9 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                         b_lines.append((p1, p2, rgb, col, lay_name, lw))
                         line_segs.append((p1, p2))
                     elif t in ['LWPOLYLINE', 'POLYLINE']:
+                        cw = getattr(e.dxf, 'const_width', 0.0) or getattr(e.dxf, 'width', 0.0) or 0.0
+                        if cw > 0.3:
+                            lw = max(lw, min(cw, 1.2))
                         segs, pts2, is_rect_cand = decompose_polyline_entity(e)
                         for p1, p2 in segs:
                             b_lines.append(((p1[0] - bpx, p1[1] - bpy), (p2[0] - bpx, p2[1] - bpy), rgb, col, lay_name, lw))
@@ -1369,15 +1394,28 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
             tri_start = len(tri_pos_data)
             entity_is_sheet_insert = False
 
+            # ⚡ AutoCAD / DWG FastViewer 표준 품질: 엔티티 고유 선가중치 및 도곽선(BORDER/GROUP_BOX) 두께 추출
+            lw = 0.0
+            ent_lw = getattr(e.dxf, 'lineweight', -1)
+            if ent_lw > 0:
+                lw = ent_lw / 100.0 # 50 -> 0.50mm, 70 -> 0.70mm
+
             if t in ['LINE', 'LWPOLYLINE', 'POLYLINE', 'SPLINE', 'SOLID', 'TRACE', 'CIRCLE', 'ARC', 'ELLIPSE']:
                 if t == 'LINE':
                     p1 = (e.dxf.start.x, e.dxf.start.y)
                     p2 = (e.dxf.end.x, e.dxf.end.y)
-                    add_seg(p1, p2, rgb)
+                    role = role_for_segment(p1, p2)
+                    eff_lw = max(lw, ROLE_STYLE[role][1]) if role in ROLE_STYLE else lw
+                    add_seg(p1, p2, rgb, eff_lw)
                 elif t in ['LWPOLYLINE', 'POLYLINE']:
+                    cw = getattr(e.dxf, 'const_width', 0.0) or getattr(e.dxf, 'width', 0.0) or 0.0
+                    if cw > 0.3:
+                        lw = max(lw, min(cw, 1.2))
                     segs, pts2, is_rect_cand = decompose_polyline_entity(e)
                     for p1, p2 in segs:
-                        add_seg(p1, p2, rgb)
+                        role = role_for_segment(p1, p2)
+                        eff_lw = max(lw, ROLE_STYLE[role][1]) if role in ROLE_STYLE else lw
+                        add_seg(p1, p2, rgb, eff_lw)
                 elif t == 'SPLINE':
                     try:
                         pts = list(e.flattening(distance=0.05))
@@ -1766,18 +1804,23 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     })
                 # Add vector table background triangles (white base & colored subtotal fills)
                 for (p1, p2, p3, rgb) in ole.get('tris', []):
-                    add_tri(p1, p2, p3, rgb, z=-0.1)
-                # Add vector table lines
-                for (p1, p2, rgb) in ole.get('lines', []):
-                    add_seg(p1, p2, rgb)
+                    add_tri(p1, p2, p3, rgb, z=-0.5)
+                # Add vector table lines with lineweight support
+                for item in ole.get('lines', []):
+                    if len(item) == 4:
+                        p1, p2, rgb, lw = item
+                    else:
+                        p1, p2, rgb = item[:3]
+                        lw = 0.0
+                    add_seg(p1, p2, rgb, lw)
                 if not ole.get('lines'):
                     # Fallback outer yellow frame if no detailed vector lines
                     ox1, ox2 = ole['min_x'], ole['max_x']
                     oy1, oy2 = ole['min_y'], ole['max_y']
-                    add_seg((ox1, oy1), (ox2, oy1), (1.0, 1.0, 0.0))
-                    add_seg((ox2, oy1), (ox2, oy2), (1.0, 1.0, 0.0))
-                    add_seg((ox2, oy2), (ox1, oy2), (1.0, 1.0, 0.0))
-                    add_seg((ox1, oy2), (ox1, oy1), (1.0, 1.0, 0.0))
+                    add_seg((ox1, oy1), (ox2, oy1), (1.0, 1.0, 0.0), 0.70)
+                    add_seg((ox2, oy1), (ox2, oy2), (1.0, 1.0, 0.0), 0.70)
+                    add_seg((ox2, oy2), (ox1, oy2), (1.0, 1.0, 0.0), 0.70)
+                    add_seg((ox1, oy2), (ox1, oy1), (1.0, 1.0, 0.0), 0.70)
                 if ole.get('texts'):
                     all_texts.extend(ole['texts'])
         except Exception as _oe:
