@@ -21,7 +21,7 @@ if (typeof process !== 'undefined') {
   if (!process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID) {
     process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID = '8dd35536-8cbb-4e1c-bb65-b35f2920cb03';
   }
-  if (!process.env.NEXT_PUBLIC_EGDESK_ENV) {
+  if (!process.env.NEXT_PUBLIC_EGDESK_ENV || process.env.NEXT_PUBLIC_EGDESK_ENV === 'production') {
     process.env.NEXT_PUBLIC_EGDESK_ENV = 'development';
   }
   // Enforce valid active EGDesk API key for localhost:8080

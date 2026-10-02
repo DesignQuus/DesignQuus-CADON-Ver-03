@@ -64,11 +64,14 @@ function buildServerEgdeskHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const apiKey =
     (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_KEY) ||
-    EGDESK_CONFIG.apiKey;
+    EGDESK_CONFIG.apiKey ||
+    '48632c34-0fd1-4b53-b448-b8162e19b925';
   const projectId =
-    typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_EGDESK_PROJECT_ID : undefined;
-  const egdeskEnv =
+    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_PROJECT_ID) ||
+    '8dd35536-8cbb-4e1c-bb65-b35f2920cb03';
+  let egdeskEnv =
     typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_EGDESK_ENV : undefined;
+  if (!egdeskEnv || egdeskEnv === 'production') egdeskEnv = 'development';
   if (apiKey) headers['X-Api-Key'] = apiKey;
   if (projectId) headers['X-EGDesk-Project-Id'] = projectId;
   if (egdeskEnv) headers['X-EGDesk-Env'] = egdeskEnv;
@@ -163,9 +166,12 @@ async function callWorkspaceMcpTool(
   const visitorHeaders = buildWorkspaceVisitorHeaders(options);
   let response: Response;
   if (isServer) {
-    const apiUrl =
+    let apiUrl =
       (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
       EGDESK_CONFIG.apiUrl;
+    if (!apiUrl || apiUrl.includes('tunneling-service.onrender.com')) {
+      apiUrl = 'http://localhost:8080';
+    }
     response = await fetch(`${apiUrl}${path}`, {
       method: 'POST',
       headers: { ...buildServerEgdeskHeaders(), ...visitorHeaders },
@@ -344,9 +350,12 @@ export async function callUserDataTool(
   let response: Response;
   if (isServer) {
     // API routes: call Egdesk directly (relative URL is invalid in Node)
-    const apiUrl =
+    let apiUrl =
       (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
       EGDESK_CONFIG.apiUrl;
+    if (!apiUrl || apiUrl.includes('tunneling-service.onrender.com')) {
+      apiUrl = 'http://localhost:8080';
+    }
     response = await fetch(`${apiUrl}/user-data/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
