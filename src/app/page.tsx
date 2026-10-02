@@ -1493,22 +1493,19 @@ export default function HomePage() {
                         {companyDisplay}
                       </td>
 
-                      {/* 3. 견적 담당자 (신설) */}
+                      {/* 3. 견적 담당자 */}
                       <td className="py-3 px-3.5">
                         {isOwner ? (
-                          <span className="inline-flex items-center gap-1.5 font-bold text-slate-900 text-xs">
-                            <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 flex items-center justify-center text-[10px] font-black shrink-0">
-                              {user?.name ? user.name.slice(0, 1) : '나'}
+                          <span className="inline-flex items-center gap-1.5 font-semibold text-slate-900 text-xs">
+                            <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 flex items-center justify-center text-[10px] font-bold shrink-0">
+                              {user?.name ? user.name.slice(0, 1) : (c.created_by_name ? c.created_by_name.slice(0, 1) : '나')}
                             </span>
                             <span>{c.created_by_name || user?.name || '담당자'}</span>
-                            <span className="text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.2 rounded shrink-0">
-                              본인
-                            </span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium text-xs">
-                            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[10px] shrink-0">
-                              <User className="w-3 h-3 text-slate-400" />
+                          <span className="inline-flex items-center gap-1.5 text-slate-700 text-xs">
+                            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-medium shrink-0">
+                              {c.created_by_name ? c.created_by_name.slice(0, 1) : <User className="w-3 h-3 text-slate-400" />}
                             </span>
                             <span>{c.created_by_name || '담당자'}</span>
                           </span>
