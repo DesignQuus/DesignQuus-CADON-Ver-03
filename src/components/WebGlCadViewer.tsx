@@ -828,9 +828,9 @@ export default function WebGlCadViewer({
         : `/api/quotation-cases/${caseId}/webgl-binary`;
       const res = await fetch(url);
       if (!res.ok) {
-        if (res.status === 404 && retryAttempt < 5) {
-          setLoadingProgress(25);
-          setLoadingStatus('CAD 변환 동기화 대기 중...');
+        if ((res.status === 404 || res.status >= 500) && retryAttempt < 5) {
+          setLoadingProgress(25 + retryAttempt * 12);
+          setLoadingStatus(`CAD 바이너리 동기화 대기 중... (${retryAttempt + 1}/5)`);
           await new Promise(resolve => setTimeout(resolve, 1500));
           return loadBinaryData(retryAttempt + 1);
         }
