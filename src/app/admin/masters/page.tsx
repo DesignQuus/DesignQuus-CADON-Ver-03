@@ -1167,38 +1167,38 @@ export default function MasterDataManagerPage() {
                   <col style={{ width: '52px' }} />
                 </colgroup>
                 <thead>
-                  <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 select-none">
-                    <th className="py-2.5 px-2 text-center">
+                  <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 select-none h-8.5">
+                    <th className="py-1.5 px-2 text-center">
                       <button
                         type="button"
                         onClick={handleToggleSelectAll}
                         className="text-slate-500 hover:text-blue-600 transition-colors cursor-pointer flex items-center justify-center mx-auto"
                         title={allPageSelected ? '현재 페이지 전체 선택 해제' : '현재 페이지 전체 선택'}
                       >
-                        {allPageSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4" />}
+                        {allPageSelected ? <CheckSquare className="w-3.5 h-3.5 text-blue-600" /> : <Square className="w-3.5 h-3.5" />}
                       </button>
                     </th>
-                    <th className="py-2.5 px-2 text-center font-mono">No</th>
-                    <th className="py-2.5 px-3">마스터 코드</th>
-                    <th className="py-2.5 px-3">표준 품명</th>
-                    <th className="py-2.5 pl-3 pr-4 text-left">규격 (Spec)</th>
-                    <th className="py-2.5 pl-6 pr-3 text-left">재질</th>
-                    <th className="py-2.5 px-3 text-left">부품 유형</th>
-                    <th className="py-2.5 px-3 text-right">공인 기준단가</th>
-                    <th className="py-2.5 px-2 text-center">관리</th>
+                    <th className="py-1.5 px-2 text-center font-mono text-[11px]">No</th>
+                    <th className="py-1.5 px-3 text-[11px]">마스터 코드</th>
+                    <th className="py-1.5 px-3 text-[11px]">표준 품명</th>
+                    <th className="py-1.5 pl-3 pr-4 text-left text-[11px]">규격 (Spec)</th>
+                    <th className="py-1.5 pl-6 pr-3 text-left text-[11px]">재질</th>
+                    <th className="py-1.5 px-3 text-left text-[11px]">부품 유형</th>
+                    <th className="py-1.5 px-3 text-right text-[11px]">공인 기준단가</th>
+                    <th className="py-1.5 px-2 text-center text-[11px]">관리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-400">
+                      <td colSpan={9} className="py-8 text-center text-slate-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-500" />
                         기준정보 데이터를 불러오는 중입니다...
                       </td>
                     </tr>
                   ) : items.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-400">
+                      <td colSpan={9} className="py-8 text-center text-slate-400">
                         등록된 마스터 품목이 없습니다. 상단 [신규 품목 등록] 또는 [엑셀 일괄 업로드]를 진행해 주세요.
                       </td>
                     </tr>
@@ -1211,39 +1211,39 @@ export default function MasterDataManagerPage() {
                         <tr
                           key={it.id || it.master_code || `master-item-${globalIdx}`}
                           onClick={() => handleToggleSelect(it.id)}
-                          className={`transition-colors cursor-pointer select-none ${
+                          className={`h-9 transition-colors cursor-pointer select-none ${
                             isSelected
                               ? 'bg-blue-50/80 hover:bg-blue-100/70'
                               : 'hover:bg-slate-50'
                           }`}
                           title="클릭하여 품목을 선택/해제합니다."
                         >
-                          <td className="py-2 px-2 text-center relative">
+                          <td className="py-1 px-2 text-center relative">
                             {isSelected && (
                               <span className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600" />
                             )}
                             <div className="flex items-center justify-center">
                               {isSelected ? (
-                                <CheckSquare className="w-4 h-4 text-blue-600" />
+                                <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
                               ) : (
-                                <Square className="w-4 h-4 text-slate-300 hover:text-slate-500" />
+                                <Square className="w-3.5 h-3.5 text-slate-300 hover:text-slate-500" />
                               )}
                             </div>
                           </td>
-                          <td className="py-2 px-2 text-center text-slate-400 font-mono">{globalIdx}</td>
-                          <td className="py-2 px-3 font-mono font-bold text-slate-900 truncate" title={it.master_code}>
+                          <td className="py-1 px-2 text-center text-slate-400 font-mono text-[11px]">{globalIdx}</td>
+                          <td className="py-1 px-3 font-mono font-bold text-slate-900 truncate text-[11.5px]" title={it.master_code}>
                             {it.master_code}
                           </td>
-                          <td className="py-2 px-3 font-medium text-slate-900 truncate" title={it.standard_name}>
+                          <td className="py-1 px-3 font-medium text-slate-900 truncate text-[11.5px]" title={it.standard_name}>
                             {it.standard_name}
                           </td>
-                          <td className="py-2 pl-3 pr-4 text-left font-mono text-slate-600 truncate" title={it.specification || '-'}>
+                          <td className="py-1 pl-3 pr-4 text-left font-mono text-slate-600 truncate text-[11px]" title={it.specification || '-'}>
                             {it.specification || '-'}
                           </td>
-                          <td className="py-2 pl-6 pr-3 text-left font-mono font-medium text-slate-700 text-xs truncate" title={it.material || 'SS400'}>
+                          <td className="py-1 pl-6 pr-3 text-left font-mono font-medium text-slate-700 text-[11px] truncate" title={it.material || 'SS400'}>
                             {it.material || 'SS400'}
                           </td>
-                          <td className="py-2 px-3 text-left" onClick={(e) => e.stopPropagation()}>
+                          <td className="py-1 px-3 text-left" onClick={(e) => e.stopPropagation()}>
                             {(() => {
                               const subItem = customSubItems[it.id] || detectPartSubItem(it.standard_name, it.category, it.master_code);
                               const isOpen = activeCategoryDropdownId === it.id;
@@ -1251,30 +1251,30 @@ export default function MasterDataManagerPage() {
 
                               return (
                                 <div className="relative inline-block text-left" data-category-dropdown>
-                                  {/* 트리거 버튼 (대분류 볼드 컬러 + 실무 대표 품목 1:1 매핑 뱃지 + 드롭다운 화살표) */}
+                                  {/* 트리거 버튼 (행간 컴팩트화: h-[25px], py-0.5, gap-1) */}
                                   <button
                                     type="button"
                                     onClick={() => setActiveCategoryDropdownId(isOpen ? null : it.id)}
-                                    className={`flex items-center gap-1.5 py-1 px-1.5 rounded-lg border transition-all cursor-pointer group text-left ${
+                                    className={`flex items-center gap-1 py-0.5 px-1.5 rounded-md border transition-all cursor-pointer group text-left h-[25px] ${
                                       isOpen
                                         ? 'bg-blue-50/80 border-blue-400 ring-2 ring-blue-100 shadow-xs'
                                         : 'border-transparent hover:border-slate-200 hover:bg-slate-100/80'
                                     }`}
                                     title={`클릭하여 부품 유형 변경 (현재: ${getPartCategoryLabel(it.category)}${subItem ? ` · ${subItem}` : ''})`}
                                   >
-                                    <span className={`text-xs font-bold whitespace-nowrap ${getPartCategoryTextClass(it.category)}`}>
+                                    <span className={`text-[11.5px] font-bold whitespace-nowrap leading-none ${getPartCategoryTextClass(it.category)}`}>
                                       {getPartCategoryLabel(it.category)}
                                     </span>
                                     {subItem && (
                                       <>
                                         <span className="text-slate-300 font-bold text-xs select-none">·</span>
-                                        <span className="px-1.5 py-0.5 rounded bg-slate-100/90 text-slate-800 font-medium text-[11px] border border-slate-200/90 whitespace-nowrap shadow-2xs">
+                                        <span className="px-1.5 py-0 rounded bg-slate-100/90 text-slate-800 font-medium text-[10.5px] border border-slate-200/90 whitespace-nowrap leading-[18px] shadow-2xs">
                                           {subItem}
                                         </span>
                                       </>
                                     )}
                                     <ChevronDown
-                                      className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-transform duration-150 shrink-0 ml-0.5 ${
+                                      className={`w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-transform duration-150 shrink-0 ml-0.5 ${
                                         isOpen ? 'rotate-180 text-blue-600' : ''
                                       }`}
                                     />
@@ -1371,8 +1371,8 @@ export default function MasterDataManagerPage() {
                             })()}
                           </td>
                           {editingPriceId === it.id ? (
-                            <td className="py-1 px-3 text-right" onClick={(e) => e.stopPropagation()}>
-                              <div className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.5 shadow-2xs ring-2 ring-blue-100 justify-end w-full max-w-[155px]">
+                            <td className="py-0.5 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.2 shadow-2xs ring-2 ring-blue-100 justify-end w-full max-w-[155px]">
                                 <span className="text-slate-400 font-mono text-[11px] shrink-0">₩</span>
                                 <input
                                   type="text"
@@ -1400,7 +1400,7 @@ export default function MasterDataManagerPage() {
                             </td>
                           ) : (
                             <td
-                              className="py-2 px-3 text-right font-mono font-bold text-blue-700 text-xs hover:bg-blue-100/60 cursor-pointer whitespace-nowrap"
+                              className="py-1 px-3 text-right font-mono font-bold text-blue-700 text-[11.5px] hover:bg-blue-100/60 cursor-pointer whitespace-nowrap leading-none"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setEditingPriceId(it.id);
@@ -1415,13 +1415,13 @@ export default function MasterDataManagerPage() {
                               </div>
                             </td>
                           )}
-                          <td className="py-2 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                          <td className="py-1 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDeleteItem(it.id, it.master_code);
                               }}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              className="p-0.5 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 transition-colors cursor-pointer"
                               title="삭제"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1436,7 +1436,7 @@ export default function MasterDataManagerPage() {
 
               {/* Standard Pagination Navigation Bar (중앙 정렬 배치 & 프로젝트 표준 로직) */}
               {items.length > 0 && (
-                <div className="py-3.5 px-5 border-t border-slate-200/90 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-6 text-xs text-slate-500 shrink-0">
+                <div className="py-2.5 px-5 border-t border-slate-200/90 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-6 text-xs text-slate-500 shrink-0">
                   {/* 중앙 번호 네비게이션 버튼 그룹 (첫페이지, 이전, 번호, 다음, 끝페이지) */}
                   <div className="flex items-center space-x-1">
                     {/* 첫 페이지 버튼 */}
