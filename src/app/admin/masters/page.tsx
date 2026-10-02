@@ -1313,11 +1313,11 @@ export default function MasterDataManagerPage() {
                                             openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
                                           } opacity-0 group-hover/picker:opacity-100 pointer-events-none transition-all duration-200 z-[80] w-[270px]`}
                                         >
-                                          <div className="bg-slate-900/95 backdrop-blur-xs text-white text-[11px] rounded-lg p-2.5 shadow-2xl border border-slate-700 text-center leading-snug">
-                                            <div className="font-bold text-amber-300 flex items-center justify-center gap-1 mb-1">
+                                          <div className="bg-slate-100/95 backdrop-blur-md text-[11px] rounded-lg p-2.5 shadow-xl border border-slate-300 text-center leading-snug">
+                                            <div className="font-bold text-blue-700 flex items-center justify-center gap-1 mb-1">
                                               <span>💡 기능 설명</span>
                                             </div>
-                                            <p className="text-slate-200">
+                                            <p className="text-slate-700 font-medium">
                                               70여 종 실무 대표 품목(브라켓, 커버, 샤프트 등) 검색 및 원가 산출식 로직을 확인하고 변경합니다.
                                             </p>
                                           </div>
