@@ -2106,6 +2106,8 @@ export default function CasesPage() {
                         <tr
                           key={c.id}
                           onClick={() => router.push(`/cases/${c.id}`)}
+                          onDoubleClick={() => router.push(`/cases/${c.id}`)}
+                          title="더블 클릭하면 AI 도면 파싱으로 넘어갑니다"
                           className={`transition-colors cursor-pointer group ${
                             isSelected
                               ? 'bg-blue-50/70 hover:bg-blue-50'
@@ -2134,7 +2136,13 @@ export default function CasesPage() {
                           </td>
 
                           {/* Case Name */}
-                          <td className="py-3 px-3.5 min-w-[240px]">
+                          <td className="py-3 px-3.5 min-w-[240px] relative">
+                            {/* 💡 행 호버 시 더블클릭 도면 파싱 안내 툴팁 */}
+                            <div className="hidden group-hover:flex items-center gap-1.5 absolute bottom-full mb-1.5 left-4 z-40 px-2.5 py-1 bg-slate-900/95 text-white rounded-md text-[11px] font-bold shadow-xl border border-slate-700/80 pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95 whitespace-nowrap">
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                              <span>더블 클릭하면 AI 도면 파싱으로 넘어갑니다</span>
+                              <div className="absolute top-full left-6 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900/95"></div>
+                            </div>
                             <div className="flex items-center justify-between gap-2.5 min-w-0">
                               <div className="min-w-0 flex-1 flex items-center gap-1.5">
                                 {c.primary_file_name?.toLowerCase().endsWith('.dwg') ? (

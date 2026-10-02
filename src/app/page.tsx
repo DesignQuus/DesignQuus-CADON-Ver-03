@@ -1448,6 +1448,8 @@ export default function HomePage() {
                     <tr
                       key={c.id}
                       onClick={() => !isDeleted && router.push(`/cases/${c.id}`)}
+                      onDoubleClick={() => !isDeleted && router.push(`/cases/${c.id}`)}
+                      title={!isDeleted ? "더블 클릭하면 AI 도면 파싱으로 넘어갑니다" : undefined}
                       className={`relative transition-all duration-150 cursor-pointer group border-l-4 ${
                         isDeleted || isArchived
                           ? 'bg-slate-50/50 hover:bg-slate-100/80 border-l-transparent text-slate-500'
@@ -1459,7 +1461,15 @@ export default function HomePage() {
                         {String(globalIdx).padStart(2, '0')}
                       </td>
                       {/* 1. 의뢰번호 / 명칭 (1행 가로 통합 + SmartTruncateTooltip) */}
-                      <td className="py-2.5 px-4">
+                      <td className="py-2.5 px-4 relative">
+                        {/* 💡 행 호버 시 더블클릭 도면 파싱 안내 툴팁 */}
+                        {!isDeleted && (
+                          <div className="hidden group-hover:flex items-center gap-1.5 absolute bottom-full mb-1.5 left-4 z-40 px-2.5 py-1 bg-slate-900/95 text-white rounded-md text-[11px] font-bold shadow-xl border border-slate-700/80 pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95 whitespace-nowrap">
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                            <span>더블 클릭하면 AI 도면 파싱으로 넘어갑니다</span>
+                            <div className="absolute top-full left-6 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900/95"></div>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 min-w-0 whitespace-nowrap">
                           <span className="font-mono text-xs text-slate-500 group-hover:text-blue-700 font-bold shrink-0 transition-colors">
                             {c.case_no}
