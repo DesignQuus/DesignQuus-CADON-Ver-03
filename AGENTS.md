@@ -90,3 +90,18 @@ See `.agents/rules/egdesk-dev-context.md` for full details.
   3. **검색 및 필터링 시 순번 무결성**:
      - 검색어 입력이나 상태 필터링 시에도 현재 필터링된 결과물에 맞춰 1번부터 차례대로 매끄럽게 재정렬 표출되어야 합니다.
 
+## 표준 도면 표제란 및 고객사 자동 인식 규칙 (Title Block & Customer Auto-Detection Rule)
+- **절대 원칙**: 특정 도면이나 특정 회사명(예: 엠브이텍, 세창 등)을 임의로 하드코딩하지 않으며, **어떠한 제조/가공 CAD 도면이 입력되더라도 아래의 범용 4단계 인식 체계와 엄격한 라벨 정규화 원칙에 따라 고객사를 100% 정밀하게 식별하고 마스터에 자동 연동**합니다.
+- **핵심 구현 지침**:
+  1. **블랙리스트 완전 정규화 원칙 (Normalized Label Blacklist Rule)**:
+     - 표제란 검출기(`scripts/title_block_detector.py`)에서 후보 텍스트 필터링 시, 공백/특수문자/대소문자가 완전히 제거된 정규화 세트(`LABEL_BLACKLIST_CLEAN`, `is_label_blacklisted`)를 반드시 사용합니다.
+     - `CUSTOMER` 라벨 주변에 수직/수평으로 밀접한 다른 헤더(`PROJECT NO.`, `DWG NO.`, `TITLE`, `SCALE`, `REV`, `DESCRIPTION`, `SPECIFICATION` 등)가 0.1mm 단위의 거리 편차로 인해 실제 고객사명보다 우선 채택되는 현상을 원천 방지합니다.
+     - 날짜 패턴(`YYYY.MM.DD`, `YYYY-MM-DD` 등) 및 프로젝트 번호 패턴(`XXXX-XXX`)은 고객사명 후보에서 엄격히 제외합니다.
+  2. **범용 4단계 고객사 인식 체계 (4-Level Customer Hierarchy)**:
+     - **1단계 (표준 라벨 공간 탐색)**: `CUSTOMER`, `CLIENT`, `BUYER`, `ORDERER`, `고객사`, `발주처`, `발주사`, `수요처`, `납품처` 등 국·영문 표준 라벨의 공간 근접도 기반 추출.
+     - **2단계 (무라벨 법인 식별자 패턴)**: 라벨이 없는 자유 양식 도면은 `(주)`, `㈜`, `주식회사`, `CO., LTD.`, `INC.`, `CORP.`, `LLC`, `株式会社`, `有限公司` 등의 법인 접미어를 탐색하고, 반복 등장하는 자사(공급자) 명칭을 제외한 의뢰 고객사 선별.
+     - **3단계 (전 시트 교차 상속, `customer_global`)**: 1번 시트(메인 조립도)에만 표제란 고객사가 존재하고 하위 단품 가공도에 생략된 경우, 도면 세트 전체에서 가장 신뢰도가 높은 고객사를 모든 시트에 일괄 상속.
+     - **4단계 (제미나이 AI 심층분석 마스터 동기화)**: AI 분석(`ai_insights`)에서 판별된 고객사(`detectedCompany`)가 유효하고 견적 케이스가 `comp_unassigned`일 경우, 즉시 고객사 마스터(`companies`)에 자동 등록/연결하고 대시보드 캐시를 즉시 갱신(`invalidateCasesCache()`).
+  3. **가짜 업체 유입 방지 가드 (Anti-Bogus Header Guard)**:
+     - `PROJECT NO`, `DWG NO`, `CUSTOMER`, `TITLE` 등 표제란 헤더 명칭이나 플레이스홀더가 `companies` 테이블에 신규 업체로 등록되는 것을 파이프라인(`src/lib/cad-pipeline.ts`) 단에서 원천 차단합니다.
+
