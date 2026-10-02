@@ -9,7 +9,7 @@ import {
   RefreshCw, FileSpreadsheet, ArrowLeft, Sliders, DollarSign,
   AlertCircle, Layers, X, Scissors, Flame, Sparkles, Wrench, Percent, Factory, ShieldCheck,
   Target, Calculator, TrendingUp, ArrowRight, CheckSquare, Square, Save, ChevronDown, Tag,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check
 } from 'lucide-react';
 
 import {
@@ -148,6 +148,7 @@ export default function MasterDataManagerPage() {
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null); // 개별 단가 인라인 편집 상태 (다중 선택과 완전 분리)
   const [modifiedItems, setModifiedItems] = useState<Record<string, number>>({});
   const [customSubItems, setCustomSubItems] = useState<Record<string, string>>({}); // 품목별 세부 대표 품목 수동 지정 매핑
+  const [activeCategoryDropdownId, setActiveCategoryDropdownId] = useState<string | null>(null); // 커스텀 부품 유형 드롭다운 활성화 품목 ID
   const [isSavingBatch, setIsSavingBatch] = useState(false);
   const [bulkCustomPriceInput, setBulkCustomPriceInput] = useState('');
   const [bulkCategory, setBulkCategory] = useState<string>('MACHINING');
@@ -363,6 +364,28 @@ export default function MasterDataManagerPage() {
 
     loadData(false);
   }, [categoryFilter]);
+
+  // 커스텀 부품 유형 드롭다운 외부 클릭 및 ESC 닫기 핸들러
+  useEffect(() => {
+    if (!activeCategoryDropdownId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-category-dropdown]')) {
+        setActiveCategoryDropdownId(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveCategoryDropdownId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeCategoryDropdownId]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1223,10 +1246,22 @@ export default function MasterDataManagerPage() {
                           <td className="py-2 px-3 text-left" onClick={(e) => e.stopPropagation()}>
                             {(() => {
                               const subItem = customSubItems[it.id] || detectPartSubItem(it.standard_name, it.category, it.master_code);
+                              const isOpen = activeCategoryDropdownId === it.id;
+                              const openUpward = idx > 9;
+
                               return (
-                                <div className="relative inline-flex items-center group max-w-[225px]">
-                                  {/* 시각 레이어 (대분류 볼드 컬러 + 실무 대표 품목 1:1 매핑 뱃지 + 드롭다운 화살표) */}
-                                  <div className="flex items-center gap-1.5 py-0.5 px-1.5 rounded hover:bg-slate-100/80 transition-colors pointer-events-none">
+                                <div className="relative inline-block text-left" data-category-dropdown>
+                                  {/* 트리거 버튼 (대분류 볼드 컬러 + 실무 대표 품목 1:1 매핑 뱃지 + 드롭다운 화살표) */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveCategoryDropdownId(isOpen ? null : it.id)}
+                                    className={`flex items-center gap-1.5 py-1 px-1.5 rounded-lg border transition-all cursor-pointer group text-left ${
+                                      isOpen
+                                        ? 'bg-blue-50/80 border-blue-400 ring-2 ring-blue-100 shadow-xs'
+                                        : 'border-transparent hover:border-slate-200 hover:bg-slate-100/80'
+                                    }`}
+                                    title={`클릭하여 부품 유형 변경 (현재: ${getPartCategoryLabel(it.category)}${subItem ? ` · ${subItem}` : ''})`}
+                                  >
                                     <span className={`text-xs font-bold whitespace-nowrap ${getPartCategoryTextClass(it.category)}`}>
                                       {getPartCategoryLabel(it.category)}
                                     </span>
@@ -1238,45 +1273,99 @@ export default function MasterDataManagerPage() {
                                         </span>
                                       </>
                                     )}
-                                    <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-colors shrink-0 ml-0.5" />
-                                  </div>
+                                    <ChevronDown
+                                      className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-transform duration-150 shrink-0 ml-0.5 ${
+                                        isOpen ? 'rotate-180 text-blue-600' : ''
+                                      }`}
+                                    />
+                                  </button>
 
-                                  {/* 1-클릭 풀다운 투명 오버레이 셀렉트 (네이티브 드롭다운 즉시 반응) */}
-                                  <select
-                                    value={it.category || 'MACHINING'}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      if (val === '__OPEN_PICKER__') {
-                                        setCategoryPickerState({
-                                          isOpen: true,
-                                          mode: 'inline',
-                                          targetId: it.id,
-                                          targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
-                                          currentCategory: it.category || 'MACHINING'
-                                        });
-                                        return;
-                                      }
-                                      handleInlineCategoryChange(it.id, val);
-                                    }}
-                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                    title={`클릭하여 부품 유형 변경 (현재: ${getPartCategoryLabel(it.category)}${subItem ? ` · ${subItem}` : ''})`}
-                                  >
-                                    <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1.5">
-                                      스마트피커 열기 (세부 대표품목 선택)...
-                                    </option>
-                                    <option
-                                      disabled
-                                      className="text-slate-600 bg-slate-100 font-bold text-[13px] text-center py-1.5"
-                                      style={{ textAlign: 'center', fontSize: '13px' }}
+                                  {/* 추천 1위: 모던 프리미엄 커스텀 드롭다운 팝오버 */}
+                                  {isOpen && (
+                                    <div
+                                      className={`absolute left-0 ${
+                                        openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                                      } z-[60] w-[280px] bg-white rounded-xl shadow-2xl border border-slate-200/90 p-2 space-y-2 animate-in fade-in zoom-in-95 duration-150`}
+                                      onClick={(e) => e.stopPropagation()}
                                     >
-                                      10대 분류 및 실무 대표 품목
-                                    </option>
-                                    {PART_CATEGORIES.map(c => (
-                                      <option key={c.id} value={c.id} className="bg-white text-slate-800 font-medium">
-                                        {c.label} ({c.subDetail})
-                                      </option>
-                                    ))}
-                                  </select>
+                                      {/* 1. 스마트피커 열기 버튼 (프리미엄 커스텀 디자인: 검정 점선 제거, 부드러운 그라디언트 + 블루 섀도우) */}
+                                      <div className="relative group/picker">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveCategoryDropdownId(null);
+                                            setCategoryPickerState({
+                                              isOpen: true,
+                                              mode: 'inline',
+                                              targetId: it.id,
+                                              targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
+                                              currentCategory: it.category || 'MACHINING'
+                                            });
+                                          }}
+                                          className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/30 transition-all flex items-center justify-center text-center cursor-pointer border border-blue-400/30 outline-none"
+                                        >
+                                          <span>스마트피커 열기 (세부 대표품목 선택)...</span>
+                                        </button>
+
+                                        {/* 호버 시 기능 설명 인라인 툴팁 (사용자 요청 1번 충족) */}
+                                        <div
+                                          className={`absolute left-1/2 -translate-x-1/2 ${
+                                            openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
+                                          } opacity-0 group-hover/picker:opacity-100 pointer-events-none transition-all duration-200 z-[80] w-[270px]`}
+                                        >
+                                          <div className="bg-slate-900/95 backdrop-blur-xs text-white text-[11px] rounded-lg p-2.5 shadow-2xl border border-slate-700 text-center leading-snug">
+                                            <div className="font-bold text-amber-300 flex items-center justify-center gap-1 mb-1">
+                                              <span>💡 기능 설명</span>
+                                            </div>
+                                            <p className="text-slate-200">
+                                              70여 종 실무 대표 품목(브라켓, 커버, 샤프트 등) 검색 및 원가 산출식 로직을 확인하고 변경합니다.
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* 2. 구분 헤더: 좌우 라인 삭제, 완벽한 중앙 정렬, 폰트크기 30% 확대 (사용자 요청 2번 충족) */}
+                                      <div className="pt-1 border-t border-slate-100">
+                                        <div className="text-center font-bold text-[13px] text-slate-500 py-1 select-none">
+                                          10대 분류 및 실무 대표 품목
+                                        </div>
+                                      </div>
+
+                                      {/* 3. 10대 카테고리 목록 (호버 시 부드러운 하이라이트 + 체크 표시) */}
+                                      <div className="space-y-0.5 max-h-[250px] overflow-y-auto pr-0.5">
+                                        {PART_CATEGORIES.map((c) => {
+                                          const isCurrent = it.category === c.id;
+                                          return (
+                                            <button
+                                              key={c.id}
+                                              type="button"
+                                              onClick={() => {
+                                                handleInlineCategoryChange(it.id, c.id);
+                                                setActiveCategoryDropdownId(null);
+                                              }}
+                                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between group/item cursor-pointer ${
+                                                isCurrent
+                                                  ? 'bg-blue-50 text-blue-900 font-bold border border-blue-200'
+                                                  : 'hover:bg-slate-100 text-slate-700 font-medium'
+                                              }`}
+                                            >
+                                              <div className="flex items-center gap-1.5 truncate">
+                                                <span className={`text-xs font-bold ${c.textClass}`}>
+                                                  {c.label}
+                                                </span>
+                                                <span className="text-[11px] text-slate-400 font-normal truncate">
+                                                  ({c.subDetail})
+                                                </span>
+                                              </div>
+                                              {isCurrent && (
+                                                <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-1" />
+                                              )}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })()}
