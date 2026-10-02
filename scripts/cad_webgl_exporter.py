@@ -130,9 +130,13 @@ def extract_ole_frames_from_dxf(dxf_path):
                 wb = openpyxl.load_workbook(io.BytesIO(pkg_data), data_only=True)
                 ws = wb.active
                 max_r = ws.max_row or 1
-                max_c = min(ws.max_column or 7, 7)
+                title_max_c = 0
+                for rng in ws.merged_cells.ranges:
+                    if rng.min_col == 1 and rng.min_row in [1, 2, 3]:
+                        title_max_c = max(title_max_c, rng.max_col)
+                max_c = title_max_c if title_max_c >= 4 else min(ws.max_column or 6, 6)
 
-                col_keys = ['A', 'B', 'C', 'D', 'E', 'F', 'G'][:max_c]
+                col_keys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'][:max_c]
                 col_widths = [ws.column_dimensions[k].width or 10.0 for k in col_keys]
                 sum_w = sum(col_widths) or 1.0
                 col_rel_w = [w / sum_w for w in col_widths]
@@ -149,8 +153,12 @@ def extract_ole_frames_from_dxf(dxf_path):
 
                 # Parse merged ranges
                 merged_lookup = {}
+                cell_merge_map = {}
                 for rng in ws.merged_cells.ranges:
                     merged_lookup[(rng.min_row, rng.min_col)] = (rng.max_row, min(rng.max_col, max_c))
+                    for mr in range(rng.min_row, rng.max_row + 1):
+                        for mc in range(rng.min_col, min(rng.max_col, max_c) + 1):
+                            cell_merge_map[(mr, mc)] = rng
 
                 # Identify table blocks separated by empty rows
                 table_ranges = []
@@ -183,7 +191,7 @@ def extract_ole_frames_from_dxf(dxf_path):
 
                 WHITE = (1.0, 1.0, 1.0)
                 BLACK = (0.0, 0.0, 0.0)
-                GREY = (0.55, 0.55, 0.55)
+                GREY = (0.2, 0.2, 0.2)
 
                 for (tr_start, tr_end) in table_ranges:
                     top_y = row_ys[tr_start - 1]
@@ -192,25 +200,81 @@ def extract_ole_frames_from_dxf(dxf_path):
                     table_tris.append(((min_x, top_y), (max_x, top_y), (max_x, bot_y), WHITE))
                     table_tris.append(((max_x, bot_y), (min_x, bot_y), (min_x, top_y), WHITE))
 
-                    # Table outer black border
-                    table_lines.append(((min_x, top_y), (max_x, top_y), BLACK))
-                    table_lines.append(((max_x, top_y), (max_x, bot_y), BLACK))
-                    table_lines.append(((max_x, bot_y), (min_x, bot_y), BLACK))
-                    table_lines.append(((min_x, bot_y), (min_x, top_y), BLACK))
+                # Extract explicit cell borders with interior merge suppression & dashed style support
+                border_segments = {}
+                PRECEDENCE = {'thick': 4, 'double': 4, 'medium': 3, 'thin': 2, 'hair': 1, 'dotted': 1, 'dashed': 1}
 
-                    # Header lines (under title row and under column header row)
-                    if tr_start <= max_r:
-                        table_lines.append(((min_x, row_ys[tr_start]), (max_x, row_ys[tr_start]), BLACK))
-                    if tr_start + 1 <= max_r and tr_start + 1 <= tr_end:
-                        table_lines.append(((min_x, row_ys[tr_start + 1]), (max_x, row_ys[tr_start + 1]), BLACK))
+                def add_border_edge(p1, p2, style):
+                    if p1 > p2:
+                        p1, p2 = p2, p1
+                    k = (round(p1[0], 1), round(p1[1], 1), round(p2[0], 1), round(p2[1], 1))
+                    curr = border_segments.get(k)
+                    if curr is None or PRECEDENCE.get(style, 2) > PRECEDENCE.get(curr, 2):
+                        border_segments[k] = style
 
-                    # Inner horizontal row dividers
-                    for r in range(tr_start + 2, tr_end):
-                        table_lines.append(((min_x, row_ys[r]), (max_x, row_ys[r]), GREY))
+                for r in range(1, max_r + 1):
+                    for c in range(1, max_c + 1):
+                        cell = ws.cell(r, c)
+                        c_left = col_xs[c - 1]
+                        c_right = col_xs[c]
+                        r_top = row_ys[r - 1]
+                        r_bottom = row_ys[r]
 
-                    # Vertical column dividers
-                    for c_idx in range(1, max_c):
-                        table_lines.append(((col_xs[c_idx], row_ys[tr_start + 1]), (col_xs[c_idx], bot_y), GREY))
+                        m = cell_merge_map.get((r, c))
+                        draw_t = m is None or r == m.min_row
+                        draw_b = m is None or r == m.max_row
+                        draw_l = m is None or c == m.min_col
+                        draw_r = m is None or c == m.max_col
+
+                        b = getattr(cell, 'border', None)
+                        if b:
+                            if draw_t and b.top and b.top.style:
+                                add_border_edge((c_left, r_top), (c_right, r_top), b.top.style)
+                            if draw_b and b.bottom and b.bottom.style:
+                                add_border_edge((c_left, r_bottom), (c_right, r_bottom), b.bottom.style)
+                            if draw_l and b.left and b.left.style:
+                                add_border_edge((c_left, r_bottom), (c_left, r_top), b.left.style)
+                            if draw_r and b.right and b.right.style:
+                                add_border_edge((c_right, r_bottom), (c_right, r_top), b.right.style)
+
+                # Fallback if no cell borders were defined in sheet
+                if not border_segments:
+                    for (tr_start, tr_end) in table_ranges:
+                        top_y = row_ys[tr_start - 1]
+                        bot_y = row_ys[tr_end]
+                        add_border_edge((min_x, top_y), (max_x, top_y), 'thick')
+                        add_border_edge((max_x, top_y), (max_x, bot_y), 'thick')
+                        add_border_edge((max_x, bot_y), (min_x, bot_y), 'thick')
+                        add_border_edge((min_x, bot_y), (min_x, top_y), 'thick')
+                        if tr_start <= max_r:
+                            add_border_edge((min_x, row_ys[tr_start]), (max_x, row_ys[tr_start]), 'medium')
+                        if tr_start + 1 <= max_r and tr_start + 1 <= tr_end:
+                            add_border_edge((min_x, row_ys[tr_start + 1]), (max_x, row_ys[tr_start + 1]), 'medium')
+                        for r in range(tr_start + 2, tr_end):
+                            add_border_edge((min_x, row_ys[r]), (max_x, row_ys[r]), 'thin')
+                        for c_idx in range(1, max_c):
+                            add_border_edge((col_xs[c_idx], row_ys[tr_start + 1]), (col_xs[c_idx], bot_y), 'thin')
+
+                for (x1, y1, x2, y2), style in border_segments.items():
+                    p1 = (x1, y1)
+                    p2 = (x2, y2)
+                    col = BLACK if style in ['thick', 'medium', 'double'] else GREY
+                    if style in ['hair', 'dotted', 'dashed']:
+                        dx = x2 - x1
+                        dy = y2 - y1
+                        length = math.hypot(dx, dy)
+                        if length > 0:
+                            dash_len = min(60.0, length / 6.0)
+                            gap_len = dash_len * 0.75
+                            step = dash_len + gap_len
+                            cur = 0.0
+                            ux, uy = dx / length, dy / length
+                            while cur < length:
+                                seg_end = min(cur + dash_len, length)
+                                table_lines.append(((x1 + ux * cur, y1 + uy * cur), (x1 + ux * seg_end, y1 + uy * seg_end), col))
+                                cur += step
+                    else:
+                        table_lines.append((p1, p2, col))
 
                 # Extract cell background fills (e.g. yellow/gold subtotal rows)
                 for r in range(1, max_r + 1):
@@ -1133,9 +1197,9 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                 heavy_col_data.extend([rgb[0], rgb[1], rgb[2], rgb[0], rgb[1], rgb[2]])
                 heavy_lw_data.append(float(lw))
 
-        def add_tri(p1, p2, p3, rgb):
+        def add_tri(p1, p2, p3, rgb, z=0.0):
             nonlocal min_x, min_y, max_x, max_y
-            tri_pos_data.extend([p1[0], p1[1], 0.0, p2[0], p2[1], 0.0, p3[0], p3[1], 0.0])
+            tri_pos_data.extend([p1[0], p1[1], float(z), p2[0], p2[1], float(z), p3[0], p3[1], float(z)])
             tri_col_data.extend([rgb[0], rgb[1], rgb[2], rgb[0], rgb[1], rgb[2], rgb[0], rgb[1], rgb[2]])
             min_x = min(min_x, p1[0], p2[0], p3[0])
             min_y = min(min_y, p1[1], p2[1], p3[1])
@@ -1662,7 +1726,7 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     })
                 # Add vector table background triangles (white base & colored subtotal fills)
                 for (p1, p2, p3, rgb) in ole.get('tris', []):
-                    add_tri(p1, p2, p3, rgb)
+                    add_tri(p1, p2, p3, rgb, z=-0.1)
                 # Add vector table lines
                 for (p1, p2, rgb) in ole.get('lines', []):
                     add_seg(p1, p2, rgb)

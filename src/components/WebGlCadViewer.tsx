@@ -921,8 +921,14 @@ export default function WebGlCadViewer({
         const triGeometry = new THREE.BufferGeometry();
         triGeometry.setAttribute('position', new THREE.BufferAttribute(triPosArray, 3));
         triGeometry.setAttribute('color', new THREE.BufferAttribute(triColArray, 3));
-        const triMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+        const triMaterial = new THREE.MeshBasicMaterial({
+          vertexColors: true,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
         triMesh = new THREE.Mesh(triGeometry, triMaterial);
+        triMesh.position.set(0, 0, -0.1);
+        triMesh.renderOrder = -1;
       }
 
       // v3 heavy 세그먼트 → 선가중치(mm)별 버킷으로 나눠 화면 고정 픽셀 굵기 LineSegments2 생성
@@ -996,13 +1002,13 @@ export default function WebGlCadViewer({
           heavyMaterialsRef.current = [];
         }
 
-        sceneRef.current.add(lineSegments);
-        lineSegmentsRef.current = lineSegments;
-
         if (triMesh) {
           sceneRef.current.add(triMesh);
           meshRef.current = triMesh;
         }
+
+        sceneRef.current.add(lineSegments);
+        lineSegmentsRef.current = lineSegments;
 
         if (heavyGroup) {
           sceneRef.current.add(heavyGroup);
