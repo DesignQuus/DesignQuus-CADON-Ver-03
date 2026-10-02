@@ -471,7 +471,8 @@ export default function WebGlCadViewer({
               // (Eliminates forced min-size floors that caused closely spaced table rows to overlap)
               const fontSize = Math.max(1, Math.round(pxH));
 
-              tctx.font = `${fontSize}px "Segoe UI", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Noto Sans KR", Roboto, sans-serif`;
+              const fontWeight = (item as any).onWhiteBg ? '600 ' : '';
+              tctx.font = `${fontWeight}${fontSize}px "Segoe UI", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Noto Sans KR", Roboto, sans-serif`;
 
               // Auto-contrast: ensure dark CAD colors (e.g. black text on white paper) shine bright on dark viewer (#0e1117)
               let fillColor = item.c || '#f1f5f9';

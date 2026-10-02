@@ -176,17 +176,45 @@ def extract_ole_frames_from_dxf(dxf_path):
                     for rr in range(tr_s, tr_e + 1):
                         row_table_start[rr] = tr_s
 
-                def parse_hex_color(col_val):
-                    if not col_val or not isinstance(col_val, str):
+                def get_fill_rgb(fill):
+                    if not fill or getattr(fill, 'fill_type', None) is None:
                         return None
-                    c = col_val.strip().lstrip('#')
-                    if len(c) == 8: # AARRGGBB
-                        c = c[2:]
-                    if len(c) == 6:
-                        try:
-                            return (int(c[0:2], 16) / 255.0, int(c[2:4], 16) / 255.0, int(c[4:6], 16) / 255.0)
-                        except Exception:
-                            return None
+                    sc = getattr(fill, 'start_color', None)
+                    if not sc:
+                        return None
+                    theme = getattr(sc, 'theme', None)
+                    if isinstance(theme, int):
+                        THEME_BASE = {
+                            0: (1.0, 1.0, 1.0),
+                            1: (0.0, 0.0, 0.0),
+                            2: (0.93, 0.92, 0.90),
+                            3: (0.12, 0.19, 0.28),
+                            4: (0.31, 0.51, 0.74), # Accent 1 (Blue)
+                            5: (0.75, 0.31, 0.30),
+                            6: (0.61, 0.73, 0.35),
+                            7: (0.48, 0.38, 0.60),
+                            8: (0.28, 0.68, 0.78),
+                            9: (0.97, 0.58, 0.17),
+                        }
+                        base = THEME_BASE.get(theme, (0.31, 0.51, 0.74))
+                        tint = getattr(sc, 'tint', 0.0) or 0.0
+                        if isinstance(tint, (int, float)) and tint != 0.0:
+                            if tint > 0:
+                                rgb = tuple(b + (1.0 - b) * tint for b in base)
+                            else:
+                                rgb = tuple(b * (1.0 + tint) for b in base)
+                        else:
+                            rgb = base
+                        return rgb
+                    raw = getattr(sc, 'rgb', None)
+                    if isinstance(raw, str):
+                        c = raw.strip().lstrip('#')
+                        if len(c) == 8: c = c[2:]
+                        if len(c) == 6:
+                            try:
+                                return (int(c[0:2], 16) / 255.0, int(c[2:4], 16) / 255.0, int(c[4:6], 16) / 255.0)
+                            except Exception:
+                                pass
                     return None
 
                 WHITE = (1.0, 1.0, 1.0)
@@ -276,23 +304,21 @@ def extract_ole_frames_from_dxf(dxf_path):
                     else:
                         table_lines.append((p1, p2, col))
 
-                # Extract cell background fills (e.g. yellow/gold subtotal rows)
+                # Extract cell background fills (light blue header/section fills & yellow/gold subtotal rows)
                 for r in range(1, max_r + 1):
                     for c in range(1, max_c + 1):
                         try:
                             cell = ws.cell(r, c)
                             fill = getattr(cell, 'fill', None)
-                            if fill and getattr(fill, 'fill_type', None) and getattr(fill, 'start_color', None):
-                                raw_rgb = getattr(fill.start_color, 'rgb', None)
-                                col_rgb = parse_hex_color(raw_rgb)
-                                if col_rgb and col_rgb != WHITE:
-                                    max_r_idx, max_c_idx = merged_lookup.get((r, c), (r, c))
-                                    c_left = col_xs[c - 1]
-                                    c_right = col_xs[max_c_idx]
-                                    r_top = row_ys[r - 1]
-                                    r_bottom = row_ys[max_r_idx]
-                                    table_tris.append(((c_left, r_top), (c_right, r_top), (c_right, r_bottom), col_rgb))
-                                    table_tris.append(((c_right, r_bottom), (c_left, r_bottom), (c_left, r_top), col_rgb))
+                            col_rgb = get_fill_rgb(fill)
+                            if col_rgb and col_rgb != WHITE:
+                                max_r_idx, max_c_idx = merged_lookup.get((r, c), (r, c))
+                                c_left = col_xs[c - 1]
+                                c_right = col_xs[max_c_idx]
+                                r_top = row_ys[r - 1]
+                                r_bottom = row_ys[max_r_idx]
+                                table_tris.append(((c_left, r_top), (c_right, r_top), (c_right, r_bottom), col_rgb))
+                                table_tris.append(((c_right, r_bottom), (c_left, r_bottom), (c_left, r_top), col_rgb))
                         except Exception:
                             pass
 
@@ -309,7 +335,21 @@ def extract_ole_frames_from_dxf(dxf_path):
                             continue
                         val = ws.cell(r, c).value
                         if val is not None and str(val).strip():
-                            t_str = str(val).strip()
+                            # Auto-format integers/numbers with thousands comma separator
+                            if isinstance(val, int):
+                                t_str = f"{val:,}" if abs(val) >= 1000 else str(val)
+                            elif isinstance(val, float):
+                                if val.is_integer() and abs(val) >= 1000:
+                                    t_str = f"{int(val):,}"
+                                else:
+                                    t_str = f"{val:g}"
+                            else:
+                                raw_s = str(val).strip()
+                                if raw_s.isdigit() and len(raw_s) >= 4:
+                                    t_str = f"{int(raw_s):,}"
+                                else:
+                                    t_str = raw_s
+
                             max_r_idx, max_c_idx = merged_lookup.get((r, c), (r, c))
                             c_left = col_xs[c - 1]
                             c_right = col_xs[max_c_idx]
@@ -324,15 +364,15 @@ def extract_ole_frames_from_dxf(dxf_path):
                             ha = 1 # Center by default
                             t_start = row_table_start.get(r, 1)
                             if r == t_start: # 각 테이블의 제목행
-                                font_h = min(cell_h * 0.45, 520.0)
+                                font_h = min(cell_h * 0.65, 680.0)
                             elif r == t_start + 1: # 각 테이블의 컬럼 헤더행
-                                font_h = min(single_row_h * 0.42, 240.0)
+                                font_h = min(single_row_h * 0.55, 340.0)
                             elif c == 5: # Motor model description
                                 ha = 0 # Left align
                                 cx = c_left + 150.0
-                                font_h = min(single_row_h * 0.42, 230.0)
+                                font_h = min(single_row_h * 0.50, 320.0)
                             else:
-                                font_h = min(single_row_h * 0.42, 240.0)
+                                font_h = min(single_row_h * 0.55, 340.0)
 
                             cell_texts.append({
                                 't': t_str,
