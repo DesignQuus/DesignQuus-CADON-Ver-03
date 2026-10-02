@@ -1,7 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/api';
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import CaseWorkflowSidebar, { WorkflowTab } from '@/components/cases/CaseWorkflowSidebar';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
@@ -252,6 +252,38 @@ export default function CasesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchFileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  // 💡 마우스 커서 위치 추적 도면 파싱 안내 말풍선 (먹 10%)
+  const cursorTooltipRef = useRef<HTMLDivElement | null>(null);
+
+  const updateCursorTooltipPos = useCallback((clientX: number, clientY: number) => {
+    const el = cursorTooltipRef.current;
+    if (!el) return;
+    const isRight = clientX > window.innerWidth - 260;
+    const isTop = clientY < 50;
+    const transX = isRight ? '-100%' : '14px';
+    const transY = isTop ? '20px' : '-36px';
+    el.style.transform = `translate(${transX}, ${transY})`;
+    el.style.left = `${clientX}px`;
+    el.style.top = `${clientY}px`;
+  }, []);
+
+  const handleRowMouseEnter = useCallback((e: React.MouseEvent) => {
+    const el = cursorTooltipRef.current;
+    if (!el) return;
+    el.style.display = 'flex';
+    updateCursorTooltipPos(e.clientX, e.clientY);
+  }, [updateCursorTooltipPos]);
+
+  const handleRowMouseMove = useCallback((e: React.MouseEvent) => {
+    updateCursorTooltipPos(e.clientX, e.clientY);
+  }, [updateCursorTooltipPos]);
+
+  const handleRowMouseLeave = useCallback(() => {
+    const el = cursorTooltipRef.current;
+    if (!el) return;
+    el.style.display = 'none';
+  }, []);
 
   // 순수 외부 발주 고객사 목록 (견적 주체인 '세창인터내쇼날' 본사 제외)
   const customerCompanies = useMemo(() => {
@@ -2107,6 +2139,9 @@ export default function CasesPage() {
                           key={c.id}
                           onClick={() => router.push(`/cases/${c.id}`)}
                           onDoubleClick={() => router.push(`/cases/${c.id}`)}
+                          onMouseEnter={handleRowMouseEnter}
+                          onMouseMove={handleRowMouseMove}
+                          onMouseLeave={handleRowMouseLeave}
                           className={`transition-colors cursor-pointer group ${
                             isSelected
                               ? 'bg-blue-50/70 hover:bg-blue-50'
@@ -2135,13 +2170,7 @@ export default function CasesPage() {
                           </td>
 
                           {/* Case Name */}
-                          <td className="py-3 px-3.5 min-w-[240px] relative">
-                            {/* 💡 행 호버 시 더블클릭 도면 파싱 안내 툴팁 (먹 15%) */}
-                            <div className="hidden group-hover:flex items-center gap-1.5 absolute bottom-full mb-1.5 left-4 z-40 px-2.5 py-1 bg-[#D9D9D9] text-slate-900 rounded-md text-[11px] font-bold shadow-md border border-neutral-400 pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95 whitespace-nowrap">
-                              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-                              <span>더블 클릭하면 AI 도면 파싱으로 넘어갑니다</span>
-                              <div className="absolute top-full left-6 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-[#D9D9D9]"></div>
-                            </div>
+                          <td className="py-3 px-3.5 min-w-[240px]">
                             <div className="flex items-center justify-between gap-2.5 min-w-0">
                               <div className="min-w-0 flex-1 flex items-center gap-1.5">
                                 {c.primary_file_name?.toLowerCase().endsWith('.dwg') ? (
@@ -2999,6 +3028,17 @@ export default function CasesPage() {
         onClose={() => setActionToast(null)}
         onRestoreConfirmDialog={handleRestoreCaseTrashConfirmDialog}
       />
+
+      {/* 💡 마우스 커서 위치 추적 도면 파싱 안내 말풍선 (먹 10% 라이트 그레이) */}
+      <div
+        ref={cursorTooltipRef}
+        style={{ display: 'none', position: 'fixed', zIndex: 9999, pointerEvents: 'none', top: 0, left: 0 }}
+        className="items-center gap-1.5 px-2.5 py-1 bg-[#E6E6E6] text-slate-900 rounded-md text-[11px] font-bold shadow-md border border-neutral-300 whitespace-nowrap"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse shrink-0"></span>
+        <span>더블 클릭하면 AI 도면 파싱으로 넘어갑니다</span>
+        <div className="absolute top-full left-3 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-[#E6E6E6]"></div>
+      </div>
     </div>
   );
 }

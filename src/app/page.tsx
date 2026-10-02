@@ -1,7 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/api';
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
@@ -167,6 +167,38 @@ export default function HomePage() {
       return next;
     });
   };
+
+  // 💡 마우스 커서 위치 추적 도면 파싱 안내 말풍선 (먹 10%)
+  const cursorTooltipRef = useRef<HTMLDivElement | null>(null);
+
+  const updateCursorTooltipPos = useCallback((clientX: number, clientY: number) => {
+    const el = cursorTooltipRef.current;
+    if (!el) return;
+    const isRight = clientX > window.innerWidth - 260;
+    const isTop = clientY < 50;
+    const transX = isRight ? '-100%' : '14px';
+    const transY = isTop ? '20px' : '-36px';
+    el.style.transform = `translate(${transX}, ${transY})`;
+    el.style.left = `${clientX}px`;
+    el.style.top = `${clientY}px`;
+  }, []);
+
+  const handleRowMouseEnter = useCallback((e: React.MouseEvent) => {
+    const el = cursorTooltipRef.current;
+    if (!el) return;
+    el.style.display = 'flex';
+    updateCursorTooltipPos(e.clientX, e.clientY);
+  }, [updateCursorTooltipPos]);
+
+  const handleRowMouseMove = useCallback((e: React.MouseEvent) => {
+    updateCursorTooltipPos(e.clientX, e.clientY);
+  }, [updateCursorTooltipPos]);
+
+  const handleRowMouseLeave = useCallback(() => {
+    const el = cursorTooltipRef.current;
+    if (!el) return;
+    el.style.display = 'none';
+  }, []);
 
   // 신규 도면 견적 등록 모달 상태
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -1449,6 +1481,9 @@ export default function HomePage() {
                       key={c.id}
                       onClick={() => !isDeleted && router.push(`/cases/${c.id}`)}
                       onDoubleClick={() => !isDeleted && router.push(`/cases/${c.id}`)}
+                      onMouseEnter={(e) => !isDeleted && handleRowMouseEnter(e)}
+                      onMouseMove={(e) => !isDeleted && handleRowMouseMove(e)}
+                      onMouseLeave={handleRowMouseLeave}
                       className={`relative transition-all duration-150 cursor-pointer group border-l-4 ${
                         isDeleted || isArchived
                           ? 'bg-slate-50/50 hover:bg-slate-100/80 border-l-transparent text-slate-500'
@@ -1460,15 +1495,7 @@ export default function HomePage() {
                         {String(globalIdx).padStart(2, '0')}
                       </td>
                       {/* 1. 의뢰번호 / 명칭 (1행 가로 통합 + SmartTruncateTooltip) */}
-                      <td className="py-2.5 px-4 relative">
-                        {/* 💡 행 호버 시 더블클릭 도면 파싱 안내 툴팁 (먹 15%) */}
-                        {!isDeleted && (
-                          <div className="hidden group-hover:flex items-center gap-1.5 absolute bottom-full mb-1.5 left-4 z-40 px-2.5 py-1 bg-[#D9D9D9] text-slate-900 rounded-md text-[11px] font-bold shadow-md border border-neutral-400 pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95 whitespace-nowrap">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-                            <span>더블 클릭하면 AI 도면 파싱으로 넘어갑니다</span>
-                            <div className="absolute top-full left-6 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-[#D9D9D9]"></div>
-                          </div>
-                        )}
+                      <td className="py-2.5 px-4">
                         <div className="flex items-center gap-2 min-w-0 whitespace-nowrap">
                           <span className="font-mono text-xs text-slate-500 group-hover:text-blue-700 font-bold shrink-0 transition-colors">
                             {c.case_no}
@@ -2457,6 +2484,17 @@ export default function HomePage() {
         onClose={() => setDeleteToast(null)}
         onRestoreConfirmDialog={handleRestoreConfirmDialog}
       />
+
+      {/* 💡 마우스 커서 위치 추적 도면 파싱 안내 말풍선 (먹 10% 라이트 그레이) */}
+      <div
+        ref={cursorTooltipRef}
+        style={{ display: 'none', position: 'fixed', zIndex: 9999, pointerEvents: 'none', top: 0, left: 0 }}
+        className="items-center gap-1.5 px-2.5 py-1 bg-[#E6E6E6] text-slate-900 rounded-md text-[11px] font-bold shadow-md border border-neutral-300 whitespace-nowrap"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse shrink-0"></span>
+        <span>더블 클릭하면 AI 도면 파싱으로 넘어갑니다</span>
+        <div className="absolute top-full left-3 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-[#E6E6E6]"></div>
+      </div>
     </div>
   );
 }
