@@ -1034,54 +1034,54 @@ export default function MasterDataManagerPage() {
           <>
             {/* Top Stat Cards: 10대 제조업 표준 분류 */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-1.5">
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-slate-500 block leading-tight">전체 표준 품목</span>
                 <span className="text-sm font-black text-slate-900 font-mono mt-0.5 block leading-tight">{stats.total.toLocaleString()}개</span>
               </div>
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-blue-600 block leading-tight">기계 가공품</span>
                 <span className="text-sm font-black text-blue-700 font-mono mt-0.5 block leading-tight">{(stats.machining || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-cyan-600 block leading-tight">판금/제관품</span>
                 <span className="text-sm font-black text-cyan-700 font-mono mt-0.5 block leading-tight">{(stats.sheetMetal || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-pink-600 block leading-tight">사출/성형품</span>
                 <span className="text-sm font-black text-pink-700 font-mono mt-0.5 block leading-tight">{(stats.injection || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-teal-600 block leading-tight">기계요소</span>
                 <span className="text-sm font-black text-teal-700 font-mono mt-0.5 block leading-tight">{(stats.mechanical || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-emerald-600 block leading-tight">규격 철물</span>
                 <span className="text-sm font-black text-emerald-700 font-mono mt-0.5 block leading-tight">{(stats.commercial || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-amber-600 block leading-tight">전장/공압품</span>
                 <span className="text-sm font-black text-amber-700 font-mono mt-0.5 block leading-tight">{(stats.electrical || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-orange-600 block leading-tight">주조/단조품</span>
                 <span className="text-sm font-black text-orange-700 font-mono mt-0.5 block leading-tight">{(stats.casting || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-violet-600 block leading-tight">해외 수입품</span>
                 <span className="text-sm font-black text-violet-700 font-mono mt-0.5 block leading-tight">{(stats.imported || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-slate-600 block leading-tight">고객 사급품</span>
                 <span className="text-sm font-black text-slate-700 font-mono mt-0.5 block leading-tight">{(stats.supplied || 0).toLocaleString()}종</span>
               </div>
-              <div className="bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-indigo-600 block leading-tight">조립품(모듈)</span>
                 <span className="text-sm font-black text-indigo-700 font-mono mt-0.5 block leading-tight">{(stats.assembly || 0).toLocaleString()}종</span>
               </div>
             </div>
 
             {/* Toolbar: Search, Filters, Actions */}
-            <div className="bg-white py-2 px-3 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
+            <div className="bg-white py-2 px-3 rounded-[6px] border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
               <form onSubmit={handleSearch} className="flex items-center space-x-2 flex-1 max-w-md">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1090,12 +1090,12 @@ export default function MasterDataManagerPage() {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="품목코드, 품명, 규격, 재질 검색..."
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-blue-500"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-[6px] text-xs focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-[6px] text-xs font-bold transition-colors cursor-pointer"
                 >
                   검색
                 </button>
@@ -1111,7 +1111,7 @@ export default function MasterDataManagerPage() {
                     key={cat.id}
                     type="button"
                     onClick={() => setCategoryFilter(cat.id)}
-                    className={`px-2.5 py-1 rounded-xl font-bold transition-all cursor-pointer text-[11px] ${
+                    className={`px-2.5 py-1 rounded-[6px] font-bold transition-all cursor-pointer text-[11px] ${
                       categoryFilter === cat.id
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
@@ -1127,7 +1127,7 @@ export default function MasterDataManagerPage() {
                 <button
                   type="button"
                   onClick={handleDownloadExcelTemplate}
-                  className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-2xs transition-colors cursor-pointer"
+                  className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-[6px] text-xs font-bold flex items-center space-x-1.5 shadow-2xs transition-colors cursor-pointer"
                   title="사내 단가 대량 등록용 표준 엑셀 템플릿 서식 다운로드 (.xlsx)"
                 >
                   <Download className="w-4 h-4 text-slate-500" />
@@ -1136,7 +1136,7 @@ export default function MasterDataManagerPage() {
                 <button
                   type="button"
                   onClick={() => setShowImportModal(true)}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[6px] text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
                 >
                   <Upload className="w-4 h-4" />
                   <span>엑셀 일괄 업로드</span>
@@ -1144,7 +1144,7 @@ export default function MasterDataManagerPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(true)}
-                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-[6px] text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>신규 품목 등록</span>
