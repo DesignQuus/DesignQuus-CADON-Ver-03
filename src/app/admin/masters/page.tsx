@@ -1304,7 +1304,7 @@ export default function MasterDataManagerPage() {
                                           }}
                                           className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/30 transition-all flex items-center justify-center text-center cursor-pointer border border-blue-400/30 outline-none"
                                         >
-                                          <span>스마트피커 열기 (세부 대표품목 선택)...</span>
+                                          <span>세부 품목 검색·선택...</span>
                                         </button>
 
                                         {/* 호버 시 기능 설명 인라인 툴팁 (사용자 요청 1번 충족) */}
@@ -1628,7 +1628,7 @@ export default function MasterDataManagerPage() {
                     title="선택된 품목들에 일괄 적용할 부품 유형 선택"
                   >
                     <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1">
-                      스마트피커 열기...
+                      세부 품목 검색·선택...
                     </option>
                     <option
                       disabled
@@ -2334,7 +2334,7 @@ export default function MasterDataManagerPage() {
                     className="w-full border border-slate-200 rounded-lg p-2 text-xs"
                   >
                     <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold">
-                      스마트피커 열기 (실무 대표 품목 검색/선택)...
+                      세부 품목 검색·선택...
                     </option>
                     <optgroup label="── 도면 기반 가공/제작품 ──">
                       <option value="MACHINING">기계 가공품 (Machining - 절삭/선반/밀링)</option>
