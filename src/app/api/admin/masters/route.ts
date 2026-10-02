@@ -99,8 +99,7 @@ export async function GET(req: NextRequest) {
         p.unit,
         COALESCE(pm.unit_price, 0) as unit_price,
         pm.price_type,
-        pm.effective_from,
-        p.created_at
+        pm.effective_from
       FROM product_masters p
       LEFT JOIN price_masters pm ON p.id = pm.master_id AND pm.is_active = 1
       WHERE 1=1
@@ -117,11 +116,15 @@ export async function GET(req: NextRequest) {
     }
 
     if (category && category !== 'ALL') {
-      sql += ` AND p.category = ?`;
-      params.push(category);
+      if (category === 'COMMERCIAL') {
+        sql += ` AND (p.category = 'COMMERCIAL' OR p.category = 'FASTENER')`;
+      } else {
+        sql += ` AND p.category = ?`;
+        params.push(category);
+      }
     }
 
-    sql += ` ORDER BY (CASE WHEN COALESCE(pm.unit_price, 0) > 0 THEN 1 ELSE 0 END) DESC, p.id DESC, p.master_code ASC LIMIT 200`;
+    sql += ` ORDER BY (CASE WHEN COALESCE(pm.unit_price, 0) > 0 THEN 1 ELSE 0 END) DESC, p.id DESC, p.master_code ASC LIMIT 1000`;
 
     const rawItems = await db.prepare(sql).all(...params);
     const items = (rawItems || []).map((it: any, idx: number) => ({

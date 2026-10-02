@@ -300,24 +300,21 @@ export default function MasterDataManagerPage() {
   };
 
   const loadData = async (forceSpinner = false) => {
-    const cacheKey = `masters_items_${categoryFilter}`;
-    const cachedData = getClientCache<any>(cacheKey) || (categoryFilter === 'ALL' ? getClientCache<any>('masters_items_ALL') : null);
+    const cachedData = getClientCache<any>('masters_items_ALL');
     const hasCached = (cachedData?.items && Array.isArray(cachedData.items) && cachedData.items.length > 0) || (items.length > 0);
 
-    // 캐시가 전혀 없거나 사용자가 검색 등 명시적으로 스피너를 요청한 경우에만 로딩 활성화
+    // 캐시가 전혀 없거나 명시적으로 스피너를 요청한 경우에만 로딩 활성화
     if (!hasCached || forceSpinner) {
       setLoading(true);
     }
 
     try {
-      const urlItems = `/api/admin/masters?q=${encodeURIComponent(searchTerm)}&category=${categoryFilter}`;
+      const urlItems = '/api/admin/masters?category=ALL';
       const urlSettings = '/api/admin/masters?type=settings';
 
-      // ⚡ 검색어가 없을 때는 fetchWithCache를 통해 GNB 프리페치 캐시를 0ms 즉시 공유 (중복 대기 100% 해소)
+      // ⚡ fetchWithCache를 통해 GNB 프리페치 캐시를 0ms 즉시 공유 (중복 대기 100% 해소)
       const [data, sData] = await Promise.all([
-        !searchTerm.trim()
-          ? fetchWithCache<any>(cacheKey, urlItems, { maxAgeMs: 20000 })
-          : apiFetch(urlItems).then((r) => (r.ok ? r.json() : null)),
+        fetchWithCache<any>('masters_items_ALL', urlItems, { maxAgeMs: 20000, forceFresh: forceSpinner }),
         fetchWithCache<any>('masters_settings', urlSettings, { maxAgeMs: 40000 })
       ]);
 
@@ -326,12 +323,7 @@ export default function MasterDataManagerPage() {
         if (data.stats) {
           setStats(data.stats);
         }
-        if (!searchTerm.trim()) {
-          setClientCache(cacheKey, data);
-          if (categoryFilter === 'ALL') {
-            setClientCache('masters_items_ALL', data);
-          }
-        }
+        setClientCache('masters_items_ALL', data);
       }
 
       if (sData) {
@@ -347,9 +339,9 @@ export default function MasterDataManagerPage() {
   };
 
   useEffect(() => {
-    // ⚡ 0ms 즉시 화면 복원: 필터 변경 시 캐시된 품목 및 통계가 있으면 즉각 표출 (하이드레이션 완료 후 안전 복원)
+    // ⚡ 0ms 즉시 화면 복원: 마운트 시 캐시된 품목 및 통계가 있으면 즉각 표출 (하이드레이션 완료 후 안전 복원)
     try {
-      const cachedData = getClientCache<any>(`masters_items_${categoryFilter}`) || getClientCache<any>('masters_items_ALL');
+      const cachedData = getClientCache<any>('masters_items_ALL');
       if (cachedData?.items && Array.isArray(cachedData.items) && cachedData.items.length > 0) {
         setItems(cachedData.items);
         setLoading(false);
@@ -363,7 +355,7 @@ export default function MasterDataManagerPage() {
     } catch {}
 
     loadData(false);
-  }, [categoryFilter]);
+  }, []);
 
   // 커스텀 부품 유형 드롭다운 외부 클릭 및 ESC 닫기 핸들러
   useEffect(() => {
@@ -446,13 +438,39 @@ export default function MasterDataManagerPage() {
     }
   };
 
+  // ⚡ 0ms 즉각 반응 하이브리드 필터링 (카테고리 칩 선택 + 실시간 검색어)
+  const filteredItems = useMemo(() => {
+    return items.filter((it) => {
+      // 1. 10대 실무 분류 카테고리 필터링
+      let matchesCategory = true;
+      if (categoryFilter !== 'ALL') {
+        if (categoryFilter === 'COMMERCIAL') {
+          matchesCategory = it.category === 'COMMERCIAL' || it.category === 'FASTENER';
+        } else {
+          matchesCategory = it.category === categoryFilter;
+        }
+      }
+
+      // 2. 검색어 필터링 (마스터코드, 표준품명, 규격, 재질)
+      const q = searchTerm.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        (it.master_code && it.master_code.toLowerCase().includes(q)) ||
+        (it.standard_name && it.standard_name.toLowerCase().includes(q)) ||
+        (it.specification && it.specification.toLowerCase().includes(q)) ||
+        (it.material && it.material.toLowerCase().includes(q));
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [items, categoryFilter, searchTerm]);
+
   // ⚡ 페이지네이션 연동 품목 및 페이지 번호 계산
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
 
   const paginatedItems = useMemo(() => {
     const startIdx = (currentPage - 1) * pageSize;
-    return items.slice(startIdx, startIdx + pageSize);
-  }, [items, currentPage, pageSize]);
+    return filteredItems.slice(startIdx, startIdx + pageSize);
+  }, [filteredItems, currentPage, pageSize]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1110,7 +1128,10 @@ export default function MasterDataManagerPage() {
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() => setCategoryFilter(cat.id)}
+                    onClick={() => {
+                      setCategoryFilter(cat.id);
+                      setCurrentPage(1);
+                    }}
                     className={`px-2.5 py-1 rounded-[6px] font-bold transition-all cursor-pointer text-[11px] ${
                       categoryFilter === cat.id
                         ? 'bg-blue-600 text-white shadow-xs'
@@ -1196,10 +1217,16 @@ export default function MasterDataManagerPage() {
                         기준정보 데이터를 불러오는 중입니다...
                       </td>
                     </tr>
-                  ) : items.length === 0 ? (
+                  ) : filteredItems.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-8 text-center text-slate-400">
-                        등록된 마스터 품목이 없습니다. 상단 [신규 품목 등록] 또는 [엑셀 일괄 업로드]를 진행해 주세요.
+                        {searchTerm.trim() ? (
+                          <>검색어 &apos;{searchTerm}&apos;에 일치하는 품목이 없습니다.</>
+                        ) : categoryFilter !== 'ALL' ? (
+                          <>&apos;{PART_CATEGORIES.find(c => c.id === categoryFilter)?.label || categoryFilter}&apos; 분류에 등록된 마스터 품목이 없습니다.</>
+                        ) : (
+                          <>등록된 마스터 품목이 없습니다. 상단 [신규 품목 등록] 또는 [엑셀 일괄 업로드]를 진행해 주세요.</>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -1435,7 +1462,7 @@ export default function MasterDataManagerPage() {
               </table>
 
               {/* Standard Pagination Navigation Bar (중앙 정렬 배치 & 프로젝트 표준 로직) */}
-              {items.length > 0 && (
+              {filteredItems.length > 0 && (
                 <div className="py-2.5 px-5 border-t border-slate-200/90 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-6 text-xs text-slate-500 shrink-0">
                   {/* 중앙 번호 네비게이션 버튼 그룹 (첫페이지, 이전, 번호, 다음, 끝페이지) */}
                   <div className="flex items-center space-x-1">
@@ -1507,10 +1534,10 @@ export default function MasterDataManagerPage() {
                   {/* 건수 정보 및 페이지당 표시 행수 선택기 */}
                   <div className="flex items-center space-x-3 text-slate-600">
                     <div>
-                      총 <strong className="text-slate-900 font-bold">{items.length}</strong>개 항목 중{' '}
+                      총 <strong className="text-slate-900 font-bold">{filteredItems.length}</strong>개 항목 중{' '}
                       <span className="font-mono font-semibold text-slate-800">
-                        {items.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} -{' '}
-                        {Math.min(items.length, currentPage * pageSize)}
+                        {filteredItems.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} -{' '}
+                        {Math.min(filteredItems.length, currentPage * pageSize)}
                       </span>
                       개 표시
                     </div>
