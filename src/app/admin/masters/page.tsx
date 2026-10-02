@@ -1006,10 +1006,10 @@ export default function MasterDataManagerPage() {
         </div>
 
         {/* Tab Controls */}
-        <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+        <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-[4px] border border-slate-200">
           <button
             onClick={() => setActiveTab('products')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-[4px] text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'products' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -1018,7 +1018,7 @@ export default function MasterDataManagerPage() {
           </button>
           <button
             onClick={() => setActiveTab('settings')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-[4px] text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'settings' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
