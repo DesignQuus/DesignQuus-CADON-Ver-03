@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { apiFetch } from '@/lib/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -189,6 +189,8 @@ export default function WebGlCadViewer({
   const targetCamRef = useRef<{ x: number; y: number; zoom: number; lerpSpeed?: number } | null>(null);
   // 🖱️ DWG FastView 방식 칸 단위 줌: 휠 델타 누적값 & 마지막 입력 시각
   const wheelAccumRef = useRef<{ acc: number; lastTs: number }>({ acc: 0, lastTs: 0 });
+  // 마지막 '화면 맞춤' 카메라 상태 (리사이즈 시 사용자 조작 여부 판별용)
+  const lastFitRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
 
   // 💡 On-demand rendering control: Only render when dirty (0% GPU idle)
   const needsRenderRef = useRef(true);
@@ -313,6 +315,8 @@ export default function WebGlCadViewer({
       });
     }
 
+    // 크기 변경 시 '사용자가 직접 조작했는지' 판별하기 위한 마지막 맞춤 상태
+    lastFitRef.current = { x: centerX, y: centerY, zoom: targetZoom };
     if (animate) {
       targetCamRef.current = { x: centerX, y: centerY, zoom: targetZoom, lerpSpeed: 0.22 };
     } else {
@@ -889,15 +893,26 @@ export default function WebGlCadViewer({
       // 화면 고정 굵기 선(LineMaterial)은 캔버스 해상도를 알아야 픽셀 폭을 유지함
       heavyMaterialsRef.current.forEach((m) => m.resolution.set(w, h));
 
-      // If a drawing sheet was focused and user is not manually panning/dragging, re-frame to real dimensions
-      if (focusBboxRef.current && !isDraggingRef.current) {
-        const fb = focusBboxRef.current;
-        fitToExtents(fb.min_x, fb.min_y, fb.max_x, fb.max_y, false);
-      } else if (!isDraggingRef.current) {
-        // Automatically keep full drawing in view if user is in overall overview mode
-        const eff = getEffectiveOverviewBounds();
-        if (eff.maxX > eff.minX) {
-          fitToExtents(eff.minX, eff.minY, eff.maxX, eff.maxY, false);
+      // 직전 '화면 맞춤' 상태 그대로(사용자가 확대/이동하지 않음)일 때만 새 크기에 맞춰 다시 맞춤.
+      // 사용자가 직접 보던 위치/배율은 크기가 바뀌어도 유지.
+      const lf = lastFitRef.current;
+      const visH = frustumSize / Math.max(cam.zoom, 1e-9);
+      const atFit =
+        !lf ||
+        targetCamRef.current !== null ||
+        (Math.abs(cam.zoom / lf.zoom - 1) < 0.03 &&
+          Math.abs(cam.position.x - lf.x) < visH * 0.02 &&
+          Math.abs(cam.position.y - lf.y) < visH * 0.02);
+
+      if (atFit && !isDraggingRef.current) {
+        if (focusBboxRef.current) {
+          const fb = focusBboxRef.current;
+          fitToExtents(fb.min_x, fb.min_y, fb.max_x, fb.max_y, false);
+        } else {
+          const eff = getEffectiveOverviewBounds();
+          if (eff.maxX > eff.minX) {
+            fitToExtents(eff.minX, eff.minY, eff.maxX, eff.maxY, false);
+          }
         }
       }
       needsRenderRef.current = true;
@@ -1917,7 +1932,7 @@ export default function WebGlCadViewer({
     <div
       ref={containerRef}
       style={{ overscrollBehavior: 'contain' }}
-      className={`relative w-full h-[680px] bg-black rounded-2xl overflow-hidden border border-slate-800 select-none shadow-inner overscroll-contain ${
+      className={`relative w-full h-[clamp(460px,calc(100vh-340px),920px)] bg-black rounded-2xl overflow-hidden border border-slate-800 select-none shadow-inner overscroll-contain ${
         isBoxZoomMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
       }`}
     >
