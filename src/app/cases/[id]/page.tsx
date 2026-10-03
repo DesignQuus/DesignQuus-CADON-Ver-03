@@ -21,6 +21,7 @@ import { getClientCache, setClientCache } from '@/lib/cacheStore';
 
 export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
@@ -99,7 +100,6 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const [detailArchiveCustomReason, setDetailArchiveCustomReason] = useState('');
   const [detailLifecycleLoading, setDetailLifecycleLoading] = useState(false);
 
-  const router = useRouter();
 
   const handleArchiveCase = async () => {
     const finalReason = detailArchiveReasonType === 'CUSTOM'
