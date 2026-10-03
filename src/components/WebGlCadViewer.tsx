@@ -187,6 +187,8 @@ export default function WebGlCadViewer({
 
   // Smooth fly-to animation & kinetic momentum zoom ref
   const targetCamRef = useRef<{ x: number; y: number; zoom: number; lerpSpeed?: number } | null>(null);
+  // 🖱️ DWG FastView 방식 칸 단위 줌: 휠 델타 누적값 & 마지막 입력 시각
+  const wheelAccumRef = useRef<{ acc: number; lastTs: number }>({ acc: 0, lastTs: 0 });
 
   // 💡 On-demand rendering control: Only render when dirty (0% GPU idle)
   const needsRenderRef = useRef(true);
@@ -1565,19 +1567,60 @@ export default function WebGlCadViewer({
       const aspect = container.clientWidth / container.clientHeight;
       const frustumSize = 1000;
 
-      // ⚡ AutoCAD / DWG FastViewer 표준: 연속 지수 스무스 줌 (Continuous Exponential Smooth Zoom)
-      // 불연속적인 3단 계단식(Step) 분기를 완전히 제거하고, 휠 1틱당 약 1.18배의 균일하고 자연스러운 배율 적용
+      // ⚡ DWG FastView / AutoCAD 방식 칸 단위 줌 (Notch-Stepped Zoom)
+      //  - 마우스 휠: 1칸(deltaY≈100) = 정확히 1.25배 고정, 돌리는 속도와 무관
+      //  - 단계마다 약 100ms 내 짧게 이동 후 정지 → 칸마다 단계가 눈에 보임
+      //  - 터치패드(작은 연속 델타): 단계 없이 부드럽게 유지
+      //  - 축소/확대 한계: 도면 전체 보기 기준 (무한 확대·축소 방지)
       const activeZoom = targetCamRef.current ? targetCamRef.current.zoom : camera.zoom;
 
-      // 정규화된 휠 델타 계산 (터치패드 미세 스크롤 및 고속 휠 롤링 모두 완벽 지원)
       let rawDelta = e.deltaY;
-      if (e.deltaMode === 1) rawDelta *= 33;      // Line mode
+      if (e.deltaMode === 1) rawDelta *= 33;       // Line mode (Firefox 등)
       else if (e.deltaMode === 2) rawDelta *= 100; // Page mode
-      const normalizedDelta = Math.min(Math.max(rawDelta, -180), 180);
 
-      // 수학적 지수 곡선: 확대/축소 역변환 가역성 100% 보장 (exp(k) * exp(-k) = 1.0)
-      const zoomFactor = Math.exp(-normalizedDelta * 0.00165);
-      const newZoom = Math.min(Math.max(activeZoom * zoomFactor, 0.00001), 10000);
+      const NOTCH = 100;          // 휠 1칸 기준 델타
+      const STEP_FACTOR = 1.25;   // 1칸당 배율 (AutoCAD ZOOMFACTOR 60 수준)
+      // 터치패드: 픽셀 모드의 작은 연속 델타 또는 핀치 제스처(브라우저가 Ctrl+휠로 전달)
+      const isTrackpad = e.deltaMode === 0 && (e.ctrlKey || Math.abs(rawDelta) < 50);
+
+      let zoomFactor: number;
+      let lerpSpeed: number;
+      if (isTrackpad) {
+        // 터치패드/핀치: 연속 부드러운 줌
+        zoomFactor = Math.exp(-Math.max(-60, Math.min(60, rawDelta)) * 0.004);
+        lerpSpeed = 0.35;
+      } else {
+        // 마우스 휠: 델타 누적 → 100 단위마다 1단계
+        const now = performance.now();
+        const acc = wheelAccumRef.current;
+        // 방향이 바뀌었거나 250ms 이상 쉬었으면 누적값 초기화
+        if (now - acc.lastTs > 250 || Math.sign(acc.acc) !== Math.sign(rawDelta)) acc.acc = 0;
+        acc.lastTs = now;
+        acc.acc += rawDelta;
+        let steps = Math.trunc(acc.acc / NOTCH);
+        if (steps === 0) {
+          // 1칸 미만 입력(가속 휠 잔여분): 첫 입력은 최소 1단계 보장
+          if (Math.abs(acc.acc) >= NOTCH * 0.5) steps = Math.sign(acc.acc);
+          else return;
+        }
+        acc.acc -= steps * NOTCH;
+        // 걸림 없는 휠(프리스핀) 폭주 방지: 입력 1회당 최대 2단계
+        steps = Math.max(-2, Math.min(2, steps));
+        zoomFactor = Math.pow(STEP_FACTOR, -steps);
+        lerpSpeed = 0.45; // 60FPS 기준 약 6프레임(≈100ms) 내 97% 도달 후 정지
+      }
+
+      // 도면 크기 기준 확대/축소 한계
+      const eff = getEffectiveOverviewBounds();
+      const spanX = Math.max(eff.maxX - eff.minX, 1);
+      const spanY = Math.max(eff.maxY - eff.minY, 1);
+      const overviewZoom = Math.min((frustumSize * aspect) / (spanX * 1.18), frustumSize / (spanY * 1.18));
+      const minZoom = overviewZoom * 0.5;              // 전체 보기의 1/2 크기까지만 축소
+      const maxZoom = Math.min(overviewZoom * 5000, 10000); // 도면 대비 5,000배까지 확대
+      const newZoom = Math.min(Math.max(activeZoom * zoomFactor, minZoom), maxZoom);
+      // 한계 도달 시 무시 (이미 한계 밖이면 반대 방향으로 튀지 않도록 차단)
+      if (Math.abs(newZoom - activeZoom) / activeZoom < 1e-6) return;
+      if ((zoomFactor < 1 && newZoom > activeZoom) || (zoomFactor > 1 && newZoom < activeZoom)) return;
 
       // 마우스 커서 위치를 월드 좌표의 기준점으로 고정
       const worldW = (frustumSize * aspect) / camera.zoom;
@@ -1591,12 +1634,11 @@ export default function WebGlCadViewer({
       const targetX = worldMouseX - (mouseX / container.clientWidth - 0.5) * newWorldW;
       const targetY = worldMouseY + (mouseY / container.clientHeight - 0.5) * newWorldH;
 
-      // ⚡ 연속 관성 물리 줌: 60/120 FPS에서 버터처럼 매끄럽고 유려하게 미끄러지듯 감속 (Ease-out)
       targetCamRef.current = {
         x: targetX,
         y: targetY,
         zoom: newZoom,
-        lerpSpeed: 0.20
+        lerpSpeed
       };
 
       // 60 FPS Responsive LOD trigger: prioritize responsiveness while wheeling
