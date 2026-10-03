@@ -90,6 +90,20 @@ export default function ReviewCadViewer({
     return null;
   }, [drawings, selectedPartNo, selectedBalloonNo]);
 
+  // 도면(drawings)이 로드되어 있다면 allFiles가 비어있어도 뷰어가 '도면 없음' 플레이스홀더로 추락하지 않도록 보장
+  const effectiveFiles = useMemo(() => {
+    if (allFiles && allFiles.length > 0) return allFiles;
+    if (drawings && drawings.length > 0) {
+      return [{
+        id: drawings[0]?.source_file_id || 'file_cad_source',
+        original_file_name: drawings[0]?.drawing_name_raw || '2D CAD 도면',
+        file_type: 'DWG',
+        file_role: 'SOURCE'
+      }];
+    }
+    return [];
+  }, [allFiles, drawings]);
+
   return (
     <div className="relative w-full h-full bg-slate-900 rounded-xl overflow-hidden border border-slate-700 shadow-sm flex flex-col p-2.5">
       {/* 2단계 견적 검토 통합 CAD 뷰어 (상단 1줄 전문가 툴바 내장) */}
@@ -101,8 +115,8 @@ export default function ReviewCadViewer({
           relationships={relationships}
           bomAreas={bomAreas}
           rawBomItems={rawBomItems}
-          allFiles={allFiles}
-          selectedFile={allFiles.length > 0 ? allFiles[0] : null}
+          allFiles={effectiveFiles}
+          selectedFile={effectiveFiles.length > 0 ? effectiveFiles[0] : null}
           externalFocusIdx={externalFocusIdx}
           isSidebarOpen={false}
           isReviewMode={true}

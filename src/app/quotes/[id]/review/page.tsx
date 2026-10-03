@@ -330,38 +330,50 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     async function loadData() {
       setLoading(true);
       try {
-        // 케이스 데이터, 사내 마스터 단가표, 과거 수주/견적 학습 풀을 병렬 조회
-        const [res, mastersRes, learnedRes] = await Promise.all([
-          apiFetch(`/api/quotation-cases/${caseId}`),
-          apiFetch('/api/admin/masters?type=products&onlyPriced=true'),
-          apiFetch('/api/manual-prices?mode=ALL_LEARNED')
-        ]);
+        // 1. 케이스 핵심 데이터(도면, 부품)를 최우선으로 안정적 로드
+        let res: Response | null = null;
+        try {
+          res = await apiFetch(`/api/quotation-cases/${caseId}`);
+        } catch (fetchErr) {
+          console.warn('[QuoteReview] apiFetch failed, trying fallback fetch:', fetchErr);
+          res = await fetch(`/api/quotation-cases/${caseId}`).catch(() => null);
+        }
 
+        if (!res || !res.ok) {
+          console.error('[QuoteReview] Failed to fetch case data:', res?.status);
+          setLoading(false);
+          return;
+        }
+
+        const json = await res.json();
+        setCaseInfo(json.case);
+        const effectiveCaseFiles = (json.files && json.files.length > 0) ? json.files : (json.allFiles || []);
+        setFiles(effectiveCaseFiles);
+        setDrawings(json.drawings || []);
+        setCadObjects(json.cadObjects || []);
+        setRelationships(json.relationships || []);
+        setBomAreas(json.bomAreas || []);
+        setRawBomItems(json.rawBomItems || []);
+
+        // 2. 사내 마스터 단가표 & 학습 풀은 non-blocking 병렬 조회 (실패해도 도면/BOM 표출 영향 0)
         let pricedMasters: any[] = [];
-        if (mastersRes.ok) {
-          try {
-            const mastersJson = await mastersRes.json();
-            pricedMasters = mastersJson.items || [];
-          } catch (e) {}
-        }
-
         let learnedPool: any[] = [];
-        if (learnedRes?.ok) {
-          try {
-            const learnedJson = await learnedRes.json();
-            learnedPool = learnedJson.list || [];
-          } catch (e) {}
+        try {
+          const [mastersRes, learnedRes] = await Promise.allSettled([
+            apiFetch('/api/admin/masters?type=products&onlyPriced=true'),
+            apiFetch('/api/manual-prices?mode=ALL_LEARNED')
+          ]);
+          if (mastersRes.status === 'fulfilled' && mastersRes.value.ok) {
+            const mJson = await mastersRes.value.json().catch(() => null);
+            pricedMasters = mJson?.items || [];
+          }
+          if (learnedRes.status === 'fulfilled' && learnedRes.value.ok) {
+            const lJson = await learnedRes.value.json().catch(() => null);
+            learnedPool = lJson?.list || [];
+          }
+        } catch (e) {
+          console.warn('[QuoteReview] Non-fatal error loading price masters/learned pool:', e);
         }
-
-        if (res.ok) {
-          const json = await res.json();
-          setCaseInfo(json.case);
-          setFiles(json.files || []);
-          setDrawings(json.drawings || []);
-          setCadObjects(json.cadObjects || []);
-          setRelationships(json.relationships || []);
-          setBomAreas(json.bomAreas || []);
-          setRawBomItems(json.rawBomItems || []);
 
           // 1. 실제 견적서 품목(quoteItems)이 이미 생성되어 있는 경우
           if (Array.isArray(json.quoteItems) && json.quoteItems.length > 0) {
@@ -717,8 +729,42 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                 };
               })
             );
+          } else if (Array.isArray(json.rawBomItems) && json.rawBomItems.length > 0) {
+            // 3. Fallback: rawBomItems 기반 부품 라인 생성
+            setLines(
+              json.rawBomItems.map((rb: any, idx: number) => {
+                const nameLower = (rb.item_name || rb.part_name || '').toLowerCase();
+                const isAssembly = nameLower.includes('조립') || nameLower.includes('assembly') || nameLower.includes('line');
+                const resolvedPartNo = (rb.part_no || rb.drawing_no || '').trim() || `BOM-${idx + 1}`;
+                const cleanMaterial = rb.material || 'SS400';
+                const resolvedSpec = rb.specification || '';
+                let partType: PartType = 'MACHINING';
+                if (isAssembly) partType = 'ASSEMBLY';
+                else if (nameLower.includes('판금') || nameLower.includes('커버')) partType = 'SHEET_METAL';
+                else if (nameLower.includes('모터') || nameLower.includes('센서')) partType = 'ELECTRICAL';
+                else if (nameLower.includes('볼트') || nameLower.includes('너트')) partType = 'COMMERCIAL';
+
+                return {
+                  id: rb.id || `raw_${idx + 1}`,
+                  itemNo: idx + 1,
+                  partNo: resolvedPartNo,
+                  partName: rb.item_name || rb.part_name || 'BOM 부품',
+                  partType,
+                  material: cleanMaterial,
+                  quantity: Number(rb.quantity) || 1,
+                  unitCost: 0,
+                  supplyPrice: 0,
+                  status: isAssembly ? ('CONFIRMED' as const) : ('NEEDS_REVIEW' as const),
+                  balloonNo: String(rb.item_no || idx + 1),
+                  specification: resolvedSpec,
+                  isAssembly,
+                  isIncluded: !isAssembly,
+                  inclusionType: isAssembly ? 'EXCLUDED' : 'INCLUDED'
+                };
+              })
+            );
           } else if (Array.isArray(json.drawings) && json.drawings.length > 0) {
-            // 3. 3중 Fallback: 정규화 전 도면 목록(drawings) 기반 즉시 라인 생성
+            // 4. 4중 Fallback: 정규화 전 도면 목록(drawings) 기반 즉시 라인 생성
             setLines(
               json.drawings.map((d: any, idx: number) => {
                 const nameLower = (d.drawing_name_raw || d.drawing_name_normalized || '').toLowerCase();
@@ -803,7 +849,6 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           } else {
             setLines([]);
           }
-        }
       } catch (e) {
         console.error('Failed to load review case:', e);
       } finally {
@@ -2014,8 +2059,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           caseNo: caseInfo?.case_no,
           caseName: caseInfo?.case_name,
           companyName: caseInfo?.company_name,
-          drawingsCount: lines.length,
-          bomCount: lines.length,
+          drawingsCount: (drawings && drawings.length > 0) ? drawings.length : (caseInfo?.drawingsCount ?? lines.length),
+          bomCount: (rawBomItems && rawBomItems.length > 0) ? rawBomItems.length : (caseInfo?.bomCount ?? lines.length),
           quoteItemCount: lines.length
         }}
       />
