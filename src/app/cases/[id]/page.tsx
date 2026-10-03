@@ -8,7 +8,7 @@ import {
   FileText, Upload, Play, CheckCircle2, AlertTriangle, ChevronRight, ChevronLeft,
   Layers, Database, FileSpreadsheet, RefreshCw, Lock, Unlock, Sparkles, Building2,
   Folder, Calendar, Check, X, ShieldAlert, ShieldCheck, Clock, Send, ArrowDown, ArrowLeft, Home, Eye, Download, Info, Trash2, Trash,
-  Search, Plus, Pencil, ChevronDown, CheckSquare, Square, Coins, ExternalLink, MapPin,
+  Search, Plus, Pencil, ChevronDown, ChevronUp, CheckSquare, Square, Coins, ExternalLink, MapPin,
   Table, LayoutGrid, Filter, RotateCcw, User, AlertCircle, Brain, Archive, Copy, Wrench,
   GraduationCap, BookOpen
 } from 'lucide-react';
@@ -54,6 +54,9 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   
   // 🎯 5단계 통합 스마트 파이프라인 단계 관리 (1: 도면접수, 2: AI도면파싱, 3: 가상BOM, 4: 단가매칭, 5: 견적발행)
   const [workflowStep, setWorkflowStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  // 🧭 UI/UX 최적화: 가이드 배너 접기/펼치기 및 2단계 시트 검색 상태
+  const [isGuideBannerCollapsed, setIsGuideBannerCollapsed] = useState<boolean>(false);
+  const [sheetSearchText, setSheetSearchText] = useState<string>('');
 
   // URL step 및 tab 쿼리 파라미터 연동 (?step=1~5, ?tab=bom, ?tab=quote 등)
   useEffect(() => {
@@ -2700,31 +2703,76 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         />
 
         {/* 5단계 실시간 스마트 가이드 팁 */}
-        <div className="bg-slate-900 text-slate-200 px-4 sm:px-6 py-2 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="px-1.5 py-0.5 rounded bg-blue-600 font-semibold text-[10px] text-white">가이드</span>
-            <span className="text-slate-300">
-              {workflowStep === 1 && (
-                <span>1단계: 좌측 패널에서 고객사로부터 접수된 도면 파일(DWG, DXF)을 등록하고 관리하세요. 완료 후 상단 <button type="button" onClick={() => { setWorkflowStep(2); setIsSidebarOpen(false); }} className="font-bold underline text-blue-400 hover:text-blue-200 cursor-pointer">[2. AI 도면 파싱]</button>을 클릭하세요.</span>
-              )}
-              {workflowStep === 2 && (
-                <span>
-                  {drawings.length > 0 ? (
-                    <>2단계: AI가 파싱한 {drawings.length}개 시트의 2D CAD 벡터 도면 형상, 치수, 도곽을 검토하세요. 검토 후 상단 <strong>[3. 가상 BOM 추출]</strong>을 클릭하세요. (WebGL 60FPS 무랙 가동)</>
-                  ) : (
-                    <>2단계: AI 도면 파싱 대기 중입니다. 상단 <strong>[1. 도면 접수]</strong> 또는 CAD 툴바 <strong>[+ 도면 추가]</strong>에서 도면 파일(DWG, DXF)을 등록하고 AI 분석을 시작하세요.</>
-                  )}
-                </span>
-              )}
-              {workflowStep === 3 && (
-                <span>3단계: 도면 표제란 기반 가상 BOM 부품 목록과 수량을 검토하세요. 검토 완료 후 상단 <strong>[4. 마스터 단가 매칭]</strong>을 클릭하여 3분할 통합 단가 계산을 진행하세요.</span>
-              )}
-              {workflowStep >= 4 && (
-                <span>현재 단가 검토 및 견적서 발행 단계입니다. 상단 네비게이터를 클릭하여 언제든 전 단계로 0초(무랙) 복귀할 수 있습니다.</span>
-              )}
-            </span>
+        <div className={`bg-slate-900 text-slate-200 px-4 sm:px-6 transition-all duration-150 ${isGuideBannerCollapsed ? 'py-1' : 'py-2'} flex items-center justify-between text-xs`}>
+          <div className="flex items-center gap-2 text-[11px] min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsGuideBannerCollapsed(!isGuideBannerCollapsed)}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-600 hover:bg-blue-500 font-semibold text-[10px] text-white cursor-pointer transition-colors"
+              title={isGuideBannerCollapsed ? '가이드 배너 펼치기' : '가이드 배너 접기 (화면 공간 최대화)'}
+            >
+              <span>가이드</span>
+              {isGuideBannerCollapsed ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronUp className="w-2.5 h-2.5" />}
+            </button>
+            {!isGuideBannerCollapsed && (
+              <span className="text-slate-300 truncate">
+                {workflowStep === 1 && (
+                  <span>1단계: 좌측 패널에서 고객사로부터 접수된 도면 파일(DWG, DXF)을 등록하고 관리하세요. 완료 후 우측 <strong>[다음: 2. AI 도면 파싱]</strong>을 클릭하세요.</span>
+                )}
+                {workflowStep === 2 && (
+                  <span>
+                    {drawings.length > 0 ? (
+                      <>2단계: AI가 파싱한 {drawings.length}개 시트의 2D CAD 벡터 도면 형상, 치수, 도곽을 검토하세요. 검토 후 우측 <strong>[다음: 3. 가상 BOM 추출]</strong>을 클릭하세요.</>
+                    ) : (
+                      <>2단계: AI 도면 파싱 대기 중입니다. 상단 <strong>[1. 도면 접수]</strong> 또는 CAD 툴바 <strong>[+ 도면 추가]</strong>에서 도면 파일(DWG, DXF)을 등록하고 AI 분석을 시작하세요.</>
+                    )}
+                  </span>
+                )}
+                {workflowStep === 3 && (
+                  <span>3단계: 도면 표제란 기반 가상 BOM 부품 목록과 수량을 검토하세요. 검토 완료 후 우측 <strong>[다음: 4. 마스터 단가 매칭]</strong>을 클릭하세요.</span>
+                )}
+                {workflowStep >= 4 && (
+                  <span>현재 단가 검토 및 견적서 발행 단계입니다. 상단 네비게이터를 클릭하여 언제든 전 단계로 0초(무랙) 복귀할 수 있습니다.</span>
+                )}
+              </span>
+            )}
           </div>
           <div className="flex items-center space-x-2 shrink-0">
+            {/* 🎯 Primary Action CTA 버튼 (동선 낭비 없는 원클릭 다음 단계 전진) */}
+            {workflowStep === 1 && (
+              <button
+                type="button"
+                onClick={() => { setWorkflowStep(2); setIsSidebarOpen(false); }}
+                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-blue-400/60"
+                title="2단계 AI 도면 파싱 및 검토 화면으로 전진합니다"
+              >
+                <span>다음: 2. AI 도면 파싱</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {workflowStep === 2 && (
+              <button
+                type="button"
+                onClick={() => { setWorkflowStep(3); setIsSidebarOpen(false); }}
+                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-emerald-400/60"
+                title="3단계 가상 BOM 추출 및 부품 목록 확인 화면으로 전진합니다"
+              >
+                <span>다음: 3. 가상 BOM 추출</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {workflowStep === 3 && (
+              <button
+                type="button"
+                onClick={() => router.push(`/quotes/${id}/review`)}
+                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-indigo-400/60"
+                title="4단계 마스터 단가 매칭 및 견적 검토 화면으로 전진합니다"
+              >
+                <span>다음: 4. 마스터 단가 매칭</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleOpenPatternModal}
@@ -2779,7 +2827,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       )}
 
       {/* TAB 1: CAD File Upload & Viewer (PROMPT 03, 04, 05, 06, 18-R1, 18-R2) */}
-      <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${workflowStep === 1 && isSidebarOpen ? 'gap-2' : ''} items-start w-full relative` : "hidden"}>
+      <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${(workflowStep === 1 || workflowStep === 2) && isSidebarOpen ? 'gap-2' : ''} items-start w-full relative transition-all duration-200` : "hidden"}>
           {/* Unified Upload & Files Left Panel (Collapsible) - Step 1 Only */}
           {workflowStep === 1 && isSidebarOpen ? (
             <div className="w-full lg:w-[340px] xl:w-[360px] shrink-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 animate-in fade-in slide-in-from-left-2 relative">
@@ -3023,20 +3071,123 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             </div>
           ) : null}
 
-          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) - Step 1 Only */}
-          {workflowStep === 1 && !isSidebarOpen && (
+          {/* AI 파싱 도면 시트 목록 탐색 패널 - Step 2 (Collapsible) */}
+          {workflowStep === 2 && isSidebarOpen ? (
+            <div className="w-full lg:w-[320px] xl:w-[340px] shrink-0 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3 animate-in fade-in slide-in-from-left-2 relative">
+              <SidebarBookmarkTab
+                mode="collapse"
+                onClick={() => setIsSidebarOpen(false)}
+                label="접기"
+                title="도면 시트 탐색기 접기"
+              />
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+                  <Layers className="w-4 h-4 text-emerald-600" />
+                  <span>파싱 도면 시트</span>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-mono font-bold">
+                    {drawings.length}
+                  </span>
+                </h2>
+                <button
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  title="도면 시트 탐색기 접기"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* 검색 필터 */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="도면번호 / 품명 검색..."
+                  value={sheetSearchText}
+                  onChange={(e) => setSheetSearchText(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                {sheetSearchText && (
+                  <button
+                    onClick={() => setSheetSearchText('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* 시트 스크롤 리스트 */}
+              <div className="space-y-1.5 max-h-[calc(100vh-380px)] overflow-y-auto pr-1">
+                {drawings
+                  .map((d: any, idx: number) => ({ d, idx }))
+                  .filter(({ d, idx }: any) => {
+                    if (!sheetSearchText.trim()) return true;
+                    const q = sheetSearchText.toLowerCase();
+                    const no = (d.drawing_no_raw || d.drawing_no_normalized || '').toLowerCase();
+                    const name = (d.drawing_name_raw || d.drawing_name_normalized || '').toLowerCase();
+                    return no.includes(q) || name.includes(q) || String(idx + 1).includes(q);
+                  })
+                  .map(({ d, idx }: any) => {
+                    const isSelected = externalFocusIdx === idx;
+                    const isAssy = d.drawing_type === 'MAIN_ASSEMBLY' || d.drawing_type === 'SUB_ASSEMBLY';
+                    return (
+                      <button
+                        key={d.id || idx}
+                        type="button"
+                        onClick={() => setExternalFocusIdx(idx)}
+                        className={`w-full text-left p-2.5 rounded-xl border text-xs transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                          isSelected
+                            ? 'bg-blue-50 border-blue-400 shadow-xs ring-1 ring-blue-300'
+                            : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="font-mono text-[10.5px] font-bold text-slate-400 shrink-0">
+                              #{String(idx + 1).padStart(2, '0')}
+                            </span>
+                            {isAssy ? (
+                              <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[10px] font-bold shrink-0">
+                                조립
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 text-[10px] font-bold shrink-0">
+                                단품
+                              </span>
+                            )}
+                            <span className="font-bold text-slate-900 truncate">
+                              {d.drawing_no_raw || d.drawing_no_normalized || `DWG-${idx + 1}`}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 truncate">
+                            {d.drawing_name_raw || d.drawing_name_normalized || '-'}
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                          {d.material || 'SS400'}
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          ) : null}
+
+          {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - Step 1: 도면접수, Step 2: 시트목록 */}
+          {!isSidebarOpen && (workflowStep === 1 || workflowStep === 2) && (
             <SidebarBookmarkTab
               mode="expand"
               onClick={() => setIsSidebarOpen(true)}
-              label="도면접수"
-              icon={Folder}
-              title={`견적의뢰 도면 등록 패널 열기 (${files.length}개 도면 등록됨)`}
+              label={workflowStep === 2 ? '시트목록' : '도면접수'}
+              icon={workflowStep === 2 ? Layers : Folder}
+              title={workflowStep === 2 ? `123개 파싱 도면 시트 탐색기 열기` : `견적의뢰 도면 등록 패널 열기 (${files.length}개 도면 등록됨)`}
               positionOverride="absolute"
             />
           )}
 
           {/* 2D Real CAD Vector Viewer (Takes 100% of remaining width!) */}
-          <div className="flex-1 w-full min-w-0">
+          <div className="flex-1 w-full min-w-0 transition-all duration-200 ease-out">
             <CadViewer
               caseId={id}
               cadObjects={data?.cadObjects || []}

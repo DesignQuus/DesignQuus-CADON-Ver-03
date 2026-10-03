@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { apiFetch } from '@/lib/api';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -907,11 +907,11 @@ export default function WebGlCadViewer({
       if (atFit && !isDraggingRef.current) {
         if (focusBboxRef.current) {
           const fb = focusBboxRef.current;
-          fitToExtents(fb.min_x, fb.min_y, fb.max_x, fb.max_y, false);
+          fitToExtents(fb.min_x, fb.min_y, fb.max_x, fb.max_y, true);
         } else {
           const eff = getEffectiveOverviewBounds();
           if (eff.maxX > eff.minX) {
-            fitToExtents(eff.minX, eff.minY, eff.maxX, eff.maxY, false);
+            fitToExtents(eff.minX, eff.minY, eff.maxX, eff.maxY, true);
           }
         }
       }
@@ -1932,7 +1932,7 @@ export default function WebGlCadViewer({
     <div
       ref={containerRef}
       style={{ overscrollBehavior: 'contain' }}
-      className={`relative w-full h-[clamp(460px,calc(100vh-340px),920px)] bg-black rounded-2xl overflow-hidden border border-slate-800 select-none shadow-inner overscroll-contain ${
+      className={`relative w-full h-[clamp(440px,calc(100vh-370px),880px)] bg-black rounded-2xl overflow-hidden border border-slate-800 select-none shadow-inner overscroll-contain ${
         isBoxZoomMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
       }`}
     >
