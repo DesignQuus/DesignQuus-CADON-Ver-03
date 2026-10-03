@@ -11,10 +11,11 @@ See `.agents/rules/egdesk-dev-context.md` for full details.
 <!-- END:egdesk-dev-context -->
 
 ## 개발 서버 포트 기준 규칙 (EGDesk Port Rule)
-- **절대 원칙**: 개발 서버는 항상 **EGDesk 기준 포트 `4005`(http://localhost:4005)** 로 진행합니다. (사용자 확정 지시)
-- 4003(`npm run dev` 기본값), 4007 등 다른 포트로 별도 개발 서버를 임의로 띄우거나 그 포트를 기준으로 테스트·안내하지 않습니다.
-- 4005에 서버가 떠 있지 않으면 다른 포트로 우회하지 말고, 사용자에게 EGDesk에서 프로젝트 서버를 실행하도록 안내합니다.
-- 로컬 확인/테스트/화면 안내 URL은 모두 `http://localhost:4005` 기준으로 작성합니다.
+- **절대 원칙**: 개발 서버는 항상 **EGDesk가 호스팅하는 서버(EGDesk 패널의 `DEV` 주소)** 를 기준으로 진행합니다. (사용자 확정 지시)
+- EGDesk는 실행할 때마다 포트를 다시 할당할 수 있습니다(예: 4005 → 4006). 고정 번호를 가정하지 말고, 작업 전 `netstat`/HTTP 응답으로 EGDesk 서버 포트를 확인합니다. `.agents/rules/egdesk-dev-context.md`의 번호가 실제와 다르면 실제 EGDesk 포트를 우선합니다.
+- 최근 확인된 EGDesk DEV 포트: **`4006`** (http://localhost:4006, 2026-10-04 기준)
+- 4003(`npm run dev` 기본값), 4007 등 EGDesk가 아닌 별도 개발 서버를 임의로 띄우거나 그 포트를 기준으로 테스트·안내하지 않습니다.
+- EGDesk 서버가 떠 있지 않으면 다른 포트로 우회하지 말고, 사용자에게 EGDesk에서 프로젝트 서버를 실행하도록 안내합니다.
 
 ## 언어 설정 (Language Preference)
 - 사용자와의 모든 대화, 설명 및 응답은 반드시 **한국어(한글)**로 작성합니다.
