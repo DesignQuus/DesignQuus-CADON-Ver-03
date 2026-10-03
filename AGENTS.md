@@ -10,6 +10,12 @@ EGDesk MCP/API runs at http://localhost:8080.
 See `.agents/rules/egdesk-dev-context.md` for full details.
 <!-- END:egdesk-dev-context -->
 
+## 개발 서버 포트 기준 규칙 (EGDesk Port Rule)
+- **절대 원칙**: 개발 서버는 항상 **EGDesk 기준 포트 `4005`(http://localhost:4005)** 로 진행합니다. (사용자 확정 지시)
+- 4003(`npm run dev` 기본값), 4007 등 다른 포트로 별도 개발 서버를 임의로 띄우거나 그 포트를 기준으로 테스트·안내하지 않습니다.
+- 4005에 서버가 떠 있지 않으면 다른 포트로 우회하지 말고, 사용자에게 EGDesk에서 프로젝트 서버를 실행하도록 안내합니다.
+- 로컬 확인/테스트/화면 안내 URL은 모두 `http://localhost:4005` 기준으로 작성합니다.
+
 ## 언어 설정 (Language Preference)
 - 사용자와의 모든 대화, 설명 및 응답은 반드시 **한국어(한글)**로 작성합니다.
 
