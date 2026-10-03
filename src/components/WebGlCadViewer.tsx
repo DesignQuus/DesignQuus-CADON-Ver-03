@@ -1820,12 +1820,9 @@ export default function WebGlCadViewer({
     if (isDraggingRef.current) {
       isDraggingRef.current = false;
       // 드래그 중단 시 마우스가 멈춘 채 놓였으면(속도가 미미하면) 관성 플링 중단
-      if (panVelocityRef.current) {
-        if (Math.abs(panVelocityRef.current.vx) < 1.0 && Math.abs(panVelocityRef.current.vy) < 1.0) {
-          panVelocityRef.current = null;
-          isInteractingRef.current = false;
-        }
-      }
+      // DWG FastView 방식: 손을 놓는 즉시 정지 (관성 미끄러짐 없음)
+      panVelocityRef.current = null;
+      isInteractingRef.current = false;
       needsRenderRef.current = true;
     }
   };
