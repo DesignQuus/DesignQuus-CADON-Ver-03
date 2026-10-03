@@ -243,6 +243,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const [isBatchMasterModalOpen, setIsBatchMasterModalOpen] = useState<boolean>(false);
   const [batchMasterTargetIds, setBatchMasterTargetIds] = useState<string[]>([]);
   const [isAddNonDrawingModalOpen, setIsAddNonDrawingModalOpen] = useState<boolean>(false);
+  // 🖥️ 화면 레이아웃 모드: SPLIT(도면45:BOM55) / DRAWING(도면 대화면) / BOM(BOM 전폭)
+  const [layoutMode, setLayoutMode] = useState<'SPLIT' | 'DRAWING' | 'BOM'>('SPLIT');
 
   // 실제 CAD 도면 및 2D 벡터 오브젝트 상태
   const [files, setFiles] = useState<any[]>([]);
@@ -1864,6 +1866,29 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         return;
       }
 
+      // 🔍 도면 대화면 모드: Space/ESC = BOM 복귀, ←/→/↑/↓ = 이전/다음 품목 연속 탐색
+      if (layoutMode === 'DRAWING') {
+        if (e.code === 'Space' || e.key === 'Escape') {
+          e.preventDefault();
+          setLayoutMode('SPLIT');
+          return;
+        }
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSelectedIndex((prev) => Math.min(prev + 1, lines.length - 1));
+          return;
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSelectedIndex((prev) => Math.max(prev - 1, 0));
+          return;
+        }
+      } else if (layoutMode === 'BOM' && e.key === 'Escape') {
+        e.preventDefault();
+        setLayoutMode('SPLIT');
+        return;
+      }
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedIndex((prev) => Math.min(prev + 1, lines.length - 1));
@@ -1892,7 +1917,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [lines, selectedIndex, selectedLine, recommendations, unconfirmedCount]);
+  }, [lines, selectedIndex, selectedLine, recommendations, unconfirmedCount, layoutMode]);
 
   return (
     <div className="h-screen flex flex-col bg-slate-100 overflow-hidden font-sans">
@@ -2168,10 +2193,14 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         </div>
       )}
 
-      {/* 2. 상단 2열 (좌: 도면 뷰어 45%, 우: BOM 그리드 55%) */}
-      <div className="flex-1 flex overflow-hidden p-3 gap-3">
-        {/* 좌측 45%: Three.js / WebGL CAD 도면 뷰어 */}
-        <div className="w-[45%] h-full">
+      {/* 2. 상단 2열 — 3모드 레이아웃 (SPLIT: 45/55 · DRAWING: 도면 대화면 · BOM: BOM 전폭) */}
+      <div className="flex-1 flex overflow-hidden p-3 gap-3 relative">
+        {/* 좌측: Three.js / WebGL CAD 도면 뷰어 */}
+        <div
+          className={`h-full relative transition-[width] duration-200 ease-out ${
+            layoutMode === 'DRAWING' ? 'flex-1 min-w-0' : layoutMode === 'BOM' ? 'w-0 overflow-hidden' : 'w-[45%] shrink-0'
+          }`}
+        >
           <ReviewCadViewer
             caseId={caseId}
             cadObjects={cadObjects}
@@ -2183,14 +2212,92 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             selectedBalloonNo={selectedLine?.balloonNo}
             selectedPartNo={selectedLine?.partNo}
           />
+
+          {/* 🧭 도면 대화면 모드 전용: 연속 품목 탐색 & 원터치 복귀 HUD */}
+          {layoutMode === 'DRAWING' && selectedLine && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-neutral-700 rounded-[5px] shadow-xl px-2 py-1.5 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
+              <button
+                type="button"
+                onClick={() => setSelectedIndex((p) => Math.max(p - 1, 0))}
+                disabled={selectedIndex <= 0}
+                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer flex items-center gap-0.5"
+                title="이전 품목 (← / ↑)"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> 이전
+              </button>
+              <div className="px-2 min-w-0 max-w-[360px] flex items-center gap-1.5">
+                <span className="font-mono text-[10.5px] text-slate-400 shrink-0">
+                  {selectedIndex + 1}/{lines.length}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10.5px] shrink-0">
+                  풍선 #{selectedLine.balloonNo || '-'}
+                </span>
+                <span className="font-bold text-slate-900 truncate">{selectedLine.partName || selectedLine.partNo}</span>
+                <span className="text-slate-500 shrink-0 text-[11px]">
+                  ({selectedLine.material || '-'}, {selectedLine.quantity}EA)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedIndex((p) => Math.min(p + 1, lines.length - 1))}
+                disabled={selectedIndex >= lines.length - 1}
+                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer flex items-center gap-0.5"
+                title="다음 품목 (→ / ↓)"
+              >
+                다음 <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayoutMode('SPLIT')}
+                className="ml-1 px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer flex items-center gap-1"
+                title="확인 완료 — BOM 리스트로 복귀 (Space / ESC)"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> 확인 완료 (BOM 복귀)
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* 우측 55%: BOM & 단가 그리드 */}
-        <div className="w-[55%] h-full">
+        {/* 🔖 분할 모드: 중앙 경계선 견출탭 — 도면 접기(BOM 전폭) */}
+        {layoutMode === 'SPLIT' && (
+          <button
+            type="button"
+            onClick={() => setLayoutMode('BOM')}
+            className="absolute top-1/2 z-30 group cursor-pointer select-none"
+            style={{ left: 'calc(0.75rem + (100% - 1.5rem) * 0.45 + 0.375rem)', transform: 'translate(-50%, -50%)' }}
+            title="도면 접기 — BOM 리스트 전폭 보기"
+          >
+            <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50 border border-slate-300 group-hover:border-blue-400 rounded-xl shadow-md group-hover:shadow-xl transition-all duration-[120ms] py-3 w-[11px] group-hover:w-8 overflow-hidden relative">
+              <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-[3px] h-7 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity" />
+              <div className="flex flex-col items-center gap-1 w-8 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                <ChevronLeft className="w-3.5 h-3.5 text-blue-600" />
+                <div className="flex flex-col items-center text-[10px] font-extrabold text-blue-600 leading-[1.15]">
+                  {'도면접기'.split('').map((c, i) => <span key={i}>{c}</span>)}
+                </div>
+              </div>
+            </div>
+          </button>
+        )}
+
+        {/* 🔖 BOM 전폭 모드: 좌측 벽면 견출탭 — 도면 펼치기 */}
+        {layoutMode === 'BOM' && (
+          <SideTab side="left" label="CAD도면" icon={<Layers className="w-4 h-4 text-blue-600" />} onClick={() => setLayoutMode('SPLIT')} title="CAD 도면 다시 펼치기 (ESC)" />
+        )}
+
+        {/* 우측: BOM & 단가 그리드 */}
+        <div
+          className={`h-full transition-[width] duration-200 ease-out ${
+            layoutMode === 'DRAWING' ? 'w-0 overflow-hidden' : layoutMode === 'BOM' ? 'flex-1 min-w-0 pl-3' : 'flex-1 min-w-0'
+          }`}
+        >
           <QuoteLineGrid
             lines={lines}
             selectedIndex={selectedIndex}
             onSelectIndex={setSelectedIndex}
+            onRowDoubleClick={(idx) => {
+              setSelectedIndex(idx);
+              setLayoutMode('DRAWING');
+            }}
             onToggleConfirm={handleToggleConfirm}
             filterType={filterType}
             onFilterChange={setFilterType}
@@ -2216,6 +2323,11 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             onUpdateLineQuantity={handleUpdateLineQuantity}
           />
         </div>
+
+        {/* 🔖 도면 대화면 모드: 우측 벽면 견출탭 — BOM 품목 리스트 펼치기 */}
+        {layoutMode === 'DRAWING' && (
+          <SideTab side="right" label="BOM품목" icon={<FileText className="w-4 h-4 text-blue-600" />} onClick={() => setLayoutMode('SPLIT')} title="BOM 품목 리스트 펼치기 (Space / ESC)" />
+        )}
       </div>
 
       {/* 하단 패널 접기/펼치기 토글 바 */}
@@ -2386,5 +2498,59 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         caseId={caseId}
       />
     </div>
+  );
+}
+
+/**
+ * 🔖 벽면 부착형 버티컬 견출탭 (CADON SidebarBookmarkTab 표준 디자인 계승)
+ * - 평상시 11px 블루 핸들 / 호버 시 36px 돌출 + 세로 라벨
+ * - side='left': 좌측 벽면, side='right': 우측 벽면 (수직 정중앙)
+ */
+function SideTab({
+  side,
+  label,
+  icon,
+  onClick,
+  title
+}: {
+  side: 'left' | 'right';
+  label: string;
+  icon?: React.ReactNode;
+  onClick: () => void;
+  title?: string;
+}) {
+  const isLeft = side === 'left';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title || label}
+      className={`absolute top-1/2 -translate-y-1/2 z-30 group cursor-pointer select-none focus:outline-hidden ${isLeft ? 'left-0' : 'right-0'}`}
+    >
+      <div
+        className={`flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 border-y border-slate-300 group-hover:border-blue-400 shadow-md group-hover:shadow-2xl transition-all duration-[120ms] ease-out py-3.5 w-[11px] group-hover:w-9 overflow-hidden relative ${
+          isLeft ? 'border-r rounded-r-xl' : 'border-l rounded-l-xl'
+        }`}
+      >
+        <div
+          className={`absolute top-1/2 -translate-y-1/2 w-[3px] h-8 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity duration-100 ${
+            isLeft ? 'right-[3px]' : 'left-[3px]'
+          }`}
+        />
+        <div className="flex flex-col items-center justify-center space-y-2 w-9 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
+          {icon}
+          <div className="flex flex-col items-center text-[10.5px] font-extrabold text-blue-600 leading-[1.2] tracking-tight">
+            {label.split('').map((c, i) => (
+              <span key={i}>{c}</span>
+            ))}
+          </div>
+          {isLeft ? (
+            <ChevronRight className="w-3.5 h-3.5 text-blue-600" />
+          ) : (
+            <ChevronLeft className="w-3.5 h-3.5 text-blue-600" />
+          )}
+        </div>
+      </div>
+    </button>
   );
 }

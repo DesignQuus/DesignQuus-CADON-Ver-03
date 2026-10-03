@@ -70,9 +70,11 @@ interface QuoteLineGridProps {
   onOpenBatchMasterModal?: (selectedIds: string[]) => void;
   onOpenAddNonDrawingModal?: () => void;
   onUpdateLineQuantity?: (lineId: string, quantity: number) => void;
+  onRowDoubleClick?: (idx: number) => void;
 }
 
 export default function QuoteLineGrid({
+  onRowDoubleClick,
   lines,
   selectedIndex,
   onSelectIndex,
@@ -343,6 +345,8 @@ export default function QuoteLineGrid({
                 <tr
                   key={row.id}
                   onClick={() => onSelectIndex(lines.indexOf(row))}
+                  onDoubleClick={() => onRowDoubleClick?.(lines.indexOf(row))}
+                  title="더블클릭: 도면 대화면으로 부품 위치 확인"
                   className={`cursor-pointer transition-colors ${
                     isSelected ? 'bg-blue-50/90 ring-1 ring-blue-500 font-semibold' : 'hover:bg-slate-50'
                   } ${isNoise ? 'bg-amber-50/40 text-slate-500 line-through-none' : isExcluded ? 'bg-slate-50/60 opacity-65' : ''} ${
