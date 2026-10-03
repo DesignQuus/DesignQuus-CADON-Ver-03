@@ -2430,7 +2430,8 @@ export default function CasesPage() {
                                   {/* Next Action Context Button */}
                                   {isReady ? (
                                     <Link
-                                      href={`/cases/${c.id}?tab=quote`}
+                                      href={`/quotes/${c.id}/publish`}
+                                      onClick={(e) => e.stopPropagation()}
                                       className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-xs group"
                                       title="최종 견적서 발행 및 다운로드 바로가기"
                                     >
@@ -2439,7 +2440,8 @@ export default function CasesPage() {
                                     </Link>
                                   ) : isAnalyzed ? (
                                     <Link
-                                      href={`/cases/${c.id}?tab=bom`}
+                                      href={`/quotes/${c.id}/review`}
+                                      onClick={(e) => e.stopPropagation()}
                                       className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group"
                                       title="추출된 BOM 및 단가 매칭 검토 바로가기"
                                     >
@@ -2449,6 +2451,7 @@ export default function CasesPage() {
                                   ) : (
                                     <Link
                                       href={`/cases/${c.id}`}
+                                      onClick={(e) => e.stopPropagation()}
                                       className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-all shadow-xs group"
                                       title="CAD 도면 등록 및 AI 분석 바로가기"
                                     >

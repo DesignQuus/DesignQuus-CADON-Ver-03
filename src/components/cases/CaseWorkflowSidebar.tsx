@@ -386,7 +386,7 @@ export default function CaseWorkflowSidebar({
             {counts.ready === 1 && latestReadyCase ? (
               <div className="space-y-1.5 mt-1.5">
                 <Link
-                  href={`/cases/${latestReadyCase.id}?tab=quote`}
+                  href={`/quotes/${latestReadyCase.id}/publish`}
                   className="btn-hover-effect-primary w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all flex items-center justify-between shadow-xs group cursor-pointer"
                   title={`[${latestReadyCase.case_no}] 최종 견적서 즉시 산출 및 발행 화면으로 직행`}
                 >

@@ -54,21 +54,34 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   // 🎯 5단계 통합 스마트 파이프라인 단계 관리 (1: 도면접수, 2: AI도면파싱, 3: 가상BOM, 4: 단가매칭, 5: 견적발행)
   const [workflowStep, setWorkflowStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
-  // URL step 쿼리 파라미터 연동 (?step=1, ?step=2, ?step=3)
+  // URL step 및 tab 쿼리 파라미터 연동 (?step=1~5, ?tab=bom, ?tab=quote 등)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const sp = new URLSearchParams(window.location.search);
       const stepParam = sp.get('step');
+      const tabParam = sp.get('tab');
       if (stepParam === '1') {
         setWorkflowStep(1);
         setIsSidebarOpen(true);
       } else if (stepParam === '2') {
         setWorkflowStep(2);
-      } else if (stepParam === '3') {
+      } else if (stepParam === '3' || tabParam === 'bom' || tabParam === 'sheet') {
         setWorkflowStep(3);
+      } else if (stepParam === '4' || tabParam === 'review' || tabParam === 'price') {
+        router.push(`/quotes/${id}/review`);
+      } else if (stepParam === '5' || tabParam === 'publish') {
+        router.push(`/quotes/${id}/publish`);
+      } else if (tabParam === 'quote') {
+        setActiveTab('quote');
+      } else if (tabParam === 'approval') {
+        setActiveTab('approval');
+      } else if (tabParam === 'structure') {
+        setActiveTab('structure');
+      } else if (tabParam === 'excel') {
+        setActiveTab('excel');
       }
     }
-  }, []);
+  }, [id, router]);
 
   // 🚀 Smart Upload Intent & Multi-Drawing Filter States
   const [uploadIntentModal, setUploadIntentModal] = useState<{ file: File; uploadJson: any } | null>(null);
