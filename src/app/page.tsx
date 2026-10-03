@@ -1057,18 +1057,6 @@ export default function HomePage() {
                   <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                   <span>스마트 견적 파이프라인</span>
                 </span>
-                {pipelineFilter !== 'ALL' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPipelineFilter('ALL');
-                      setCasePage(1);
-                    }}
-                    className="text-[10px] text-blue-600 hover:underline font-bold cursor-pointer"
-                  >
-                    필터 해제
-                  </button>
-                )}
               </div>
 
               {/* 파이프라인 진입 시작점: 신규 도면 견적 등록 버튼 */}
@@ -1295,10 +1283,10 @@ export default function HomePage() {
                 <span className="text-[11px] font-extrabold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs animate-in fade-in">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
                   <span>
-                    {pipelineFilter === '1' && '1단계: 도면 접수 & CAD 파싱 필터링'}
-                    {pipelineFilter === '2' && '2단계: 멀티레벨 BOM 자동 전개 필터링'}
-                    {pipelineFilter === '3' && '3단계: 단가 마스터 매칭 & 원가 산출 필터링'}
-                    {pipelineFilter === '4' && '4단계: 공식 견적서 발행 & 승인 필터링'}
+                    {pipelineFilter === '1' && '1단계: 도면 접수 & CAD 파싱'}
+                    {pipelineFilter === '2' && '2단계: 멀티레벨 BOM 자동 전개'}
+                    {pipelineFilter === '3' && '3단계: 단가 마스터 매칭 & 원가 산출'}
+                    {pipelineFilter === '4' && '4단계: 공식 견적서 발행 & 승인'}
                     {' '}({filteredCases.length}건)
                   </span>
                   <button
@@ -1317,7 +1305,7 @@ export default function HomePage() {
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               {pipelineFilter !== 'ALL'
-                ? `스마트 파이프라인에서 [${PIPELINE_STAGE_LABELS[pipelineFilter] || `${pipelineFilter}단계`}]를 선택하여 해당 진행 상태의 건만 집중 모니터링 중입니다.`
+                ? '선택하신 파이프라인 단계에 머물러 있는 건만 집중 모니터링 중입니다.'
                 : caseFilter === 'MY'
                 ? `${user?.name || '담당자'} 담당자님이 진행 중인 활성 견적 건입니다. (총 ${myCasesCount}건)`
                 : `현재 시스템에서 진행 중인 전사 활성 견적 건입니다. (총 ${activeCases.length}건)`}
@@ -1409,12 +1397,12 @@ export default function HomePage() {
                   <Filter className="w-6 h-6 text-slate-500" />
                 </div>
                 <p className="text-sm font-extrabold text-slate-800">
-                  선택하신 [{PIPELINE_STAGE_LABELS[pipelineFilter] || `${pipelineFilter}단계`}] 단계의 의뢰 건이 없습니다.
+                  선택하신 단계의 진행 건이 없습니다
                 </p>
                 <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
                   {caseFilter === 'MY'
-                    ? '현재 내 담당 프로젝트 중 해당 파이프라인 단계에 머물러 있는 건이 없습니다. 필터를 해제하여 다른 진행 건을 확인하세요.'
-                    : '현재 시스템의 전사 활성 프로젝트 중 해당 파이프라인 단계에 머물러 있는 건이 없습니다.'}
+                    ? '현재 내 담당 프로젝트 중 해당 파이프라인 단계에 대기 중인 건이 없습니다.'
+                    : '현재 전사 활성 프로젝트 중 해당 파이프라인 단계에 대기 중인 건이 없습니다.'}
                 </p>
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
                   <button
@@ -1426,7 +1414,7 @@ export default function HomePage() {
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 shadow-sm cursor-pointer transition-all"
                   >
                     <Layers className="w-3.5 h-3.5" />
-                    <span>필터 해제 (전체 단계 보기)</span>
+                    <span>전체 의뢰 목록 보기 (필터 해제)</span>
                   </button>
                   {caseFilter === 'MY' && activeCases.length > myActiveCases.length && (
                     <button
@@ -1439,16 +1427,6 @@ export default function HomePage() {
                     >
                       <Building2 className="w-3.5 h-3.5 text-slate-500" />
                       <span>전사 현황에서 보기 ({activeCases.length}건)</span>
-                    </button>
-                  )}
-                  {pipelineFilter === '1' && (
-                    <button
-                      type="button"
-                      onClick={handleOpenUploadModal}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-all cursor-pointer shadow-2xs"
-                    >
-                      <Plus className="w-3.5 h-3.5 stroke-[3] text-blue-600" />
-                      <span>신규 도면 견적 등록</span>
                     </button>
                   )}
                 </div>
