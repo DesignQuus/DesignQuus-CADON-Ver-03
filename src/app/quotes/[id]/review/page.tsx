@@ -1,12 +1,13 @@
 'use client';
 
 import { apiFetch } from '@/lib/api';
-import React, { useEffect, useState, use, useCallback } from 'react';
+import React, { useEffect, useState, use, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Send, CheckCircle2, RefreshCw, FileText, AlertTriangle, AlertCircle,
-  ExternalLink, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sparkles, Layers, Zap, Database, HelpCircle, Coins
+  ExternalLink, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sparkles, Layers, Zap, Database, HelpCircle, Coins,
+  Columns2, GripVertical
 } from 'lucide-react';
 import QuoteLineGrid, { QuoteReviewLine, InclusionType } from '@/components/review/QuoteLineGrid';
 import SmartBatchActionBar from '@/components/review/SmartBatchActionBar';
@@ -245,6 +246,60 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   const [isAddNonDrawingModalOpen, setIsAddNonDrawingModalOpen] = useState<boolean>(false);
   // 🖥️ 화면 레이아웃 모드: SPLIT(도면45:BOM55) / DRAWING(도면 대화면) / BOM(BOM 전폭)
   const [layoutMode, setLayoutMode] = useState<'SPLIT' | 'DRAWING' | 'BOM'>('SPLIT');
+  const DEFAULT_SPLIT = 45;
+  const [splitRatio, setSplitRatio] = useState<number>(DEFAULT_SPLIT);
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+
+  // 마지막 화면 레이아웃/비율 기억 (localStorage)
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem('cadon_review_layout_mode');
+      const r = Number(localStorage.getItem('cadon_review_split_ratio'));
+      if (m === 'SPLIT' || m === 'DRAWING' || m === 'BOM') setLayoutMode(m);
+      if (r >= 20 && r <= 80) setSplitRatio(r);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem('cadon_review_layout_mode', layoutMode);
+      localStorage.setItem('cadon_review_split_ratio', String(Math.round(splitRatio)));
+    } catch {}
+  }, [layoutMode, splitRatio]);
+
+  // 경계선 드래그 폭 조절 (20% ~ 80%)
+  const startSplitDrag = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const box = splitContainerRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setIsDraggingSplit(true);
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: MouseEvent) => {
+      const pct = ((ev.clientX - box.left - 12) / (box.width - 24)) * 100;
+      setSplitRatio(Math.min(80, Math.max(20, pct)));
+    };
+    const onUp = () => {
+      setIsDraggingSplit(false);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
+
+  // 목록으로 돌아갈 때 선택 행으로 스크롤 + 강조 플래시
+  const [flashLineId, setFlashLineId] = useState<string | null>(null);
+  const pendingScrollRef = useRef(false);
+  const switchLayout = useCallback((mode: 'SPLIT' | 'DRAWING' | 'BOM', scrollToSelected = false) => {
+    setLayoutMode(mode);
+    if (scrollToSelected && mode !== 'DRAWING') pendingScrollRef.current = true;
+  }, []);
 
   // 실제 CAD 도면 및 2D 벡터 오브젝트 상태
   const [files, setFiles] = useState<any[]>([]);
@@ -1859,6 +1914,20 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     }
   };
 
+  useEffect(() => {
+    if (!pendingScrollRef.current || layoutMode === 'DRAWING') return;
+    pendingScrollRef.current = false;
+    const id = lines[selectedIndex]?.id;
+    if (!id) return;
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-line-id="${CSS.escape(id)}"]`) as HTMLElement | null;
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setFlashLineId(id);
+      setTimeout(() => setFlashLineId(null), 1400);
+    }, 230);
+    return () => clearTimeout(t);
+  }, [layoutMode, selectedIndex, lines]);
+
   // 단축키 이벤트 리스너 (F2, F4, Space, ↑/↓, Ctrl+Enter)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1866,11 +1935,23 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         return;
       }
 
-      // 🔍 도면 대화면 모드: Space/ESC = BOM 복귀, ←/→/↑/↓ = 이전/다음 품목 연속 탐색
+      // 🖥️ 레이아웃 단축키: Ctrl+1 도면 크게 / Ctrl+2 나란히 / Ctrl+3 목록 크게
+      if ((e.ctrlKey || e.metaKey) && ['1', '2', '3'].includes(e.key)) {
+        e.preventDefault();
+        switchLayout(e.key === '1' ? 'DRAWING' : e.key === '2' ? 'SPLIT' : 'BOM', e.key !== '1');
+        return;
+      }
+
+      // 🔍 도면 크게 모드: Space/ESC = 나란히 복귀, L = 목록에서 보기, ←/→/↑/↓ = 이전/다음 품목
       if (layoutMode === 'DRAWING') {
         if (e.code === 'Space' || e.key === 'Escape') {
           e.preventDefault();
-          setLayoutMode('SPLIT');
+          switchLayout('SPLIT', true);
+          return;
+        }
+        if (e.key === 'l' || e.key === 'L' || e.key === 'ㅣ') {
+          e.preventDefault();
+          switchLayout('BOM', true);
           return;
         }
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -1885,7 +1966,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         }
       } else if (layoutMode === 'BOM' && e.key === 'Escape') {
         e.preventDefault();
-        setLayoutMode('SPLIT');
+        switchLayout('SPLIT', true);
         return;
       }
 
@@ -2011,6 +2092,29 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             )}
             <span>{calculatingEngineering ? '산출 중...' : '⚡ AI 공학원가 산출'}</span>
           </button>
+
+          {/* ① 화면 전환 버튼 (도면 크게 / 나란히 / 목록 크게) */}
+          <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-0.5 shrink-0" role="group" aria-label="화면 레이아웃">
+            {([
+              { mode: 'DRAWING', icon: <Layers className="w-3.5 h-3.5" />, label: '도면 크게', key: 'Ctrl+1' },
+              { mode: 'SPLIT', icon: <Columns2 className="w-3.5 h-3.5" />, label: '나란히', key: 'Ctrl+2' },
+              { mode: 'BOM', icon: <FileText className="w-3.5 h-3.5" />, label: '목록 크게', key: 'Ctrl+3' }
+            ] as const).map((b) => (
+              <button
+                key={b.mode}
+                type="button"
+                onClick={() => switchLayout(b.mode, b.mode !== 'DRAWING')}
+                className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 whitespace-nowrap transition-colors cursor-pointer ${
+                  layoutMode === b.mode ? 'bg-white text-blue-700 shadow-xs border border-slate-200' : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title={`${b.label} (${b.key})`}
+                aria-pressed={layoutMode === b.mode}
+              >
+                {b.icon}
+                <span className="hidden xl:inline">{b.label}</span>
+              </button>
+            ))}
+          </div>
 
           {/* 📋 사내 마스터 단가표 참고 드로어 토글 버튼 */}
           <button
@@ -2193,13 +2297,26 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         </div>
       )}
 
-      {/* 2. 상단 2열 — 3모드 레이아웃 (SPLIT: 45/55 · DRAWING: 도면 대화면 · BOM: BOM 전폭) */}
-      <div className="flex-1 flex overflow-hidden p-3 gap-3 relative">
-        {/* 좌측: Three.js / WebGL CAD 도면 뷰어 */}
+      {/* 2. 상단 작업 영역 — 3모드 레이아웃 (SPLIT 나란히 · DRAWING 도면 크게 · BOM 목록 크게) */}
+      <div ref={splitContainerRef} className="flex-1 flex overflow-hidden p-3 relative select-none-while-drag">
+        {/* ③ 목록 크게 모드: 좌측 축소 패널 (도면) */}
+        {layoutMode === 'BOM' && (
+          <CollapsedRail
+            side="left"
+            icon={<Layers className="w-4 h-4" />}
+            label="도면"
+            badge={`${drawings.length}장`}
+            onClick={() => switchLayout('SPLIT')}
+            title="도면 펼치기 (Ctrl+2 / ESC)"
+          />
+        )}
+
+        {/* 좌측: CAD 도면 뷰어 */}
         <div
-          className={`h-full relative transition-[width] duration-200 ease-out ${
-            layoutMode === 'DRAWING' ? 'flex-1 min-w-0' : layoutMode === 'BOM' ? 'w-0 overflow-hidden' : 'w-[45%] shrink-0'
+          className={`h-full relative ${isDraggingSplit ? '' : 'transition-[width,flex] duration-200 ease-out'} ${
+            layoutMode === 'DRAWING' ? 'flex-1 min-w-0' : layoutMode === 'BOM' ? 'w-0 overflow-hidden' : 'shrink-0'
           }`}
+          style={layoutMode === 'SPLIT' ? { width: `${splitRatio}%` } : undefined}
         >
           <ReviewCadViewer
             caseId={caseId}
@@ -2213,90 +2330,108 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             selectedPartNo={selectedLine?.partNo}
           />
 
-          {/* 🧭 도면 대화면 모드 전용: 연속 품목 탐색 & 원터치 복귀 HUD */}
+          {/* 🧭 도면 크게 모드: 연속 품목 탐색 바 */}
           {layoutMode === 'DRAWING' && selectedLine && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-neutral-700 rounded-[5px] shadow-xl px-2 py-1.5 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-neutral-700 rounded-[5px] shadow-xl px-2 py-1.5 text-xs animate-in fade-in slide-in-from-top-2 duration-200 max-w-[calc(100%-1.5rem)]">
               <button
                 type="button"
                 onClick={() => setSelectedIndex((p) => Math.max(p - 1, 0))}
                 disabled={selectedIndex <= 0}
-                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer flex items-center gap-0.5"
+                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer flex items-center gap-0.5 shrink-0"
                 title="이전 품목 (← / ↑)"
               >
                 <ChevronLeft className="w-3.5 h-3.5" /> 이전
               </button>
-              <div className="px-2 min-w-0 max-w-[360px] flex items-center gap-1.5">
-                <span className="font-mono text-[10.5px] text-slate-400 shrink-0">
-                  {selectedIndex + 1}/{lines.length}
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10.5px] shrink-0">
-                  풍선 #{selectedLine.balloonNo || '-'}
-                </span>
-                <span className="font-bold text-slate-900 truncate">{selectedLine.partName || selectedLine.partNo}</span>
-                <span className="text-slate-500 shrink-0 text-[11px]">
-                  ({selectedLine.material || '-'}, {selectedLine.quantity}EA)
-                </span>
+              <div className="px-2 min-w-0 flex items-center gap-1.5">
+                <span className="font-mono text-[10.5px] text-slate-400 shrink-0">{selectedIndex + 1}/{lines.length}</span>
+                <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10.5px] shrink-0">풍선 #{selectedLine.balloonNo || '-'}</span>
+                <span className="font-bold text-slate-900 truncate max-w-[260px]">{selectedLine.partName || selectedLine.partNo}</span>
+                <span className="text-slate-500 shrink-0 text-[11px]">({selectedLine.material || '-'}, {selectedLine.quantity}EA)</span>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedIndex((p) => Math.min(p + 1, lines.length - 1))}
                 disabled={selectedIndex >= lines.length - 1}
-                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer flex items-center gap-0.5"
+                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold disabled:opacity-40 cursor-pointer flex items-center gap-0.5 shrink-0"
                 title="다음 품목 (→ / ↓)"
               >
                 다음 <ChevronRight className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
-                onClick={() => setLayoutMode('SPLIT')}
-                className="ml-1 px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer flex items-center gap-1"
-                title="확인 완료 — BOM 리스트로 복귀 (Space / ESC)"
+                onClick={() => switchLayout('BOM', true)}
+                className="px-2 py-1 rounded bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold cursor-pointer flex items-center gap-1 shrink-0"
+                title="이 품목을 목록 크게 화면에서 보기 (L)"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" /> 확인 완료 (BOM 복귀)
+                <FileText className="w-3.5 h-3.5" /> 목록에서 보기
+              </button>
+              <button
+                type="button"
+                onClick={() => switchLayout('SPLIT', true)}
+                className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer flex items-center gap-1 shrink-0"
+                title="확인 완료 — 나란히 보기로 복귀 (Space / ESC)"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> 확인 완료
               </button>
             </div>
           )}
         </div>
 
-        {/* 🔖 분할 모드: 중앙 경계선 견출탭 — 도면 접기(BOM 전폭) */}
+        {/* ② 나란히 모드: 가운데 경계선 — 양방향 버튼 + 드래그 폭 조절 + 더블클릭 기본비율 */}
         {layoutMode === 'SPLIT' && (
-          <button
-            type="button"
-            onClick={() => setLayoutMode('BOM')}
-            className="absolute top-1/2 z-30 group cursor-pointer select-none"
-            style={{ left: 'calc(0.75rem + (100% - 1.5rem) * 0.45 + 0.375rem)', transform: 'translate(-50%, -50%)' }}
-            title="도면 접기 — BOM 리스트 전폭 보기"
+          <div
+            className="w-3 shrink-0 h-full relative flex items-center justify-center cursor-col-resize group/split"
+            onMouseDown={startSplitDrag}
+            onDoubleClick={() => setSplitRatio(DEFAULT_SPLIT)}
+            title="끌어서 폭 조절 · 더블클릭: 기본 비율(45:55)"
           >
-            <div className="flex flex-col items-center justify-center bg-white group-hover:bg-blue-50 border border-slate-300 group-hover:border-blue-400 rounded-xl shadow-md group-hover:shadow-xl transition-all duration-[120ms] py-3 w-[11px] group-hover:w-8 overflow-hidden relative">
-              <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-[3px] h-7 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity" />
-              <div className="flex flex-col items-center gap-1 w-8 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <ChevronLeft className="w-3.5 h-3.5 text-blue-600" />
-                <div className="flex flex-col items-center text-[10px] font-extrabold text-blue-600 leading-[1.15]">
-                  {'도면접기'.split('').map((c, i) => <span key={i}>{c}</span>)}
-                </div>
+            <div className={`absolute inset-y-0 left-1/2 -translate-x-1/2 w-px ${isDraggingSplit ? 'bg-blue-500' : 'bg-slate-300 group-hover/split:bg-blue-400'}`} />
+            <div
+              className="relative z-10 flex flex-col items-center bg-white border border-slate-300 rounded-lg shadow-md overflow-hidden cursor-default"
+              onMouseDown={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => switchLayout('BOM')}
+                className="w-6 h-7 flex items-center justify-center text-slate-600 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
+                title="도면 접기 → 목록 크게 (Ctrl+3)"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <div
+                className="w-6 h-6 flex items-center justify-center text-slate-400 border-y border-slate-200 cursor-col-resize hover:text-blue-600"
+                onMouseDown={startSplitDrag}
+                title="끌어서 폭 조절"
+              >
+                <GripVertical className="w-3.5 h-3.5" />
               </div>
+              <button
+                type="button"
+                onClick={() => switchLayout('DRAWING')}
+                className="w-6 h-7 flex items-center justify-center text-slate-600 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
+                title="목록 접기 → 도면 크게 (Ctrl+1)"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
-          </button>
-        )}
-
-        {/* 🔖 BOM 전폭 모드: 좌측 벽면 견출탭 — 도면 펼치기 */}
-        {layoutMode === 'BOM' && (
-          <SideTab side="left" label="CAD도면" icon={<Layers className="w-4 h-4 text-blue-600" />} onClick={() => setLayoutMode('SPLIT')} title="CAD 도면 다시 펼치기 (ESC)" />
+          </div>
         )}
 
         {/* 우측: BOM & 단가 그리드 */}
         <div
-          className={`h-full transition-[width] duration-200 ease-out ${
-            layoutMode === 'DRAWING' ? 'w-0 overflow-hidden' : layoutMode === 'BOM' ? 'flex-1 min-w-0 pl-3' : 'flex-1 min-w-0'
-          }`}
+          className={`h-full ${isDraggingSplit ? '' : 'transition-[width,flex] duration-200 ease-out'} ${
+            layoutMode === 'DRAWING' ? 'w-0 overflow-hidden' : 'flex-1 min-w-0'
+          } ${layoutMode === 'BOM' ? 'ml-3' : ''}`}
         >
           <QuoteLineGrid
             lines={lines}
             selectedIndex={selectedIndex}
             onSelectIndex={setSelectedIndex}
+            flashLineId={flashLineId}
             onRowDoubleClick={(idx) => {
               setSelectedIndex(idx);
-              setLayoutMode('DRAWING');
+              switchLayout('DRAWING');
             }}
             onToggleConfirm={handleToggleConfirm}
             filterType={filterType}
@@ -2324,9 +2459,17 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           />
         </div>
 
-        {/* 🔖 도면 대화면 모드: 우측 벽면 견출탭 — BOM 품목 리스트 펼치기 */}
+        {/* ③ 도면 크게 모드: 우측 축소 패널 (BOM 목록) */}
         {layoutMode === 'DRAWING' && (
-          <SideTab side="right" label="BOM품목" icon={<FileText className="w-4 h-4 text-blue-600" />} onClick={() => setLayoutMode('SPLIT')} title="BOM 품목 리스트 펼치기 (Space / ESC)" />
+          <CollapsedRail
+            side="right"
+            icon={<FileText className="w-4 h-4" />}
+            label="BOM"
+            badge={`${lines.length}건`}
+            subBadge={unconfirmedCount > 0 ? `미확정 ${unconfirmedCount}` : undefined}
+            onClick={() => switchLayout('SPLIT', true)}
+            title="BOM 목록 펼치기 (Ctrl+2 / Space / ESC)"
+          />
         )}
       </div>
 
@@ -2501,56 +2644,57 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   );
 }
 
+
 /**
- * 🔖 벽면 부착형 버티컬 견출탭 (CADON SidebarBookmarkTab 표준 디자인 계승)
- * - 평상시 11px 블루 핸들 / 호버 시 36px 돌출 + 세로 라벨
- * - side='left': 좌측 벽면, side='right': 우측 벽면 (수직 정중앙)
+ * ③ 접힌 쪽 축소 패널 (Collapsed Rail)
+ * - 40px 폭의 패널로 남아 무엇이 접혀 있는지 항상 표시 (호버 불필요)
+ * - 아이콘 + 세로 라벨 + 건수 배지, 패널 전체 클릭 시 펼치기
  */
-function SideTab({
+function CollapsedRail({
   side,
-  label,
   icon,
+  label,
+  badge,
+  subBadge,
   onClick,
   title
 }: {
   side: 'left' | 'right';
+  icon: React.ReactNode;
   label: string;
-  icon?: React.ReactNode;
+  badge?: string;
+  subBadge?: string;
   onClick: () => void;
   title?: string;
 }) {
-  const isLeft = side === 'left';
   return (
     <button
       type="button"
       onClick={onClick}
-      title={title || label}
-      className={`absolute top-1/2 -translate-y-1/2 z-30 group cursor-pointer select-none focus:outline-hidden ${isLeft ? 'left-0' : 'right-0'}`}
+      title={title}
+      className={`w-10 shrink-0 h-full flex flex-col items-center gap-2 py-3 bg-white border border-slate-300 rounded-xl shadow-sm hover:border-blue-400 hover:bg-blue-50/60 hover:shadow-md transition-all cursor-pointer group animate-in fade-in duration-200 ${
+        side === 'left' ? 'mr-3' : 'ml-3'
+      }`}
     >
-      <div
-        className={`flex flex-col items-center justify-center bg-white group-hover:bg-blue-50/90 border-y border-slate-300 group-hover:border-blue-400 shadow-md group-hover:shadow-2xl transition-all duration-[120ms] ease-out py-3.5 w-[11px] group-hover:w-9 overflow-hidden relative ${
-          isLeft ? 'border-r rounded-r-xl' : 'border-l rounded-l-xl'
-        }`}
-      >
-        <div
-          className={`absolute top-1/2 -translate-y-1/2 w-[3px] h-8 bg-blue-500 rounded-full group-hover:opacity-0 transition-opacity duration-100 ${
-            isLeft ? 'right-[3px]' : 'left-[3px]'
-          }`}
-        />
-        <div className="flex flex-col items-center justify-center space-y-2 w-9 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
-          {icon}
-          <div className="flex flex-col items-center text-[10.5px] font-extrabold text-blue-600 leading-[1.2] tracking-tight">
-            {label.split('').map((c, i) => (
-              <span key={i}>{c}</span>
-            ))}
-          </div>
-          {isLeft ? (
-            <ChevronRight className="w-3.5 h-3.5 text-blue-600" />
-          ) : (
-            <ChevronLeft className="w-3.5 h-3.5 text-blue-600" />
-          )}
-        </div>
-      </div>
+      <span className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+        {icon}
+      </span>
+      <span className="flex flex-col items-center text-[11px] font-extrabold text-slate-700 group-hover:text-blue-700 leading-[1.15]">
+        {label.split('').map((c, i) => (
+          <span key={i}>{c}</span>
+        ))}
+      </span>
+      {badge && (
+        <span className="text-[9.5px] font-bold font-mono text-slate-500 [writing-mode:vertical-rl]">{badge}</span>
+      )}
+      {subBadge && (
+        <span className="text-[9.5px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded px-0.5 py-1 [writing-mode:vertical-rl]">
+          {subBadge}
+        </span>
+      )}
+      <span className="mt-auto text-slate-400 group-hover:text-blue-600">
+        {side === 'left' ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+      </span>
     </button>
   );
 }

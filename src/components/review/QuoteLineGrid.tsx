@@ -71,10 +71,12 @@ interface QuoteLineGridProps {
   onOpenAddNonDrawingModal?: () => void;
   onUpdateLineQuantity?: (lineId: string, quantity: number) => void;
   onRowDoubleClick?: (idx: number) => void;
+  flashLineId?: string | null;
 }
 
 export default function QuoteLineGrid({
   onRowDoubleClick,
+  flashLineId,
   lines,
   selectedIndex,
   onSelectIndex,
@@ -344,6 +346,7 @@ export default function QuoteLineGrid({
               return (
                 <tr
                   key={row.id}
+                  data-line-id={row.id}
                   onClick={() => onSelectIndex(lines.indexOf(row))}
                   onDoubleClick={() => onRowDoubleClick?.(lines.indexOf(row))}
                   title="더블클릭: 도면 대화면으로 부품 위치 확인"
@@ -351,7 +354,7 @@ export default function QuoteLineGrid({
                     isSelected ? 'bg-blue-50/90 ring-1 ring-blue-500 font-semibold' : 'hover:bg-slate-50'
                   } ${isNoise ? 'bg-amber-50/40 text-slate-500 line-through-none' : isExcluded ? 'bg-slate-50/60 opacity-65' : ''} ${
                     isChecked ? 'bg-indigo-50/60' : ''
-                  }`}
+                  } ${flashLineId === row.id ? 'animate-pulse bg-amber-100/80' : ''}`}
                 >
                   {/* 행별 체크박스 */}
                   <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
