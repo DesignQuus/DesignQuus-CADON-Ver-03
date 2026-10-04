@@ -121,6 +121,7 @@ interface CadViewerProps {
   controlledViewMode?: 'CAD' | 'SHEET';
   onViewModeChange?: (mode: 'CAD' | 'SHEET') => void;
   onUploadFile?: (file: File) => void;
+  showQuickUpload?: boolean;
 }
 
 export default function CadViewer({
@@ -152,7 +153,8 @@ export default function CadViewer({
   selectedPartNo,
   controlledViewMode,
   onViewModeChange,
-  onUploadFile
+  onUploadFile,
+  showQuickUpload = false
 }: CadViewerProps) {
   const quickFileInputRef = useRef<HTMLInputElement>(null);
   // Mode switcher: 'CAD' (2D Vector Viewer) vs 'SHEET' (Full-width Excel Grid)
@@ -1316,9 +1318,10 @@ export default function CadViewer({
       const fbox = typeof dwg.frame_bbox_json === 'string' ? JSON.parse(dwg.frame_bbox_json) : dwg.frame_bbox;
       const tbox = typeof dwg.title_block_bbox_json === 'string' ? JSON.parse(dwg.title_block_bbox_json) : dwg.title_block_bbox;
       
+      // 도곽(fbox)이 존재하면 해당 도곽을 1:1 정확한 95% 줌인 타겟으로 설정
       let targetBox = fbox;
       if (!targetBox && tbox && typeof tbox.min_x === 'number') {
-        // Safe Fallback: If outer frame bbox is missing, comfortably frame the title block with generous 3x margin
+        // 도곽 미검출 시에만 표제란 주변으로 안전 폴백
         const tw = Math.max(tbox.max_x - tbox.min_x, 300);
         const th = Math.max(tbox.max_y - tbox.min_y, 100);
         targetBox = {
@@ -1396,6 +1399,34 @@ export default function CadViewer({
       }
     }
   }, [externalFocusIdx, drawings]);
+
+  // 🚀 선택된 부품 번호(selectedPartNo) 변경 시 해당 도면 도곽으로 95% 대화면 즉시 줌인 포커스
+  useEffect(() => {
+    if (selectedPartNo && drawings && drawings.length > 0) {
+      const cleanPNo = selectedPartNo.trim().toLowerCase();
+      // 1. 도면 번호/품번 완전 일치
+      let targetDwg = drawings.find((d: any) =>
+        (d.drawing_no_raw && d.drawing_no_raw.trim().toLowerCase() === cleanPNo) ||
+        (d.drawing_no_normalized && d.drawing_no_normalized.trim().toLowerCase() === cleanPNo) ||
+        (d.drawing_name_raw && d.drawing_name_raw.trim().toLowerCase() === cleanPNo)
+      );
+      // 2. 상위 조립도 프리픽스 매칭 (예: 2503-021-SA05-002 -> 2503-021-SA05)
+      if (!targetDwg) {
+        const subAssyMatch = cleanPNo.match(/^(.+-[a-z0-9]+)-[0-9]+$/i);
+        if (subAssyMatch) {
+          const prefix = subAssyMatch[1].toLowerCase();
+          targetDwg = drawings.find((d: any) => {
+            const dNo = (d.drawing_no_raw || '').toLowerCase();
+            const dNorm = (d.drawing_no_normalized || '').toLowerCase();
+            return dNo.startsWith(prefix) || dNorm.startsWith(prefix);
+          });
+        }
+      }
+      if (targetDwg) {
+        handleZoomToRow(targetDwg);
+      }
+    }
+  }, [selectedPartNo, drawings]);
 
   // Base stroke width relative to viewport
   const strokeWidth = Math.max(0.6, activeViewport.width / 1800);
@@ -1675,8 +1706,8 @@ export default function CadViewer({
 
           {/* [Right Group] 도구 모음: 풍선알림, 영역표시, TXT, CAD설정 */}
           <div className="flex items-center space-x-1.5 shrink-0">
-            {/* 3. 풍선 알림 On/Off 토글 */}
-            {onToggleBalloonNotice && (
+            {/* 3. 풍선 알림 On/Off 토글 (검토 모드에서는 가로 공간 확보를 위해 숨김) */}
+            {!isReviewMode && onToggleBalloonNotice && (
               <button
                 onClick={onToggleBalloonNotice}
                 className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer whitespace-nowrap shadow-2xs ${
@@ -1691,12 +1722,6 @@ export default function CadViewer({
               </button>
             )}
 
-            {/* 풍선 포커스 안내 뱃지 */}
-            {showBalloonNotice && selectedBalloonNo && (
-              <span className="hidden xl:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/15 text-amber-300 font-bold text-xs border border-amber-500/30 animate-in fade-in duration-150">
-                풍선 {selectedBalloonNo}번 {selectedPartNo ? `(${selectedPartNo})` : ''}
-              </span>
-            )}
 
             {/* 4. 영역 표시 토글 */}
             <button
@@ -1781,16 +1806,16 @@ export default function CadViewer({
                   표제란 시트 ({drawings.length}개)
                 </span>
               )}
-              {selectedDrawingIdx >= 0 && drawings[selectedDrawingIdx] && (
-                <span className="text-amber-300 font-mono font-bold text-[10px] bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/60 truncate max-w-[180px]" title={`${drawings[selectedDrawingIdx].drawing_no_raw}: ${drawings[selectedDrawingIdx].drawing_name_raw}`}>
-                  시트: {drawings[selectedDrawingIdx].drawing_no_raw}
+              {drawings.length > 0 && (
+                <span className="hidden md:inline-flex text-slate-400 font-mono text-[10px] bg-slate-900/90 px-2 py-0.5 rounded border border-slate-800" title={`현재 분석 완료된 총 ${drawings.length}개 도면 시트`}>
+                  총 {drawings.length}시트
                 </span>
               )}
             </div>
           )}
 
-          {/* Quick Add Drawing Button */}
-          {onUploadFile && (
+          {/* Quick Add Drawing Button: 도면이 0개이거나 명시적 허용 시에만 노출 */}
+          {onUploadFile && showQuickUpload && drawings.length === 0 && (
             <div className="flex items-center">
               <input
                 type="file"

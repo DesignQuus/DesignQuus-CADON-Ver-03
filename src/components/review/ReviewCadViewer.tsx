@@ -66,23 +66,33 @@ export default function ReviewCadViewer({
     if (!drawings || drawings.length === 0) return null;
     if (!selectedPartNo && !selectedBalloonNo) return null;
 
-    // 1. 도면 번호 또는 품번 일치 검색
+    // 1. 도면 번호 또는 품번 완전 일치 검색
     if (selectedPartNo) {
+      const cleanPNo = selectedPartNo.trim().toLowerCase();
       const idx = drawings.findIndex((d: any) =>
-        (d.drawing_no_raw && d.drawing_no_raw.trim().toLowerCase() === selectedPartNo.trim().toLowerCase()) ||
-        (d.drawing_no_normalized && d.drawing_no_normalized.trim().toLowerCase() === selectedPartNo.trim().toLowerCase()) ||
-        (d.drawing_name_raw && d.drawing_name_raw.trim().toLowerCase() === selectedPartNo.trim().toLowerCase())
+        (d.drawing_no_raw && d.drawing_no_raw.trim().toLowerCase() === cleanPNo) ||
+        (d.drawing_no_normalized && d.drawing_no_normalized.trim().toLowerCase() === cleanPNo) ||
+        (d.drawing_name_raw && d.drawing_name_raw.trim().toLowerCase() === cleanPNo)
       );
       if (idx >= 0) return idx;
+
+      // 1-2. 부품번호의 상위 조립도 매칭 (예: 2503-021-SA02-002 -> 2503-021-SA02-000)
+      const subAssyMatch = cleanPNo.match(/^(.+-[a-z0-9]+)-[0-9]+$/i);
+      if (subAssyMatch) {
+        const subAssyPrefix = subAssyMatch[1].toLowerCase();
+        const parentIdx = drawings.findIndex((d: any) => {
+          const dNo = (d.drawing_no_raw || '').toLowerCase();
+          const dNorm = (d.drawing_no_normalized || '').toLowerCase();
+          return dNo.startsWith(subAssyPrefix) || dNorm.startsWith(subAssyPrefix);
+        });
+        if (parentIdx >= 0) return parentIdx;
+      }
     }
 
-    // 2. 풍선 번호 또는 도면 인덱스 일치 검색
+    // 2. 도면에 명시적으로 등록된 풍선 번호 일치 검색 (단순 drawing_index로 오인식하는 오류 방지)
     if (selectedBalloonNo) {
-      const bNum = parseInt(selectedBalloonNo, 10);
-      const idx = drawings.findIndex((d: any, i: number) =>
-        d.balloon_no === selectedBalloonNo ||
-        d.drawing_index === bNum - 1 ||
-        String(i + 1) === selectedBalloonNo
+      const idx = drawings.findIndex((d: any) =>
+        d.balloon_no && String(d.balloon_no).trim() === String(selectedBalloonNo).trim()
       );
       if (idx >= 0) return idx;
     }

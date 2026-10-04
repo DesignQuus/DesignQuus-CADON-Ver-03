@@ -60,6 +60,37 @@ export const TABLES = {
     "columnCount": 10,
     "rowCount": 0
   },
+  "batch_items": {
+    "name": "batch_items",
+    "displayName": "업로드 배치 항목 및 분석 큐",
+    "description": "파일별 분석 상태, 진행률, 오류, 재시도, 임시저장 데이터",
+    "columns": [
+      "id",
+      "_version",
+      "batch_id",
+      "uploaded_file_id",
+      "quotation_case_id",
+      "file_name",
+      "file_size",
+      "status",
+      "progress",
+      "error_message",
+      "retry_count",
+      "sort_order",
+      "draft_data",
+      "created_at",
+      "tenant_id",
+      "uuid",
+      "updated_at",
+      "updated_by",
+      "deleted_at",
+      "deleted_by",
+      "restored_at",
+      "restored_by"
+    ],
+    "columnCount": 22,
+    "rowCount": 0
+  },
   "bom_approval_records": {
     "name": "bom_approval_records",
     "displayName": "BOM 승인/수정 이력",
@@ -166,7 +197,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 22,
-    "rowCount": 2
+    "rowCount": 3
   },
   "cad_objects": {
     "name": "cad_objects",
@@ -230,6 +261,7 @@ export const TABLES = {
     "columns": [
       "id",
       "_version",
+      "chunk_id",
       "case_id",
       "company_name",
       "drawing_no",
@@ -249,8 +281,8 @@ export const TABLES = {
       "restored_at",
       "restored_by"
     ],
-    "columnCount": 20,
-    "rowCount": 0
+    "columnCount": 21,
+    "rowCount": 26
   },
   "case_archives": {
     "name": "case_archives",
@@ -289,6 +321,7 @@ export const TABLES = {
       "company_code",
       "company_name",
       "company_type",
+      "notes",
       "is_active",
       "created_at",
       "tenant_id",
@@ -300,8 +333,36 @@ export const TABLES = {
       "restored_at",
       "restored_by"
     ],
-    "columnCount": 15,
-    "rowCount": 5
+    "columnCount": 16,
+    "rowCount": 4
+  },
+  "company_contacts": {
+    "name": "company_contacts",
+    "displayName": "고객사 담당자 대장",
+    "description": "고객사별 담당자(이름, 부서, 직급, 전화번호, 이메일, 비고)",
+    "columns": [
+      "id",
+      "_version",
+      "company_id",
+      "contact_name",
+      "department",
+      "position",
+      "phone",
+      "email",
+      "is_primary",
+      "notes",
+      "created_at",
+      "tenant_id",
+      "uuid",
+      "updated_at",
+      "updated_by",
+      "deleted_at",
+      "deleted_by",
+      "restored_at",
+      "restored_by"
+    ],
+    "columnCount": 19,
+    "rowCount": 0
   },
   "drawing_relationships": {
     "name": "drawing_relationships",
@@ -968,6 +1029,16 @@ export const TABLES = {
       "quote_readiness",
       "created_by_user_id",
       "created_at",
+      "lifecycle_status",
+      "archived_at",
+      "archive_reason",
+      "manager_name",
+      "manager_contact",
+      "designer_name",
+      "department",
+      "project_title",
+      "notes",
+      "queue_order",
       "tenant_id",
       "uuid",
       "updated_at",
@@ -977,7 +1048,7 @@ export const TABLES = {
       "restored_at",
       "restored_by"
     ],
-    "columnCount": 20,
+    "columnCount": 30,
     "rowCount": 25
   },
   "quote_exports": {
@@ -1073,6 +1144,10 @@ export const TABLES = {
       "approved_by_user_id",
       "approved_at",
       "override_reason",
+      "notes",
+      "submitted_by_user_id",
+      "submitted_at",
+      "reject_reason",
       "created_at",
       "tenant_id",
       "uuid",
@@ -1083,7 +1158,7 @@ export const TABLES = {
       "restored_at",
       "restored_by"
     ],
-    "columnCount": 31,
+    "columnCount": 35,
     "rowCount": 0
   },
   "raw_bom_items": {
@@ -1193,6 +1268,32 @@ export const TABLES = {
     "columnCount": 13,
     "rowCount": 4
   },
+  "upload_batches": {
+    "name": "upload_batches",
+    "displayName": "업로드 배치 관리",
+    "description": "일괄 업로드 세션 관리 및 진행률",
+    "columns": [
+      "id",
+      "_version",
+      "batch_name",
+      "status",
+      "total_files",
+      "processed_files",
+      "failed_files",
+      "created_by_user_id",
+      "created_at",
+      "tenant_id",
+      "uuid",
+      "updated_at",
+      "updated_by",
+      "deleted_at",
+      "deleted_by",
+      "restored_at",
+      "restored_by"
+    ],
+    "columnCount": 17,
+    "rowCount": 0
+  },
   "uploaded_files": {
     "name": "uploaded_files",
     "displayName": "업로드/파생 파일 관리",
@@ -1251,7 +1352,7 @@ export const TABLES = {
       "restored_by"
     ],
     "columnCount": 20,
-    "rowCount": 477
+    "rowCount": 484
   },
   "user_approval_permissions": {
     "name": "user_approval_permissions",

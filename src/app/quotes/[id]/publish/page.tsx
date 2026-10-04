@@ -43,6 +43,15 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
   const [emergencyApprover, setEmergencyApprover] = useState('기술영업팀장');
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [approvingTeamLead, setApprovingTeamLead] = useState(false);
+  const [submittingQuote, setSubmittingQuote] = useState(false);
+
+  // ❌ 결재 반려 모달 상태
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReasonInput, setRejectReasonInput] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+
+  // 📥 엑셀 내보내기 진행 상태
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
 
   // 견적서 승인 상태 (거버넌스 가드용)
   const [quoteInfo, setQuoteInfo] = useState<{
@@ -51,6 +60,11 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
     is_locked: number;
     quote_no: string;
     quote_version: number;
+    notes?: string | null;
+    submitted_at?: string | null;
+    submitted_by_user_id?: string | null;
+    reject_reason?: string | null;
+    override_reason?: string | null;
   } | null>(null);
 
   // 실제 견적 데이터 상태
@@ -88,11 +102,30 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
           if (latestQ) {
             setQuoteInfo({
               id: latestQ.id,
-              status: latestQ.status,
+              status: latestQ.status || 'DRAFT',
               is_locked: Number(latestQ.is_locked) || 0,
               quote_no: latestQ.quote_no || '',
-              quote_version: Number(latestQ.quote_version) || 1
+              quote_version: Number(latestQ.quote_version) || 1,
+              notes: latestQ.notes || null,
+              submitted_at: latestQ.submitted_at || null,
+              submitted_by_user_id: latestQ.submitted_by_user_id || null,
+              reject_reason: latestQ.reject_reason || null,
+              override_reason: latestQ.override_reason || null
             });
+
+            // DB에 저장된 기존 수주 피드백 불러오기
+            try {
+              const fbRes = await apiFetch(`/api/quotes/${latestQ.id}/feedback`);
+              if (fbRes.ok) {
+                const fbJson = await fbRes.json();
+                if (fbJson?.feedback) {
+                  setOrderStatus(fbJson.feedback.order_status || 'PENDING');
+                  setFeedbackNote(fbJson.feedback.feedback_notes || '');
+                }
+              }
+            } catch (fbErr) {
+              console.warn('Feedback load warning:', fbErr);
+            }
           } else {
             setQuoteInfo(null);
           }
@@ -180,27 +213,43 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
       alert('총 견적 금액이 0원인 상태에서는 견적서를 승인하거나 발행할 수 없습니다.\n4단계 [단가 검토] 화면에서 품목별 단가를 먼저 확정해 주세요.');
       return;
     }
+    if (!quoteInfo?.id) {
+      alert('견적서 정보를 찾을 수 없습니다.');
+      return;
+    }
     setApprovingTeamLead(true);
     try {
-      await apiFetch(`/api/quotation-cases/${caseId}/create-quote`, {
-        method: 'POST'
-      }).catch(() => {});
-
-      setQuoteInfo({
-        id: quoteInfo?.id || 'q_approved',
-        status: 'APPROVED',
-        is_locked: 1,
-        quote_no: quoteData.caseNo || caseId,
-        quote_version: (quoteInfo?.quote_version || 1)
+      const res = await apiFetch(`/api/quotes/${quoteInfo.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isTeamLead: true,
+          overrideReason: '마진 가이드라인 준수 팀장 전결'
+        })
       });
-      alert(`[팀장 전결 승인 완료]\n마진 거버넌스(${quoteData.marginRate}% ≥ 12.0%)를 준수하여 팀장 전결로 정식 견적서가 발행 및 확정되었습니다.`);
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || '팀장 전결 승인 실패');
+        return;
+      }
+
+      setQuoteInfo((prev) => prev ? {
+        ...prev,
+        status: json.status || 'APPROVED',
+        is_locked: 1,
+        override_reason: '마진 가이드라인 준수 팀장 전결'
+      } : null);
+
+      alert(`[팀장 전결 승인 완료]\n마진 거버넌스(${quoteData.marginRate}% ≥ 12.0%)를 준수하여 팀장 전결로 정식 견적서가 DB에 영구 승인 및 확정되었습니다.`);
+    } catch (e: any) {
+      alert('오류 발생: ' + e.message);
     } finally {
       setApprovingTeamLead(false);
     }
   };
 
   // 🚨 2. 비상시 긴급 선발행 핸들러 (최고 관리자 부재/긴급 마감 대응)
-  const handleExecuteEmergencyPublish = () => {
+  const handleExecuteEmergencyPublish = async () => {
     if (quoteData.totalSupply <= 0) {
       alert('총 견적 금액이 0원인 상태에서는 긴급 선발행을 진행할 수 없습니다.\n품목 단가가 산출되지 않은 0원 견적서는 고객 제출용으로 발행할 수 없습니다.');
       return;
@@ -209,105 +258,234 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
       alert('긴급 선발행 사유를 필수로 입력해 주세요.');
       return;
     }
-    setIsEmergencyPublished(true);
-    setShowEmergencyModal(false);
+    if (!quoteInfo?.id) {
+      alert('견적서 정보를 찾을 수 없습니다.');
+      return;
+    }
 
-    setQuoteInfo({
-      id: quoteInfo?.id || 'q_emergency',
-      status: 'EMERGENCY_APPROVED',
-      is_locked: 1,
-      quote_no: quoteData.caseNo || caseId,
-      quote_version: (quoteInfo?.quote_version || 1)
-    });
+    try {
+      const res = await apiFetch(`/api/quotes/${quoteInfo.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isEmergency: true,
+          emergencyReason: `[${emergencyApprover}] ${emergencyReason.trim()}`
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || '긴급 선발행 승인 실패');
+        return;
+      }
 
-    alert(
-      `🚨 [긴급 선발행(선송부) 권한 해제 완료]\n` +
-      `사유: ${emergencyReason}\n` +
-      `대결/신청자: ${emergencyApprover}\n\n` +
-      `고객 제출용 견적서 열람, 인쇄 및 CSV 다운로드 권한이 즉시 해제되었습니다.\n` +
-      `본 건은 사후 감사를 위해 시스템 감사 로그에 영구 기록됩니다.`
-    );
+      setIsEmergencyPublished(true);
+      setShowEmergencyModal(false);
+
+      setQuoteInfo((prev) => prev ? {
+        ...prev,
+        status: 'EMERGENCY_APPROVED',
+        is_locked: 1,
+        override_reason: emergencyReason
+      } : null);
+
+      alert(
+        `🚨 [긴급 선발행(선송부) 권한 해제 완료]\n` +
+        `사유: ${emergencyReason}\n` +
+        `대결/신청자: ${emergencyApprover}\n\n` +
+        `DB에 긴급 승인 상태가 영구 기록되었으며, 고객 제출용 견적서 열람, 인쇄 및 CSV 다운로드 권한이 즉시 해제되었습니다.\n` +
+        `본 건은 사후 감사를 위해 시스템 감사 로그에 영구 보존됩니다.`
+      );
+    } catch (e: any) {
+      alert('오류 발생: ' + e.message);
+    }
   };
 
+  // 📋 3. 결재 상신 핸들러 (DRAFT -> SUBMITTED)
+  const handleSubmitQuote = async () => {
+    if (!quoteInfo?.id) return;
+    setSubmittingQuote(true);
+    try {
+      const res = await apiFetch(`/api/quotes/${quoteInfo.id}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: '정규 견적 승인 상신' })
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || '결재 상신 실패');
+        return;
+      }
+      setQuoteInfo((prev) => prev ? { ...prev, status: 'SUBMITTED', submitted_at: new Date().toISOString() } : null);
+      alert('견적서가 결재 상신되었습니다. 승인권자 결재 대기 상태로 전환되었습니다.');
+    } catch (e: any) {
+      alert('오류 발생: ' + e.message);
+    } finally {
+      setSubmittingQuote(false);
+    }
+  };
+
+  // ❌ 4. 결재 반려 핸들러 (SUBMITTED -> REJECTED)
+  const handleExecuteReject = async () => {
+    if (!quoteInfo?.id) return;
+    if (!rejectReasonInput.trim()) {
+      alert('반려 사유를 필수로 입력해주세요.');
+      return;
+    }
+    setRejecting(true);
+    try {
+      const res = await apiFetch(`/api/quotes/${quoteInfo.id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rejectionReason: rejectReasonInput.trim() })
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || '결재 반려 실패');
+        return;
+      }
+      setShowRejectModal(false);
+      setQuoteInfo((prev) => prev ? {
+        ...prev,
+        status: 'REJECTED',
+        is_locked: 0,
+        reject_reason: rejectReasonInput.trim()
+      } : null);
+      alert(`견적서가 반려 처리되었습니다.\n사유: ${rejectReasonInput.trim()}\n단가 검토 화면에서 품목 수정이 가능합니다.`);
+    } catch (e: any) {
+      alert('오류 발생: ' + e.message);
+    } finally {
+      setRejecting(false);
+    }
+  };
+
+  // 🎯 5. 수주 피드백 저장 핸들러 (order_results 실제 DB 저장)
   const handleSaveFeedback = async () => {
+    if (!quoteInfo?.id) {
+      alert('견적서 정보를 찾을 수 없습니다.');
+      return;
+    }
     setSavingFeedback(true);
     try {
-      // 피드백 저장 API 호출
-      await new Promise((r) => setTimeout(r, 600));
-      alert(`[성공] 수주 상태가 '${orderStatus}'(으)로 등록되었습니다. 마스터 단가 지식풀에 성공률이 학습됩니다.`);
+      const res = await apiFetch(`/api/quotes/${quoteInfo.id}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderStatus,
+          feedbackNotes: feedbackNote.trim(),
+          orderAmount: quoteData.totalSupply
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(json.error || '수주 피드백 저장 실패');
+        return;
+      }
+      alert(`[성공] 수주 상태가 '${orderStatus}'(으)로 DB에 저장되었습니다. 마스터 단가 지식풀에 성공률이 학습됩니다.`);
+    } catch (e: any) {
+      alert('오류 발생: ' + e.message);
     } finally {
       setSavingFeedback(false);
     }
   };
 
-  const handleDownloadExcel = (type: 'CUSTOMER' | 'MANUFACTURING') => {
+  const handleDownloadExcel = async (type: 'CUSTOMER' | 'MANUFACTURING') => {
     if (!isApproved) {
       alert('🚨 [승인 가드 차단] 견적서가 최종 승인(APPROVED) 및 확정(LOCKED)되지 않았습니다. 미승인 견적서는 다운로드할 수 없습니다.');
       return;
     }
 
-    const isCustomer = type === 'CUSTOMER';
-    const filename = isCustomer
-      ? `견적서_고객제출용_${quoteData.caseNo}.csv`
-      : `제조원가산출서_사내용_${quoteData.caseNo}.csv`;
+    const targetId = quoteInfo?.id || caseId;
+    setDownloadingExcel(true);
 
-    let headers: string[];
-    let rows: string[][];
+    try {
+      if (type === 'CUSTOMER') {
+        // 1. 서버 공식 엑셀 (.xlsx) 다운로드 API 호출
+        const res = await apiFetch(`/api/quotes/${targetId}/export-excel`);
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `견적서_${quoteData.caseNo || targetId}.xlsx`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+          return;
+        } else {
+          const errData = await res.json().catch(() => null);
+          if (errData?.error) {
+            alert(`[서버 엑셀 생성 안내] ${errData.error}\n구조화된 대체 CSV 포맷으로 다운로드를 전환합니다.`);
+          }
+        }
+      }
 
-    if (isCustomer) {
-      headers = ['No', '품명 (규격)', '수량', '단위', '공급단가 (원)', '공급가액 (원)', '비고'];
-      rows = quoteData.items.map((item) => [
-        String(item.no),
-        `"${item.name.replace(/"/g, '""')}"`,
-        String(item.qty),
-        'EA',
-        String(item.price),
-        String(item.price * item.qty),
-        ''
-      ]);
-      // Total Row
-      rows.push(['', '합계 (VAT 별도)', '', '', '', String(quoteData.totalSupply), '']);
-    } else {
-      headers = ['No', '품명 (규격)', '수량', '단위', '재료비 (원)', '가공비 (원)', '단위원가 (원)', '공급단가 (원)', '공급가액 (원)', '마진액 (원)', '마진율 (%)'];
-      rows = quoteData.items.map((item) => {
-        const supplyAmt = item.price * item.qty;
-        const costAmt = item.cost * item.qty;
-        const marginAmt = supplyAmt - costAmt;
-        const marginPct = supplyAmt > 0 ? ((marginAmt / supplyAmt) * 100).toFixed(1) : '0';
-        return [
+      // 2. 내부 제조원가 BOM 또는 폴백 CSV 다운로드
+      const isCustomer = type === 'CUSTOMER';
+      const filename = isCustomer
+        ? `견적서_고객제출용_${quoteData.caseNo}.csv`
+        : `제조원가산출서_사내용_${quoteData.caseNo}.csv`;
+
+      let headers: string[];
+      let rows: string[][];
+
+      if (isCustomer) {
+        headers = ['No', '품명 (규격)', '수량', '단위', '공급단가 (원)', '공급가액 (원)', '비고'];
+        rows = quoteData.items.map((item) => [
           String(item.no),
           `"${item.name.replace(/"/g, '""')}"`,
           String(item.qty),
           'EA',
-          String(item.materialCost),
-          String(item.processCost),
-          String(item.cost),
           String(item.price),
-          String(supplyAmt),
-          String(marginAmt),
-          `${marginPct}%`
-        ];
-      });
-      // Total Row
-      const totalCostAmt = quoteData.totalCost;
-      const totalMarginAmt = quoteData.totalSupply - totalCostAmt;
-      rows.push(['', '총계 (VAT 별도)', '', '', '', '', String(totalCostAmt), '', String(quoteData.totalSupply), String(totalMarginAmt), `${quoteData.marginRate}%`]);
+          String(item.price * item.qty),
+          ''
+        ]);
+        rows.push(['', '합계 (VAT 별도)', '', '', '', String(quoteData.totalSupply), '']);
+      } else {
+        headers = ['No', '품명 (규격)', '수량', '단위', '재료비 (원)', '가공비 (원)', '단위원가 (원)', '공급단가 (원)', '공급가액 (원)', '마진액 (원)', '마진율 (%)'];
+        rows = quoteData.items.map((item) => {
+          const supplyAmt = item.price * item.qty;
+          const costAmt = item.cost * item.qty;
+          const marginAmt = supplyAmt - costAmt;
+          const marginPct = supplyAmt > 0 ? ((marginAmt / supplyAmt) * 100).toFixed(1) : '0';
+          return [
+            String(item.no),
+            `"${item.name.replace(/"/g, '""')}"`,
+            String(item.qty),
+            'EA',
+            String(item.materialCost),
+            String(item.processCost),
+            String(item.cost),
+            String(item.price),
+            String(supplyAmt),
+            String(marginAmt),
+            `${marginPct}%`
+          ];
+        });
+        const totalCostAmt = quoteData.totalCost;
+        const totalMarginAmt = quoteData.totalSupply - totalCostAmt;
+        rows.push(['', '총계 (VAT 별도)', '', '', '', '', String(totalCostAmt), '', String(quoteData.totalSupply), String(totalMarginAmt), `${quoteData.marginRate}%`]);
+      }
+
+      const csvContent = '\uFEFF' + [
+        headers.join(','),
+        ...rows.map(r => r.join(','))
+      ].join('\r\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert('엑셀 다운로드 중 오류가 발생했습니다: ' + e.message);
+    } finally {
+      setDownloadingExcel(false);
     }
-
-    const csvContent = '\uFEFF' + [
-      headers.join(','),
-      ...rows.map(r => r.join(','))
-    ].join('\r\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   };
 
   if (loading) {
@@ -406,7 +584,36 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
                 </div>
               </div>
             ) : (
-              /* 🎯 긴급 승인 액션 섹션 */
+              <>
+                {/* 견적서 상태별 안내 및 반려 사유 배너 */}
+              {quoteInfo?.status === 'REJECTED' && (
+                <div className="p-4 rounded-xl border-2 border-rose-300 bg-rose-50 text-left space-y-2 animate-in fade-in">
+                  <div className="flex items-center gap-2 text-rose-800 font-bold text-xs">
+                    <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>결재 반려된 견적서입니다</span>
+                  </div>
+                  <div className="text-xs text-rose-900 bg-white p-3 rounded-lg border border-rose-200 font-medium">
+                    <strong className="text-rose-600 block mb-0.5">반려 사유:</strong>
+                    {quoteInfo.reject_reason || '반려 사유가 입력되지 않았습니다.'}
+                  </div>
+                  <p className="text-[11px] text-rose-700">
+                    단가 검토 화면에서 품목 및 단가를 수정한 후 다시 결재를 상신해주세요.
+                  </p>
+                </div>
+              )}
+
+              {quoteInfo?.status === 'SUBMITTED' && (
+                <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50 text-left space-y-1">
+                  <div className="flex items-center gap-2 text-blue-900 font-bold text-xs">
+                    <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span>결재 상신 완료 (승인권자 심사 대기 중)</span>
+                  </div>
+                  <p className="text-[11px] text-blue-700">
+                    상신일시: {quoteInfo.submitted_at ? new Date(quoteInfo.submitted_at).toLocaleString('ko-KR') : '방금 전'}
+                  </p>
+                </div>
+              )}
+
               <div className={`p-4 rounded-xl border space-y-3 text-left ${
                 quoteData.marginRate >= 12.0 ? 'bg-emerald-50/60 border-emerald-200' : 'bg-amber-50/60 border-amber-200'
               }`}>
@@ -434,7 +641,19 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 pt-1">
-                  {/* 1. 팀장 전결 버튼 (12% 이상일 때 우선 활성화) */}
+                  {/* 1. 결재 상신 버튼 (DRAFT 또는 REJECTED 상태일 때) */}
+                  {(quoteInfo?.status === 'DRAFT' || quoteInfo?.status === 'REJECTED' || !quoteInfo?.status) && (
+                    <button
+                      onClick={handleSubmitQuote}
+                      disabled={submittingQuote}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {submittingQuote ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      <span>📋 결재 상신 (팀장/승인권자 제출)</span>
+                    </button>
+                  )}
+
+                  {/* 2. 팀장 전결 버튼 (12% 이상일 때 우선 활성화) */}
                   {quoteData.marginRate >= 12.0 && (
                     <button
                       onClick={handleTeamLeadApprove}
@@ -446,7 +665,18 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
                     </button>
                   )}
 
-                  {/* 2. 비상 긴급 선발행 버튼 (최고 관리자 부재 및 마감 임박 대응) */}
+                  {/* 3. 결재 반려 버튼 (상신 상태일 때 반려 사유 모달 호출) */}
+                  {quoteInfo?.status === 'SUBMITTED' && (
+                    <button
+                      onClick={() => setShowRejectModal(true)}
+                      className="px-3.5 py-2 bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 text-xs font-bold rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                      <span>결재 반려</span>
+                    </button>
+                  )}
+
+                  {/* 4. 비상 긴급 선발행 버튼 (최고 관리자 부재 및 마감 임박 대응) */}
                   <button
                     onClick={() => setShowEmergencyModal(true)}
                     className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
@@ -456,7 +686,8 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
                   </button>
                 </div>
               </div>
-            )}
+            </>
+          )}
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
@@ -556,29 +787,99 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
         )}
+
+        {/* ❌ 결재 반려 사유 입력 팝업 모달 */}
+        {showRejectModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-rose-300 max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100">
+                <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-700">
+                  <XCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">견적 결재 반려</h3>
+                  <p className="text-[11px] text-slate-500">담당자에게 보완 및 재검토를 요청합니다.</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">반려 사유 (필수)</label>
+                  <textarea
+                    rows={4}
+                    value={rejectReasonInput}
+                    onChange={(e) => setRejectReasonInput(e.target.value)}
+                    placeholder="반려 사유를 구체적으로 작성하세요. (예: 주요 가공 공정 마진 재조정 필요, 재료비 단가 견적서 재확인 요망 등)"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 font-medium focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => setShowRejectModal(false)}
+                  disabled={rejecting}
+                  className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleExecuteReject}
+                  disabled={rejecting || !rejectReasonInput.trim()}
+                  className="px-5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {rejecting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                  <span>반려 처리 (잠금 해제 및 상태 전환)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-100 print:bg-white flex flex-col font-sans">
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background: white !important;
+          }
+          table {
+            page-break-inside: auto;
+          }
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+          }
+        }
+      `}</style>
       {/* 🚀 CADON v3.0: 5단계 스마트 파이프라인 네비게이터 (5단계: 공식 견적서 발행) */}
-      <PipelineNavigator
-        caseId={caseId}
-        currentStep={5}
-        stats={{
-          marginWarning: isLowMargin
-        }}
-        caseInfo={{
-          caseNo: quoteData.caseNo,
-          caseName: quoteData.projectName,
-          companyName: quoteData.customerName,
-          quoteItemCount: quoteData.items.length
-        }}
-      />
+      <div className="print:hidden">
+        <PipelineNavigator
+          caseId={caseId}
+          currentStep={5}
+          stats={{
+            marginWarning: isLowMargin
+          }}
+          caseInfo={{
+            caseNo: quoteData.caseNo,
+            caseName: quoteData.projectName,
+            companyName: quoteData.customerName,
+            quoteItemCount: quoteData.items.length
+          }}
+        />
+      </div>
 
       {/* 상단 컨트롤 바 */}
-      <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-2xs">
+      <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-2xs print:hidden">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold">
             <button
@@ -612,30 +913,32 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
           </button>
           <button
             onClick={() => handleDownloadExcel('CUSTOMER')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors ${
+            disabled={downloadingExcel}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors disabled:opacity-50 ${
               docType === 'CUSTOMER' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
             }`}
-            title="고객 제출용 표준 견적서 다운로드"
+            title="고객 제출용 공식 표준 견적서 (.xlsx) 다운로드"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>고객용 엑셀 (.CSV)</span>
+            {downloadingExcel ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            <span>공식 견적서 (.xlsx)</span>
           </button>
           <button
             onClick={() => handleDownloadExcel('MANUFACTURING')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors ${
+            disabled={downloadingExcel}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors disabled:opacity-50 ${
               docType === 'MANUFACTURING' ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
             }`}
-            title="사내 제조원가 및 마진 내역서 다운로드"
+            title="사내 제조원가 및 마진 상세 내역서 다운로드"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>내부 제조원가 엑셀 (.CSV)</span>
+            <span>내부 제조원가 내역서</span>
           </button>
         </div>
       </header>
 
       {/* 🚨 긴급 선발행 배너 (사후 추인 대기 중 안내) */}
       {(isEmergencyPublished || quoteInfo?.status === 'EMERGENCY_APPROVED') && (
-        <div className="bg-amber-600 text-white px-6 py-2.5 flex items-center justify-between text-xs shadow-inner shrink-0">
+        <div className="bg-amber-600 text-white px-6 py-2.5 flex items-center justify-between text-xs shadow-inner shrink-0 print:hidden">
           <div className="flex items-center gap-2 font-bold">
             <AlertTriangle className="w-4 h-4 text-amber-200 animate-pulse" />
             <span>[비상 긴급 선발행] 본 견적서는 최고 관리자 부재/긴급 마감으로 인해 [선송부 후보고] 상태로 발행되었습니다.</span>
@@ -650,17 +953,17 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
       )}
 
       {/* 메인 견적서 프리뷰 및 수주 피드백 컨테이너 */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-6 space-y-6">
+      <main className="flex-1 max-w-5xl w-full mx-auto p-6 print:p-0 print:max-w-none space-y-6 print:space-y-0">
         {/* 마진 거버넌스 알림 */}
         {isLowMargin ? (
-          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center justify-between text-rose-800 text-xs">
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center justify-between text-rose-800 text-xs print:hidden">
             <div className="flex items-center gap-2 font-bold">
               <ShieldAlert className="w-5 h-5 text-rose-600" />
               <span>마진 하한선(12%) 미달: 현재 마진율 {quoteData.marginRate}%. 대표이사 결재가 필요합니다.</span>
             </div>
           </div>
         ) : (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between text-emerald-800 text-xs">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between text-emerald-800 text-xs print:hidden">
             <div className="flex items-center gap-2 font-semibold">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <span>마진 거버넌스 준수 (평균 마진: <strong>{quoteData.marginRate}%</strong>) • 팀장 전결 발행 가능</span>
@@ -670,7 +973,7 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
         )}
 
         {/* 견적서 종이 문서 시각화 */}
-        <div className="bg-white rounded-2xl border border-slate-300 shadow-md p-8 space-y-6 text-slate-800">
+        <div className="bg-white rounded-2xl print:rounded-none border border-slate-300 print:border-none shadow-md print:shadow-none p-8 print:p-4 space-y-6 text-slate-800 print:text-black">
           <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-black tracking-tight text-slate-900">
@@ -762,7 +1065,7 @@ export default function QuotePublishPage({ params }: { params: Promise<{ id: str
         </div>
 
         {/* 수주 / 실주 피드백 루프 (사후 관리) */}
-        <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
+        <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3 print:hidden">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
             <h3 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
               <Coins className="w-4 h-4 text-amber-500" />

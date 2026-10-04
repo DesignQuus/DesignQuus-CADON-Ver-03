@@ -66,9 +66,10 @@ export async function POST(req: NextRequest) {
         });
         successCount++;
       } else if (action === 'RESTORE') {
+        const restoredStatus = qc.status === 'ARCHIVED' || qc.status === 'DELETED' ? 'ANALYZED' : qc.status;
         await db.prepare(`
           UPDATE quotation_cases
-          SET status = 'ANALYZED',
+          SET status = ?,
               lifecycle_status = NULL,
               archived_at = NULL,
               archive_reason = NULL,
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
               restored_by = ?,
               updated_at = ?
           WHERE id = ?
-        `).run(now, session.userId, now, id);
+        `).run(restoredStatus, now, session.userId, now, id);
 
         await recordActivity(req, session, {
           activityType: 'CASE_RESTORE',

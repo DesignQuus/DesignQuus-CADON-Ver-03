@@ -225,6 +225,64 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
                     customer = txt
                     break
 
+        # Extract Designer (Spatial proximity to DESIGNER / DRAWN / 설계 / 작도 / 작성 label)
+        designer = None
+        DESIGNER_LABEL_KEYS = {
+            "DESIGNER", "DESIGN", "DRAWN", "DRAWNBY", "DWN", "설계", "작도", "작성", "도면작성", "설계자", "작도자", "작성자", "담당"
+        }
+        des_labels = [
+            t for t in in_frame 
+            if t["text"].strip().upper().replace(" ", "").replace(":", "").replace(";", "") in DESIGNER_LABEL_KEYS
+        ]
+        if des_labels:
+            dl = des_labels[0]
+            d_cands = [
+                t for t in in_frame
+                if t != dl
+                and -35 * usc <= (t["y"] - dl["y"]) <= 15 * usc
+                and abs(t["x"] - dl["x"]) <= 100 * usc
+                and not is_label_blacklisted(t["text"])
+                and not is_supplier_like(t["text"].strip())
+                and not looks_like_date(t["text"].strip())
+                and not re.match(r'^\d+$', t["text"].strip())
+                and len(t["text"].strip()) >= 2
+            ]
+            if d_cands:
+                d_cands.sort(key=lambda t: (dl["y"] - t["y"])**2 + (dl["x"] - t["x"])**2)
+                designer = d_cands[0]["text"].strip()
+
+        # Extract Design Date (Spatial proximity to DATE / 일자 / 작성일 / 설계일 label)
+        design_date = None
+        DATE_LABEL_KEYS = {
+            "DATE", "DRAWNDATE", "DESIGNDATE", "작성일", "일자", "설계일", "도면일자", "DATEOFISSUE", "PLOTDATE"
+        }
+        date_labels = [
+            t for t in in_frame
+            if t["text"].strip().upper().replace(" ", "").replace(":", "").replace(";", "") in DATE_LABEL_KEYS
+        ]
+        if date_labels:
+            dtl = date_labels[0]
+            dt_cands = [
+                t for t in in_frame
+                if t != dtl
+                and -35 * usc <= (t["y"] - dtl["y"]) <= 15 * usc
+                and abs(t["x"] - dtl["x"]) <= 120 * usc
+                and not is_label_blacklisted(t["text"])
+            ]
+            for cand in dt_cands:
+                txt = cand["text"].strip()
+                m_date = re.search(r'(\d{2,4}[-/.년]\s*\d{1,2}[-/.월]\s*\d{1,2})', txt)
+                if m_date:
+                    design_date = m_date.group(1).replace("년", "-").replace("월", "-").replace(".", "-").replace("/", "-").replace(" ", "")
+                    break
+        if not design_date:
+            for t in tb_texts:
+                txt = t["text"].strip()
+                m_date = re.search(r'\b(20\d{2}[-/.년]\s*\d{1,2}[-/.월]\s*\d{1,2})\b', txt)
+                if m_date and not pat_full.search(txt):
+                    design_date = m_date.group(1).replace("년", "-").replace("월", "-").replace(".", "-").replace("/", "-").replace(" ", "")
+                    break
+
         # Detect integrated Title Block BOM Table
         header_labels = {}
         for t in tb_texts:
@@ -372,8 +430,8 @@ def extract_title_blocks_hierarchical(cad_data: dict, frames_data: dict) -> dict
             "project_name": proj_no_global or dno.split("-")[0],
             "project_no": proj_no_global or dno.split("-")[0],
             "customer": customer or "-",
-            "designer": "-",
-            "design_date": "-",
+            "designer": designer or "-",
+            "design_date": design_date or "-",
             "company": company_global or "-",
             "revision": "R00",
             "material": mat or "UNKNOWN",

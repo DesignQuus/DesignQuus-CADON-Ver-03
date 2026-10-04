@@ -30,6 +30,7 @@ import {
   getTableSchemas,
   listTables
 } from '../../egdesk-helpers';
+import { backupTableToFile, countRows, getBackupRoot, makeTimestamp } from './db-backup';
 
 /** 8종 표준 감사 컬럼 */
 export const AUDIT_COLUMNS = [
@@ -80,6 +81,7 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'company_code', type: 'TEXT', notNull: true },
       { name: 'company_name', type: 'TEXT', notNull: true },
       { name: 'company_type', type: 'TEXT', notNull: true },
+      { name: 'notes', type: 'TEXT' }, // 고객사 메모
       { name: 'is_active', type: 'INTEGER', notNull: true },
       { name: 'created_at', type: 'TEXT', notNull: true }
     ],
@@ -128,7 +130,19 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'revision', type: 'TEXT', notNull: true },
       { name: 'quote_readiness', type: 'TEXT', notNull: true },
       { name: 'created_by_user_id', type: 'TEXT', notNull: true },
-      { name: 'created_at', type: 'TEXT', notNull: true }
+      { name: 'created_at', type: 'TEXT', notNull: true },
+      // 보관함/라이프사이클 (lifecycle API, 견적 목록 탭에서 사용)
+      { name: 'lifecycle_status', type: 'TEXT' }, // NULL(활성) | ARCHIVED | TRASHED
+      { name: 'archived_at', type: 'TEXT' },
+      { name: 'archive_reason', type: 'TEXT' },
+      // 1단계 확장: 메타 정보 및 대기열
+      { name: 'manager_name', type: 'TEXT' }, // 견적 담당자
+      { name: 'manager_contact', type: 'TEXT' }, // 담당자 연락처
+      { name: 'designer_name', type: 'TEXT' }, // 설계자
+      { name: 'department', type: 'TEXT' }, // 부서
+      { name: 'project_title', type: 'TEXT' }, // 프로젝트명 (단일 텍스트 메타)
+      { name: 'notes', type: 'TEXT' }, // 견적 메모
+      { name: 'queue_order', type: 'INTEGER' } // 대기열 순서
     ],
     uniqueKeyColumns: ['id']
   },
@@ -482,6 +496,11 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'approved_by_user_id', type: 'TEXT' },
       { name: 'approved_at', type: 'TEXT' },
       { name: 'override_reason', type: 'TEXT' },
+      // 1단계 확장: 견적 메모 및 결재 상신/반려 메타
+      { name: 'notes', type: 'TEXT' }, // 견적 메모
+      { name: 'submitted_by_user_id', type: 'TEXT' }, // 상신자 ID
+      { name: 'submitted_at', type: 'TEXT' }, // 상신일시
+      { name: 'reject_reason', type: 'TEXT' }, // 반려 사유
       { name: 'created_at', type: 'TEXT', notNull: true }
     ],
     uniqueKeyColumns: ['id']
@@ -919,12 +938,80 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
       { name: 'created_at', type: 'TEXT', notNull: true }
     ],
     uniqueKeyColumns: ['id']
+  },
+  {
+    name: 'company_contacts',
+    displayName: '고객사 담당자 대장',
+    description: '고객사별 담당자(이름, 부서, 직급, 전화번호, 이메일, 비고)',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'company_id', type: 'TEXT', notNull: true },
+      { name: 'contact_name', type: 'TEXT', notNull: true },
+      { name: 'department', type: 'TEXT' },
+      { name: 'position', type: 'TEXT' },
+      { name: 'phone', type: 'TEXT' },
+      { name: 'email', type: 'TEXT' },
+      { name: 'is_primary', type: 'INTEGER' }, // 대표 담당자 여부 (1 or 0)
+      { name: 'notes', type: 'TEXT' },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
+  },
+  {
+    name: 'upload_batches',
+    displayName: '업로드 배치 관리',
+    description: '일괄 업로드 세션 관리 및 진행률',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'batch_name', type: 'TEXT', notNull: true },
+      { name: 'status', type: 'TEXT', notNull: true }, // UPLOADING, PROCESSING, COMPLETED, FAILED
+      { name: 'total_files', type: 'INTEGER', notNull: true },
+      { name: 'processed_files', type: 'INTEGER', notNull: true },
+      { name: 'failed_files', type: 'INTEGER', notNull: true },
+      { name: 'created_by_user_id', type: 'TEXT', notNull: true },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
+  },
+  {
+    name: 'batch_items',
+    displayName: '업로드 배치 항목 및 분석 큐',
+    description: '파일별 분석 상태, 진행률, 오류, 재시도, 임시저장 데이터',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'batch_id', type: 'TEXT', notNull: true },
+      { name: 'uploaded_file_id', type: 'TEXT' },
+      { name: 'quotation_case_id', type: 'TEXT' },
+      { name: 'file_name', type: 'TEXT', notNull: true },
+      { name: 'file_size', type: 'INTEGER' },
+      { name: 'status', type: 'TEXT', notNull: true }, // PENDING(대기), ANALYZING(분석 중), READY(검토 준비), ON_HOLD(보류), COMPLETED(완료), ERROR(오류)
+      { name: 'progress', type: 'INTEGER' }, // 진행률 (0~100)
+      { name: 'error_message', type: 'TEXT' }, // 오류 내용
+      { name: 'retry_count', type: 'INTEGER' }, // 재시도 횟수
+      { name: 'sort_order', type: 'INTEGER' }, // 정렬 순서
+      { name: 'draft_data', type: 'TEXT' }, // 임시저장 JSON 데이터
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
   }
 ];
 
-export async function setupDatabase(): Promise<{ success: boolean; message: string; results?: any }> {
-  console.log('🚀 [CADON Zero-Config Setup] Initializing EGDesk Database with Auto-Audit Columns...');
+export interface SetupDatabaseOptions {
+  /** true면 누락 컬럼/신규 테이블만 보고하고 DB는 변경하지 않음 */
+  dryRun?: boolean;
+  /** 지정 시 해당 테이블만 생성/마이그레이션 (기본 데이터 시딩 생략, egdesk.schema.ts 동기화는 수행) */
+  onlyTables?: string[];
+}
+
+export async function setupDatabase(
+  options: SetupDatabaseOptions = {}
+): Promise<{ success: boolean; message: string; results?: any }> {
+  const { dryRun = false, onlyTables } = options;
+  const onlySet = onlyTables && onlyTables.length > 0 ? new Set(onlyTables.map(t => t.toLowerCase())) : null;
+  console.log(`🚀 [CADON Zero-Config Setup] Initializing EGDesk Database with Auto-Audit Columns...${dryRun ? ' (DRY-RUN)' : ''}`);
   const now = new Date().toISOString();
+  const migrationBackupDir = path.join(getBackupRoot(), `migration-${makeTimestamp()}`);
+  const report: Array<{ table: string; action: string; detail?: string }> = [];
 
   // 1. 현재 존재하는 테이블 목록 조회
   let existingTables: string[] = [];
@@ -932,11 +1019,13 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
     const listRes = await listTables();
     existingTables = (listRes.tables || []).map((t: any) => t.tableName.toLowerCase());
   } catch (e: any) {
-    console.warn('⚠️ listTables check failed, will try direct operations:', e.message);
+    console.error('❌ listTables check failed:', e.message);
+    throw new Error(`테이블 목록 조회 실패: ${e.message} (안전을 위해 작업을 중단합니다)`);
   }
 
   // 2. 34개 테이블 순회하며 8종 감사 컬럼 주입 및 생성/보정
   for (const spec of CADON_TABLE_SPECS) {
+    if (onlySet && !onlySet.has(spec.name.toLowerCase())) continue;
     const tableName = spec.name;
     const tableDisplayName = spec.displayName;
     
@@ -949,6 +1038,10 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
     }
 
     if (!existingTables.includes(tableName.toLowerCase())) {
+      if (dryRun) {
+        report.push({ table: tableName, action: 'CREATE' });
+        continue;
+      }
       console.log(`[Setup] Creating table "${tableName}" with audit columns...`);
       try {
         await createTable(tableDisplayName, finalColumns as any, {
@@ -956,8 +1049,10 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
           uniqueKeyColumns: spec.uniqueKeyColumns || ['id']
         });
         console.log(`✓ Table "${tableName}" created.`);
+        report.push({ table: tableName, action: 'CREATED' });
       } catch (err: any) {
         console.error(`❌ Failed to create table "${tableName}":`, err.message);
+        report.push({ table: tableName, action: 'CREATE_FAILED', detail: err.message });
       }
     } else {
       // 기존 테이블의 누락 컬럼 확인 및 안전한 테이블 재구축(데이터 100% 보존) 마이그레이션
@@ -967,16 +1062,23 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
         const missingCols = finalColumns.filter(c => !currentCols.includes(c.name.toLowerCase()));
 
         if (missingCols.length > 0) {
-          console.log(`[Auto-Migration] Table "${tableName}" has ${missingCols.length} missing columns (${missingCols.map(c => c.name).join(', ')}). Rebuilding schema with data preservation...`);
-          
-          // 1. 기존 데이터 백업
-          let oldRows: any[] = [];
-          try {
-            const queryRes = await queryTable(tableName);
-            oldRows = Array.isArray(queryRes) ? queryRes : (queryRes?.rows || []);
-          } catch (fetchErr: any) {
-            console.warn(`Could not read old rows for ${tableName}:`, fetchErr.message);
+          const missingNames = missingCols.map(c => c.name).join(', ');
+          if (dryRun) {
+            const rowCount = await countRows(tableName).catch(() => -1);
+            report.push({ table: tableName, action: 'REBUILD', detail: `누락 컬럼: ${missingNames} / 보존 대상 ${rowCount}행` });
+            continue;
           }
+          console.log(`[Auto-Migration] Table "${tableName}" has ${missingCols.length} missing columns (${missingNames}). Rebuilding schema with data preservation...`);
+
+          // 0. 신규 NOT NULL 컬럼은 기존 행 복원 시 실패하므로 재구축 자체를 중단 (기본값 없는 NOT NULL 추가 금지)
+          const notNullAdds = missingCols.filter(c => c.notNull);
+
+          // 1. 기존 데이터 전량 백업 (페이지 조회 + COUNT 검증 + JSON 파일 저장). 실패 시 테이블을 삭제하지 않음.
+          const { rows: oldRows, file: backupFile } = await backupTableToFile(tableName, migrationBackupDir);
+          if (notNullAdds.length > 0 && oldRows.length > 0) {
+            throw new Error(`기존 ${oldRows.length}행이 있는 테이블에 NOT NULL 컬럼(${notNullAdds.map(c => c.name).join(', ')})을 추가할 수 없습니다. nullable로 정의하세요.`);
+          }
+          console.log(`  ↳ 백업 완료: ${backupFile} (${oldRows.length}행)`);
 
           // 2. 기존 테이블 삭제
           await deleteTable(tableName);
@@ -987,7 +1089,7 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
             uniqueKeyColumns: spec.uniqueKeyColumns || ['id']
           });
 
-          // 4. 백업 데이터 복원
+          // 4. 백업 데이터 복원 (청크 단위)
           if (oldRows.length > 0) {
             const validColNames = finalColumns.map(c => c.name);
             const cleanedRows = oldRows.map(row => {
@@ -1001,16 +1103,43 @@ export async function setupDatabase(): Promise<{ success: boolean; message: stri
               }
               return cleaned;
             });
-            await insertRows(tableName, cleanedRows);
-            console.log(`✓ Table "${tableName}" rebuilt and ${cleanedRows.length} rows preserved.`);
+            const CHUNK = 500;
+            for (let i = 0; i < cleanedRows.length; i += CHUNK) {
+              await insertRows(tableName, cleanedRows.slice(i, i + CHUNK));
+            }
+            const restored = await countRows(tableName);
+            if (restored !== cleanedRows.length) {
+              throw new Error(`복원 건수 불일치: 백업 ${cleanedRows.length}행 / 복원 ${restored}행. 백업 파일로 복구하세요: ${backupFile}`);
+            }
+            console.log(`✓ Table "${tableName}" rebuilt and ${restored} rows preserved.`);
           } else {
             console.log(`✓ Table "${tableName}" rebuilt (was empty).`);
           }
+          report.push({ table: tableName, action: 'REBUILT', detail: `추가 컬럼: ${missingNames} / ${oldRows.length}행 보존` });
         }
       } catch (altErr: any) {
-        console.warn(`[Auto-Migration Warning] Failed to migrate "${tableName}":`, altErr.message);
+        console.error(`[Auto-Migration Error] Failed to migrate "${tableName}":`, altErr.message);
+        report.push({ table: tableName, action: 'MIGRATION_FAILED', detail: altErr.message });
       }
     }
+  }
+
+  if (dryRun) {
+    console.log('🔎 [DRY-RUN] 변경 예정 내역:', report.length ? '' : '없음');
+    for (const r of report) console.log(`  - ${r.table}: ${r.action}${r.detail ? ` (${r.detail})` : ''}`);
+    return { success: true, message: 'Dry-run complete. No changes applied.', results: report };
+  }
+
+  const failures = report.filter(r => r.action.endsWith('FAILED'));
+
+  // onlyTables 지정 시 시딩/스키마 파일 동기화는 생략 (범위 한정 마이그레이션)
+  if (onlySet) {
+    await syncEgdeskSchemaFile();
+    return {
+      success: failures.length === 0,
+      message: failures.length ? `Scoped migration finished with ${failures.length} failure(s).` : 'Scoped migration complete.',
+      results: report
+    };
   }
 
   // 3. 기본 관리자 계정 및 기본 플레이스홀더 시딩

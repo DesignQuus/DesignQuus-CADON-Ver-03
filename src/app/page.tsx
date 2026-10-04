@@ -58,9 +58,9 @@ interface UserProfile {
   myActiveCasesCount?: number;
 }
 
-export type PipelineStage = '1' | '2' | '3' | '4';
+type PipelineStage = '1' | '2' | '3' | '4';
 
-export const PIPELINE_STAGE_LABELS: Record<PipelineStage, string> = {
+const PIPELINE_STAGE_LABELS: Record<PipelineStage, string> = {
   '1': '1단계: 도면 접수 & CAD 파싱',
   '2': '2단계: 멀티레벨 BOM 자동 전개',
   '3': '3단계: 단가 마스터 매칭 & 원가 산출',
@@ -85,6 +85,10 @@ interface QuotationCase {
   is_deleted?: boolean;
   remaining_days?: number | null;
   deleted_at?: string | null;
+  status?: string;
+  lifecycle_status?: string | null;
+  archived_at?: string | null;
+  archive_reason?: string | null;
 }
 
 interface CompanySummary {
@@ -232,6 +236,7 @@ export default function HomePage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingStep, setSubmittingStep] = useState<string>('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -328,6 +333,7 @@ export default function HomePage() {
     }
 
     try {
+      setSubmittingStep('신규 견적의뢰 채번 중...');
       // 1. 견적 건 생성
       const createRes = await apiFetch('/api/quotation-cases', {
         method: 'POST',
@@ -346,8 +352,9 @@ export default function HomePage() {
 
       const newCaseId = createData.caseId;
 
-      // 2. 파일이 선택되어 있으면 업로드 및 자동 분석 수행
+      // 2. 파일이 선택되어 있으면 업로드 및 자동 분석 비동기 트리거
       if (selectedFile) {
+        setSubmittingStep(`도면 파일 업로드 중... (${(selectedFile.size / 1024 / 1024).toFixed(1)} MB)`);
         const formData = new FormData();
         formData.append('file', selectedFile);
         const uploadRes = await apiFetch(`/api/quotation-cases/${newCaseId}/upload`, {
@@ -372,13 +379,15 @@ export default function HomePage() {
         }
       }
 
-      // 3. 파일 업로드 완료 즉시 모달 닫고 워크벤치 상세 페이지로 1초 만에 전환!
+      // 3. 파일 업로드 완료 즉시 모달 닫고 워크벤치 상세 페이지로 0.5초 만에 즉시 전환!
+      setSubmittingStep('등록 완료! 분석 워크스페이스로 이동 중...');
       setIsUploadModalOpen(false);
       setIsSubmitting(false);
       window.location.href = `/cases/${newCaseId}`;
     } catch (err: any) {
       setSubmitError(err.message || '견적 등록 중 오류가 발생했습니다.');
       setIsSubmitting(false);
+      setSubmittingStep('');
     }
   };
 
@@ -387,7 +396,7 @@ export default function HomePage() {
     if (!confirm(`[${caseName || '해당 건'}] 건을 정상 작업 상태로 복원하시겠습니까?`)) return;
     try {
       const res = await apiFetch(`/api/quotation-cases/${caseId}/lifecycle`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'RESTORE' })
       });
@@ -395,7 +404,16 @@ export default function HomePage() {
         setCases((prev) =>
           prev.map((c) =>
             c.id === caseId
-              ? { ...c, is_deleted: false, deleted_at: null, remaining_days: null }
+              ? {
+                  ...c,
+                  is_deleted: false,
+                  deleted_at: null,
+                  remaining_days: null,
+                  lifecycle_status: null,
+                  archived_at: null,
+                  archive_reason: null,
+                  status: c.status === 'ARCHIVED' || c.status === 'DELETED' ? 'ANALYZED' : c.status
+                }
               : c
           )
         );
@@ -2458,12 +2476,12 @@ export default function HomePage() {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>도면 분석 파이프라인 가동 중...</span>
+                      <span>{submittingStep || '도면 등록 및 분석 파이프라인 가동 중...'}</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      <span>⚡ 도면 분석 및 견적 등록 시작</span>
+                      <span>⚡ 도면 등록 및 AI 분석 시작 (0.5초 즉시 전환)</span>
                     </>
                   )}
                 </button>

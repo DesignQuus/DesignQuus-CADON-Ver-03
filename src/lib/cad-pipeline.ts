@@ -118,46 +118,76 @@ export async function processCadFilePipeline(
   // 2. Parse DXF (PROMPT 04)
   const absoluteDxfPath = resolveStoragePath(effectiveDxfPath);
 
-  // 2-B. Start WebGL binary buffer & HD Vector SVG generation in parallel background
+  // 2-B. Start WebGL binary buffer & HD Vector SVG generation in parallel background (File-scoped isolation)
   const derivedStorageDir = getStorageSubdir('derived');
   fs.mkdirSync(derivedStorageDir, { recursive: true });
 
-  const webglBinName = `${quotationCaseId}__cad_webgl.bin`;
+  const webglBinName = `${quotationCaseId}_${sourceFileId}__cad_webgl.bin`;
+  const legacyWebglBinName = `${quotationCaseId}__cad_webgl.bin`;
   const webglBinPath = path.join(derivedStorageDir, webglBinName);
   const webglPromise = runPythonScript('cad_webgl_exporter.py', [absoluteDxfPath, webglBinPath])
     .then(() => {
-      // Synchronize to workspace storage/derived as well
+      // Synchronize to workspace storage/derived as well & provide backward-compatible copy
       const localDerived = path.join(process.cwd(), 'storage', 'derived');
-      if (fs.existsSync(localDerived) && localDerived !== derivedStorageDir) {
-        try {
+      fs.mkdirSync(localDerived, { recursive: true });
+
+      const txtName = webglBinName.replace('__cad_webgl.bin', '__cad_texts.json');
+      const rasterName = webglBinName.replace('__cad_webgl.bin', '__cad_rasters.json');
+      const legacyTxtName = legacyWebglBinName.replace('__cad_webgl.bin', '__cad_texts.json');
+      const legacyRasterName = legacyWebglBinName.replace('__cad_webgl.bin', '__cad_rasters.json');
+
+      try {
+        // Also provide case-level alias for single-file/backward compatibility
+        const legacyBinPath = path.join(derivedStorageDir, legacyWebglBinName);
+        fs.copyFileSync(webglBinPath, legacyBinPath);
+        if (localDerived !== derivedStorageDir) {
           fs.copyFileSync(webglBinPath, path.join(localDerived, webglBinName));
-          const txtName = webglBinName.replace('__cad_webgl.bin', '__cad_texts.json');
-          const srcTxt = path.join(derivedStorageDir, txtName);
-          if (fs.existsSync(srcTxt)) {
-            fs.copyFileSync(srcTxt, path.join(localDerived, txtName));
-          }
-          const rasterName = webglBinName.replace('__cad_webgl.bin', '__cad_rasters.json');
-          const srcRaster = path.join(derivedStorageDir, rasterName);
-          if (fs.existsSync(srcRaster)) {
-            fs.copyFileSync(srcRaster, path.join(localDerived, rasterName));
-          }
-        } catch (copyErr) {
-          console.warn('WebGL storage sync warning:', copyErr);
+          fs.copyFileSync(webglBinPath, path.join(localDerived, legacyWebglBinName));
         }
+
+        const srcTxt = path.join(derivedStorageDir, txtName);
+        if (fs.existsSync(srcTxt)) {
+          fs.copyFileSync(srcTxt, path.join(derivedStorageDir, legacyTxtName));
+          if (localDerived !== derivedStorageDir) {
+            fs.copyFileSync(srcTxt, path.join(localDerived, txtName));
+            fs.copyFileSync(srcTxt, path.join(localDerived, legacyTxtName));
+          }
+        }
+
+        const srcRaster = path.join(derivedStorageDir, rasterName);
+        if (fs.existsSync(srcRaster)) {
+          fs.copyFileSync(srcRaster, path.join(derivedStorageDir, legacyRasterName));
+          if (localDerived !== derivedStorageDir) {
+            fs.copyFileSync(srcRaster, path.join(localDerived, rasterName));
+            fs.copyFileSync(srcRaster, path.join(localDerived, legacyRasterName));
+          }
+        }
+      } catch (copyErr) {
+        console.warn('WebGL storage sync warning:', copyErr);
       }
     })
     .catch((webglErr) => console.warn('WebGL binary export warning:', webglErr));
 
-  const svgFileName = `${quotationCaseId}__hd_vector.svg`;
+  const svgFileName = `${quotationCaseId}_${sourceFileId}__hd_vector.svg`;
+  const legacySvgFileName = `${quotationCaseId}__hd_vector.svg`;
   const svgFilePath = path.join(derivedStorageDir, svgFileName);
 
   const svgPromise = runPythonScript('vector_svg_renderer.py', [absoluteDxfPath, svgFilePath])
     .then(async (svgResult) => {
       if (svgResult && svgResult.status === 'SUCCESS') {
+        try {
+          fs.copyFileSync(svgFilePath, path.join(derivedStorageDir, legacySvgFileName));
+          const localDerived = path.join(process.cwd(), 'storage', 'derived');
+          if (fs.existsSync(localDerived) && localDerived !== derivedStorageDir) {
+            fs.copyFileSync(svgFilePath, path.join(localDerived, svgFileName));
+            fs.copyFileSync(svgFilePath, path.join(localDerived, legacySvgFileName));
+          }
+        } catch {}
+
         await db.prepare(`
           DELETE FROM uploaded_files
-          WHERE quotation_case_id = ? AND file_role = 'VECTOR_SVG'
-        `).run(quotationCaseId);
+          WHERE quotation_case_id = ? AND derived_from_file_id = ? AND file_role = 'VECTOR_SVG'
+        `).run(quotationCaseId, file.id);
 
         const svgFileId = `file_svg_${Date.now()}`;
         await db.prepare(`
@@ -247,7 +277,6 @@ export async function processCadFilePipeline(
 
   // Save Drawings to DB (source_file_id 기반 격리 저장 - 다른 도면 데이터 보존)
   await db.prepare('DELETE FROM drawings WHERE quotation_case_id = ? AND (source_file_id = ? OR source_file_id IS NULL)').run(quotationCaseId, sourceFileId);
-  await db.prepare('DELETE FROM drawing_relationships WHERE quotation_case_id = ?').run(quotationCaseId);
 
   if (structureResult.drawings && structureResult.drawings.length > 0) {
     const dwgRows = structureResult.drawings.map((d: any) => {
@@ -363,11 +392,52 @@ export async function processCadFilePipeline(
         console.warn('Auto case name update warning:', titleErr);
       }
     }
+
+    // Auto-update Designer and Project Name from Title Block if empty
+    const detectedDesigner = structureResult.drawings.find((d: any) => d.designer && d.designer !== '-' && d.designer !== '')?.designer;
+    const detectedProjName = structureResult.drawings.find((d: any) => d.project_name && d.project_name !== '-' && d.project_name !== '')?.project_name;
+    if (detectedDesigner || detectedProjName) {
+      try {
+        const caseRow = (await db.prepare('SELECT designer_name, project_name FROM quotation_cases WHERE id = ?').get(quotationCaseId)) as any;
+        const updates: string[] = [];
+        const params: any[] = [];
+        if (!caseRow?.designer_name && detectedDesigner) {
+          updates.push('designer_name = ?');
+          params.push(detectedDesigner);
+        }
+        if (!caseRow?.project_name && detectedProjName) {
+          updates.push('project_name = ?');
+          params.push(detectedProjName);
+        }
+        if (updates.length > 0) {
+          updates.push('updated_at = ?');
+          params.push(now);
+          params.push(quotationCaseId);
+          await db.prepare(`UPDATE quotation_cases SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+        }
+      } catch (metaErr) {
+        console.warn('Auto metadata update warning:', metaErr);
+      }
+    }
   }
 
   if (structureResult.relationships && structureResult.relationships.length > 0) {
+    // 현재 파일의 도면들에 연결된 기존 계층 관계만 선별 삭제 (다른 파일의 도면 관계 보존)
+    const currentDrawingNos = Array.from(new Set(
+      (structureResult.drawings || []).flatMap((d: any) => [d.drawing_no_raw, d.drawing_no_normalized]).filter(Boolean)
+    )) as string[];
+
+    if (currentDrawingNos.length > 0) {
+      const placeholders = currentDrawingNos.map(() => '?').join(',');
+      await db.prepare(`
+        DELETE FROM drawing_relationships 
+        WHERE quotation_case_id = ? 
+          AND (parent_drawing_no IN (${placeholders}) OR child_drawing_no IN (${placeholders}))
+      `).run(quotationCaseId, ...currentDrawingNos, ...currentDrawingNos);
+    }
+
     const relRows = structureResult.relationships.map((r: any, idx: number) => ({
-      id: `rel_${quotationCaseId}_${idx + 1}`,
+      id: `rel_${sourceFileId}_${idx + 1}`,
       quotation_case_id: quotationCaseId,
       parent_drawing_no: r.parent_drawing_no,
       child_drawing_no: r.child_drawing_no,
@@ -420,11 +490,22 @@ export async function processCadFilePipeline(
     await insertRows('raw_bom_items', rbRows);
   }
 
-  // 8. Multi-Level BOM & Quantity Roll-Up (Computed in-memory by fast_cad_analyzer)
-  await db.prepare('DELETE FROM flattened_bom_items WHERE quotation_case_id = ?').run(quotationCaseId);
+  // 8. Multi-Level BOM & Quantity Roll-Up (File-scoped isolation)
+  const otherSources = (await db.prepare(`
+    SELECT COUNT(*) as cnt FROM uploaded_files
+    WHERE quotation_case_id = ? AND id != ? AND file_role != 'VECTOR_SVG' AND file_type IN ('DWG', 'DXF')
+  `).get(quotationCaseId, sourceFileId)) as any;
+  const isOnlySource = (otherSources?.cnt || 0) === 0;
+
+  if (isOnlySource) {
+    await db.prepare('DELETE FROM flattened_bom_items WHERE quotation_case_id = ?').run(quotationCaseId);
+  } else {
+    await db.prepare("DELETE FROM flattened_bom_items WHERE quotation_case_id = ? AND id LIKE 'fb_' || ? || '_%'").run(quotationCaseId, sourceFileId);
+  }
+
   if (pipelineResult.flattened_bom && pipelineResult.flattened_bom.length > 0) {
     const flatRows = pipelineResult.flattened_bom.map((fb: any, idx: number) => ({
-      id: `fb_${quotationCaseId}_${idx + 1}`,
+      id: `fb_${sourceFileId}_${idx + 1}`,
       quotation_case_id: quotationCaseId,
       item_key: fb.key,
       part_no: fb.part_no,
@@ -440,15 +521,22 @@ export async function processCadFilePipeline(
     await insertRows('flattened_bom_items', flatRows);
   }
 
-  // 9. BOM Normalization (Computed in-memory by fast_cad_analyzer)
+  // 9. BOM Normalization (File-scoped isolation)
   const tempNormJson = path.join(tempDir, `norm_${parseRunId}.json`);
   fs.writeFileSync(tempNormJson, JSON.stringify({ normalized_items: pipelineResult.normalized_items || [] }));
 
-  await db.prepare('DELETE FROM normalized_bom_items WHERE quotation_case_id = ?').run(quotationCaseId);
+  if (isOnlySource) {
+    await db.prepare('DELETE FROM master_candidates WHERE normalized_item_id IN (SELECT id FROM normalized_bom_items WHERE quotation_case_id = ?)').run(quotationCaseId);
+    await db.prepare('DELETE FROM normalized_bom_items WHERE quotation_case_id = ?').run(quotationCaseId);
+  } else {
+    await db.prepare("DELETE FROM master_candidates WHERE normalized_item_id IN (SELECT id FROM normalized_bom_items WHERE quotation_case_id = ? AND id LIKE 'norm_' || ? || '_%')").run(quotationCaseId, sourceFileId);
+    await db.prepare("DELETE FROM normalized_bom_items WHERE quotation_case_id = ? AND id LIKE 'norm_' || ? || '_%'").run(quotationCaseId, sourceFileId);
+  }
+
   const normIds: string[] = [];
   if (pipelineResult.normalized_items && pipelineResult.normalized_items.length > 0) {
     const normRows = pipelineResult.normalized_items.map((ni: any, idx: number) => {
-      const nId = `norm_${quotationCaseId}_${idx + 1}`;
+      const nId = `norm_${sourceFileId}_${idx + 1}`;
       normIds.push(nId);
       return {
         id: nId,
@@ -470,7 +558,7 @@ export async function processCadFilePipeline(
     await insertRows('normalized_bom_items', normRows);
   }
 
-  // 10. Master Candidate Matching (PROMPT 12 & Phase 1-B DB 연동)
+  // 10. Master Candidate Matching (PROMPT 12 & Phase 1-B DB 연동 - File-scoped)
   let tempMastersJson = '';
   try {
     const mastersRes = await queryTable('product_masters', { limit: 1000 });
@@ -490,7 +578,7 @@ export async function processCadFilePipeline(
       aliases: aliasMap.get(m.id) || []
     }));
 
-    tempMastersJson = path.join(tempDir, `masters_${quotationCaseId}.json`);
+    tempMastersJson = path.join(tempDir, `masters_${sourceFileId}.json`);
     fs.writeFileSync(tempMastersJson, JSON.stringify(fullMasters, null, 2), 'utf-8');
   } catch (mErr) {
     console.warn('Failed to load masters from DB for matching:', mErr);
@@ -501,7 +589,6 @@ export async function processCadFilePipeline(
     : [tempNormJson];
   const masterResult = await runPythonScript('master_matcher.py', matcherArgs);
   
-  await db.prepare('DELETE FROM master_candidates WHERE normalized_item_id IN (SELECT id FROM normalized_bom_items WHERE quotation_case_id = ?)').run(quotationCaseId);
   const candRows: any[] = [];
   for (let i = 0; i < masterResult.results.length; i++) {
     const mr = masterResult.results[i];
@@ -543,13 +630,84 @@ export async function processCadFilePipeline(
     WHERE id = ?
   `).run(now, quotationCaseId);
 
-  // Ensure WebGL binary & texts generation has finished before returning
-  try {
-    await webglPromise;
-  } catch (err) {
-    console.warn('WebGL promise wait warning:', err);
-  }
+  // Background Note: WebGL binary and HD Vector SVG continue running in parallel background
+  // and populate storage/derived without blocking the HTTP analysis response.
+  webglPromise.catch((err) => console.warn('Background WebGL export warning:', err));
 
-  // Background Note: svgPromise continues running in parallel and saves VECTOR_SVG file upon completion
+  // 🧠 [Option 2] AI 멀티모달(VLM) 기반 표제란·BOM 고정밀 자동 판독 및 메타데이터 보정 (Non-blocking)
+  runAiVlmRefinement(quotationCaseId).catch((aiErr) => {
+    console.warn('[cad-pipeline] AI VLM refinement background warning:', aiErr);
+  });
+
   return { success: true };
 }
+
+/**
+ * 🧠 AI 멀티모달 VLM 기반 표제란 및 BOM 고정밀 자동 판독 & 보정 서비스
+ */
+async function runAiVlmRefinement(quotationCaseId: string) {
+  try {
+    const { analyzeCadCaseWithAi } = await import('./cad-ai-service');
+    const aiResult = await analyzeCadCaseWithAi(quotationCaseId);
+    if (!aiResult) return;
+
+    // Cache AI analysis result for fast client UI retrieval
+    try {
+      const { getStorageSubdir } = await import('./storage');
+      const derivedDir = getStorageSubdir('derived');
+      const cacheFile = path.join(derivedDir, `${quotationCaseId}__ai_insights.json`);
+      fs.writeFileSync(cacheFile, JSON.stringify(aiResult, null, 2), 'utf-8');
+    } catch (saveErr) {
+      console.warn('[cad-pipeline] Failed to cache ai_insights:', saveErr);
+    }
+
+    const now = new Date().toISOString();
+    const tb = aiResult.titleBlockAnalysis;
+    const notes = aiResult.drawingAndMachiningFeatures?.criticalManufacturingNotes || [];
+
+    // 1. 발주 고객사 판별 및 자동 연동
+    const detectedCustomer = tb?.detectedCompany || tb?.customerCompany;
+    if (detectedCustomer && detectedCustomer !== '미지정' && detectedCustomer !== '-') {
+      const cleanCust = detectedCustomer.replace(/[\s().:_-]/g, '').toLowerCase();
+      const isSelfSupplier = cleanCust.includes('세창') || cleanCust.includes('sechang');
+      if (!isSelfSupplier) {
+        let comp = (await db.prepare('SELECT id FROM companies WHERE company_name = ?').get(detectedCustomer)) as any;
+        if (!comp) {
+          const newCompId = `comp_${Date.now()}`;
+          const compCode = `CUST-${Date.now().toString().slice(-4)}`;
+          await db.prepare(`
+            INSERT INTO companies (id, company_code, company_name, company_type, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, 'CUSTOMER', 1, ?, ?)
+          `).run(newCompId, compCode, detectedCustomer, now, now);
+          comp = { id: newCompId };
+        }
+        await db.prepare('UPDATE quotation_cases SET company_id = ?, updated_at = ? WHERE id = ?').run(comp.id, now, quotationCaseId);
+      }
+    }
+
+    // 2. 프로젝트명, 설계자명 및 AI 감지 가공 특기사항(견적 메모) 자동 갱신
+    const updates: string[] = ['updated_at = ?'];
+    const params: any[] = [now];
+
+    if (tb?.projectName && tb.projectName !== '-') {
+      updates.push('project_name = ?');
+      params.push(tb.projectName);
+    }
+    if (tb?.designerCompany && tb.designerCompany !== '-') {
+      updates.push('designer_name = ?');
+      params.push(tb.designerCompany);
+    }
+    if (notes.length > 0) {
+      const memoText = notes.map((n: string) => `• ${n}`).join('\n');
+      updates.push('quote_memo = COALESCE(quote_memo || "\n\n", "") || "[AI 제조 특기사항 자동 감지]\n" || ?');
+      params.push(memoText);
+    }
+
+    params.push(quotationCaseId);
+    await db.prepare(`UPDATE quotation_cases SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    console.log(`[cad-pipeline] AI VLM refinement completed for case ${quotationCaseId} (Customer: ${detectedCustomer || 'N/A'})`);
+  } catch (e) {
+    console.warn('[runAiVlmRefinement] Execution warning:', e);
+  }
+}
+

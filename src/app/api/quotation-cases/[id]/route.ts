@@ -14,7 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (typeof process !== 'undefined') {
-    process.env.NEXT_PUBLIC_EGDESK_API_URL = 'http://localhost:8080';
+    process.env['NEXT_PUBLIC_EGDESK_API_URL'] = 'http://localhost:8080';
   }
 
   const session = await getSession();
@@ -39,7 +39,7 @@ export async function GET(
     ...rawQc,
     company_name: company?.company_name || '',
     company_code: company?.company_code || '',
-    project_name: project?.project_name || '',
+    project_name: rawQc.project_name || project?.project_name || '',
     project_code: project?.project_code || '',
     created_by_name: creator?.name || '담당자'
   };
@@ -410,12 +410,24 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    const { companyId, companyName, projectId, projectName, caseName } = body;
+    const {
+      companyId, companyName, projectId, projectName, caseName,
+      managerName, managerContact, designerName, department,
+      quoteMemo, requestDate, queueOrder
+    } = body;
     const now = new Date().toISOString();
 
     let targetCompanyId = qc.company_id;
     let targetProjectId = qc.project_id;
     let targetCaseName = qc.case_name;
+    let targetManagerName = managerName !== undefined ? managerName : qc.manager_name;
+    let targetManagerContact = managerContact !== undefined ? managerContact : qc.manager_contact;
+    let targetDesignerName = designerName !== undefined ? designerName : qc.designer_name;
+    let targetDepartment = department !== undefined ? department : qc.department;
+    let targetQuoteMemo = quoteMemo !== undefined ? quoteMemo : qc.quote_memo;
+    let targetRequestDate = requestDate !== undefined ? requestDate : qc.request_date;
+    let targetQueueOrder = queueOrder !== undefined ? queueOrder : qc.queue_order;
+    let targetProjectName = projectName !== undefined ? projectName : qc.project_name;
 
     // 1. Resolve company with strict sanitization & duplicate guard
     if (companyId) {
@@ -469,6 +481,7 @@ export async function PATCH(
       targetProjectId = projectId;
     } else if (projectName && projectName.trim()) {
       const trimmedP = projectName.trim();
+      targetProjectName = trimmedP;
       const existingP = (await db.prepare('SELECT id FROM projects WHERE company_id = ? AND project_name = ?').get(targetCompanyId, trimmedP)) as any;
       if (existingP) {
         targetProjectId = existingP.id;
@@ -488,15 +501,23 @@ export async function PATCH(
 
     await db.prepare(`
       UPDATE quotation_cases
-      SET company_id = ?, project_id = ?, case_name = ?, updated_at = ?
+      SET company_id = ?, project_id = ?, case_name = ?,
+          manager_name = ?, manager_contact = ?, designer_name = ?,
+          department = ?, project_name = ?, quote_memo = ?,
+          request_date = ?, queue_order = ?, updated_at = ?
       WHERE id = ?
-    `).run(targetCompanyId, targetProjectId, targetCaseName, now, id);
+    `).run(
+      targetCompanyId, targetProjectId, targetCaseName,
+      targetManagerName, targetManagerContact, targetDesignerName,
+      targetDepartment, targetProjectName, targetQuoteMemo,
+      targetRequestDate, targetQueueOrder, now, id
+    );
 
     const updated = await db.prepare(`
       SELECT qc.*, c.company_name, c.company_code, p.project_name, p.project_code
       FROM quotation_cases qc
-      JOIN companies c ON qc.company_id = c.id
-      JOIN projects p ON qc.project_id = p.id
+      LEFT JOIN companies c ON qc.company_id = c.id
+      LEFT JOIN projects p ON qc.project_id = p.id
       WHERE qc.id = ?
     `).get(id);
 

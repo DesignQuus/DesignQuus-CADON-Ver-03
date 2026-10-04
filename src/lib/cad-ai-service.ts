@@ -225,14 +225,21 @@ ${matchedRag.matched ? `\n[★ RAG 지식 베이스 - 기학습된 도면 골든
 }`;
 
   try {
-    const aiResponse = await callAiCaller(
-      `다음은 CADON-BOM 시스템에서 추출된 도면 표제란, CAD 텍스트 및 도면 데이터입니다:\n${JSON.stringify(promptContext, null, 2)}`,
-      {
-        model: 'gemini-2.5-flash',
-        systemPrompt: systemInstruction,
-        temperature: 0.1
-      }
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('AI Caller timeout (10s elapsed)')), 10000)
     );
+
+    const aiResponse = await Promise.race([
+      callAiCaller(
+        `다음은 CADON-BOM 시스템에서 추출된 도면 표제란, CAD 텍스트 및 도면 데이터입니다:\n${JSON.stringify(promptContext, null, 2)}`,
+        {
+          model: 'gemini-2.5-flash',
+          systemPrompt: systemInstruction,
+          temperature: 0.1
+        }
+      ),
+      timeoutPromise
+    ]);
 
     let parsedJson: any = null;
     const rawContent = aiResponse.content.trim();

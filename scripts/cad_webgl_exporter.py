@@ -1380,6 +1380,109 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
         track_boxes = bool(proxy_sheet_inserts)
         msp_entity_boxes = []   # (x0, y0, x1, y1)
 
+        # ------------------------------------------------------------------
+        # ⚡ AutoCAD / ISO 표준 선종(Linetype: CENTER, HIDDEN, PHANTOM 등) 테셀레이터
+        # ------------------------------------------------------------------
+        global_ltscale = float(doc.header.get('$LTSCALE', 1.0) or 1.0)
+        if global_ltscale <= 0:
+            global_ltscale = 1.0
+
+        STANDARD_LINETYPES = {
+            'CENTER': [1.25, -0.25, 0.25, -0.25],       # 1점 쇄선 (____ _ ____ _ ____)
+            'CENTER2': [0.625, -0.125, 0.125, -0.125],  # 0.5x
+            'CENTERX2': [2.5, -0.5, 0.5, -0.5],         # 2.0x
+            'HIDDEN': [0.25, -0.125],                   # 파선/은선 (_ _ _ _ _)
+            'HIDDEN2': [0.125, -0.0625],
+            'HIDDENX2': [0.5, -0.25],
+            'DASHED': [0.5, -0.25],                     # 대시
+            'DASHED2': [0.25, -0.125],
+            'DASHEDX2': [1.0, -0.5],
+            'PHANTOM': [1.25, -0.25, 0.25, -0.25, 0.25, -0.25], # 2점 쇄선
+            'PHANTOM2': [0.625, -0.125, 0.125, -0.125, 0.125, -0.125],
+            'PHANTOMX2': [2.5, -0.5, 0.5, -0.5, 0.5, -0.5],
+            'DASHDOT': [0.5, -0.25, 0.0, -0.25],
+            'DOT': [0.0, -0.25],
+            'BORDER': [0.5, -0.25, 0.5, -0.25, 0.0, -0.25],
+            'DIVIDE': [0.5, -0.25, 0.0, -0.25, 0.0, -0.25],
+        }
+
+        linetype_patterns = {}
+        for k, v in STANDARD_LINETYPES.items():
+            linetype_patterns[k] = (v, global_ltscale)
+
+        if hasattr(doc, 'linetypes'):
+            for lt in doc.linetypes:
+                lname = lt.dxf.name.upper()
+                pat = getattr(lt, 'pattern_tags', None)
+                if pat and hasattr(pat, 'tags'):
+                    dashes = [float(tag.value) for tag in pat.tags if tag.code == 49]
+                    if dashes:
+                        linetype_patterns[lname] = (dashes, global_ltscale)
+
+        layer_linetypes = {}
+        if hasattr(doc, 'layers'):
+            for lay in doc.layers:
+                layer_linetypes[lay.dxf.name] = lay.dxf.get('linetype', 'CONTINUOUS').upper()
+
+        def tessellate_pattern_segment(p1, p2, pattern, scale, add_fn, rgb, eff_lw):
+            dx = p2[0] - p1[0]
+            dy = p2[1] - p1[1]
+            L = math.hypot(dx, dy)
+            if L < 0.1:
+                add_fn(p1, p2, rgb, eff_lw)
+                return
+
+            ux = dx / L
+            uy = dy / L
+            eff_pat = [d * scale for d in pattern]
+            T = sum(abs(d) for d in eff_pat)
+            if T < 0.01:
+                add_fn(p1, p2, rgb, eff_lw)
+                return
+
+            # 지능형 적응 스케일링: 선분이 1주기보다 짧아도(예: 2.5mm ~ 20mm)
+            # 중심선/은선 특유의 형상이 축소 비율로 온전히 나타나도록 자동 조절
+            if L < T and L >= 2.5:
+                k = max(0.15, L / (T * 1.05))
+                eff_pat = [d * k for d in eff_pat]
+                T = sum(abs(d) for d in eff_pat)
+            elif L < 2.5:
+                # 2.5mm 미만 극소 선분은 단일 실선으로 보존
+                add_fn(p1, p2, rgb, eff_lw)
+                return
+
+            # AutoCAD A-type 대칭 정렬: 양 끝에 대칭 대시 배치
+            num_cycles = max(1, round(L / T))
+            adj_scale = L / (num_cycles * T)
+            if 0.5 <= adj_scale <= 2.0:
+                eff_pat = [d * adj_scale for d in eff_pat]
+
+            half_first = eff_pat[0] / 2.0
+            curr = 0.0
+            idx = 0
+            while curr < L - 0.01:
+                if idx == 0:
+                    step = half_first
+                else:
+                    step = eff_pat[(idx - 1) % len(eff_pat) + 1] if ((idx - 1) % len(eff_pat) + 1) < len(eff_pat) else eff_pat[0]
+                idx += 1
+                if step > 0:
+                    s_end = min(curr + step, L)
+                    if s_end - curr > 0.02:
+                        pa = (p1[0] + curr * ux, p1[1] + curr * uy)
+                        pb = (p1[0] + s_end * ux, p1[1] + s_end * uy)
+                        add_fn(pa, pb, rgb, eff_lw)
+                    curr = s_end
+                elif step < 0:
+                    curr += abs(step)
+                else:
+                    dot_len = min(0.3 * scale, 0.4)
+                    s_end = min(curr + dot_len, L)
+                    pa = (p1[0] + curr * ux, p1[1] + curr * uy)
+                    pb = (p1[0] + s_end * ux, p1[1] + s_end * uy)
+                    add_fn(pa, pb, rgb, eff_lw)
+                    curr = s_end
+
         for e in expanded_msp:
             t = e.dxftype()
             col = getattr(e.dxf, 'color', 256)
@@ -1406,16 +1509,40 @@ def export_dxf_to_webgl_binary(dxf_path: str, output_bin_path: str) -> dict:
                     p2 = (e.dxf.end.x, e.dxf.end.y)
                     role = role_for_segment(p1, p2)
                     eff_lw = max(lw, ROLE_STYLE[role][1]) if role in ROLE_STYLE else lw
-                    add_seg(p1, p2, rgb, eff_lw)
+
+                    # 선종(Linetype) 검출 및 패턴 분할 적용
+                    ent_lt = getattr(e.dxf, 'linetype', 'BYLAYER')
+                    if ent_lt == 'BYLAYER':
+                        ent_lt = layer_linetypes.get(lay_name, 'CONTINUOUS')
+                    ent_lt = (ent_lt or 'CONTINUOUS').upper()
+
+                    if ent_lt in linetype_patterns and ent_lt not in ('CONTINUOUS', 'SOLID', 'BYLAYER', 'BYBLOCK'):
+                        pat, lt_scale = linetype_patterns[ent_lt]
+                        ent_scale = getattr(e.dxf, 'ltscale', 1.0) or 1.0
+                        tessellate_pattern_segment(p1, p2, pat, lt_scale * ent_scale, add_seg, rgb, eff_lw)
+                    else:
+                        add_seg(p1, p2, rgb, eff_lw)
                 elif t in ['LWPOLYLINE', 'POLYLINE']:
                     cw = getattr(e.dxf, 'const_width', 0.0) or getattr(e.dxf, 'width', 0.0) or 0.0
                     if cw > 0.3:
                         lw = max(lw, min(cw, 1.2))
                     segs, pts2, is_rect_cand = decompose_polyline_entity(e)
+
+                    ent_lt = getattr(e.dxf, 'linetype', 'BYLAYER')
+                    if ent_lt == 'BYLAYER':
+                        ent_lt = layer_linetypes.get(lay_name, 'CONTINUOUS')
+                    ent_lt = (ent_lt or 'CONTINUOUS').upper()
+                    is_pattern = ent_lt in linetype_patterns and ent_lt not in ('CONTINUOUS', 'SOLID', 'BYLAYER', 'BYBLOCK')
+                    pat, lt_scale = linetype_patterns[ent_lt] if is_pattern else (None, 1.0)
+                    ent_scale = getattr(e.dxf, 'ltscale', 1.0) or 1.0
+
                     for p1, p2 in segs:
                         role = role_for_segment(p1, p2)
                         eff_lw = max(lw, ROLE_STYLE[role][1]) if role in ROLE_STYLE else lw
-                        add_seg(p1, p2, rgb, eff_lw)
+                        if is_pattern and pat:
+                            tessellate_pattern_segment(p1, p2, pat, lt_scale * ent_scale, add_seg, rgb, eff_lw)
+                        else:
+                            add_seg(p1, p2, rgb, eff_lw)
                 elif t == 'SPLINE':
                     try:
                         pts = list(e.flattening(distance=0.05))

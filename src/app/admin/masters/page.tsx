@@ -1181,11 +1181,12 @@ export default function MasterDataManagerPage() {
                   <col style={{ width: '48px' }} />
                   <col style={{ width: '130px' }} />
                   <col style={{ minWidth: '150px' }} />
-                  <col style={{ width: '135px' }} />
-                  <col style={{ width: '170px' }} />
-                  <col style={{ width: '230px' }} />
-                  <col style={{ width: '165px' }} />
-                  <col style={{ width: '52px' }} />
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '105px' }} />
+                  <col style={{ width: '145px' }} />
+                  <col style={{ width: '130px' }} />
+                  <col style={{ width: '48px' }} />
                 </colgroup>
                 <thead>
                   <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 select-none h-8.5">
@@ -1202,24 +1203,27 @@ export default function MasterDataManagerPage() {
                     <th className="py-1.5 px-2 text-center font-mono text-[11px]">No</th>
                     <th className="py-1.5 px-3 text-[11px]">마스터 코드</th>
                     <th className="py-1.5 px-3 text-[11px]">표준 품명</th>
-                    <th className="py-1.5 pl-3 pr-4 text-left text-[11px]">규격 (Spec)</th>
-                    <th className="py-1.5 pl-6 pr-3 text-left text-[11px]">재질</th>
-                    <th className="py-1.5 px-3 text-left text-[11px]">부품 유형</th>
-                    <th className="py-1.5 px-3 text-right text-[11px]">공인 기준단가</th>
+                    <th className="py-1.5 px-3 text-left text-[11px]">규격 (Spec)</th>
+                    <th className="py-1.5 px-3 text-left text-[11px]">재질</th>
+                    <th className="py-1.5 px-3 text-left text-[11px] whitespace-nowrap">
+                      <span className="inline-block relative left-[24px]">부품 분류</span>
+                    </th>
+                    <th className="py-1.5 px-3 text-left text-[11px] whitespace-nowrap">실무 대표 품목</th>
+                    <th className="py-1.5 px-3 text-right text-[11px] whitespace-nowrap">공인 기준단가</th>
                     <th className="py-1.5 px-2 text-center text-[11px]">관리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-400">
+                      <td colSpan={10} className="py-8 text-center text-slate-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-500" />
                         기준정보 데이터를 불러오는 중입니다...
                       </td>
                     </tr>
                   ) : filteredItems.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-400">
+                      <td colSpan={10} className="py-8 text-center text-slate-400">
                         {searchTerm.trim() ? (
                           <>검색어 &apos;{searchTerm}&apos;에 일치하는 품목이 없습니다.</>
                         ) : categoryFilter !== 'ALL' ? (
@@ -1264,10 +1268,10 @@ export default function MasterDataManagerPage() {
                           <td className="py-1 px-3 font-medium text-slate-900 truncate text-[11.5px]" title={it.standard_name}>
                             {it.standard_name}
                           </td>
-                          <td className="py-1 pl-3 pr-4 text-left font-mono text-slate-600 truncate text-[11px]" title={it.specification || '-'}>
+                          <td className="py-1 px-3 text-left font-mono text-slate-600 truncate text-[11px]" title={it.specification || '-'}>
                             {it.specification || '-'}
                           </td>
-                          <td className="py-1 pl-6 pr-3 text-left font-mono font-medium text-slate-700 text-[11px] truncate" title={it.material || 'SS400'}>
+                          <td className="py-1 px-3 text-left font-mono font-medium text-slate-700 text-[11px] truncate" title={it.material || 'SS400'}>
                             {it.material || 'SS400'}
                           </td>
                           <td className="py-1 px-3 text-left" onClick={(e) => e.stopPropagation()}>
@@ -1278,33 +1282,25 @@ export default function MasterDataManagerPage() {
 
                               return (
                                 <div className="relative inline-block text-left" data-category-dropdown>
-                                  {/* 트리거 버튼 (행간 컴팩트화: h-[25px], py-0.5, gap-1) */}
+                                  {/* 트리거 버튼 (행간 컴팩트화: h-[25px], py-0.5, gap-1.5, 좌측 완벽 정렬) */}
                                   <button
                                     type="button"
                                     onClick={() => setActiveCategoryDropdownId(isOpen ? null : it.id)}
-                                    className={`flex items-center gap-1 py-0.5 px-1.5 rounded-md border transition-all cursor-pointer group text-left h-[25px] ${
+                                    className={`inline-flex items-center gap-1.5 py-0.5 pl-1.5 pr-2 rounded-md border transition-all cursor-pointer group text-left h-[25px] ${
                                       isOpen
                                         ? 'bg-blue-50/80 border-blue-400 ring-2 ring-blue-100 shadow-xs'
                                         : 'border-transparent hover:border-slate-200 hover:bg-slate-100/80'
                                     }`}
-                                    title={`클릭하여 부품 유형 변경 (현재: ${getPartCategoryLabel(it.category)}${subItem ? ` · ${subItem}` : ''})`}
+                                    title={`클릭하여 부품 분류 변경 (현재: ${getPartCategoryLabel(it.category)})`}
                                   >
-                                    <span className={`text-[11.5px] font-bold whitespace-nowrap leading-none ${getPartCategoryTextClass(it.category)}`}>
-                                      {getPartCategoryLabel(it.category)}
-                                    </span>
-                                    {subItem && (
-                                      <>
-                                        <span className="text-slate-300 font-bold text-xs select-none">·</span>
-                                        <span className="px-1.5 py-0 rounded bg-slate-100/90 text-slate-800 font-medium text-[10.5px] border border-slate-200/90 whitespace-nowrap leading-[18px] shadow-2xs">
-                                          {subItem}
-                                        </span>
-                                      </>
-                                    )}
                                     <ChevronDown
-                                      className={`w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-transform duration-150 shrink-0 ml-0.5 ${
+                                      className={`w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-transform duration-150 shrink-0 ${
                                         isOpen ? 'rotate-180 text-blue-600' : ''
                                       }`}
                                     />
+                                    <span className={`text-[11.5px] font-bold whitespace-nowrap leading-none ${getPartCategoryTextClass(it.category)}`}>
+                                      {getPartCategoryLabel(it.category)}
+                                    </span>
                                   </button>
 
                                   {/* 추천 1위: 모던 프리미엄 커스텀 드롭다운 팝오버 */}
@@ -1394,6 +1390,51 @@ export default function MasterDataManagerPage() {
                                     </div>
                                   )}
                                 </div>
+                              );
+                            })()}
+                          </td>
+
+                          {/* 🏷️ 실무 대표 품목 (소분류 - 스마트 피커 연동 컬럼) */}
+                          <td className="py-1 px-3 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            {(() => {
+                              const subItem = customSubItems[it.id] || detectPartSubItem(it.standard_name, it.category, it.master_code);
+
+                              return subItem ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCategoryPickerState({
+                                      isOpen: true,
+                                      mode: 'inline',
+                                      targetId: it.id,
+                                      targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
+                                      currentCategory: it.category || 'MACHINING'
+                                    });
+                                  }}
+                                  className="inline-flex items-center gap-1.5 py-0.5 pl-1.5 pr-2 rounded-lg bg-blue-50/90 hover:bg-blue-100 text-blue-700 font-semibold text-[11px] border border-blue-200/90 hover:border-blue-300 transition-all shadow-2xs group cursor-pointer active:scale-95 leading-[18px]"
+                                  title="클릭하여 실무 대표 품목 및 산출식 스마트 피커 열기"
+                                >
+                                  <Tag className="w-3 h-3 text-blue-500 group-hover:scale-110 transition-transform shrink-0" />
+                                  <span className="truncate max-w-[125px] font-bold">{subItem}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCategoryPickerState({
+                                      isOpen: true,
+                                      mode: 'inline',
+                                      targetId: it.id,
+                                      targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
+                                      currentCategory: it.category || 'MACHINING'
+                                    });
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/80 text-slate-400 hover:text-blue-600 text-[10.5px] transition-all cursor-pointer font-medium leading-[18px]"
+                                  title="실무 대표 품목 선택"
+                                >
+                                  <Plus className="w-3 h-3 shrink-0" />
+                                  <span>대표품목 선택</span>
+                                </button>
                               );
                             })()}
                           </td>

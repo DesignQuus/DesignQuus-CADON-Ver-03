@@ -18,21 +18,27 @@ if (typeof process !== 'undefined') {
     } catch (e) {}
   }
 
-  if (!process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID) {
-    process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID = '8dd35536-8cbb-4e1c-bb65-b35f2920cb03';
+  const pEnv = process.env as Record<string, string | undefined>;
+  const KEY_PRJ = 'NEXT_' + 'PUBLIC_EGDESK_PROJECT_ID';
+  const KEY_ENV = 'NEXT_' + 'PUBLIC_EGDESK_ENV';
+  const KEY_API = 'NEXT_' + 'PUBLIC_EGDESK_API_KEY';
+  const KEY_URL = 'NEXT_' + 'PUBLIC_EGDESK_API_URL';
+
+  if (!pEnv[KEY_PRJ]) {
+    pEnv[KEY_PRJ] = '8dd35536-8cbb-4e1c-bb65-b35f2920cb03';
   }
-  if (!process.env.NEXT_PUBLIC_EGDESK_ENV || process.env.NEXT_PUBLIC_EGDESK_ENV === 'production') {
-    process.env.NEXT_PUBLIC_EGDESK_ENV = 'development';
+  if (!pEnv[KEY_ENV] || pEnv[KEY_ENV] === 'production') {
+    pEnv[KEY_ENV] = 'development';
   }
   // Enforce valid active EGDesk API key for localhost:8080
   const VALID_KEY = '48632c34-0fd1-4b53-b448-b8162e19b925';
-  if (!process.env.NEXT_PUBLIC_EGDESK_API_KEY || process.env.NEXT_PUBLIC_EGDESK_API_KEY.length < 10) {
-    process.env.NEXT_PUBLIC_EGDESK_API_KEY = VALID_KEY;
+  if (!pEnv[KEY_API] || (pEnv[KEY_API] as string).length < 10) {
+    pEnv[KEY_API] = VALID_KEY;
   }
 
   // Enforce local EGDesk endpoint for local dev/preview to eliminate render tunnel latency & auth dropouts
-  if (!process.env.NEXT_PUBLIC_EGDESK_API_URL || process.env.NEXT_PUBLIC_EGDESK_API_URL.includes('tunneling-service.onrender.com')) {
-    process.env.NEXT_PUBLIC_EGDESK_API_URL = 'http://localhost:8080';
+  if (!pEnv[KEY_URL] || (pEnv[KEY_URL] as string).includes('tunneling-service.onrender.com')) {
+    pEnv[KEY_URL] = 'http://localhost:8080';
   }
 }
 

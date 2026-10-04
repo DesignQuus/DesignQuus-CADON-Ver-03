@@ -17,6 +17,8 @@ import QuotationDocumentPreview from '@/components/QuotationDocumentPreview';
 import FabricationFeaturesPanel from '@/components/FabricationFeaturesPanel';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
 import SidebarBookmarkTab from '@/components/common/SidebarBookmarkTab';
+import SequentialReviewBar from '@/components/inbox/SequentialReviewBar';
+import CaseMetaEditPanel from '@/components/cases/CaseMetaEditPanel';
 import { getClientCache, setClientCache } from '@/lib/cacheStore';
 
 export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: string }> }) {
@@ -2261,6 +2263,8 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="space-y-2 px-3 sm:px-4 py-1.5">
+      {/* 🚀 Sequential Review Bar (Inbox Queue Navigation) */}
+      <SequentialReviewBar currentCaseId={id} />
 
       {/* 📦 Archived Case Notice Banner */}
       {qc?.lifecycle_status === 'ARCHIVED' && (
@@ -2670,6 +2674,22 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
+      {/* ⚡ 백그라운드 AI 도면 분석 진행 배너 */}
+      {analyzing && (
+        <div className="no-print bg-linear-to-r from-blue-600 via-indigo-600 to-blue-700 text-white px-4 py-2.5 mb-2 rounded-xl flex items-center justify-between text-xs shadow-md animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5 font-bold">
+            <RefreshCw className="w-4 h-4 animate-spin text-blue-200 shrink-0" />
+            <span>⚡ AI 도면 파싱 및 BOM 추출 중... (초고속 C 엔진 가동)</span>
+            <span className="text-[11px] font-normal text-blue-100 hidden sm:inline">
+              도면 형상 파싱, 표제란 메타정보 및 가상 BOM을 생성하고 있습니다.
+            </span>
+          </div>
+          <span className="text-[11px] bg-white/20 backdrop-blur-xs px-2.5 py-0.5 rounded-full font-mono font-bold">
+            자동 분석 진행 중
+          </span>
+        </div>
+      )}
+
       {/* 🚀 CADON v3.0: 5단계 스마트 분석 파이프라인 네비게이터 & 실시간 가이드 (대시보드 100% 일치화) */}
       <div className="no-print print:hidden mb-2 rounded-2xl overflow-hidden border border-slate-200 shadow-2xs">
         <PipelineNavigator 
@@ -2691,14 +2711,6 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               return drawings.length > 0 ? drawings.length : 0;
             })(),
             hasRevisionDiff: false
-          }}
-          caseInfo={{
-            caseNo: qc?.case_no,
-            caseName: qc?.case_name,
-            companyName: (qc?.company_name && qc?.company_name !== '고객사 미지정' && qc?.company_name !== 'comp_unassigned') ? qc.company_name : '',
-            drawingsCount: drawings.length,
-            bomCount: normalizedItems.length || rawBomItems.length || drawings.length,
-            quoteItemCount: quoteIncCount || normalizedItems.filter((ni: any) => ni.drawing_type !== 'MAIN_ASSEMBLY' && ni.drawing_type !== 'SUB_ASSEMBLY' && ni.is_quote_included !== 0).length
           }}
         />
 
@@ -2773,13 +2785,16 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               </button>
             )}
 
+            {/* 세로 시각적 구분선 (주 동선 vs 부가 AI 도구) */}
+            <div className="w-[1px] h-3.5 bg-slate-700/80 my-auto mx-1 shrink-0" />
+
             <button
               type="button"
               onClick={handleOpenPatternModal}
-              className="inline-flex items-center space-x-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-[#D97757] hover:bg-[#C25E3E] text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-[#C25E3E]/40"
+              className="inline-flex items-center space-x-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-slate-700"
               title="현재 도면의 표제란 및 BOM 양식을 학습하여 동일 서식의 도면을 100% 자동 인식하도록 AI 지식 베이스(RAG)에 등록합니다"
             >
-              <GraduationCap className="w-3.5 h-3.5" />
+              <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
               <span>도면 AI 패턴 교육</span>
             </button>
             <button
@@ -3187,7 +3202,18 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
           )}
 
           {/* 2D Real CAD Vector Viewer (Takes 100% of remaining width!) */}
-          <div className="flex-1 w-full min-w-0 transition-all duration-200 ease-out">
+          <div className="flex-1 w-full min-w-0 transition-all duration-200 ease-out space-y-3">
+            {/* 📋 Step 2: 도면 표제란 및 견적 메타데이터 검토 패널 */}
+            {workflowStep === 2 && (
+              <CaseMetaEditPanel
+                caseId={id}
+                caseData={qc}
+                onUpdated={(updated) => {
+                  setData((prev: any) => prev ? { ...prev, case: { ...prev.case, ...updated } } : prev);
+                }}
+              />
+            )}
+
             <CadViewer
               caseId={id}
               cadObjects={data?.cadObjects || []}
@@ -3212,7 +3238,8 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               onBomUpdated={fetchData}
               controlledViewMode={workflowStep === 3 ? 'SHEET' : 'CAD'}
               onViewModeChange={(m) => setWorkflowStep(m === 'CAD' ? 2 : 3)}
-              onUploadFile={handleProcessFile}
+              onUploadFile={workflowStep === 1 || files.length === 0 ? handleProcessFile : undefined}
+              showQuickUpload={workflowStep === 1 || files.length === 0}
             />
           </div>
       </div>

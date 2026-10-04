@@ -8,14 +8,16 @@ export function getEgdeskStorageDir(): string {
   }
 
   // Auto-read .env.development.local if not already loaded in non-Next environments
-  if (!process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID) {
+  const pEnv = process.env as Record<string, string | undefined>;
+  const KEY_PRJ = 'NEXT_' + 'PUBLIC_EGDESK_PROJECT_ID';
+  if (!pEnv[KEY_PRJ]) {
     try {
       const envPath = path.join(process.cwd(), '.env.development.local');
       if (fs.existsSync(envPath)) {
         const envContent = fs.readFileSync(envPath, 'utf8');
         const match = envContent.match(/NEXT_PUBLIC_EGDESK_PROJECT_ID=([^\r\n]+)/);
         if (match && match[1]) {
-          process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID = match[1].trim();
+          pEnv[KEY_PRJ] = match[1].trim();
         }
       }
     } catch (e) {

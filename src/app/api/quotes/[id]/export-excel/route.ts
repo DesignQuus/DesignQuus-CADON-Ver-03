@@ -50,10 +50,12 @@ async function handleExportExcel(
   const quote = (await db.prepare(`
     SELECT q.*, c.company_name, p.project_name
     FROM quotes q
-    JOIN companies c ON q.company_id = c.id
-    JOIN projects p ON q.project_id = p.id
-    WHERE q.id = ?
-  `).get(id)) as any;
+    LEFT JOIN companies c ON q.company_id = c.id
+    LEFT JOIN projects p ON q.project_id = p.id
+    WHERE q.id = ? OR q.quotation_case_id = ?
+    ORDER BY q.created_at DESC
+    LIMIT 1
+  `).get(id, id)) as any;
 
   if (!quote) {
     return NextResponse.json({ error: '견적서를 찾을 수 없습니다.' }, { status: 404 });
@@ -68,10 +70,11 @@ async function handleExportExcel(
     }, { status: 400 });
   }
 
-  // 🛡️ [미승인 견적서 엑셀 내보내기 원천 차단 가드] (status === 'APPROVED' & is_locked === 1)
-  if (quote.status !== 'APPROVED' || quote.is_locked !== 1) {
+  // 🛡️ [미승인 견적서 엑셀 내보내기 원천 차단 가드] (APPROVED 또는 EMERGENCY_APPROVED & is_locked === 1)
+  const isApprovedStatus = (quote.status === 'APPROVED' || quote.status === 'EMERGENCY_APPROVED') && quote.is_locked === 1;
+  if (!isApprovedStatus) {
     return NextResponse.json({ 
-      error: `미승인 견적서(상태: ${quote.status || 'DRAFT'})는 엑셀로 내보낼 수 없습니다. [단가 검토] 화면에서 모든 단가를 확정하고 [견적 승인]을 완료해주세요.`,
+      error: `미승인 견적서(상태: ${quote.status || 'DRAFT'})는 엑셀로 내보낼 수 없습니다. [결재 승인] 또는 [긴급 선발행]을 완료해주세요.`,
       status: quote.status,
       is_locked: quote.is_locked
     }, { status: 403 });

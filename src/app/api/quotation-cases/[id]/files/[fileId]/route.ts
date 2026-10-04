@@ -61,6 +61,17 @@ export async function DELETE(
       // Delete drawings associated with the deleted files
       await db.prepare(`DELETE FROM drawings WHERE source_file_id IN (${placeholders})`).run(...fileIdsToDelete);
 
+      // Delete BOM areas and raw BOM items associated with the deleted files
+      await db.prepare(`DELETE FROM bom_areas WHERE source_file_id IN (${placeholders})`).run(...fileIdsToDelete);
+      await db.prepare(`DELETE FROM raw_bom_items WHERE source_file_id IN (${placeholders})`).run(...fileIdsToDelete);
+
+      // Delete file-scoped flattened, normalized BOM and master candidates
+      for (const fid of fileIdsToDelete) {
+        await db.prepare("DELETE FROM master_candidates WHERE normalized_item_id IN (SELECT id FROM normalized_bom_items WHERE quotation_case_id = ? AND id LIKE 'norm_' || ? || '_%')").run(id, fid);
+        await db.prepare("DELETE FROM normalized_bom_items WHERE quotation_case_id = ? AND id LIKE 'norm_' || ? || '_%'").run(id, fid);
+        await db.prepare("DELETE FROM flattened_bom_items WHERE quotation_case_id = ? AND id LIKE 'fb_' || ? || '_%'").run(id, fid);
+      }
+
       if (shouldWipeAllCaseData) {
         // No other source drawings exist: Wipe all remaining orphaned records
         await db.prepare('DELETE FROM drawings WHERE quotation_case_id = ?').run(id);

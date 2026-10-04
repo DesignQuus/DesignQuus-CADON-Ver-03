@@ -22,8 +22,15 @@ import {
   X,
   Factory,
   ShieldAlert,
-  ArrowRight
+  ArrowRight,
+  Phone,
+  Mail,
+  UserCheck,
+  Trash2,
+  Save,
+  MessageSquare
 } from 'lucide-react';
+import { formatPhoneNumber } from '@/lib/formatters';
 
 interface Company {
   id: string;
@@ -33,6 +40,7 @@ interface Company {
   is_active: number;
   created_at?: string;
   deleted_at?: string | null;
+  memo?: string | null;
   memberCount?: number;
   caseCount?: number;
   projectCount?: number;
@@ -67,12 +75,31 @@ export default function AdminCompaniesPage() {
   // 신규 고객사 폼 상태
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
+  const [formMemo, setFormMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
 
   // 고객사 수정 폼 상태
   const [editName, setEditName] = useState('');
   const [editCode, setEditCode] = useState('');
+  const [editMemo, setEditMemo] = useState('');
+
+  // 고객사 담당자 관리 모달 상태
+  const [showContactsModal, setShowContactsModal] = useState(false);
+  const [contactsCompany, setContactsCompany] = useState<Company | null>(null);
+  const [contactsList, setContactsList] = useState<any[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [contactError, setContactError] = useState('');
+
+  // 신규 담당자 등록 폼 상태
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactPhone, setNewContactPhone] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
+  const [newContactDept, setNewContactDept] = useState('');
+  const [newContactPos, setNewContactPos] = useState('');
+  const [newContactIsPrimary, setNewContactIsPrimary] = useState(false);
+  const [newContactMemo, setNewContactMemo] = useState('');
+  const [addingContact, setAddingContact] = useState(false);
 
   // 1. 인증 확인 (SUPER_ADMIN 전용)
   useEffect(() => {
@@ -190,7 +217,8 @@ export default function AdminCompaniesPage() {
         body: JSON.stringify({
           company_name: formName.trim(),
           company_code: formCode.trim() || undefined,
-          company_type: 'CUSTOMER'
+          company_type: 'CUSTOMER',
+          memo: formMemo.trim() || null
         })
       });
       const data = await res.json();
@@ -200,6 +228,9 @@ export default function AdminCompaniesPage() {
       }
 
       setShowAddModal(false);
+      setFormName('');
+      setFormCode('');
+      setFormMemo('');
       setSuccessMsg(`새로운 발주 고객사 '${formName}'가 성공적으로 등록되었습니다.`);
       setTimeout(() => setSuccessMsg(''), 5000);
       fetchCompanies();
@@ -215,6 +246,7 @@ export default function AdminCompaniesPage() {
     setSelectedCompany(c);
     setEditName(c.company_name);
     setEditCode(c.company_code || '');
+    setEditMemo(c.memo || '');
     setModalError('');
     setShowEditModal(true);
   };
@@ -239,6 +271,7 @@ export default function AdminCompaniesPage() {
           company_name: editName.trim(),
           company_code: editCode.trim() || selectedCompany.company_code,
           company_type: selectedCompany.company_type || 'CUSTOMER',
+          memo: editMemo.trim() || null,
           is_active: selectedCompany.is_active
         })
       });
@@ -257,6 +290,91 @@ export default function AdminCompaniesPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // 고객사 담당자 목록 열기
+  const handleOpenContactsModal = async (c: Company) => {
+    setContactsCompany(c);
+    setShowContactsModal(true);
+    setLoadingContacts(true);
+    setContactError('');
+    setNewContactName('');
+    setNewContactPhone('');
+    setNewContactEmail('');
+    setNewContactDept('');
+    setNewContactPos('');
+    setNewContactIsPrimary(false);
+    setNewContactMemo('');
+    try {
+      const res = await apiFetch(`/api/companies/${c.id}/contacts`);
+      const data = await res.json();
+      if (data.success) {
+        setContactsList(data.contacts || []);
+      } else {
+        setContactError(data.error || '담당자 목록을 불러오지 못했습니다.');
+      }
+    } catch (err: any) {
+      setContactError(err.message || '통신 오류');
+    } finally {
+      setLoadingContacts(false);
+    }
+  };
+
+  // 신규 담당자 등록 제출
+  const handleAddContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contactsCompany || !newContactName.trim()) return;
+    setAddingContact(true);
+    setContactError('');
+    try {
+      const res = await apiFetch(`/api/companies/${contactsCompany.id}/contacts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contact_name: newContactName.trim(),
+          phone: newContactPhone.trim(),
+          email: newContactEmail.trim(),
+          department: newContactDept.trim(),
+          position: newContactPos.trim(),
+          is_primary: newContactIsPrimary,
+          memo: newContactMemo.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.contact) {
+        setContactsList((prev) => [data.contact, ...prev]);
+        setNewContactName('');
+        setNewContactPhone('');
+        setNewContactEmail('');
+        setNewContactDept('');
+        setNewContactPos('');
+        setNewContactIsPrimary(false);
+        setNewContactMemo('');
+      } else {
+        setContactError(data.error || '담당자 등록 실패');
+      }
+    } catch (err: any) {
+      setContactError(err.message || '통신 오류');
+    } finally {
+      setAddingContact(false);
+    }
+  };
+
+  // 담당자 삭제
+  const handleDeleteContact = async (contactId: string) => {
+    if (!contactsCompany || !window.confirm('해당 담당자를 삭제하시겠습니까?')) return;
+    try {
+      const res = await apiFetch(`/api/companies/${contactsCompany.id}/contacts?contactId=${contactId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setContactsList((prev) => prev.filter((cnt) => cnt.id !== contactId));
+      } else {
+        alert(data.error || '담당자 삭제 실패');
+      }
+    } catch (err: any) {
+      alert(err.message || '통신 오류');
   };
 
   // 거래 상태 중단 (비활성화)
@@ -637,9 +755,18 @@ export default function AdminCompaniesPage() {
                       {/* 액션 버튼 */}
                       <td className="px-4 py-3.5 text-right space-x-1.5 whitespace-nowrap">
                         <button
+                          onClick={() => handleOpenContactsModal(comp)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors inline-flex items-center space-x-1 cursor-pointer"
+                          title="고객사 담당자 및 연락처 관리"
+                        >
+                          <Users className="w-3 h-3" />
+                          <span>담당자 관리</span>
+                        </button>
+
+                        <button
                           onClick={() => handleOpenEditModal(comp)}
                           className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 transition-colors inline-flex items-center space-x-1 cursor-pointer"
-                          title="고객사명 및 식별코드 관리"
+                          title="고객사명, 식별코드 및 메모 관리"
                         >
                           <Edit className="w-3 h-3" />
                           <span>고객사 정보</span>
@@ -725,6 +852,17 @@ export default function AdminCompaniesPage() {
                     onChange={(e) => setFormCode(e.target.value)}
                     placeholder="비워둘 경우 CUST-XXXX 자동 채번"
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">고객사 특이사항 / 메모 (선택)</label>
+                  <textarea
+                    rows={2}
+                    value={formMemo}
+                    onChange={(e) => setFormMemo(e.target.value)}
+                    placeholder="거래 조건, 주요 가공 성향, 마스터 매칭 주의사항 등..."
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-xs text-slate-800"
                   />
                 </div>
               </div>
@@ -822,7 +960,21 @@ export default function AdminCompaniesPage() {
                 />
               </div>
 
-              {/* 3. 현황 요약 칩 */}
+              {/* 3. 메모 입력 */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  고객사 특이사항 / 메모
+                </label>
+                <textarea
+                  rows={2}
+                  value={editMemo}
+                  onChange={(e) => setEditMemo(e.target.value)}
+                  placeholder="거래 조건, 주요 가공 성향, 마스터 매칭 주의사항 등..."
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-xs text-slate-800"
+                />
+              </div>
+
+              {/* 4. 현황 요약 칩 */}
               <div className="grid grid-cols-2 gap-2 text-center text-xs">
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                   <span className="text-[10px] text-slate-400 block">견적의뢰 접수</span>
@@ -856,6 +1008,234 @@ export default function AdminCompaniesPage() {
           </div>
         </div>
       )}
+
+      {/* [모달 3] 고객사 담당자 관리 모달 */}
+      {showContactsModal && contactsCompany && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-xl max-w-2xl w-full p-6 space-y-4 border border-slate-200 max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span>{contactsCompany.company_name}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-mono">
+                      담당자 관리 ({contactsList.length}명)
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    발주 담당자, 설계 엔지니어 및 주요 연락처를 등록하고 관리합니다.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowContactsModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {contactError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs shrink-0 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{contactError}</span>
+              </div>
+            )}
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+              {/* 신규 담당자 등록 폼 */}
+              <form onSubmit={handleAddContactSubmit} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="font-bold text-slate-800 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-indigo-600" />
+                    신규 담당자 등록
+                  </span>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer font-medium">
+                    <input
+                      type="checkbox"
+                      checked={newContactIsPrimary}
+                      onChange={(e) => setNewContactIsPrimary(e.target.checked)}
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    대표 담당자로 지정
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">성명 *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="예: 홍길동"
+                      value={newContactName}
+                      onChange={(e) => setNewContactName(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">연락처 (전화번호)</label>
+                    <input
+                      type="text"
+                      placeholder="010-1234-5678"
+                      value={newContactPhone}
+                      onChange={(e) => setNewContactPhone(formatPhoneNumber(e.target.value))}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">이메일</label>
+                    <input
+                      type="email"
+                      placeholder="user@company.com"
+                      value={newContactEmail}
+                      onChange={(e) => setNewContactEmail(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">소속 부서</label>
+                    <input
+                      type="text"
+                      placeholder="예: 기구설계팀 / 구매팀"
+                      value={newContactDept}
+                      onChange={(e) => setNewContactDept(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">직급</label>
+                    <input
+                      type="text"
+                      placeholder="예: 책임연구원 / 팀장"
+                      value={newContactPos}
+                      onChange={(e) => setNewContactPos(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">메모 / 특이사항</label>
+                    <input
+                      type="text"
+                      placeholder="비고"
+                      value={newContactMemo}
+                      onChange={(e) => setNewContactMemo(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    disabled={addingContact || !newContactName.trim()}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{addingContact ? '등록 중...' : '담당자 추가'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* 담당자 목록 */}
+              <div className="space-y-2">
+                <h3 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                  <span>등록된 담당자 목록</span>
+                  <span className="text-[11px] text-slate-500 font-normal">({contactsList.length}건)</span>
+                </h3>
+
+                {loadingContacts ? (
+                  <div className="py-8 text-center text-slate-400">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500" />
+                    <span>담당자 목록 불러오는 중...</span>
+                  </div>
+                ) : contactsList.length === 0 ? (
+                  <div className="py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs">
+                    등록된 담당자가 없습니다. 위 양식에서 첫 번째 담당자를 등록해보세요.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {contactsList.map((cnt: any) => (
+                      <div
+                        key={cnt.id}
+                        className={`p-3 rounded-xl border transition-all ${
+                          cnt.is_primary === 1
+                            ? 'bg-indigo-50/50 border-indigo-200'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-900 text-xs">{cnt.contact_name}</span>
+                            {cnt.position && (
+                              <span className="text-[11px] text-slate-500 font-medium">{cnt.position}</span>
+                            )}
+                            {cnt.is_primary === 1 && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold bg-indigo-600 text-white">
+                                대표
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleDeleteContact(cnt.id)}
+                            className="text-slate-400 hover:text-rose-600 p-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="담당자 삭제"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="mt-2 space-y-1 text-[11px] text-slate-600">
+                          {cnt.department && (
+                            <div className="flex items-center gap-1.5 text-slate-500">
+                              <Briefcase className="w-3 h-3 text-slate-400" />
+                              <span>{cnt.department}</span>
+                            </div>
+                          )}
+                          {cnt.phone && (
+                            <div className="flex items-center gap-1.5 text-slate-700 font-mono">
+                              <Phone className="w-3 h-3 text-indigo-500" />
+                              <span>{cnt.phone}</span>
+                            </div>
+                          )}
+                          {cnt.email && (
+                            <div className="flex items-center gap-1.5 text-slate-700">
+                              <Mail className="w-3 h-3 text-blue-500" />
+                              <span>{cnt.email}</span>
+                            </div>
+                          )}
+                          {cnt.memo && (
+                            <div className="text-slate-400 text-[10px] bg-slate-100/70 p-1 rounded mt-1">
+                              {cnt.memo}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-slate-100 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowContactsModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
 }

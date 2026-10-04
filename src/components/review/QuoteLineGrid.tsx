@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   CheckCircle2, Clock, HelpCircle, ShieldAlert, AlertCircle,
   Package, Wrench, Ban, Check, ChevronDown, CheckSquare, Square,
@@ -103,6 +103,108 @@ export default function QuoteLineGrid({
     window.addEventListener('click', handleOutside);
     return () => window.removeEventListener('click', handleOutside);
   }, [openDropdownId]);
+
+  // 🚀 [스마트 엣지 오토스크롤: 60FPS Zero Re-render & 지수 스무딩]
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const fadeIndicatorRef = useRef<HTMLDivElement>(null);
+  const scrollAnimRef = useRef<number | null>(null);
+  const targetSpeedRef = useRef<number>(0);
+  const currentSpeedRef = useRef<number>(0);
+
+  // React re-render 없이 DOM 직접 조작으로 인디케이터 투명도 제어 (Zero Re-render)
+  const updateIndicator = useCallback(() => {
+    const el = gridContainerRef.current;
+    const ind = fadeIndicatorRef.current;
+    if (!el || !ind) return;
+    const canScroll = el.scrollWidth - el.clientWidth - el.scrollLeft > 6;
+    ind.style.opacity = canScroll ? '1' : '0';
+  }, []);
+
+  const stopAutoScroll = useCallback(() => {
+    if (scrollAnimRef.current !== null) {
+      cancelAnimationFrame(scrollAnimRef.current);
+      scrollAnimRef.current = null;
+    }
+    targetSpeedRef.current = 0;
+    currentSpeedRef.current = 0;
+    updateIndicator();
+  }, [updateIndicator]);
+
+  const stepScroll = useCallback(() => {
+    const el = gridContainerRef.current;
+    if (!el) {
+      stopAutoScroll();
+      return;
+    }
+
+    // 지수 스무딩 (Lerp): 덜컥거림 없는 깃털 같은 가속/감속
+    currentSpeedRef.current += (targetSpeedRef.current - currentSpeedRef.current) * 0.25;
+
+    if (Math.abs(currentSpeedRef.current) < 0.2 && targetSpeedRef.current === 0) {
+      stopAutoScroll();
+      return;
+    }
+
+    el.scrollLeft += currentSpeedRef.current;
+    updateIndicator();
+    scrollAnimRef.current = requestAnimationFrame(stepScroll);
+  }, [stopAutoScroll, updateIndicator]);
+
+  const handleEdgeMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.buttons !== 0) {
+      stopAutoScroll();
+      return;
+    }
+
+    const el = gridContainerRef.current;
+    if (!el) return;
+
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if (maxScroll <= 4) {
+      stopAutoScroll();
+      return;
+    }
+
+    const rect = el.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const triggerZone = 50; // 자연스러운 50px 모서리 영역
+
+    // 1) 우측 모서리 감지
+    if (mouseX >= rect.width - triggerZone && mouseX <= rect.width) {
+      const ratio = Math.min(1, Math.max(0.1, (mouseX - (rect.width - triggerZone)) / triggerZone));
+      targetSpeedRef.current = ratio * 14;
+      if (scrollAnimRef.current === null) {
+        scrollAnimRef.current = requestAnimationFrame(stepScroll);
+      }
+    }
+    // 2) 좌측 모서리 감지
+    else if (mouseX <= 130 && mouseX >= 60 && el.scrollLeft > 0) {
+      const ratio = Math.min(1, Math.max(0.1, (130 - mouseX) / 70));
+      targetSpeedRef.current = -ratio * 14;
+      if (scrollAnimRef.current === null) {
+        scrollAnimRef.current = requestAnimationFrame(stepScroll);
+      }
+    } else {
+      targetSpeedRef.current = 0;
+    }
+  }, [stepScroll, stopAutoScroll]);
+
+  const handleEdgeMouseLeave = useCallback(() => {
+    stopAutoScroll();
+  }, [stopAutoScroll]);
+
+  useEffect(() => {
+    const el = gridContainerRef.current;
+    if (!el) return;
+    updateIndicator();
+    el.addEventListener('scroll', updateIndicator, { passive: true });
+    window.addEventListener('resize', updateIndicator, { passive: true });
+    return () => {
+      stopAutoScroll();
+      el.removeEventListener('scroll', updateIndicator);
+      window.removeEventListener('resize', updateIndicator);
+    };
+  }, [stopAutoScroll, updateIndicator, lines]);
 
   // 견적 대상 부품: 조립도, 제외품, 체결구제외, 도면노이즈를 제외한 실 가공/구매 대상
   const quoteTargetLines = lines.filter((l) => {
@@ -239,7 +341,7 @@ export default function QuoteLineGrid({
             onChange={(e) => onFilterChange(e.target.value)}
             className="text-xs px-2 py-1 border border-slate-200 rounded-md bg-white text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
           >
-            <option value="ALL">견적 대상 전체 ({quoteTargetLines.length}건)</option>
+            <option value="ALL">전체 품목 ({quoteTargetLines.length}건)</option>
             {modifiedCount > 0 && (
               <option value="MODIFIED">⚡ 단가 직접 수정 항목 ({modifiedCount}건)</option>
             )}
@@ -258,13 +360,27 @@ export default function QuoteLineGrid({
         </div>
       </div>
 
-      {/* 2. 그리드 본문 */}
-      <div className="flex-1 overflow-y-auto" onClick={() => setOpenDropdownId(null)}>
-        <table className="w-full text-left border-collapse text-xs">
-          <thead className="bg-slate-100 text-slate-600 font-semibold sticky top-0 border-b border-slate-200 z-10">
+      {/* 2. 그리드 본문 (컴팩트 10열 한눈에 보기 & 60FPS Zero Re-render 엣지 오토스크롤) */}
+      <div className="flex-1 relative overflow-hidden flex flex-col">
+        {/* [D-4] 가시성 힌트: 창이 극단적으로 좁을 때만 DOM 직접 조작으로 은은한 페이드 표출 */}
+        <div
+          ref={fadeIndicatorRef}
+          className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-300/40 via-slate-200/15 to-transparent z-40 transition-opacity duration-200 opacity-0"
+          title="오른쪽에 공급단가 및 견적상태 열이 더 있습니다."
+        />
+        <div
+          ref={gridContainerRef}
+          onMouseMove={handleEdgeMouseMove}
+          onMouseLeave={handleEdgeMouseLeave}
+          className="flex-1 overflow-auto will-change-scroll"
+          style={{ transform: 'translateZ(0)' }}
+          onClick={() => setOpenDropdownId(null)}
+        >
+          <table className="min-w-[680px] w-full text-left border-collapse text-xs whitespace-nowrap">
+          <thead className="bg-slate-100 text-slate-600 font-semibold sticky top-0 border-b border-slate-200 z-30">
             <tr>
-              {/* 다중 선택 헤더 체크박스 */}
-              <th className="p-2 w-8 text-center" onClick={(e) => e.stopPropagation()}>
+              {/* 다중 선택 헤더 체크박스 (좌측 1열 고정) */}
+              <th className="px-1.5 py-2 w-7 min-w-[28px] max-w-[28px] text-center sticky left-0 z-30 bg-slate-100 border-b border-slate-200" onClick={(e) => e.stopPropagation()}>
                 {onSelectAll && (
                   <input
                     type="checkbox"
@@ -275,15 +391,21 @@ export default function QuoteLineGrid({
                   />
                 )}
               </th>
-              <th className="p-2 w-8 text-center">No</th>
-              <th className="p-2 w-32">풍선/도번</th>
-              <th className="p-2">품명</th>
-              <th className="p-2 w-20 text-center">유형</th>
-              <th className="p-2 w-16">재질</th>
-              <th className="p-2 w-12 text-center">수량</th>
-              <th className="p-2 w-20 text-right">단위원가</th>
-              <th className="p-2 w-24 text-right">공급단가</th>
-              <th className="p-2 w-28 text-center">견적상태</th>
+              {/* No. (좌측 2열 고정) */}
+              <th className="px-1 py-2 w-8 min-w-[32px] max-w-[32px] text-center sticky left-[28px] z-30 bg-slate-100 border-b border-slate-200">
+                No.
+              </th>
+              {/* 도면번호 (좌측 3열 고정 + 우측 분리 섀도우) */}
+              <th className="px-1.5 py-2 w-36 min-w-[140px] max-w-[155px] sticky left-[60px] z-30 bg-slate-100 border-b border-slate-200 border-r border-slate-200 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
+                도면번호
+              </th>
+              <th className="px-1.5 py-2 min-w-[105px]">품명</th>
+              <th className="px-1 py-2 w-11 min-w-[44px] text-center">유형</th>
+              <th className="px-1.5 py-2 w-14 min-w-[54px]">재질</th>
+              <th className="px-1 py-2 w-10 min-w-[38px] text-center">수량</th>
+              <th className="px-1.5 py-2 w-18 min-w-[68px] text-right">단위원가</th>
+              <th className="px-1.5 py-2 w-24 min-w-[92px] text-right">공급단가</th>
+              <th className="px-1.5 py-2 w-20 min-w-[76px] text-center">견적상태</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
@@ -331,7 +453,7 @@ export default function QuoteLineGrid({
                 </td>
               </tr>
             )}
-            {filtered.map((row) => {
+            {filtered.map((row, rowIdx) => {
               const isSelected = lines.indexOf(row) === selectedIndex;
               const isChecked = selectedIds.includes(row.id);
               const incType: InclusionType = row.inclusionType || (row.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
@@ -343,6 +465,17 @@ export default function QuoteLineGrid({
               const isConfirmed = row.status === 'CONFIRMED';
               const isNeedsReview = row.status === 'NEEDS_REVIEW';
 
+              // 좌측 sticky 고정 열 배경색 (스크롤 시 뒷단 텍스트 비침 원천 차단)
+              const stickyBg = isSelected
+                ? 'bg-blue-50'
+                : isChecked
+                ? 'bg-indigo-50'
+                : isNoise
+                ? 'bg-amber-50'
+                : isExcluded
+                ? 'bg-slate-50'
+                : 'bg-white';
+
               return (
                 <tr
                   key={row.id}
@@ -352,12 +485,12 @@ export default function QuoteLineGrid({
                   title="더블클릭: 도면 대화면으로 부품 위치 확인"
                   className={`cursor-pointer transition-colors ${
                     isSelected ? 'bg-blue-50/90 ring-1 ring-blue-500 font-semibold' : 'hover:bg-slate-50'
-                  } ${isNoise ? 'bg-amber-50/40 text-slate-500 line-through-none' : isExcluded ? 'bg-slate-50/60 opacity-65' : ''} ${
+                  } ${isNoise ? 'bg-amber-50/40 text-slate-500' : isExcluded ? 'bg-slate-50/60 opacity-65' : ''} ${
                     isChecked ? 'bg-indigo-50/60' : ''
                   } ${flashLineId === row.id ? 'animate-pulse bg-amber-100/80' : ''}`}
                 >
-                  {/* 행별 체크박스 */}
-                  <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
+                  {/* 행별 체크박스 (좌측 1열 고정) */}
+                  <td className={`px-1.5 py-1.5 text-center sticky left-0 z-10 w-7 min-w-[28px] max-w-[28px] ${stickyBg}`} onClick={(e) => e.stopPropagation()}>
                     {onToggleSelectId && (
                       <input
                         type="checkbox"
@@ -368,41 +501,80 @@ export default function QuoteLineGrid({
                     )}
                   </td>
 
-                  <td className="p-2 text-center text-slate-400 font-mono">{row.itemNo}</td>
-                  <td className="p-2">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="inline-flex items-center justify-center min-w-[20px] px-1 py-0.2 text-[10px] rounded bg-slate-100 text-slate-700 border border-slate-300 font-bold font-mono">
-                        #{row.balloonNo || row.itemNo}
-                      </span>
-                      <span className="font-mono text-slate-900 font-semibold text-[11px] tracking-tight">
+                  {/* No. (좌측 2열 고정: 1, 2, 3... 실제 글로벌 행 순번 필수 표출) */}
+                  <td className={`px-1 py-1.5 text-center text-slate-500 font-bold font-sans tabular-nums text-xs leading-normal sticky left-[28px] z-10 w-8 min-w-[32px] max-w-[32px] ${stickyBg}`}>
+                    {rowIdx + 1}
+                  </td>
+
+                  {/* 도면번호 (좌측 3열 고정 + 풍선번호 뱃지 병행 + 1행 1열 인라인 배치 + 우측 경계선 섀도우) */}
+                  <td className={`px-1.5 py-1.5 sticky left-[60px] z-10 w-44 min-w-[150px] max-w-[175px] border-r border-slate-200 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)] ${stickyBg}`}>
+                    <div className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
+                      {row.balloonNo && (
+                        <span
+                          className="px-1 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-sans font-bold tabular-nums shrink-0"
+                          title={`도면 내 풍선 기호: #${row.balloonNo}`}
+                        >
+                          #{row.balloonNo}
+                        </span>
+                      )}
+                      <span className="font-sans font-bold tabular-nums text-slate-900 text-xs tracking-tight leading-normal shrink-0">
                         {row.partNo || '-'}
                       </span>
+                      {(() => {
+                        const spec = (row.specification || '').trim();
+                        const isNoiseSpec = !spec ||
+                          spec === '-' ||
+                          spec === row.partNo ||
+                          /^[0-9]+\s*[\/-]\s*[0-9]+$/.test(spec); // '1/1', '1 / 1' 등 수량/시트 찌꺼기 제외
+                        if (isNoiseSpec) return null;
+                        return (
+                          <span
+                            className="px-1 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[9px] font-sans font-medium shrink-0 max-w-[80px] truncate leading-normal"
+                            title={`규격/치수: ${spec}`}
+                          >
+                            {spec}
+                          </span>
+                        );
+                      })()}
                     </div>
-                    {row.specification && row.specification !== row.partNo && row.specification !== '-' && (
-                      <div className="mt-0.5 flex items-center gap-1 text-[10px] text-blue-600 font-mono" title={`규격/치수: ${row.specification}`}>
-                        <span className="px-1 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[9px] font-sans font-medium">규격</span>
-                        <span className="truncate max-w-[130px] font-medium">{row.specification}</span>
-                      </div>
-                    )}
                   </td>
-                  <td className="p-2 truncate max-w-[140px]" title={row.partName}>
-                    {row.partName}
-                    {row.isAssembly && (
-                      <span className="ml-1 px-1 py-0.2 text-[9px] rounded bg-purple-100 text-purple-700 font-bold">조립제외</span>
-                    )}
-                    {isNoise && (
-                      <span className="ml-1 px-1 py-0.2 text-[9px] rounded bg-amber-100 text-amber-800 font-bold border border-amber-300">
-                        🧹 도면주석
-                      </span>
-                    )}
-                    {(row.priceSource === 'COST_PRESET' || row.priceSource === 'MANUAL_INPUT' || row.memo?.includes('비도면') || row.partNo?.startsWith('EXP-') || row.partNo?.startsWith('ETC-')) && (
-                      <span className="ml-1 px-1 py-0.2 text-[9px] rounded bg-indigo-50 text-indigo-700 font-bold border border-indigo-200" title="도면 외 직접 추가된 품목 또는 부대비용">
-                        {row.partNo?.startsWith('EXP-') ? '부대비용' : '비도면추가'}
-                      </span>
-                    )}
+                  <td className="px-1.5 py-1.5 whitespace-nowrap min-w-[105px]" title={row.partName}>
+                    <div className="flex items-center gap-1 whitespace-nowrap">
+                      {(() => {
+                        const cleanPNo = (row.partNo || '').replace(/[-_\s]/g, '').toLowerCase();
+                        const cleanPName = (row.partName || '').replace(/[-_\s]/g, '').toLowerCase();
+                        const isDuplicateOfPartNo = cleanPNo && cleanPName && cleanPNo === cleanPName;
+
+                        if (isDuplicateOfPartNo || !row.partName || row.partName === 'BOM 부품') {
+                          return (
+                            <span className="text-slate-400 text-xs font-normal" title="도면 표제란 품명 미기재 (단품 가공도)">
+                              단품 가공품
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="font-bold text-slate-900 text-xs truncate max-w-[180px]">
+                            {row.partName}
+                          </span>
+                        );
+                      })()}
+                      {row.isAssembly && (
+                        <span className="px-1 py-0.2 text-[9px] rounded bg-purple-100 text-purple-700 font-bold shrink-0">조립제외</span>
+                      )}
+                      {isNoise && (
+                        <span className="px-1 py-0.2 text-[9px] rounded bg-amber-100 text-amber-800 font-bold border border-amber-300 shrink-0">
+                          🧹 도면주석
+                        </span>
+                      )}
+                      {(row.priceSource === 'COST_PRESET' || row.priceSource === 'MANUAL_INPUT' || row.memo?.includes('비도면') || row.partNo?.startsWith('EXP-') || row.partNo?.startsWith('ETC-')) && (
+                        <span className="px-1 py-0.2 text-[9px] rounded bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 shrink-0" title="도면 외 직접 추가된 품목 또는 부대비용">
+                          {row.partNo?.startsWith('EXP-') ? '부대비용' : '비도면추가'}
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  <td className="p-2 text-center">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                  <td className="px-1 py-1.5 text-center w-11 min-w-[44px]">
+                    <span className={`text-[10px] px-1 py-0.5 rounded font-bold ${
                       isNoise ? 'bg-slate-100 text-slate-500' :
                       row.partType === 'MACHINING' ? 'bg-blue-100 text-blue-800' :
                       row.partType === 'SHEET_METAL' ? 'bg-cyan-100 text-cyan-800' :
@@ -421,10 +593,10 @@ export default function QuoteLineGrid({
                        row.partType === 'ASSEMBLY' ? '조립' : '미분류'}
                     </span>
                   </td>
-                  <td className="p-2 truncate">{row.material}</td>
-                  <td className="p-1 text-center font-mono" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-1.5 py-1.5 w-14 min-w-[54px] truncate" title={row.material}>{row.material}</td>
+                  <td className="px-1 py-1 text-center font-sans tabular-nums w-10 min-w-[38px] leading-normal" onClick={(e) => e.stopPropagation()}>
                     {isNoise || isExcluded || row.isAssembly ? (
-                      <span className="text-slate-400 font-mono text-xs">{row.quantity}</span>
+                      <span className="text-slate-400 font-sans tabular-nums text-xs leading-normal">{row.quantity}</span>
                     ) : (
                       <input
                         type="number"
@@ -434,12 +606,12 @@ export default function QuoteLineGrid({
                           const val = Math.max(1, parseInt(e.target.value, 10) || 1);
                           onUpdateLineQuantity?.(row.id, val);
                         }}
-                        className="w-12 px-1 py-0.5 text-center font-mono font-bold bg-white hover:bg-slate-50 border border-slate-200 hover:border-blue-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded text-xs transition-colors"
+                        className="w-9 px-0.5 py-0.5 text-center font-sans font-bold tabular-nums bg-white hover:bg-slate-50 border border-slate-200 hover:border-blue-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded text-xs transition-colors leading-normal"
                         title="수량 직접 수정 (클릭 후 변경)"
                       />
                     )}
                   </td>
-                  <td className="p-2 text-right font-mono text-slate-500">
+                  <td className="px-1.5 py-1.5 text-right font-sans font-medium tabular-nums text-slate-500 w-18 min-w-[68px] leading-normal">
                     {isNoise ? (
                       <span className="text-amber-700 font-medium text-[10px]">노이즈제외</span>
                     ) : isSupplied ? (
@@ -450,7 +622,7 @@ export default function QuoteLineGrid({
                       <span className="text-slate-400 font-medium text-[10px]">견적제외</span>
                     ) : (row.unitCost > 0 ? `₩${row.unitCost.toLocaleString()}` : <span className="text-slate-400">₩0</span>)}
                   </td>
-                  <td className="p-2 text-right font-mono font-bold whitespace-nowrap">
+                  <td className="px-1.5 py-1.5 text-right font-sans font-bold tabular-nums whitespace-nowrap w-24 min-w-[92px] leading-normal">
                     {isNoise ? (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-800 border border-amber-300 font-bold" title="도면 주석/노이즈로 격리됨 (견적금액 제외)">
                         <Sparkles className="w-3 h-3 text-amber-600 shrink-0" />
@@ -479,122 +651,73 @@ export default function QuoteLineGrid({
                         const isNegativeMargin = marginPct !== null && marginPct < 0;
                         const isLowMargin = marginPct !== null && marginPct >= 0 && marginPct < 12;
 
-                        return (
-                          <div className="flex flex-col items-end whitespace-nowrap">
-                            {row.priceSource === 'ENGINEERING_COST' ? (
-                              <div className="inline-flex items-center justify-end gap-1.5 flex-nowrap" title="원가 엔진 추정치 (담당자 검토 필요)">
-                                <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-slate-100 text-slate-600 border border-slate-300 font-medium whitespace-nowrap shrink-0">
+                        const masterPrc = row.masterPrice || row.similarityBreakdown?.matchedUnitPrice;
+                          const diffFromMaster = masterPrc ? row.supplyPrice - masterPrc : null;
+                          const diffPctFromMaster = masterPrc && diffFromMaster !== null
+                            ? Math.round((diffFromMaster / masterPrc) * 1000) / 10
+                            : null;
+                          const masterTooltip = masterPrc
+                            ? `\n• 사내 마스터 단가: ₩${masterPrc.toLocaleString()} (${diffPctFromMaster !== null && diffPctFromMaster !== 0 ? (diffPctFromMaster > 0 ? `▲+${diffPctFromMaster}%` : `▼${diffPctFromMaster}%`) : '일치'})`
+                            : '';
+
+                          return (
+                            <div
+                              className="flex items-center justify-end gap-1.5 whitespace-nowrap"
+                              title={`공급단가: ₩${row.supplyPrice.toLocaleString()}\n• 단위원가: ₩${row.unitCost.toLocaleString()}\n• 마진율: ${marginPct !== null ? `${marginPct}%` : '미책정'}${masterTooltip}`}
+                            >
+                              {/* 마스터/원가마진/수기 라벨 뱃지 */}
+                              {row.priceSource === 'ENGINEERING_COST' ? (
+                                <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-slate-100 text-slate-600 border border-slate-300 font-medium shrink-0">
                                   참고
                                 </span>
-                                <span className="text-slate-600 font-mono whitespace-nowrap">₩{row.supplyPrice.toLocaleString()}</span>
-                              </div>
-                            ) : (
-                              <div className="inline-flex items-center justify-end gap-1.5 flex-nowrap">
-                                {row.priceSource === 'MARGIN_CALCULATED' ? (
-                                  <span
-                                    className="px-1.5 py-0.5 text-[9.5px] rounded bg-blue-50 text-blue-700 border border-blue-300 font-bold whitespace-nowrap shrink-0"
-                                    title={`원가 기준 목표 마진율(${marginPct !== null ? marginPct : ''}%) 적용 산출 단가`}
-                                  >
-                                    ✏️ 원가마진
-                                  </span>
-                                ) : row.priceSource === 'MANUAL_PRICE' ? (
-                                  <span
-                                    className="px-1.5 py-0.5 text-[9.5px] rounded bg-purple-50 text-purple-700 border border-purple-300 font-bold whitespace-nowrap shrink-0"
-                                    title="담당자 직접 수기 입력 단가"
-                                  >
-                                    ✏️ 수기입력
-                                  </span>
-                                ) : row.similarityBreakdown ? (
-                                  <span
-                                    className={`px-1.5 py-0.5 text-[9.5px] rounded border font-bold cursor-help transition-all shadow-2xs whitespace-nowrap shrink-0 ${
-                                      row.similarityBreakdown.totalScore >= 90
-                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 ring-1 ring-emerald-200'
-                                        : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 ring-1 ring-amber-200'
-                                    }`}
-                                    title={`[마스터 대조 결과: ${row.similarityBreakdown.totalScore}% 일치]\n• 품명 (40%): ${row.similarityBreakdown.matchedMasterName || row.partName} (${row.similarityBreakdown.nameMatchPct}%)\n• 재질 (30%): ${row.material} (${row.similarityBreakdown.materialMatchPct}%)\n• 치수 (20%): ${row.specification || '-'} (${row.similarityBreakdown.specMatchPct}%)\n• 공정 (10%): (${row.similarityBreakdown.processMatchPct}%)\n• 마스터 단가: ₩${(row.similarityBreakdown.matchedUnitPrice || row.supplyPrice).toLocaleString()}`}
-                                  >
-                                    {row.similarityBreakdown.totalScore >= 90
-                                      ? `⭐ ${row.similarityBreakdown.totalScore}% 일치`
-                                      : `🟡 ${row.similarityBreakdown.totalScore}% 유사`}
-                                  </span>
-                                ) : ['CUSTOMER_PRICE', 'STANDARD_PRICE', 'MASTER_MATCH'].includes(row.priceSource || '') ? (
-                                  <span
-                                    className="px-1.5 py-0.5 text-[9.5px] rounded bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold whitespace-nowrap shrink-0"
-                                    title="사내 표준 마스터 단가 일치"
-                                  >
-                                    ⭐ 마스터
-                                  </span>
-                                ) : null}
-                                <span className="text-blue-700 font-mono whitespace-nowrap">₩{row.supplyPrice.toLocaleString()}</span>
-                              </div>
-                            )}
-                            {marginPct !== null && (
-                              <span
-                                className={`text-[9.5px] font-mono font-bold leading-none mt-0.5 ${
-                                  isNegativeMargin
-                                    ? 'text-rose-600 bg-rose-50 px-1 py-0.2 rounded border border-rose-200'
-                                    : isLowMargin
-                                    ? 'text-amber-700'
-                                    : 'text-emerald-600'
-                                }`}
-                              >
-                                {marginPct > 0 ? `+${marginPct}%` : `${marginPct}%`}
-                              </span>
-                            )}
-                            {/* 마스터 프라이스 대조 서브텍스트 */}
-                            {(() => {
-                              const masterPrc = row.masterPrice || row.similarityBreakdown?.matchedUnitPrice;
-                              const diffFromMaster = masterPrc ? row.supplyPrice - masterPrc : null;
-                              const diffPctFromMaster = masterPrc && diffFromMaster !== null
-                                ? Math.round((diffFromMaster / masterPrc) * 1000) / 10
-                                : null;
-                              const isExtremeDiff = diffPctFromMaster !== null && Math.abs(diffPctFromMaster) >= 30;
+                              ) : row.priceSource === 'MARGIN_CALCULATED' ? (
+                                <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-blue-50 text-blue-700 border border-blue-300 font-bold shrink-0">
+                                  ✏️ 원가마진
+                                </span>
+                              ) : row.priceSource === 'MANUAL_PRICE' ? (
+                                <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-purple-50 text-purple-700 border border-purple-300 font-bold shrink-0">
+                                  ✏️ 수기
+                                </span>
+                              ) : row.similarityBreakdown ? (
+                                <span className={`px-1.5 py-0.5 text-[9.5px] rounded border font-bold shrink-0 ${
+                                  row.similarityBreakdown.totalScore >= 90
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                    : 'bg-amber-50 text-amber-800 border-amber-300'
+                                }`}>
+                                  {row.similarityBreakdown.totalScore >= 90
+                                    ? `⭐ ${row.similarityBreakdown.totalScore}%`
+                                    : `🟡 ${row.similarityBreakdown.totalScore}%`}
+                                </span>
+                              ) : ['CUSTOMER_PRICE', 'STANDARD_PRICE', 'MASTER_MATCH'].includes(row.priceSource || '') ? (
+                                <span className="px-1.5 py-0.5 text-[9.5px] rounded bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold shrink-0">
+                                  ⭐ 마스터
+                                </span>
+                              ) : null}
 
-                              return (
-                                <div className="flex items-center justify-end gap-1 mt-0.5 text-[9px] font-mono leading-none">
-                                  {isExtremeDiff ? (
-                                    <span
-                                      className="text-rose-600 font-bold bg-rose-50 px-1 py-0.2 rounded border border-rose-200 animate-pulse"
-                                      title={`마스터 기준단가(₩${masterPrc?.toLocaleString()}) 대비 ${diffPctFromMaster! > 0 ? `+${diffPctFromMaster}%` : `${diffPctFromMaster}%`} 과도 괴리 발생!`}
-                                    >
-                                      ⚠️ 마스터: ₩{masterPrc?.toLocaleString()} ({diffPctFromMaster! > 0 ? `+${diffPctFromMaster}%` : `${diffPctFromMaster}%`})
-                                    </span>
-                                  ) : masterPrc ? (
-                                    <span
-                                      className={`${row.supplyPrice === masterPrc ? 'text-emerald-700 font-medium' : 'text-slate-400'}`}
-                                      title={`사내 표준 마스터 기준단가: ₩${masterPrc.toLocaleString()}`}
-                                    >
-                                      마스터: ₩{masterPrc.toLocaleString()}{' '}
-                                      {diffPctFromMaster !== null && diffPctFromMaster !== 0
-                                        ? `(${diffPctFromMaster > 0 ? `▲+${diffPctFromMaster}%` : `▼${diffPctFromMaster}%`})`
-                                        : '(일치)'}
-                                    </span>
-                                  ) : onOpenBatchMasterModal ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onOpenBatchMasterModal([row.id]);
-                                      }}
-                                      className="text-amber-800 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
-                                      title="이 부품을 사내 마스터 DB에 등록합니다."
-                                    >
-                                      <Database className="w-2.5 h-2.5 text-amber-600" />
-                                      <span>⭐ 마스터 등록</span>
-                                    </button>
-                                  ) : (
-                                    <span className="text-purple-600 font-medium" title="사내 마스터 프라이스 미등록 품목">
-                                      마스터: 미등록
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        );
-                      })()
+                              {/* 메인 공급금액 */}
+                              <span className="text-blue-900 font-mono text-xs font-bold whitespace-nowrap">
+                                ₩{row.supplyPrice.toLocaleString()}
+                              </span>
+
+                              {/* 마진율 인라인 뱃지 */}
+                              {marginPct !== null && (
+                                <span
+                                  className={`text-[9.5px] font-mono font-bold px-1 py-0.2 rounded shrink-0 ${
+                                    isNegativeMargin
+                                      ? 'text-rose-700 bg-rose-50 border border-rose-200'
+                                      : isLowMargin
+                                      ? 'text-amber-700 bg-amber-50 border border-amber-200'
+                                      : 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                                  }`}
+                                >
+                                  {marginPct > 0 ? `+${marginPct}%` : `${marginPct}%`}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 border border-rose-200 font-bold">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 border border-rose-200 font-bold font-sans leading-normal">
                         <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
                         단가미확보(0원)
                       </span>
@@ -602,7 +725,7 @@ export default function QuoteLineGrid({
                   </td>
 
                   {/* 견적 상태 열 */}
-                  <td className="p-2 text-center relative" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-1.5 py-1.5 text-center relative w-20 min-w-[76px]" onClick={(e) => e.stopPropagation()}>
                     {row.isAssembly ? (
                       <span className="px-2 py-1 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
                         조립제외
@@ -761,6 +884,7 @@ export default function QuoteLineGrid({
             })}
           </tbody>
         </table>
+      </div>
       </div>
 
       {/* 3. 플로팅 다중 선택 일괄 작업 바 (선택된 행이 1개 이상일 때 하단에 플로팅) */}

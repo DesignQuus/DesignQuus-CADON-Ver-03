@@ -15,25 +15,40 @@ export async function GET(
   }
 
   const { id } = await params;
+  const { searchParams } = new URL(req.url);
+  const fileId = searchParams.get('fileId');
 
   // Guard: Verify that at least one valid source CAD drawing exists for this case
-  const hasSourceDrawing = db.prepare(`
-    SELECT 1 FROM uploaded_files
-    WHERE quotation_case_id = ? AND file_role != 'VECTOR_SVG' AND file_type IN ('DWG', 'DXF')
-    LIMIT 1
-  `).get(id);
+  const hasSourceDrawing = await (fileId
+    ? db.prepare(`
+        SELECT 1 FROM uploaded_files
+        WHERE quotation_case_id = ? AND (id = ? OR derived_from_file_id = ?) AND file_role != 'VECTOR_SVG' AND file_type IN ('DWG', 'DXF')
+        LIMIT 1
+      `).get(id, fileId, fileId)
+    : db.prepare(`
+        SELECT 1 FROM uploaded_files
+        WHERE quotation_case_id = ? AND file_role != 'VECTOR_SVG' AND file_type IN ('DWG', 'DXF')
+        LIMIT 1
+      `).get(id));
 
   if (!hasSourceDrawing) {
     return NextResponse.json({ error: '등록된 도면 파일이 없습니다.' }, { status: 404 });
   }
 
   // 1. Look for registered VECTOR_SVG file
-  let svgFile = (await db.prepare(`
-    SELECT * FROM uploaded_files
-    WHERE quotation_case_id = ? AND (file_role = 'VECTOR_SVG' OR original_file_name LIKE '%.svg')
-    ORDER BY rowid DESC
-    LIMIT 1
-  `).get(id)) as any;
+  let svgFile = (await (fileId
+    ? db.prepare(`
+        SELECT * FROM uploaded_files
+        WHERE quotation_case_id = ? AND derived_from_file_id = ? AND (file_role = 'VECTOR_SVG' OR original_file_name LIKE '%.svg')
+        ORDER BY rowid DESC
+        LIMIT 1
+      `).get(id, fileId)
+    : db.prepare(`
+        SELECT * FROM uploaded_files
+        WHERE quotation_case_id = ? AND (file_role = 'VECTOR_SVG' OR original_file_name LIKE '%.svg')
+        ORDER BY rowid DESC
+        LIMIT 1
+      `).get(id))) as any;
 
   let svgPath: string | null = null;
   if (svgFile && svgFile.storage_path) {
@@ -43,7 +58,10 @@ export async function GET(
 
   // 2. Fallback: Check storage/derived or storage directory
   if (!svgPath) {
+    const filePrefix = fileId ? `${id}_${fileId}` : id;
     const derivedCandidates = [
+      path.join(getStorageSubdir('derived'), `${filePrefix}__hd_vector.svg`),
+      path.join(process.cwd(), 'storage', 'derived', `${filePrefix}__hd_vector.svg`),
       path.join(getStorageSubdir('derived'), `${id}__hd_vector.svg`),
       path.join(process.cwd(), 'storage', 'derived', `${id}__hd_vector.svg`),
       path.join(process.cwd(), 'storage', 'test_vector.svg')

@@ -267,7 +267,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     } catch {}
   }, [layoutMode, splitRatio]);
 
-  // 경계선 드래그 폭 조절 (20% ~ 80%)
+  // 경계선 드래그 폭 조절 (20% ~ 80%) — 60FPS RAF 동기화로 버벅임 및 지터 완전 제거
   const startSplitDrag = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -278,11 +278,22 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     const prevSelect = document.body.style.userSelect;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+
+    let rafId: number | null = null;
     const onMove = (ev: MouseEvent) => {
-      const pct = ((ev.clientX - box.left - 12) / (box.width - 24)) * 100;
-      setSplitRatio(Math.min(80, Math.max(20, pct)));
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const curBox = splitContainerRef.current?.getBoundingClientRect() || box;
+        const pct = ((ev.clientX - curBox.left - 12) / (curBox.width - 24)) * 100;
+        setSplitRatio(Math.min(80, Math.max(20, pct)));
+      });
     };
     const onUp = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       setIsDraggingSplit(false);
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
@@ -2055,14 +2066,6 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
           unconfirmedCount,
           marginWarning: avgMargin < 12.0
         }}
-        caseInfo={{
-          caseNo: caseInfo?.case_no,
-          caseName: caseInfo?.case_name,
-          companyName: caseInfo?.company_name,
-          drawingsCount: (drawings && drawings.length > 0) ? drawings.length : (caseInfo?.drawingsCount ?? lines.length),
-          bomCount: (rawBomItems && rawBomItems.length > 0) ? rawBomItems.length : (caseInfo?.bomCount ?? lines.length),
-          quoteItemCount: lines.length
-        }}
       />
 
       {/* 1. 상단 워크스페이스 헤더 */}
@@ -2217,13 +2220,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
               <Send className="w-3.5 h-3.5 shrink-0" />
             )}
             <span>
-              {submittingQuote
-                ? '이동 중...'
-                : zeroPriceCount > 0
-                ? `결재 상신 (미확보 ${zeroPriceCount}건)`
-                : unconfirmedCount > 0
-                ? `결재 상신 (미확정 ${unconfirmedCount}건)`
-                : '결재 상신'}
+              {submittingQuote ? '이동 중...' : '결재 상신'}
             </span>
           </button>
         </div>
@@ -2250,7 +2247,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             </span>
             <span className="text-rose-300">|</span>
             <span className="text-slate-600">
-              도면을 보며 <strong>1개씩 확인·적용</strong>하거나 하단 <strong>[⚡ 이 품목 AI 원가 계산]</strong> 또는 추천 단가를 채택하세요.
+              도면을 보며 <strong>1개씩 확인·적용</strong>하거나 우측 <strong>[⚡ 이 품목 AI 계산]</strong> 또는 추천 단가를 채택하세요.
             </span>
           </div>
 
@@ -2467,7 +2464,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         <div
           className={`h-full ${isDraggingSplit ? '' : 'transition-[width,flex] duration-200 ease-out'} ${
             layoutMode === 'DRAWING' ? 'w-0 overflow-hidden' : 'flex-1 min-w-0'
-          } ${layoutMode === 'BOM' ? 'ml-3' : ''}`}
+          }`}
         >
           <QuoteLineGrid
             lines={lines}
@@ -2718,7 +2715,7 @@ function CollapsedRail({
       onClick={onClick}
       title={title}
       className={`w-10 shrink-0 h-full flex flex-col items-center gap-2 py-3 bg-white border border-slate-300 rounded-xl shadow-sm hover:border-blue-400 hover:bg-blue-50/60 hover:shadow-md transition-all cursor-pointer group animate-in fade-in duration-200 ${
-        side === 'left' ? 'mr-3' : 'ml-3'
+        side === 'left' ? 'mr-1.5' : 'ml-1.5'
       }`}
     >
       <span className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">

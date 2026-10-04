@@ -186,11 +186,23 @@ export default function WebGlCadViewer({
   const wasInteractingRef = useRef<boolean>(false);
 
   // Smooth fly-to animation & kinetic momentum zoom ref
-  const targetCamRef = useRef<{ x: number; y: number; zoom: number; lerpSpeed?: number } | null>(null);
+  const targetCamRef = useRef<{
+    x?: number;
+    y?: number;
+    zoom?: number;
+    lerpSpeed?: number;
+    anchorWorldX?: number;
+    anchorWorldY?: number;
+    ndcX?: number;
+    ndcY?: number;
+    targetZoom?: number;
+  } | null>(null);
   // 🖱️ DWG FastView 방식 칸 단위 줌: 휠 델타 누적값 & 마지막 입력 시각
   const wheelAccumRef = useRef<{ acc: number; lastTs: number }>({ acc: 0, lastTs: 0 });
   // 마지막 '화면 맞춤' 카메라 상태 (리사이즈 시 사용자 조작 여부 판별용)
   const lastFitRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
+  // 🌟 분할 창 리사이즈 시 도면 흔들림 방지(좌측 고정점 기준 X 델타 보정)를 위한 이전 캔버스 크기 추적
+  const lastCanvasSizeRef = useRef<{ w: number; h: number } | null>(null);
 
   // 💡 On-demand rendering control: Only render when dirty (0% GPU idle)
   const needsRenderRef = useRef(true);
@@ -267,12 +279,12 @@ export default function WebGlCadViewer({
   }, []);
 
   // 3. Zoom Camera to Extents or Specific Bounding Box (Robust with Auto-Retry)
-  const fitToExtents = useCallback((minX: number, minY: number, maxX: number, maxY: number, animate = true, retryCount = 0) => {
+  const fitToExtents = useCallback((minX: number, minY: number, maxX: number, maxY: number, animate = true, retryCount = 0, isSheetFocus = false) => {
     const camera = cameraRef.current;
     const container = containerRef.current;
     if (!camera || !container) {
       if (retryCount < 30) {
-        setTimeout(() => fitToExtents(minX, minY, maxX, maxY, animate, retryCount + 1), 50);
+        setTimeout(() => fitToExtents(minX, minY, maxX, maxY, animate, retryCount + 1, isSheetFocus), 50);
       }
       return;
     }
@@ -281,21 +293,23 @@ export default function WebGlCadViewer({
     const h = container.clientHeight;
     if (!w || !h || w <= 0 || h <= 0) {
       if (retryCount < 30) {
-        setTimeout(() => fitToExtents(minX, minY, maxX, maxY, animate, retryCount + 1), 50);
+        setTimeout(() => fitToExtents(minX, minY, maxX, maxY, animate, retryCount + 1, isSheetFocus), 50);
       }
       return;
     }
 
-    const margin = 1.15; // Balanced margin for spacious AutoCAD look & HUD breathing room
+    // 🎯 95% 대화면 줌인: 특정 도곽(Sheet Frame) 포커스 시 5% 여백(margin = 1.053)으로 화면 95% 완벽 충전!
+    // 전체 도면 오버뷰 시에는 상단 HUD 여백을 포함하여 margin = 1.15 유지
+    const margin = isSheetFocus ? 1.053 : 1.15;
     const spanX = Math.max(maxX - minX, 50);
     const spanY = Math.max(maxY - minY, 50);
-    // Add balanced top breathing room (5% of spanY) so HUD badges never overlap drawing content
-    const topPadding = spanY * 0.05;
+    // 도곽 확대 시에는 상하좌우 대칭 2.5% 여백으로 정중앙 배치
+    const topPadding = isSheetFocus ? 0 : spanY * 0.05;
     const dx = spanX * margin;
     const dy = (spanY + topPadding) * margin;
 
     const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY + topPadding * 0.15) / 2;
+    const centerY = isSheetFocus ? (minY + maxY) / 2 : (minY + maxY + topPadding * 0.15) / 2;
 
     const frustumSize = 1000;
     const aspect = w / h;
@@ -304,7 +318,8 @@ export default function WebGlCadViewer({
 
     const zoomX = camWidth / dx;
     const zoomY = camHeight / dy;
-    const targetZoom = Math.max(Math.min(zoomX, zoomY), 0.00005);
+    // 과도한 확대 방지를 위한 안전 줌 상한 (최대 10.0x)
+    const targetZoom = Math.max(Math.min(Math.min(zoomX, zoomY), 10.0), 0.00005);
 
     if (typeof window !== 'undefined') {
       (window as any).__cadDebugHistory = (window as any).__cadDebugHistory || [];
@@ -390,27 +405,60 @@ export default function WebGlCadViewer({
     const animate = () => {
       let isMoving = false;
 
-      // Smooth camera interpolation (Fly-to & Kinetic Momentum Zoom)
+      // Smooth camera interpolation (Fly-to & Zero-Drift Anchor Zoom)
       if (targetCamRef.current && cameraRef.current) {
         isMoving = true;
         const cam = cameraRef.current;
         const target = targetCamRef.current;
-        const speed = target.lerpSpeed ?? 0.32;
-        cam.position.x += (target.x - cam.position.x) * speed;
-        cam.position.y += (target.y - cam.position.y) * speed;
-        cam.zoom += (target.zoom - cam.zoom) * speed;
-        cam.updateProjectionMatrix();
+        const speed = target.lerpSpeed ?? 0.60;
+        const w = container.clientWidth || 1000;
+        const h = container.clientHeight || 680;
+        const aspect = w / h;
+        const frustumSize = 1000;
 
-        if (
-          Math.abs(cam.position.x - target.x) < 0.2 &&
-          Math.abs(cam.position.y - target.y) < 0.2 &&
-          Math.abs(cam.zoom - target.zoom) / Math.max(cam.zoom, 0.0001) < 0.002
-        ) {
-          cam.position.x = target.x;
-          cam.position.y = target.y;
-          cam.zoom = target.zoom;
+        if (target.anchorWorldX !== undefined && target.anchorWorldY !== undefined && target.targetZoom !== undefined) {
+          // ⚡ 1. 마우스 앵커 줌 모드: 오차 0 (Zero Drift)
+          // 줌 배율만 부드럽게 감속 보간하고, 카메라는 매 프레임 마우스 커서 위치에 완벽하게 못 박아 고정!
+          cam.zoom += (target.targetZoom - cam.zoom) * speed;
+
+          const frustumW = (frustumSize * aspect) / cam.zoom;
+          const frustumH = frustumSize / cam.zoom;
+          cam.position.x = target.anchorWorldX - (target.ndcX ?? 0) * frustumW;
+          cam.position.y = target.anchorWorldY + (target.ndcY ?? 0) * frustumH;
           cam.updateProjectionMatrix();
-          targetCamRef.current = null;
+
+          // 줌 상대 오차가 0.5% 미만이면 최종 목표로 즉시 스냅 정지
+          if (Math.abs(cam.zoom - target.targetZoom) / target.targetZoom < 0.005) {
+            cam.zoom = target.targetZoom;
+            const finalW = (frustumSize * aspect) / cam.zoom;
+            const finalH = frustumSize / cam.zoom;
+            cam.position.x = target.anchorWorldX - (target.ndcX ?? 0) * finalW;
+            cam.position.y = target.anchorWorldY + (target.ndcY ?? 0) * finalH;
+            cam.updateProjectionMatrix();
+            targetCamRef.current = null;
+          }
+        } else if (target.x !== undefined && target.y !== undefined && target.zoom !== undefined) {
+          // ⚡ 2. 화면 전체 맞춤 비행 모드 (fitToExtents)
+          cam.position.x += (target.x - cam.position.x) * speed;
+          cam.position.y += (target.y - cam.position.y) * speed;
+          cam.zoom += (target.zoom - cam.zoom) * speed;
+          cam.updateProjectionMatrix();
+
+          const worldPerPx = frustumSize / (Math.max(cam.zoom, 0.0001) * h);
+          const diffX = Math.abs(cam.position.x - target.x);
+          const diffY = Math.abs(cam.position.y - target.y);
+          const diffZoomRel = Math.abs(cam.zoom - target.zoom) / Math.max(cam.zoom, 0.0001);
+
+          if (
+            (diffX / worldPerPx < 0.5 && diffY / worldPerPx < 0.5 && diffZoomRel < 0.005) ||
+            (diffX < 0.3 && diffY < 0.3 && diffZoomRel < 0.003)
+          ) {
+            cam.position.x = target.x;
+            cam.position.y = target.y;
+            cam.zoom = target.zoom;
+            cam.updateProjectionMatrix();
+            targetCamRef.current = null;
+          }
         }
       }
 
@@ -502,7 +550,9 @@ export default function WebGlCadViewer({
           const w = container.clientWidth;
           const h = container.clientHeight;
 
-          if (textCanvas.width !== Math.round(w * dpr) || textCanvas.height !== Math.round(h * dpr)) {
+          // 🌟 초기 1회 미할당 상태(width === 0)일 때만 버퍼 크기 초기화.
+          // 이후 창 크기 변경은 handleResize에서만 동기적으로 1회 갱신하여 매 프레임 깜빡임(Flicker)을 원천 차단!
+          if (textCanvas.width === 0 || textCanvas.height === 0) {
             textCanvas.width = Math.round(w * dpr);
             textCanvas.height = Math.round(h * dpr);
           }
@@ -876,14 +926,33 @@ export default function WebGlCadViewer({
     };
     animationFrameIdRef.current = requestAnimationFrame(animate);
 
-    // Resize Observer
+    // Resize Observer: 창 크기 / 분할 패널 폭 조절 시 도면 배율 고정 및 좌측 고정 무흔들림 뷰포트 확장
     const handleResize = () => {
       if (!container || !cameraRef.current || !rendererRef.current) return;
       const w = container.clientWidth;
       const h = container.clientHeight;
       if (w === 0 || h === 0) return;
-      const asp = w / h;
+
       const cam = cameraRef.current;
+      const prevSize = lastCanvasSizeRef.current;
+
+      // 🌟 리사이즈 중 잔여 lerp 비행 애니메이션이 줌을 멋대로 바꾸지 않도록 즉시 정지
+      targetCamRef.current = null;
+
+      // 🌟 좌측 고정 모서리 기준 카메라 중심 X 델타 보정 (무흔들림 핵심 알고리즘)
+      // 패널의 오른쪽 경계선(리사이저)을 좌우로 움직일 때,
+      // 왼쪽 고정 모서리에 있던 CAD 도면의 픽셀 위치가 1픽셀도 흔들리지 않고 바위처럼 정지해 있도록
+      // 늘어난 폭(dw)의 절반만큼 월드 X 좌표를 실시간 보정합니다.
+      if (prevSize && prevSize.w > 0 && prevSize.h > 0 && cam.zoom > 0) {
+        const dw = w - prevSize.w;
+        if (Math.abs(dw) > 0.05) {
+          const deltaWorldX = (dw * frustumSize) / (2 * h * cam.zoom);
+          cam.position.x += deltaWorldX;
+        }
+      }
+      lastCanvasSizeRef.current = { w, h };
+
+      const asp = w / h;
       cam.left = (-frustumSize * asp) / 2;
       cam.right = (frustumSize * asp) / 2;
       cam.top = frustumSize / 2;
@@ -893,28 +962,20 @@ export default function WebGlCadViewer({
       // 화면 고정 굵기 선(LineMaterial)은 캔버스 해상도를 알아야 픽셀 폭을 유지함
       heavyMaterialsRef.current.forEach((m) => m.resolution.set(w, h));
 
-      // 직전 '화면 맞춤' 상태 그대로(사용자가 확대/이동하지 않음)일 때만 새 크기에 맞춰 다시 맞춤.
-      // 사용자가 직접 보던 위치/배율은 크기가 바뀌어도 유지.
-      const lf = lastFitRef.current;
-      const visH = frustumSize / Math.max(cam.zoom, 1e-9);
-      const atFit =
-        !lf ||
-        targetCamRef.current !== null ||
-        (Math.abs(cam.zoom / lf.zoom - 1) < 0.03 &&
-          Math.abs(cam.position.x - lf.x) < visH * 0.02 &&
-          Math.abs(cam.position.y - lf.y) < visH * 0.02);
-
-      if (atFit && !isDraggingRef.current) {
-        if (focusBboxRef.current) {
-          const fb = focusBboxRef.current;
-          fitToExtents(fb.min_x, fb.min_y, fb.max_x, fb.max_y, true);
-        } else {
-          const eff = getEffectiveOverviewBounds();
-          if (eff.maxX > eff.minX) {
-            fitToExtents(eff.minX, eff.minY, eff.maxX, eff.maxY, true);
-          }
+      // 🌟 2D 텍스트 캔버스를 handleResize에서만 동기적으로 크기 갱신하여 깜빡임 완전 제거!
+      const textCanvas = textCanvasRef.current;
+      if (textCanvas) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+        const targetW = Math.round(w * dpr);
+        const targetH = Math.round(h * dpr);
+        if (textCanvas.width !== targetW || textCanvas.height !== targetH) {
+          textCanvas.width = targetW;
+          textCanvas.height = targetH;
         }
       }
+
+      // 🌟 즉시 1회 동기 렌더링을 실행하여 CSS 리플로우와의 1프레임 틈(스트레칭/깜빡임)을 제거!
+      rendererRef.current.render(scene, cam);
       needsRenderRef.current = true;
     };
 
@@ -933,7 +994,7 @@ export default function WebGlCadViewer({
   const loadBinaryData = useCallback(async (retryAttempt = 0) => {
     if (!caseId) return;
     const fetchId = activeFileId;
-    const cacheKey = `${caseId}_${fetchId || 'default'}`;
+    const cacheKey = `${caseId}_${fetchId || 'default'}_v4_lt`;
 
     setLoading(true);
     setErrorMsg(null);
@@ -1115,7 +1176,7 @@ export default function WebGlCadViewer({
   const loadTexts = useCallback(async (retryAttempt = 0) => {
     if (!caseId) return;
     const fetchId = activeFileId;
-    const cacheKey = `${caseId}_${fetchId || 'default'}`;
+    const cacheKey = `${caseId}_${fetchId || 'default'}_v4_lt`;
 
     try {
       if (retryAttempt === 0) {
@@ -1547,7 +1608,7 @@ export default function WebGlCadViewer({
       if (prevFocusBboxRef.current || (prevSelectedDrawingIdxRef.current >= 0 && selectedDrawingIdx < 0)) {
         const eff = getEffectiveOverviewBounds();
         if (eff.maxX > eff.minX) {
-          fitToExtents(eff.minX, eff.minY, eff.maxX, eff.maxY, true);
+          fitToExtents(eff.minX, eff.minY, eff.maxX, eff.maxY, true, 0, false);
         }
       }
       prevFocusBboxRef.current = null;
@@ -1557,7 +1618,7 @@ export default function WebGlCadViewer({
 
     prevFocusBboxRef.current = focusBbox;
     prevSelectedDrawingIdxRef.current = selectedDrawingIdx;
-    fitToExtents(focusBbox.min_x, focusBbox.min_y, focusBbox.max_x, focusBbox.max_y, true);
+    fitToExtents(focusBbox.min_x, focusBbox.min_y, focusBbox.max_x, focusBbox.max_y, true, 0, true);
   }, [focusBbox, selectedDrawingIdx, fitToExtents, getEffectiveOverviewBounds]);
 
   // 5. Mouse Interaction: 60 FPS Zoom on Wheel (Logarithmic Dynamic Scale + Kinetic Momentum Physics)
@@ -1584,18 +1645,14 @@ export default function WebGlCadViewer({
 
       // ⚡ DWG FastView / AutoCAD 방식 칸 단위 줌 (Notch-Stepped Zoom)
       //  - 마우스 휠: 1칸(deltaY≈100) = 정확히 1.25배 고정, 돌리는 속도와 무관
-      //  - 단계마다 약 100ms 내 짧게 이동 후 정지 → 칸마다 단계가 눈에 보임
+      //  - 단계마다 약 70~80ms 내 짧고 부드럽게 이동 후 정지 (Snappy & Smooth Halt)
       //  - 터치패드(작은 연속 델타): 단계 없이 부드럽게 유지
       //  - 축소/확대 한계: 도면 전체 보기 기준 (무한 확대·축소 방지)
-      const activeZoom = targetCamRef.current ? targetCamRef.current.zoom : camera.zoom;
-
       let rawDelta = e.deltaY;
       if (e.deltaMode === 1) rawDelta *= 33;       // Line mode (Firefox 등)
       else if (e.deltaMode === 2) rawDelta *= 100; // Page mode
 
       const NOTCH = 100;          // 휠 1칸 기준 델타
-      const STEP_FACTOR = 1.25;   // 1칸당 배율 (AutoCAD ZOOMFACTOR 60 수준)
-      // 터치패드: 픽셀 모드의 작은 연속 델타 또는 핀치 제스처(브라우저가 Ctrl+휠로 전달)
       const isTrackpad = e.deltaMode === 0 && (e.ctrlKey || Math.abs(rawDelta) < 50);
 
       let zoomFactor: number;
@@ -1603,27 +1660,46 @@ export default function WebGlCadViewer({
       if (isTrackpad) {
         // 터치패드/핀치: 연속 부드러운 줌
         zoomFactor = Math.exp(-Math.max(-60, Math.min(60, rawDelta)) * 0.004);
-        lerpSpeed = 0.35;
+        lerpSpeed = 0.55;
       } else {
         // 마우스 휠: 델타 누적 → 100 단위마다 1단계
         const now = performance.now();
         const acc = wheelAccumRef.current;
-        // 방향이 바뀌었거나 250ms 이상 쉬었으면 누적값 초기화
-        if (now - acc.lastTs > 250 || Math.sign(acc.acc) !== Math.sign(rawDelta)) acc.acc = 0;
+        const isFreshInput = now - acc.lastTs > 140;
+        // 방향이 바뀌었거나 140ms 이상 쉬었으면 누적값 초기화
+        if (isFreshInput || Math.sign(acc.acc) !== Math.sign(rawDelta)) acc.acc = 0;
         acc.lastTs = now;
         acc.acc += rawDelta;
         let steps = Math.trunc(acc.acc / NOTCH);
         if (steps === 0) {
-          // 1칸 미만 입력(가속 휠 잔여분): 첫 입력은 최소 1단계 보장
-          if (Math.abs(acc.acc) >= NOTCH * 0.5) steps = Math.sign(acc.acc);
+          // 휠을 멈춘 뒤 뒤따라오는 미세 잔여 진동에 의한 추가 스텝 발동 방지
+          // 새로운 입력 시작일 때만 0.5 노치 이상을 1단계로 인정
+          if (isFreshInput && Math.abs(acc.acc) >= NOTCH * 0.5) steps = Math.sign(acc.acc);
           else return;
         }
         acc.acc -= steps * NOTCH;
-        // 걸림 없는 휠(프리스핀) 폭주 방지: 입력 1회당 최대 2단계
-        steps = Math.max(-2, Math.min(2, steps));
+        // 걸림 없는 휠(프리스핀) 폭주 방지: 입력 1회당 최대 3단계 수용
+        steps = Math.max(-3, Math.min(3, steps));
+
+        // ⚡ 지각적 줌 스케일 균형 (Perceptual Scale Consistency):
+        // 도면이 전체 화면(Overview)보다 훨씬 작게 축소되어 있을 때는 도면으로 신속히 복귀할 수 있도록
+        // 확대 스텝을 1.30배로 시원하게 적용하고, 정밀 확대 상태에서는 1.25배로 안정적 적용
+        const eff = getEffectiveOverviewBounds();
+        const spanX = Math.max(eff.maxX - eff.minX, 1);
+        const spanY = Math.max(eff.maxY - eff.minY, 1);
+        const overviewZoom = Math.min((frustumSize * aspect) / (spanX * 1.18), frustumSize / (spanY * 1.18));
+        const isZoomedOutFar = camera.zoom < overviewZoom * 0.85;
+        const STEP_FACTOR = isZoomedOutFar && steps < 0 ? 1.30 : 1.25;
+
         zoomFactor = Math.pow(STEP_FACTOR, -steps);
-        lerpSpeed = 0.45; // 60FPS 기준 약 6프레임(≈100ms) 내 97% 도달 후 정지
+        // ⚡ 짧고 부드러운 정지(Snappy & Smooth Halt): 60FPS 기준 약 4~5프레임(≈70~80ms) 내 98% 도달 후 깔끔하게 정지
+        lerpSpeed = 0.60;
       }
+
+      // 연속 휠 조작 시 현재 진행 중인 목표 줌을 기준으로 누적 (자연스러운 휠 연타 지원)
+      const activeZoom = (targetCamRef.current && targetCamRef.current.targetZoom !== undefined)
+        ? targetCamRef.current.targetZoom
+        : camera.zoom;
 
       // 도면 크기 기준 확대/축소 한계
       const eff = getEffectiveOverviewBounds();
@@ -1633,26 +1709,29 @@ export default function WebGlCadViewer({
       const minZoom = overviewZoom * 0.5;              // 전체 보기의 1/2 크기까지만 축소
       const maxZoom = Math.min(overviewZoom * 5000, 10000); // 도면 대비 5,000배까지 확대
       const newZoom = Math.min(Math.max(activeZoom * zoomFactor, minZoom), maxZoom);
+
       // 한계 도달 시 무시 (이미 한계 밖이면 반대 방향으로 튀지 않도록 차단)
       if (Math.abs(newZoom - activeZoom) / activeZoom < 1e-6) return;
       if ((zoomFactor < 1 && newZoom > activeZoom) || (zoomFactor > 1 && newZoom < activeZoom)) return;
 
-      // 마우스 커서 위치를 월드 좌표의 기준점으로 고정
-      const worldW = (frustumSize * aspect) / camera.zoom;
-      const worldH = frustumSize / camera.zoom;
-      const worldMouseX = camera.position.x + (mouseX / container.clientWidth - 0.5) * worldW;
-      const worldMouseY = camera.position.y - (mouseY / container.clientHeight - 0.5) * worldH;
+      // 마우스 포인터의 화면 중심 기준 정규화 좌표 (-0.5 ~ +0.5)
+      const ndcX = mouseX / container.clientWidth - 0.5;
+      const ndcY = mouseY / container.clientHeight - 0.5;
 
-      // 목표 줌 배율에서의 뷰포트 크기 및 목표 카메라 중심점
-      const newWorldW = (frustumSize * aspect) / newZoom;
-      const newWorldH = frustumSize / newZoom;
-      const targetX = worldMouseX - (mouseX / container.clientWidth - 0.5) * newWorldW;
-      const targetY = worldMouseY + (mouseY / container.clientHeight - 0.5) * newWorldH;
+      // ⚡ Zero-Drift Single Source of Truth Anchor Zoom:
+      // 마우스 커서가 가리키고 있는 현재 실제 도면 상의 월드 좌표를 마우스 앵커로 완벽 고정
+      // (애니메이션 도중 휠을 추가로 돌려도 마우스 커서 위치가 1px도 미끄러지지 않음)
+      const curWorldW = (frustumSize * aspect) / camera.zoom;
+      const curWorldH = frustumSize / camera.zoom;
+      const anchorWorldX = camera.position.x + ndcX * curWorldW;
+      const anchorWorldY = camera.position.y - ndcY * curWorldH;
 
       targetCamRef.current = {
-        x: targetX,
-        y: targetY,
-        zoom: newZoom,
+        anchorWorldX,
+        anchorWorldY,
+        ndcX,
+        ndcY,
+        targetZoom: newZoom,
         lerpSpeed
       };
 
@@ -1897,7 +1976,7 @@ export default function WebGlCadViewer({
   const handleZoomIn = () => {
     if (!cameraRef.current) return;
     const cam = cameraRef.current;
-    const baseZoom = targetCamRef.current ? targetCamRef.current.zoom : cam.zoom;
+    const baseZoom = targetCamRef.current?.targetZoom ?? targetCamRef.current?.zoom ?? cam.zoom;
     const targetZoom = Math.min(baseZoom * 1.6, 10000);
     targetCamRef.current = {
       x: cam.position.x,
@@ -1911,7 +1990,7 @@ export default function WebGlCadViewer({
   const handleZoomOut = () => {
     if (!cameraRef.current) return;
     const cam = cameraRef.current;
-    const baseZoom = targetCamRef.current ? targetCamRef.current.zoom : cam.zoom;
+    const baseZoom = targetCamRef.current?.targetZoom ?? targetCamRef.current?.zoom ?? cam.zoom;
     const targetZoom = Math.max(baseZoom * 0.62, 0.00001);
     targetCamRef.current = {
       x: cam.position.x,

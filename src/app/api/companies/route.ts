@@ -280,6 +280,7 @@ export async function PUT(req: NextRequest) {
     const companyName = (body.company_name || body.companyName || '').trim();
     const companyCode = (body.company_code || body.companyCode || '').trim();
     const companyType = (body.company_type || body.companyType || 'CUSTOMER').toUpperCase();
+    const memo = body.memo !== undefined ? body.memo : null;
     const isActive = body.is_active !== undefined ? (body.is_active ? 1 : 0) : 1;
 
     if (!id) {
@@ -290,14 +291,19 @@ export async function PUT(req: NextRequest) {
     }
 
     const now = new Date().toISOString();
-    await updateRows('companies', {
+    const updatePayload: any = {
       company_name: companyName,
       company_code: companyCode,
       company_type: companyType,
       is_active: isActive,
       updated_at: now,
       updated_by: session.userId
-    }, { filters: { id } });
+    };
+    if (memo !== null) {
+      updatePayload.memo = memo;
+    }
+
+    await updateRows('companies', updatePayload, { filters: { id } });
 
     // 대표 관리자 비밀번호 초기화 요청이 있는 경우 처리
     const resetAdminPassword = (body.reset_admin_password || body.resetAdminPassword || '').trim();
