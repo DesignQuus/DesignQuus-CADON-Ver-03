@@ -7,7 +7,7 @@ import {
   CheckCircle2, FileText, X, Search, ShieldCheck, Archive, Download,
   PanelLeftClose, PanelLeftOpen, FileSpreadsheet, ChevronDown, ChevronRight,
   Maximize2, Sparkles, Filter, Check, Settings, Play, RefreshCw, AlertCircle, AlertTriangle,
-  FolderOpen, Copy, MessageSquare, Ruler, Upload, FileCode2, Boxes
+  FolderOpen, Copy, MessageSquare, Ruler, Upload, FileCode2, Boxes, Ghost, EyeOff
 } from 'lucide-react';
 import WebGlCadViewer from './WebGlCadViewer';
 import BlockInspectorDrawer, { CadBlockItem } from './blocks/BlockInspectorDrawer';
@@ -537,6 +537,21 @@ export default function CadViewer({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showExportMenu]);
+
+  // 🎨 Estimate Tools Dropdown Menu (Row 2 우측 풀다운 메뉴 상태)
+  const [showEstimateToolsMenu, setShowEstimateToolsMenu] = useState(false);
+  const estimateToolsMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showEstimateToolsMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (estimateToolsMenuRef.current && !estimateToolsMenuRef.current.contains(e.target as Node)) {
+        setShowEstimateToolsMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEstimateToolsMenu]);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -2190,8 +2205,9 @@ export default function CadViewer({
           </div>
 
           {/* Row 2: Actions, Dropdown & Controls */}
-          <div className="flex flex-wrap items-center gap-1.5">
-          {/* Action Group: AutoCAD Unified Split Button (Launch & Settings) */}
+          <div className="flex flex-wrap items-center justify-between gap-1.5 w-full">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {/* Action Group: AutoCAD Unified Split Button (Launch & Settings) */}
           {caseId && (
             <div className="inline-flex items-center rounded-lg border border-rose-500/40 bg-rose-950/40 p-0.5 shadow-2xs">
               {/* Primary: 1-Click AutoCAD Launch */}
@@ -2328,24 +2344,6 @@ export default function CadViewer({
                 <span>블록 데이터</span>
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-teal-900 text-teal-300 border border-teal-700">
                   {blocksData?.summary?.unique_block_count ?? 0}
-                </span>
-              </button>
-
-              {/* 🎨 캐드온 견적 레이어 버튼 */}
-              <button
-                type="button"
-                onClick={() => setIsEstimateLayerPanelOpen(true)}
-                className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-2xs shrink-0 ${
-                  isEstimateLayerPanelOpen
-                    ? 'border-emerald-500 bg-emerald-950/80 text-emerald-200 ring-2 ring-emerald-500/40'
-                    : 'border-slate-700 bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white'
-                }`}
-                title="휴먼 에러 방지 견적 레이어 및 사용자 그룹(Group/Ungroup) 패널 열기 (단축키: Ctrl+G)"
-              >
-                <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>견적 레이어</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
-                  {reviewedEstimateCount}/{totalEstimateCount}
                 </span>
               </button>
             </div>
@@ -2497,6 +2495,189 @@ export default function CadViewer({
             </div>
           )}
         </div>
+
+        {/* Right: 견적 진척도 + 🎨 견적 도구 풀다운 메뉴 (Row 2 우측 배치) */}
+        {viewMode === 'CAD' && drawings.length > 0 && (
+          <div className="flex items-center space-x-2 shrink-0 ml-auto">
+            {/* 1. 견적 검토 미니 진척도 게이지 */}
+            <div className="hidden md:flex items-center space-x-2 px-2.5 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] select-none shadow-xs">
+              <span className="font-bold text-slate-300 flex items-center space-x-1 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+                <span>진척도</span>
+              </span>
+              <div className="w-16 lg:w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/60 shrink-0">
+                <div
+                  className={`h-full transition-all duration-300 ${
+                    totalEstimateCount > 0 && ((reviewedEstimateCount + excludedEstimateCount) / totalEstimateCount) === 1
+                      ? 'bg-emerald-500'
+                      : totalEstimateCount > 0 && ((reviewedEstimateCount + excludedEstimateCount) / totalEstimateCount) > 0.6
+                      ? 'bg-teal-500'
+                      : 'bg-amber-500'
+                  }`}
+                  style={{ width: `${totalEstimateCount > 0 ? Math.round(((reviewedEstimateCount + excludedEstimateCount) / totalEstimateCount) * 100) : 0}%` }}
+                />
+              </div>
+              <span className="font-mono font-bold text-teal-300 shrink-0">
+                {totalEstimateCount > 0 ? Math.round(((reviewedEstimateCount + excludedEstimateCount) / totalEstimateCount) * 100) : 0}%
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono hidden lg:inline shrink-0">
+                ({reviewedEstimateCount + excludedEstimateCount}/{totalEstimateCount})
+              </span>
+            </div>
+
+            {/* 2. 🎨 스마트 견적 & 검토 옵션 풀다운 메뉴 */}
+            <div className="relative inline-flex items-stretch" ref={estimateToolsMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowEstimateToolsMenu(prev => !prev)}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-xs ${
+                  isXRayMode || isEstimateLayerPanelOpen
+                    ? 'border-emerald-500 bg-emerald-950/80 text-emerald-200 ring-2 ring-emerald-500/40'
+                    : showEstimateToolsMenu
+                    ? 'border-blue-500 bg-slate-900 text-white'
+                    : 'border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 hover:text-white'
+                }`}
+                title="누락 부품 X-Ray, 고스트/숨김 모드, 연쇄 스탬프, 사전 검사 및 레이어 패널 (풀다운 메뉴)"
+              >
+                <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>견적 도구</span>
+                {unreviewedEstimateCount > 0 && isXRayMode && (
+                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping shrink-0" />
+                )}
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800 shrink-0">
+                  {reviewedEstimateCount}/{totalEstimateCount}
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${showEstimateToolsMenu ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* 풀다운 메뉴 팝오버 */}
+              {showEstimateToolsMenu && (
+                <div className="absolute right-0 top-full mt-1.5 w-72 bg-slate-950/95 border border-slate-700/80 rounded-xl shadow-2xl z-50 p-2 text-xs animate-in fade-in slide-in-from-top-1 backdrop-blur-md select-none">
+                  <div className="px-2.5 py-1.5 text-[10.5px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 flex items-center justify-between">
+                    <span>견적 검토 도구 및 옵션</span>
+                    <span className="text-teal-400 font-mono text-[10px]">단축키 지원</span>
+                  </div>
+
+                  {/* 1. X-Ray 모드 */}
+                  <button
+                    type="button"
+                    onClick={() => setIsXRayMode(prev => !prev)}
+                    className={`w-full px-2.5 py-2 mt-1 rounded-lg text-left transition-colors flex items-center justify-between cursor-pointer ${
+                      isXRayMode ? 'bg-blue-950/60 border border-blue-500/50 text-blue-200' : 'hover:bg-slate-800/70 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <Search className={`w-4 h-4 ${isXRayMode ? 'text-blue-400' : 'text-slate-400'}`} />
+                      <div>
+                        <div className="font-bold flex items-center space-x-1">
+                          <span>누락 부품 X-Ray 탐색</span>
+                          <span className="text-[10px] text-slate-500 font-mono font-normal">(단축키: X)</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400">미검토 부품만 형광색 단독 표시</div>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold ${
+                      isXRayMode ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}>
+                      {isXRayMode ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+
+                  {/* 2. 고스트 ↔ 완전 숨김 전환 */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = estimateHideMode === 'GHOST' ? 'HIDE' : 'GHOST';
+                      setEstimateHideMode(next);
+                      saveEstimateLayers({ hideMode: next });
+                    }}
+                    className="w-full px-2.5 py-2 mt-1 rounded-lg text-left hover:bg-slate-800/70 transition-colors flex items-center justify-between cursor-pointer text-slate-300"
+                  >
+                    <div className="flex items-center space-x-2">
+                      {estimateHideMode === 'GHOST' ? <Ghost className="w-4 h-4 text-purple-400" /> : <EyeOff className="w-4 h-4 text-slate-400" />}
+                      <div>
+                        <div className="font-bold">완료 부품 표시 모드</div>
+                        <div className="text-[10px] text-slate-400">
+                          {estimateHideMode === 'GHOST' ? '완료 부품을 15% 반투명 표시 중' : '완료 부품을 완전히 숨김 중'}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10.5px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                      {estimateHideMode === 'GHOST' ? '고스트 15%' : '완전 숨김'}
+                    </span>
+                  </button>
+
+                  {/* 3. 연쇄 스탬프 토글 */}
+                  <button
+                    type="button"
+                    onClick={() => setCascadeStamp(prev => !prev)}
+                    className={`w-full px-2.5 py-2 mt-1 rounded-lg text-left transition-colors flex items-center justify-between cursor-pointer ${
+                      cascadeStamp ? 'bg-amber-950/60 border border-amber-500/50 text-amber-200' : 'hover:bg-slate-800/70 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <Sparkles className={`w-4 h-4 ${cascadeStamp ? 'text-amber-400' : 'text-slate-400'}`} />
+                      <div>
+                        <div className="font-bold">연쇄 스탬프 일괄 적용</div>
+                        <div className="text-[10px] text-slate-400">동일 부품 1클릭 시 도면 전체 동시 완료</div>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold ${
+                      cascadeStamp ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}>
+                      {cascadeStamp ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+
+                  {/* Divider */}
+                  <div className="my-1.5 border-t border-slate-800/80" />
+
+                  {/* 4. 제출 전 누락 사전 검사 */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEstimateToolsMenu(false);
+                      setIsPreflightModalOpen(true);
+                    }}
+                    className="w-full px-2.5 py-2 rounded-lg text-left hover:bg-slate-800/70 transition-colors flex items-center justify-between cursor-pointer text-slate-300"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <div>
+                        <div className="font-bold text-white">제출 전 누락 사전 검사</div>
+                        <div className="text-[10px] text-slate-400">미검토 부품 및 누락 방지 최종 검증</div>
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-emerald-400 font-bold">실행 →</span>
+                  </button>
+
+                  {/* 5. 견적 레이어 & 부품 그룹 패널 */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEstimateToolsMenu(false);
+                      setIsEstimateLayerPanelOpen(true);
+                    }}
+                    className="w-full px-2.5 py-2 mt-1 rounded-lg text-left hover:bg-slate-800/70 transition-colors flex items-center justify-between cursor-pointer text-slate-300"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <Layers className="w-4 h-4 text-teal-400" />
+                      <div>
+                        <div className="font-bold text-white flex items-center space-x-1">
+                          <span>견적 레이어 & 그룹 패널</span>
+                          <span className="text-[10px] text-slate-500 font-mono font-normal">(Ctrl+G)</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400">부품별 검토 상태 및 사용자 그룹 관리</div>
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-teal-400 font-bold">열기 →</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       </div>
       )}
 
@@ -2543,31 +2724,7 @@ export default function CadViewer({
       {/* ========================================================================= */}
       {/* 1. CAD VIEW MODE: WebGL High-Performance GPU CAD Engine (Three.js 60 FPS) */}
       {/* ========================================================================= */}
-      <div className={viewMode === 'CAD' ? 'flex-1 w-full my-2.5 relative flex flex-col space-y-2' : 'hidden'}>
-        {/* 🎨 캐드온 스마트 견적 레이어 툴바 */}
-        {drawings.length > 0 && (
-          <EstimateLayerToolbar
-            totalCount={totalEstimateCount}
-            reviewedCount={reviewedEstimateCount}
-            inProgressCount={inProgressEstimateCount}
-            excludedCount={excludedEstimateCount}
-            unreviewedCount={unreviewedEstimateCount}
-            isXRayMode={isXRayMode}
-            onToggleXRay={() => setIsXRayMode(prev => !prev)}
-            hideMode={estimateHideMode}
-            onToggleHideMode={() => {
-              const next = estimateHideMode === 'GHOST' ? 'HIDE' : 'GHOST';
-              setEstimateHideMode(next);
-              saveEstimateLayers({ hideMode: next });
-            }}
-            cascadeStamp={cascadeStamp}
-            onToggleCascadeStamp={() => setCascadeStamp(prev => !prev)}
-            isPanelOpen={isEstimateLayerPanelOpen}
-            onTogglePanel={() => setIsEstimateLayerPanelOpen(prev => !prev)}
-            onOpenPreflight={() => setIsPreflightModalOpen(true)}
-          />
-        )}
-
+      <div className={viewMode === 'CAD' ? 'flex-1 w-full my-1.5 relative flex flex-col' : 'hidden'}>
         {drawings.length === 0 ? (
           <div className="w-full h-full min-h-[550px] bg-slate-950 rounded-2xl border border-slate-800/80 flex flex-col items-center justify-center p-8 text-center select-none relative overflow-hidden">
             {/* Background CAD Grid Texture */}
