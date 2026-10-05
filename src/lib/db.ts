@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { createRequire } from 'module';
 
 // Auto-read .env.local and .env.development.local if process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID is not yet set
 if (typeof process !== 'undefined') {
@@ -60,8 +61,8 @@ let localSqliteInstance: any = null;
 export function getLocalSqlite(): any {
   if (localSqliteInstance) return localSqliteInstance;
   try {
-    const req = eval('require');
-    const { DatabaseSync } = req('node:sqlite');
+    const nodeReq = createRequire(process.cwd() + '/package.json');
+    const { DatabaseSync } = nodeReq('node:sqlite');
     const projectId = process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID || '8dd35536-8cbb-4e1c-bb65-b35f2920cb03';
     const envName = process.env.NEXT_PUBLIC_EGDESK_ENV || 'development';
 
