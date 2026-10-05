@@ -41,7 +41,6 @@ interface WebGlCadViewerProps {
     rasterCount: number;
     loading: boolean;
   }) => void;
-  hideHudOverlay?: boolean;
 }
 
 export default function WebGlCadViewer({
@@ -64,7 +63,6 @@ export default function WebGlCadViewer({
   hideMode = 'GHOST',
   estimateLayerVisibility = { unreviewed: true, reviewed: true, inProgress: true, excluded: true },
   onStatsChange,
-  hideHudOverlay = false,
 }: WebGlCadViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2302,33 +2300,6 @@ export default function WebGlCadViewer({
         </div>
       )}
 
-      {/* Top Left: HUD Status Overlay (Rendered in canvas only if !hideHudOverlay) */}
-      {!loading && !errorMsg && !hideHudOverlay && (
-        <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-20 pointer-events-auto">
-          <div className="bg-slate-950/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-800 text-slate-300 text-[11px] font-mono flex items-center space-x-2 shadow-md pointer-events-none">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse shrink-0" />
-            <span className="font-bold text-blue-400">WebGL GPU 60 FPS</span>
-            <span className="text-slate-600">|</span>
-            <span>{totalLines.toLocaleString()}개 선분</span>
-            {cadTexts.length > 0 && (
-              <>
-                <span className="text-slate-600">|</span>
-                <span className={showTexts ? "text-emerald-400 font-semibold" : "text-slate-500"}>
-                  TXT {cadTexts.length.toLocaleString()}개 {showTexts ? 'ON' : 'OFF'}
-                </span>
-              </>
-            )}
-            {rasterCount > 0 && (
-              <>
-                <span className="text-slate-600">|</span>
-                <span className="text-cyan-400 font-semibold">
-                  래스터(로고) {rasterCount}개 ON
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* OCR Trigger & Result Badge (Only if genuine rasters exist) */}
       {!loading && !errorMsg && rasterCount > 0 && (

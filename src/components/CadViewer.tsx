@@ -2653,7 +2653,6 @@ export default function CadViewer({
             hideMode={estimateHideMode}
             estimateLayerVisibility={estimateLayerVisibility}
             onStatsChange={setCadStats}
-            hideHudOverlay={true}
           />
         )}
 
