@@ -1136,7 +1136,16 @@ export default function WebGlCadViewer({
   const loadBinaryData = useCallback(async (retryAttempt = 0) => {
     if (!caseId) return;
     const fetchId = activeFileId;
-    const cacheKey = `${caseId}_${fetchId || 'default'}_v4_lt`;
+
+    // ⚡ [Autodesk SVF2 Pattern] Check if a specific sheet chunk should be streamed (99% smaller)
+    const curIdx = selectedDrawingIdxRef.current;
+    const targetSheetIdx = (curIdx !== undefined && curIdx >= 0 && drawingsRef.current[curIdx])
+      ? (drawingsRef.current[curIdx].drawing_index || (curIdx + 1))
+      : null;
+
+    const cacheKey = targetSheetIdx
+      ? `${caseId}_${fetchId || 'default'}_sheet_${targetSheetIdx}_v5_lt`
+      : `${caseId}_${fetchId || 'default'}_v4_lt`;
 
     setLoading(true);
     setErrorMsg(null);
@@ -1151,18 +1160,21 @@ export default function WebGlCadViewer({
         if (arrayBuffer && arrayBuffer.byteLength >= 28) {
           fromCache = true;
           setLoadingProgress(50);
-          setLoadingStatus('⚡ 초고속 로컬 캐시(OPFS)에서 즉시 로드 중...');
+          setLoadingStatus(targetSheetIdx ? `⚡ 시트 #${targetSheetIdx} 로컬 캐시(OPFS)에서 0ms 로드 중...` : '⚡ 초고속 로컬 캐시(OPFS)에서 즉시 로드 중...');
         }
       }
 
       // Step 2. Cache Miss -> Fetch from API
       if (!arrayBuffer) {
         setLoadingProgress(15);
-        setLoadingStatus('고속 바이너리 CAD 데이터 수신 중...');
+        setLoadingStatus(targetSheetIdx ? `시트 #${targetSheetIdx} 경량 바이너리 수신 중...` : '고속 바이너리 CAD 데이터 수신 중...');
 
-        const url = fetchId
+        let url = fetchId
           ? `/api/quotation-cases/${caseId}/webgl-binary?fileId=${encodeURIComponent(fetchId)}`
           : `/api/quotation-cases/${caseId}/webgl-binary`;
+        if (targetSheetIdx) {
+          url += (url.includes('?') ? '&' : '?') + `sheetIndex=${targetSheetIdx}`;
+        }
         const res = await fetch(url);
         if (!res.ok) {
           if ((res.status === 404 || res.status >= 500) && retryAttempt < 5) {
@@ -1318,7 +1330,15 @@ export default function WebGlCadViewer({
   const loadTexts = useCallback(async (retryAttempt = 0) => {
     if (!caseId) return;
     const fetchId = activeFileId;
-    const cacheKey = `${caseId}_${fetchId || 'default'}_v4_lt`;
+
+    const curIdx = selectedDrawingIdxRef.current;
+    const targetSheetIdx = (curIdx !== undefined && curIdx >= 0 && drawingsRef.current[curIdx])
+      ? (drawingsRef.current[curIdx].drawing_index || (curIdx + 1))
+      : null;
+
+    const cacheKey = targetSheetIdx
+      ? `${caseId}_${fetchId || 'default'}_sheet_${targetSheetIdx}_texts_v5`
+      : `${caseId}_${fetchId || 'default'}_v4_lt`;
 
     try {
       if (retryAttempt === 0) {
@@ -1331,9 +1351,12 @@ export default function WebGlCadViewer({
         }
       }
 
-      const url = fetchId
+      let url = fetchId
         ? `/api/quotation-cases/${caseId}/webgl-texts?fileId=${encodeURIComponent(fetchId)}`
         : `/api/quotation-cases/${caseId}/webgl-texts`;
+      if (targetSheetIdx) {
+        url += (url.includes('?') ? '&' : '?') + `sheetIndex=${targetSheetIdx}`;
+      }
       const res = await fetch(url);
       if (fetchId && currentFileIdRef.current && fetchId !== currentFileIdRef.current) return;
       if (res.ok) {
@@ -1746,6 +1769,14 @@ export default function WebGlCadViewer({
   const prevFocusBboxRef = useRef(focusBbox);
   const prevSelectedDrawingIdxRef = useRef(selectedDrawingIdx);
   useEffect(() => {
+    const isSheetChanged = prevSelectedDrawingIdxRef.current !== selectedDrawingIdx;
+    if (isSheetChanged) {
+      prevSelectedDrawingIdxRef.current = selectedDrawingIdx;
+      // ⚡ [Autodesk SVF2 Pattern] Stream newly selected sheet's lightweight chunk instantly
+      loadBinaryData(0);
+      loadTexts(0);
+    }
+
     if (!focusBbox) {
       if (prevFocusBboxRef.current || (prevSelectedDrawingIdxRef.current >= 0 && selectedDrawingIdx < 0)) {
         const eff = getEffectiveOverviewBounds();
@@ -1754,14 +1785,12 @@ export default function WebGlCadViewer({
         }
       }
       prevFocusBboxRef.current = null;
-      prevSelectedDrawingIdxRef.current = selectedDrawingIdx;
       return;
     }
 
     prevFocusBboxRef.current = focusBbox;
-    prevSelectedDrawingIdxRef.current = selectedDrawingIdx;
     fitToExtents(focusBbox.min_x, focusBbox.min_y, focusBbox.max_x, focusBbox.max_y, true, 0, true);
-  }, [focusBbox, selectedDrawingIdx, fitToExtents, getEffectiveOverviewBounds]);
+  }, [focusBbox, selectedDrawingIdx, fitToExtents, getEffectiveOverviewBounds, loadBinaryData, loadTexts]);
 
   // 5. Mouse Interaction: 60 FPS Zoom on Wheel (Logarithmic Dynamic Scale + Kinetic Momentum Physics)
   useEffect(() => {

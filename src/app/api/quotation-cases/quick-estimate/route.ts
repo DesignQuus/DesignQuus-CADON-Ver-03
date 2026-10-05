@@ -263,6 +263,13 @@ export async function POST(req: NextRequest) {
     `).run(now.toISOString(), caseId);
 
     // 9. Write Fast-Path Snapshot for Instant Subsequent Load
+    let resolvedCompanyId = effectiveCompanyId || companyId;
+    let resolvedCompanyName = companyName;
+    if (resolvedCompanyId && resolvedCompanyId !== 'comp_unassigned') {
+      const comp = (await db.prepare('SELECT company_name FROM companies WHERE id = ?').get(resolvedCompanyId)) as any;
+      if (comp?.company_name) resolvedCompanyName = comp.company_name;
+    }
+
     try {
       const snapshotPath = path.join(process.cwd(), 'storage', 'derived', `${caseId}_snapshot.json`);
       const snapshotData = {
@@ -270,8 +277,8 @@ export async function POST(req: NextRequest) {
           id: caseId,
           case_no: caseNo,
           case_name: caseName,
-          company_id: companyId,
-          company_name: companyName,
+          company_id: resolvedCompanyId,
+          company_name: resolvedCompanyName,
           status: 'QUOTED',
           quote_readiness: 'READY_FOR_QUOTE',
           primary_file_name: originalName,
@@ -294,7 +301,7 @@ export async function POST(req: NextRequest) {
       caseId,
       caseNo,
       caseName,
-      companyName,
+      companyName: resolvedCompanyName,
       quoteId,
       totalAmount,
       drawingsCount: drawings.length || 1,

@@ -42,6 +42,12 @@ async function syncCustomerFromAiResult(caseId: string, result: any) {
       }
       await db.prepare('UPDATE quotation_cases SET company_id = ?, updated_at = ? WHERE id = ?').run(comp.id, nowIso, caseId);
       invalidateCasesCache();
+
+      const normCaseId = caseId.startsWith('case_') ? caseId : `case_${caseId}`;
+      const snapPath = path.join(process.cwd(), 'storage', 'derived', `${normCaseId}_snapshot.json`);
+      if (fs.existsSync(snapPath)) {
+        try { fs.unlinkSync(snapPath); } catch {}
+      }
     }
   } catch (e) {
     console.warn('[ai-insights] syncCustomerFromAiResult warning:', e);

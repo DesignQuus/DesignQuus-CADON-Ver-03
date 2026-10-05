@@ -209,9 +209,12 @@ export default function CaseMetaEditPanel({
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-bold text-slate-900">표제란·견적 메타 확인</h3>
               {aiInsights?.titleBlockAnalysis ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                <span 
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200"
+                  title="정확도는 누적 데이터 및 AI 교육 수준에 따라 달라질 수 있습니다."
+                >
                   <Sparkles className="w-3 h-3 text-amber-500" />
-                  AI VLM 판독 (신뢰도 {aiInsights.titleBlockAnalysis.companyConfidence || 98}%)
+                  AI VLM 판독
                 </span>
               ) : loadingAi ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 animate-pulse">
@@ -227,6 +230,9 @@ export default function CaseMetaEditPanel({
             </div>
             <p className="text-[11px] text-slate-500">
               도면 표제란 추출 정보와 견적 담당자 및 발주처 메타데이터를 확인하고 수정합니다.
+              <span className="block sm:inline sm:ml-2 text-slate-400 font-normal">
+                ※ 정확도는 누적 데이터 및 AI 교육 수준에 따라 달라질 수 있습니다.
+              </span>
             </p>
           </div>
         </div>

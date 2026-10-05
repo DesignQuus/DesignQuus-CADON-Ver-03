@@ -22,10 +22,11 @@ export default function Navigation() {
 
   const activeRoute = pendingPath || pathname;
 
-  // ⚡ 마우스 호버 시 해당 단일 라우트 데이터만 가볍게 사전 준비
+  // ⚡ 마우스 호버 시 해당 단일 라우트 데이터 및 Next.js 라우트 사전 준비
   const handleLinkWarmup = (route: string) => {
     try {
       prefetchPageData(route);
+      router.prefetch(route);
     } catch {}
   };
 
@@ -159,7 +160,7 @@ export default function Navigation() {
             <Link
               href="/cases"
               onMouseEnter={() => handleLinkWarmup('/cases')}
-              onClick={() => { if (!pathname.startsWith('/cases')) setPendingPath('/cases'); }}
+              onClick={() => { if (pathname !== '/cases') setPendingPath('/cases'); }}
               className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 (activeRoute === '/cases' || activeRoute.startsWith('/cases/') || activeRoute.startsWith('/inbox'))
                   ? 'bg-blue-50 text-blue-700 font-bold'
@@ -188,7 +189,7 @@ export default function Navigation() {
             <Link
               href="/quotes"
               onMouseEnter={() => handleLinkWarmup('/quotes')}
-              onClick={() => { if (!pathname.startsWith('/quotes')) setPendingPath('/quotes'); }}
+              onClick={() => { if (pathname !== '/quotes') setPendingPath('/quotes'); }}
               className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 activeRoute.startsWith('/quotes')
                   ? 'bg-blue-50 text-blue-700 font-bold'
@@ -209,7 +210,7 @@ export default function Navigation() {
               <Link
                 href="/admin/companies"
                 onMouseEnter={() => handleLinkWarmup('/admin/companies')}
-                onClick={() => { if (!pathname.startsWith('/admin/companies')) setPendingPath('/admin/companies'); }}
+                onClick={() => { if (pathname !== '/admin/companies') setPendingPath('/admin/companies'); }}
                 className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   activeRoute.startsWith('/admin/companies')
                     ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
@@ -225,7 +226,7 @@ export default function Navigation() {
             <Link
               href="/admin/masters"
               onMouseEnter={() => handleLinkWarmup('/admin/masters')}
-              onClick={() => { if (!pathname.startsWith('/admin/masters')) setPendingPath('/admin/masters'); }}
+              onClick={() => { if (pathname !== '/admin/masters') setPendingPath('/admin/masters'); }}
               className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 activeRoute.startsWith('/admin/masters')
                   ? 'bg-blue-50 text-blue-700 font-bold'
@@ -242,7 +243,7 @@ export default function Navigation() {
               <Link
                 href="/admin/members"
                 onMouseEnter={() => handleLinkWarmup('/admin/members')}
-                onClick={() => { if (!pathname.startsWith('/admin/members')) setPendingPath('/admin/members'); }}
+                onClick={() => { if (pathname !== '/admin/members') setPendingPath('/admin/members'); }}
                 className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   activeRoute.startsWith('/admin/members') || activeRoute.startsWith('/admin/permissions')
                     ? 'bg-blue-50 text-blue-700 font-bold'

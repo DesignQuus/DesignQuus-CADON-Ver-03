@@ -60,7 +60,8 @@ let localSqliteInstance: any = null;
 export function getLocalSqlite(): any {
   if (localSqliteInstance) return localSqliteInstance;
   try {
-    const { DatabaseSync } = require('node:sqlite');
+    const req = eval('require');
+    const { DatabaseSync } = req('node:sqlite');
     const projectId = process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID || '8dd35536-8cbb-4e1c-bb65-b35f2920cb03';
     const envName = process.env.NEXT_PUBLIC_EGDESK_ENV || 'development';
 

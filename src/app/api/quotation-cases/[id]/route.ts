@@ -24,10 +24,28 @@ export async function GET(
   const isForceRefresh = req.nextUrl.searchParams.get('refresh') === 'true';
 
   // ⚡ [Fast-Path SWR 캐시 1순위 서빙]
-  // 스냅샷 파일이 로컬 디스크에 존재하면 즉시 5ms 이내 반환하여 체감 대기시간 0초 달성!
+  // 대용량 CAD/도면/BOM 데이터는 5ms 이내 반환하되, 최신 고객사 및 견적건 메타정보는 DB와 실시간 동기화
   if (!isForceRefresh && fs.existsSync(snapshotPath)) {
     try {
       const cached = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
+      const rawQc = (await db.prepare('SELECT * FROM quotation_cases WHERE id = ?').get(id)) as any;
+      if (rawQc) {
+        let compName = '고객사 미지정';
+        let compCode = '-';
+        if (rawQc.company_id && rawQc.company_id !== 'comp_unassigned') {
+          const comp = (await db.prepare('SELECT company_name, company_code FROM companies WHERE id = ?').get(rawQc.company_id)) as any;
+          if (comp?.company_name) {
+            compName = comp.company_name;
+            compCode = comp.company_code || '-';
+          }
+        }
+        cached.case = {
+          ...cached.case,
+          ...rawQc,
+          company_name: compName,
+          company_code: compCode,
+        };
+      }
       return NextResponse.json(cached);
     } catch {}
   }
@@ -524,6 +542,13 @@ export async function PATCH(
       LEFT JOIN projects p ON qc.project_id = p.id
       WHERE qc.id = ?
     `).get(id);
+
+    // Invalidate local snapshot cache on case update
+    const normCaseId = id.startsWith('case_') ? id : `case_${id}`;
+    const snapPath = path.join(process.cwd(), 'storage', 'derived', `${normCaseId}_snapshot.json`);
+    if (fs.existsSync(snapPath)) {
+      try { fs.unlinkSync(snapPath); } catch {}
+    }
 
     return NextResponse.json({ success: true, case: updated });
   } catch (err: any) {

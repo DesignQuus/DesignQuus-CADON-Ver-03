@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
   FileCheck2, 
   Layers, 
@@ -12,7 +13,8 @@ import {
   AlertCircle,
   Scan,
   FileSpreadsheet,
-  Coins
+  Coins,
+  Loader2
 } from 'lucide-react';
 
 export interface PipelineCaseInfo {
@@ -47,6 +49,8 @@ export default function PipelineNavigator({
   showHomeLink = false,
   className = ''
 }: PipelineNavigatorProps) {
+  const router = useRouter();
+  const [navigatingStep, setNavigatingStep] = useState<number | null>(null);
   const isZeroDrawing = caseInfo?.drawingsCount === 0;
 
   const steps = [
@@ -100,42 +104,58 @@ export default function PipelineNavigator({
           const Icon = item.icon;
           const isActive = currentStep === item.step;
           const isDone = currentStep > item.step && !(item.step === 1 && isZeroDrawing);
+          const isNavigating = navigatingStep === item.step;
 
           const buttonContent = (
             <>
               <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${
-                isActive
+                isNavigating
+                  ? 'bg-blue-600 text-white animate-pulse'
+                  : isActive
                   ? 'bg-white/20 text-white'
                   : isDone
                   ? 'bg-slate-700 text-white'
                   : 'bg-slate-200 text-slate-600'
               }`}>
-                {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : item.step}
+                {isNavigating ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : isDone ? (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                ) : (
+                  item.step
+                )}
               </div>
 
               <div className="text-left hidden lg:block">
                 <div className="flex items-center gap-1 leading-tight">
                   <span className="text-xs">{item.name}</span>
-                  {item.badge && (
+                  {item.badge && !isNavigating && (
                     <span className="px-1.5 py-0.2 text-[9px] rounded bg-amber-500 text-white font-bold">
                       {item.badge}
                     </span>
                   )}
-                  {item.warning && (
+                  {item.warning && !isNavigating && (
                     <span className="px-1.5 py-0.2 text-[9px] rounded bg-rose-500 text-white font-bold flex items-center gap-0.5">
                       <AlertCircle className="w-2.5 h-2.5" /> 마진주의
                     </span>
                   )}
+                  {isNavigating && (
+                    <span className="px-1.5 py-0.2 text-[9px] rounded bg-blue-600 text-white font-bold animate-pulse">
+                      화면 여는 중...
+                    </span>
+                  )}
                 </div>
-                <span className={`text-[10px] block truncate max-w-[130px] ${isActive ? 'text-blue-100 font-normal' : 'text-slate-400'}`}>
-                  {item.desc}
+                <span className={`text-[10px] block truncate max-w-[130px] ${isActive ? 'text-blue-100 font-normal' : isNavigating ? 'text-blue-600 font-semibold' : 'text-slate-400'}`}>
+                  {isNavigating ? '잠시만 기다려주세요...' : item.desc}
                 </span>
               </div>
             </>
           );
 
           const classNameStr = `flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-            isActive
+            isNavigating
+              ? 'bg-blue-50 text-blue-700 border border-blue-300 ring-2 ring-blue-400 shadow-sm'
+              : isActive
               ? 'bg-blue-600 text-white font-bold shadow-xs'
               : isDone
               ? 'bg-slate-100 text-slate-800 border border-slate-300 hover:bg-slate-200'
@@ -166,11 +186,16 @@ export default function PipelineNavigator({
               ) : (
                 <Link
                   href={item.href}
+                  onMouseEnter={() => {
+                    try { router.prefetch(item.href); } catch {}
+                  }}
                   onClick={(e) => {
                     if (isZeroDrawing && item.step > 1) {
                       e.preventDefault();
                       alert('현재 의뢰건에 등록된 CAD 도면이 없습니다.\n1단계 [도면 접수]에서 먼저 DWG/DXF 도면 파일을 업로드해 주세요.');
+                      return;
                     }
+                    setNavigatingStep(item.step);
                   }}
                   className={classNameStr}
                   title={item.name}

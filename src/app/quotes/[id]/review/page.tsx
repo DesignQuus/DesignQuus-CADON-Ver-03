@@ -20,6 +20,7 @@ import PilotWelcomeModal from '@/components/review/PilotWelcomeModal';
 import BatchMasterRegisterModal from '@/components/review/BatchMasterRegisterModal';
 import AddNonDrawingItemModal, { NewNonDrawingItemPayload } from '@/components/review/AddNonDrawingItemModal';
 import PipelineNavigator from '@/components/common/PipelineNavigator';
+import { getClientCache, setClientCache } from '@/lib/cacheStore';
 import { parseRemark, stringifyRemark } from '@/lib/remark-cost-helper';
 import {
   calculateCastingCost,
@@ -338,8 +339,22 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   }, []);
 
   useEffect(() => {
+    // ⚡ [EGDesk In-Memory Cache 0ms Fast Path] Bind immediately from previous Step 2/3 state
+    const cached = typeof window !== 'undefined' ? getClientCache(`case_${caseId}`) : null;
+    if (cached) {
+      setCaseInfo(cached.case);
+      const cachedFiles = (cached.files && cached.files.length > 0) ? cached.files : (cached.allFiles || []);
+      setFiles(cachedFiles);
+      setDrawings(cached.drawings || []);
+      setCadObjects(cached.cadObjects || []);
+      setRelationships(cached.relationships || []);
+      setBomAreas(cached.bomAreas || []);
+      setRawBomItems(cached.rawBomItems || []);
+      setLoading(false);
+    }
+
     async function loadData() {
-      setLoading(true);
+      if (!cached) setLoading(true);
       try {
         // 1. 케이스 핵심 데이터(도면, 부품)를 최우선으로 안정적 로드
         let res: Response | null = null;
@@ -357,6 +372,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         }
 
         const json = await res.json();
+        setClientCache(`case_${caseId}`, json);
         setCaseInfo(json.case);
         const effectiveCaseFiles = (json.files && json.files.length > 0) ? json.files : (json.allFiles || []);
         setFiles(effectiveCaseFiles);
@@ -2062,6 +2078,14 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       <PipelineNavigator
         caseId={caseId}
         currentStep={4}
+        caseInfo={{
+          caseNo: caseInfo?.case_no,
+          caseName: caseInfo?.case_name,
+          companyName: caseInfo?.company_name,
+          drawingsCount: drawings.length,
+          bomCount: rawBomItems.length,
+          quoteItemCount: lines.length
+        }}
         stats={{
           unconfirmedCount,
           marginWarning: avgMargin < 12.0

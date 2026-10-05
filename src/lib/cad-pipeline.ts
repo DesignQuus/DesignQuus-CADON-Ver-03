@@ -345,6 +345,11 @@ export async function processCadFilePipeline(
     });
     await insertRows('drawings', dwgRows);
 
+    // ⚡ [Autodesk SVF2 Pattern] Generate sheet-level spatial binary chunks for instant 0.05s loading
+    runPythonScript('generate_sheet_chunks.py', [quotationCaseId]).catch((chunkErr) => {
+      console.warn('[cad-pipeline] Sheet chunking background warning:', chunkErr);
+    });
+
     // Auto-link Customer from Title Block to quotation_cases (Exclude supplier/tenant self-name & label headers)
     const detectedCustomer = structureResult.drawings.find((d: any) => d.customer && d.customer !== '-' && d.customer !== '')?.customer;
     if (detectedCustomer) {

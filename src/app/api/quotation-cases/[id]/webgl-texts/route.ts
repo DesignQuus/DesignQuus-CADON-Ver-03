@@ -19,6 +19,7 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(req.url);
     const fileId = searchParams.get('fileId');
+    const sheetIndex = searchParams.get('sheetIndex') || searchParams.get('sheet');
 
     const derivedDir = getStorageSubdir('derived');
     const localDerived = path.join(process.cwd(), 'storage', 'derived');
@@ -44,10 +45,22 @@ export async function GET(
     }
 
     const filePrefix = fileId ? `${id}_${fileId}` : id;
-    const candidates = [
+    const candidates: string[] = [];
+
+    // ⚡ [Selective Sheet Loading] Prioritize sheet-specific text chunk
+    if (sheetIndex) {
+      candidates.push(
+        path.join(derivedDir, `${id}__sheet_${sheetIndex}__cad_texts.json`),
+        path.join(localDerived, `${id}__sheet_${sheetIndex}__cad_texts.json`),
+        path.join(derivedDir, `${filePrefix}__sheet_${sheetIndex}__cad_texts.json`),
+        path.join(localDerived, `${filePrefix}__sheet_${sheetIndex}__cad_texts.json`)
+      );
+    }
+
+    candidates.push(
       path.join(derivedDir, `${filePrefix}__cad_texts.json`),
       path.join(localDerived, `${filePrefix}__cad_texts.json`)
-    ];
+    );
 
     // If fileId given and derived_from_file_id might have been used in naming, check alternative
     if (fileId) {

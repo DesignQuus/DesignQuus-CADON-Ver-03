@@ -89,6 +89,15 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
     }
   }, [id, router]);
 
+  // ⚡ 3단계(가상 BOM) 진입 시 4단계(단가 매칭) 라우트를 백그라운드에서 사전 프리페치
+  useEffect(() => {
+    if (workflowStep === 3 && id) {
+      try {
+        router.prefetch(`/quotes/${id}/review`);
+      } catch {}
+    }
+  }, [workflowStep, id, router]);
+
   // 🚀 Smart Upload Intent & Multi-Drawing Filter States
   const [uploadIntentModal, setUploadIntentModal] = useState<{ file: File; uploadJson: any } | null>(null);
   const [fileViewMode, setFileViewMode] = useState<'ALL' | 'SINGLE'>('ALL');
@@ -2749,6 +2758,14 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         <PipelineNavigator 
           caseId={id} 
           currentStep={workflowStep}
+          caseInfo={{
+            caseNo: data?.case?.case_no,
+            caseName: data?.case?.case_name,
+            companyName: data?.case?.company_name,
+            drawingsCount: drawings.length,
+            bomCount: bomAreas.length,
+            quoteItemCount: normalizedItems.length
+          }}
           onStepChange={(s) => {
             setWorkflowStep(s);
             if (s === 1) {
@@ -2830,6 +2847,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             {workflowStep === 3 && (
               <button
                 type="button"
+                onMouseEnter={() => { try { router.prefetch(`/quotes/${id}/review`); } catch {} }}
                 onClick={() => router.push(`/quotes/${id}/review`)}
                 className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-blue-500"
                 title="4단계 마스터 단가 매칭 및 견적 검토 화면으로 전진합니다"
@@ -2899,7 +2917,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
       <div className={activeTab === 'cad' ? `flex flex-col lg:flex-row ${(workflowStep === 1 || workflowStep === 2) && isSidebarOpen ? 'gap-2' : ''} items-start w-full relative transition-all duration-200` : "hidden"}>
           {/* Unified Upload & Files Left Panel (Collapsible) - Step 1 Only */}
           {workflowStep === 1 && isSidebarOpen ? (
-            <div className="w-full lg:w-[340px] xl:w-[360px] shrink-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 animate-in fade-in slide-in-from-left-2 relative">
+            <div className="w-full lg:w-[340px] xl:w-[360px] shrink-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 animate-in fade-in slide-in-from-left-2 sticky top-[72px] self-start z-20">
               {/* 🔖 버티컬 북마크(책갈피) 견출 탭 - 표준화 공통 컴포넌트 (top-1/2 수직 중앙 정렬) */}
               <SidebarBookmarkTab
                 mode="collapse"
@@ -3142,7 +3160,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
           {/* AI 파싱 도면 시트 목록 탐색 패널 - Step 2 (Collapsible) */}
           {workflowStep === 2 && isSidebarOpen ? (
-            <div className="w-full lg:w-[320px] xl:w-[340px] shrink-0 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3 animate-in fade-in slide-in-from-left-2 relative">
+            <div className="w-full lg:w-[320px] xl:w-[340px] shrink-0 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3 animate-in fade-in slide-in-from-left-2 sticky top-[72px] self-start z-20">
               <SidebarBookmarkTab
                 mode="collapse"
                 onClick={() => setIsSidebarOpen(false)}
@@ -3187,7 +3205,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               </div>
 
               {/* 시트 스크롤 리스트 */}
-              <div className="space-y-1.5 max-h-[calc(100vh-380px)] overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-[calc(100vh-220px)] overflow-y-auto overscroll-contain pr-1">
                 {drawings
                   .map((d: any, idx: number) => ({ d, idx }))
                   .filter(({ d, idx }: any) => {
@@ -3251,7 +3269,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               label={workflowStep === 2 ? '시트목록' : '도면접수'}
               icon={workflowStep === 2 ? Layers : Folder}
               title={workflowStep === 2 ? `123개 파싱 도면 시트 탐색기 열기` : `견적의뢰 도면 등록 패널 열기 (${files.length}개 도면 등록됨)`}
-              positionOverride="absolute"
+              positionOverride="fixed"
             />
           )}
 

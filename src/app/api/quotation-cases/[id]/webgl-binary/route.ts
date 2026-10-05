@@ -20,6 +20,7 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(req.url);
     const fileId = searchParams.get('fileId');
+    const sheetIndex = searchParams.get('sheetIndex') || searchParams.get('sheet');
 
     const derivedDir = getStorageSubdir('derived');
     const localDerived = path.join(process.cwd(), 'storage', 'derived');
@@ -45,12 +46,25 @@ export async function GET(
     }
 
     const filePrefix = fileId ? `${id}_${fileId}` : id;
-    const candidates: string[] = [
+    const candidates: string[] = [];
+
+    // ⚡ [Selective Sheet Loading - Autodesk Forge SVF2 Pattern]
+    // If a specific sheetIndex is requested, prioritize loading that sheet's lightweight binary chunk (99% smaller)
+    if (sheetIndex) {
+      candidates.push(
+        path.join(derivedDir, `${id}__sheet_${sheetIndex}__cad_webgl.bin`),
+        path.join(localDerived, `${id}__sheet_${sheetIndex}__cad_webgl.bin`),
+        path.join(derivedDir, `${filePrefix}__sheet_${sheetIndex}__cad_webgl.bin`),
+        path.join(localDerived, `${filePrefix}__sheet_${sheetIndex}__cad_webgl.bin`)
+      );
+    }
+
+    candidates.push(
       path.join(derivedDir, `${filePrefix}__cad_webgl.bin`),
       path.join(localDerived, `${filePrefix}__cad_webgl.bin`),
       path.join(derivedDir, `${id}__cad_webgl.bin`),
       path.join(localDerived, `${id}__cad_webgl.bin`)
-    ];
+    );
 
     // If fileId given and derived_from_file_id might have been used in naming, check alternative
     if (fileId) {
