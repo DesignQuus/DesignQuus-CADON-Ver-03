@@ -1341,7 +1341,7 @@ export default function HomePage() {
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-extrabold text-slate-900 tracking-tight">최근 견적의뢰 내역</h2>
+                <h2 className="text-base font-extrabold text-slate-900 tracking-tight">도면 분석 & 견적 진행 현황</h2>
                 {caseFilter === 'MY' ? (
                   <button
                     type="button"
@@ -1395,10 +1395,10 @@ export default function HomePage() {
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 {pipelineFilter !== 'ALL'
-                  ? '선택하신 파이프라인 단계에 머물러 있는 건만 집중 모니터링 중입니다.'
+                  ? '선택하신 파이프라인 단계에 머물러 있는 도면 분석 건만 집중 모니터링 중입니다.'
                   : caseFilter === 'MY'
-                  ? `${user?.name || '담당자'} 담당자님이 진행 중인 활성 견적 건입니다. (총 ${myCasesCount}건)`
-                  : `현재 시스템에서 진행 중인 전사 활성 견적 건입니다. (총 ${activeCases.length}건)`}
+                  ? `접수된 CAD 도면의 파싱, BOM 전개 및 단계별 견적 작업 현황입니다. (${user?.name || '담당자'} 담당: ${myCasesCount}건)`
+                  : `회사 전체에서 진행 중인 CAD 도면 분석 및 견적 파이프라인 현황입니다. (총 ${activeCases.length}건)`}
               </p>
             </div>
           </div>
@@ -1978,7 +1978,7 @@ export default function HomePage() {
             </div>
             <div>
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                <span>최근 견적서 관리</span>
+                <span>발행 견적서 및 엑셀 다운로드</span>
                 <span className="h-[26px] px-2.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs">
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
                   <span>
@@ -1987,7 +1987,7 @@ export default function HomePage() {
                 </span>
               </h2>
               <p className="text-xs text-slate-500">
-                도면 분석 후 생성된 견적서 목록입니다. (0원 초안은 [단가검토]에서 금액을 확정해야 공식 승인 및 엑셀 출력이 가능합니다)
+                원가 산출이 완료된 견적서 목록입니다. 웹뷰어 열람 및 고객 제출용 엑셀(.xlsx) 즉시 다운로드가 가능합니다.
               </p>
             </div>
           </div>
