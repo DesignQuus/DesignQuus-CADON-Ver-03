@@ -1982,7 +1982,7 @@ export default function HomePage() {
                 <span className="h-[26px] px-2.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs">
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
                   <span>
-                    총 {quotes.length}건 (초안 {quotes.filter((q) => q.status === 'DRAFT' || Number(q.total_amount || 0) === 0).length}건 / 공식발행 {quotes.filter((q) => ['APPROVED', 'ISSUED'].includes(q.status) && Number(q.total_amount || 0) > 0).length}건)
+                    총 {quotes.length}건 (발행완료 {quotes.filter((q) => Number(q.total_amount || 0) > 0).length}건{quotes.filter((q) => Number(q.total_amount || 0) === 0).length > 0 ? ` / 단가대기 ${quotes.filter((q) => Number(q.total_amount || 0) === 0).length}건` : ''})
                   </span>
                 </span>
               </h2>
@@ -2192,14 +2192,21 @@ export default function HomePage() {
               <tbody className="divide-y divide-slate-100">
                 {paginatedQuotes.map((q, idx) => {
                   const globalIdx = (quotePage - 1) * quotePageSize + idx + 1;
-                  let statusBadge = 'rounded bg-slate-100 text-slate-700 border-slate-200';
-                  let statusLabel = '임시저장 (DRAFT)';
+                  let statusBadge = 'rounded-full bg-[#E9E9E9] text-slate-800 border-slate-300 shadow-2xs';
+                  let dotColor = 'bg-slate-400';
+                  let statusLabel = '초안 (DRAFT)';
                   if (q.status === 'APPROVED') {
-                    statusBadge = 'rounded-full bg-[#E9E9E9] text-slate-800 border-slate-300';
+                    dotColor = 'bg-emerald-500';
                     statusLabel = '승인완료';
                   } else if (q.status === 'ISSUED') {
-                    statusBadge = 'rounded-full bg-[#E9E9E9] text-slate-800 border-slate-300';
+                    dotColor = 'bg-emerald-500';
                     statusLabel = '공식발행';
+                  } else if (Number(q.total_amount || 0) > 0) {
+                    dotColor = 'bg-emerald-500';
+                    statusLabel = '견적발행 완료';
+                  } else {
+                    dotColor = 'bg-amber-500';
+                    statusLabel = '초안 (단가검토)';
                   }
 
                   return (
@@ -2233,15 +2240,16 @@ export default function HomePage() {
                       <td className="py-3 px-4 text-slate-600 font-medium">
                         {q.company_name || '고객사 미지정'}
                       </td>
-                      <td className="py-3 px-4 text-center font-semibold text-slate-700 font-mono">
-                        {q.item_count || 0}개
+                      <td className="py-3 px-4 text-center font-semibold text-slate-700 font-mono" title="가공 견적 산출 대상 품목 수">
+                        {q.item_count || 0}개 품목
                       </td>
                       <td className="py-3 px-4 text-right font-black text-slate-900 font-mono text-sm">
                         ₩{Number(q.total_amount || 0).toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <span className={`inline-flex items-center justify-center h-[26px] px-2.5 text-[10.5px] font-bold border ${statusBadge}`}>
-                          {statusLabel}
+                        <span className={`inline-flex items-center gap-1.5 h-[26px] px-2.5 text-[10.5px] font-bold border ${statusBadge}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></span>
+                          <span>{statusLabel}</span>
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
