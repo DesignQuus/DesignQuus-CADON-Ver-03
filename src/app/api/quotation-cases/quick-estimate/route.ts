@@ -206,6 +206,12 @@ export async function POST(req: NextRequest) {
     const matchedRate = Math.min(100, Math.round(((matchedCount || 1) / quoteItems.length) * 100));
 
     // 6. Create Quote Record (quotes 스키마의 NOT NULL 제약조건 완벽 준수)
+    // CAD 파이프라인에서 표제란 분석으로 도출된 고객사(company_id) 동기화
+    const updatedCase = (await db.prepare('SELECT company_id, project_id FROM quotation_cases WHERE id = ?').get(caseId)) as any;
+    const effectiveCompanyId = (updatedCase?.company_id && updatedCase.company_id !== 'comp_unassigned')
+      ? updatedCase.company_id
+      : companyId;
+
     const quoteId = `quote_${Date.now()}`;
     const quoteNo = `${caseNo}-Q01`;
     await db.prepare(`
@@ -216,7 +222,7 @@ export async function POST(req: NextRequest) {
         created_by_user_id, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      quoteId, 1, caseId, quoteNo, 1, companyId, 'proj_unassigned',
+      quoteId, 1, caseId, quoteNo, 1, effectiveCompanyId, 'proj_unassigned',
       'DRAFT', 'KRW', subtotal, 'NONE', 0, 0,
       taxRate, taxAmount, grandTotal, now.toISOString().slice(0, 10), 0,
       session.userId, now.toISOString(), now.toISOString()

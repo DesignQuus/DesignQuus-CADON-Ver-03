@@ -41,7 +41,8 @@ import {
   Trash2,
   Search,
   RefreshCw,
-  Zap
+  Zap,
+  ClipboardList
 } from 'lucide-react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import CustomerSelectCombobox, { CustomerSelectionValue, AUTO_DETECT_CUSTOMER } from '@/components/common/CustomerSelectCombobox';
@@ -432,6 +433,42 @@ export default function HomePage() {
     }
   };
 
+  const handleDeleteCase = async (e: React.MouseEvent, caseId: string, caseNo: string) => {
+    e.stopPropagation();
+    if (!confirm(`[${caseNo || '해당 의뢰건'}] 견적의뢰 건을 휴지통으로 이동하시겠습니까?\n(삭제 후 30일간 휴지통에 보관되며 복구할 수 있습니다.)`)) {
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/quotation-cases/${caseId}/lifecycle`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'TRASH' })
+      });
+      if (res.ok) {
+        setCases((prev) =>
+          prev.map((c) =>
+            c.id === caseId
+              ? {
+                  ...c,
+                  is_deleted: true,
+                  deleted_at: new Date().toISOString(),
+                  remaining_days: 30,
+                  lifecycle_status: 'TRASHED',
+                  status: 'DELETED'
+                }
+              : c
+          )
+        );
+      } else {
+        const data = await res.json();
+        alert(data.error || '휴지통 이동에 실패했습니다.');
+      }
+    } catch (err: any) {
+      console.error('Failed to trash case:', err);
+      alert('휴지통 이동 중 오류가 발생했습니다.');
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -771,7 +808,7 @@ export default function HomePage() {
 
     // 2. 고객사 필터
     if (quoteCompanyFilter !== 'ALL') {
-      list = list.filter((q) => (q.company_name || '미지정 고객사') === quoteCompanyFilter);
+      list = list.filter((q) => (q.company_name || '고객사 미지정') === quoteCompanyFilter);
     }
 
     // 3. 견적 총액 조건 필터
@@ -1298,67 +1335,72 @@ export default function HomePage() {
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-50/50 via-white to-white">
           {/* Left: Title & Personalization */}
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base font-extrabold text-slate-900 tracking-tight">최근 견적의뢰 내역</h2>
-              {caseFilter === 'MY' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCaseFilter('ALL');
-                    setCasePage(1);
-                  }}
-                  className="text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-                  title="클릭하여 전사 총괄 관제로 전환"
-                >
-                  <User className="w-3 h-3 text-blue-600" />
-                  <span>{user?.name || '담당자'} 담당 관제 ({myActiveCases.length}건)</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCaseFilter('MY');
-                    setCasePage(1);
-                  }}
-                  className="text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-                  title="클릭하여 내 담당 관제로 전환"
-                >
-                  <Building2 className="w-3 h-3 text-indigo-600" />
-                  <span>전사 총괄 관제 ({activeCases.length}건)</span>
-                </button>
-              )}
-              {pipelineFilter !== 'ALL' && (
-                <span className="text-[11px] font-extrabold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs animate-in fade-in">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                  <span>
-                    {pipelineFilter === '1' && '1단계: 도면 접수 & CAD 파싱'}
-                    {pipelineFilter === '2' && '2단계: 멀티레벨 BOM 자동 전개'}
-                    {pipelineFilter === '3' && '3단계: 단가 마스터 매칭 & 원가 산출'}
-                    {pipelineFilter === '4' && '4단계: 공식 견적서 발행 & 승인'}
-                    {' '}({filteredCases.length}건)
-                  </span>
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">
+              <ClipboardList className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base font-extrabold text-slate-900 tracking-tight">최근 견적의뢰 내역</h2>
+                {caseFilter === 'MY' ? (
                   <button
                     type="button"
                     onClick={() => {
-                      setPipelineFilter('ALL');
+                      setCaseFilter('ALL');
                       setCasePage(1);
                     }}
-                    className="ml-1 text-slate-500 hover:text-slate-900 bg-white/80 hover:bg-white px-1.5 py-0.2 rounded border border-blue-200 text-[10px] font-black cursor-pointer transition-colors"
-                    title="전체 단계 보기로 초기화"
+                    className="h-[26px] px-2.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-800 bg-[#E9E9E9] hover:bg-[#DCDCDC] border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                    title="클릭하여 전사 총괄 관제로 전환"
                   >
-                    × 해제
+                    <User className="w-3.5 h-3.5 text-blue-600" />
+                    <span>{user?.name || '담당자'} 담당 관제 ({myActiveCases.length}건)</span>
                   </button>
-                </span>
-              )}
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCaseFilter('MY');
+                      setCasePage(1);
+                    }}
+                    className="h-[26px] px-2.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-800 bg-[#E9E9E9] hover:bg-[#DCDCDC] border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                    title="클릭하여 내 담당 관제로 전환"
+                  >
+                    <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>전사 총괄 관제 ({activeCases.length}건)</span>
+                  </button>
+                )}
+                {pipelineFilter !== 'ALL' && (
+                  <span className="h-[26px] px-2.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-800 bg-[#E9E9E9] border border-slate-300 shadow-2xs animate-in fade-in">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                    <span>
+                      {pipelineFilter === '1' && '1단계: 도면 접수 & CAD 파싱'}
+                      {pipelineFilter === '2' && '2단계: 멀티레벨 BOM 자동 전개'}
+                      {pipelineFilter === '3' && '3단계: 단가 마스터 매칭 & 원가 산출'}
+                      {pipelineFilter === '4' && '4단계: 공식 견적서 발행 & 승인'}
+                      {' '}({filteredCases.length}건)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPipelineFilter('ALL');
+                        setCasePage(1);
+                      }}
+                      className="ml-1 text-slate-500 hover:text-slate-900 bg-white/80 hover:bg-white px-1.5 py-0.2 rounded border border-slate-300 text-[10px] font-black cursor-pointer transition-colors"
+                      title="전체 단계 보기로 초기화"
+                    >
+                      × 해제
+                    </button>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {pipelineFilter !== 'ALL'
+                  ? '선택하신 파이프라인 단계에 머물러 있는 건만 집중 모니터링 중입니다.'
+                  : caseFilter === 'MY'
+                  ? `${user?.name || '담당자'} 담당자님이 진행 중인 활성 견적 건입니다. (총 ${myCasesCount}건)`
+                  : `현재 시스템에서 진행 중인 전사 활성 견적 건입니다. (총 ${activeCases.length}건)`}
+              </p>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {pipelineFilter !== 'ALL'
-                ? '선택하신 파이프라인 단계에 머물러 있는 건만 집중 모니터링 중입니다.'
-                : caseFilter === 'MY'
-                ? `${user?.name || '담당자'} 담당자님이 진행 중인 활성 견적 건입니다. (총 ${myCasesCount}건)`
-                : `현재 시스템에서 진행 중인 전사 활성 견적 건입니다. (총 ${activeCases.length}건)`}
-            </p>
           </div>
 
           {/* Right: Inline Pager & Full Table Link */}
@@ -1654,9 +1696,14 @@ export default function HomePage() {
                               {c.bom_items_count}품목 전개
                             </span>
                           </div>
+                        ) : c.primary_file_name || (c.files_count && c.files_count > 0) ? (
+                          <div className="flex items-center gap-1.5 text-amber-700 font-bold text-xs" title="도면 파일은 접수되었으나 아직 CAD 시트 분할 및 BOM 파싱이 진행되지 않았습니다.">
+                            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span>도면 분석 대기 (CAD 파싱 필요)</span>
+                          </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 text-amber-700 font-bold text-xs">
-                            <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          <div className="flex items-center gap-1.5 text-slate-400 font-medium text-xs">
+                            <AlertCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <span>도면 미첨부 (0매)</span>
                           </div>
                         )}
@@ -1863,8 +1910,16 @@ export default function HomePage() {
                             <span>복구</span>
                           </button>
                         ) : isArchived ? (
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-1.5">
                             <span className="text-[11px] text-slate-400 font-medium">보관 상태</span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteCase(e, c.id, c.case_no)}
+                              className="h-[26px] w-[26px] inline-flex items-center justify-center bg-[#E9E9E9] hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-300 hover:border-rose-300 rounded-full transition-all shadow-2xs cursor-pointer"
+                              title="휴지통(삭제보관함)으로 이동"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                            </button>
                             <Link
                               href={`/cases/${c.id}`}
                               className="p-1 text-slate-400 group-hover:text-blue-600 transition-colors"
@@ -1873,31 +1928,36 @@ export default function HomePage() {
                               <ChevronRight className="w-4 h-4" />
                             </Link>
                           </div>
-                        ) : c.drawings_count === 0 && (!c.files_count || c.files_count === 0) ? (
+                        ) : (
                           <div className="flex items-center justify-center gap-1.5">
-                            <Link
-                              href={`/cases/${c.id}?step=1`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-800 text-[11px] font-extrabold border border-blue-200 transition-all cursor-pointer shadow-2xs shrink-0"
-                              title="해당 의뢰건에 CAD 도면 즉시 첨부하기"
+                            {c.drawings_count === 0 && (!c.files_count || c.files_count === 0) && (
+                              <Link
+                                href={`/cases/${c.id}?step=1`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-800 text-[11px] font-extrabold border border-blue-200 transition-all cursor-pointer shadow-2xs shrink-0"
+                                title="해당 의뢰건에 CAD 도면 즉시 첨부하기"
+                              >
+                                <Plus className="w-3 h-3 stroke-[3]" />
+                                <span>도면 투입</span>
+                              </Link>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteCase(e, c.id, c.case_no)}
+                              className="h-[26px] w-[26px] inline-flex items-center justify-center bg-[#E9E9E9] hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-300 hover:border-rose-300 rounded-full transition-all shadow-2xs cursor-pointer"
+                              title="휴지통(삭제보관함)으로 이동"
                             >
-                              <Plus className="w-3 h-3 stroke-[3]" />
-                              <span>도면 투입</span>
-                            </Link>
+                              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                            </button>
                             <Link
                               href={`/cases/${c.id}`}
+                              onClick={(e) => e.stopPropagation()}
                               className="p-1 text-slate-400 group-hover:text-blue-600 transition-colors"
+                              title="상세 보기"
                             >
                               <ChevronRight className="w-4 h-4" />
                             </Link>
                           </div>
-                        ) : (
-                          <Link
-                            href={`/cases/${c.id}`}
-                            className="inline-flex items-center gap-1 text-slate-400 group-hover:text-blue-600 transition-colors"
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </Link>
                         )}
                       </td>
                     </tr>
@@ -1919,8 +1979,11 @@ export default function HomePage() {
             <div>
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
                 <span>최근 견적서 관리</span>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                  총 {quotes.length}건 (초안 {quotes.filter((q) => q.status === 'DRAFT' || Number(q.total_amount || 0) === 0).length}건 / 공식발행 {quotes.filter((q) => ['APPROVED', 'ISSUED'].includes(q.status) && Number(q.total_amount || 0) > 0).length}건)
+                <span className="h-[26px] px-2.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs">
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>
+                    총 {quotes.length}건 (초안 {quotes.filter((q) => q.status === 'DRAFT' || Number(q.total_amount || 0) === 0).length}건 / 공식발행 {quotes.filter((q) => ['APPROVED', 'ISSUED'].includes(q.status) && Number(q.total_amount || 0) > 0).length}건)
+                  </span>
                 </span>
               </h2>
               <p className="text-xs text-slate-500">
@@ -1990,7 +2053,7 @@ export default function HomePage() {
                 >
                   <option value="ALL">전체 고객사 ({quotes.length}건)</option>
                   {availableQuoteCompanies.map((c) => {
-                    const cnt = quotes.filter((q) => (q.company_name || '미지정 고객사') === c).length;
+                    const cnt = quotes.filter((q) => (q.company_name || '고객사 미지정') === c).length;
                     return (
                       <option key={c} value={c}>
                         {c} ({cnt}건)
@@ -2168,7 +2231,7 @@ export default function HomePage() {
                         {q.case_name || '-'}
                       </td>
                       <td className="py-3 px-4 text-slate-600 font-medium">
-                        {q.company_name || '미지정 고객사'}
+                        {q.company_name || '고객사 미지정'}
                       </td>
                       <td className="py-3 px-4 text-center font-semibold text-slate-700 font-mono">
                         {q.item_count || 0}개
@@ -2222,10 +2285,10 @@ export default function HomePage() {
                           <button
                             type="button"
                             onClick={() => handleDeleteQuoteClick(q.id, q.quote_no)}
-                            className="w-[26px] h-[26px] flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors cursor-pointer border border-transparent hover:border-rose-200"
-                            title="견적서 영구 삭제"
+                            className="h-[26px] w-[26px] inline-flex items-center justify-center bg-[#E9E9E9] hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-300 hover:border-rose-300 rounded-full transition-all shadow-2xs cursor-pointer shrink-0"
+                            title="견적서 삭제 (휴지통)"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                           </button>
                         </div>
                       </td>

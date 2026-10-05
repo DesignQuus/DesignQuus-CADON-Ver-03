@@ -41,12 +41,13 @@ export async function GET(req: NextRequest) {
         q.is_locked,
         qc.case_no,
         qc.case_name,
-        COALESCE(c.company_name, '미지정 고객사') as company_name,
+        COALESCE(NULLIF(c.company_name, ''), NULLIF(qc_c.company_name, ''), '고객사 미지정') as company_name,
         (SELECT COUNT(*) FROM quote_items qi WHERE qi.quote_id = q.id) as item_count,
         (SELECT COUNT(*) FROM quote_items qi WHERE qi.quote_id = q.id AND (qi.price_source IN ('MANUAL_PRICE', 'MANUAL_INPUT', 'USER_OVERRIDE', 'PRICE_MASTER', 'MANUAL_REVIEW') OR qi.unit_price > 0)) as modified_count
       FROM quotes q
       LEFT JOIN quotation_cases qc ON qc.id = q.quotation_case_id
-      LEFT JOIN companies c ON c.id = q.company_id
+      LEFT JOIN companies c ON (c.id = q.company_id AND c.id != 'comp_unassigned')
+      LEFT JOIN companies qc_c ON (qc_c.id = qc.company_id AND qc_c.id != 'comp_unassigned')
       WHERE 1=1
     `;
 

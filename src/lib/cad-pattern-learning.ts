@@ -127,9 +127,9 @@ export async function learnCadDrawingPattern(
     }
 
     const companyId = options.companyId || caseRow.company_id;
-    let companyName = options.companyName || caseRow.resolved_company_name || '미지정 고객사';
-    if (companyName === '고객사 미지정' || companyName === 'comp_unassigned') {
-      companyName = '미지정 고객사';
+    let companyName = options.companyName || caseRow.resolved_company_name || '고객사 미지정';
+    if (companyName === '미지정 고객사' || companyName === 'comp_unassigned') {
+      companyName = '고객사 미지정';
     }
 
     // 2. 도면 메타데이터 조회 (1번 메인 조립도 우선)
@@ -391,7 +391,7 @@ export async function findMatchingCadPattern(
       let score = 0;
 
       // 1. 고객사명 직접 매칭 (가중치 40%)
-      if (pat.company_name && pat.company_name !== '미지정 고객사') {
+      if (pat.company_name && pat.company_name !== '고객사 미지정' && pat.company_name !== '미지정 고객사') {
         const cNameUpper = pat.company_name.toUpperCase();
         if (fullTextUpper.includes(cNameUpper) || (companyHint && companyHint.toUpperCase().includes(cNameUpper))) {
           score += 0.40;
@@ -1171,7 +1171,7 @@ export async function dryRunTitleBlockValidation(caseId: string): Promise<DryRun
     SELECT id, pattern_name, pattern_type, company_name, rowid
     FROM cad_drawing_patterns
     WHERE company_name = ?
-  `).all(resolvedCompany || '미지정 고객사')) as any[];
+  `).all(resolvedCompany || '고객사 미지정')) as any[];
 
   let conflictType: 'NONE' | 'DUPLICATE_COMPANY' | 'SIMILAR_LAYOUT' | 'CONTRADICTION' = 'NONE';
   let recommendation = '신규 패턴으로 안전하게 등록 가능합니다.';
@@ -1187,7 +1187,7 @@ export async function dryRunTitleBlockValidation(caseId: string): Promise<DryRun
     success: true,
     caseId,
     caseNo: caseRow.case_no,
-    companyName: resolvedCompany || '미지정 고객사',
+    companyName: resolvedCompany || '고객사 미지정',
     drawingCount: drawings.length,
     primaryDrawingNo: primaryDwg.drawing_no_normalized || primaryDwg.drawing_no_raw || '-',
     step1_titleBlock: {

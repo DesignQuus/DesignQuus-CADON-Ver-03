@@ -111,7 +111,7 @@ export async function generateCadSemanticChunks(caseId: string): Promise<CadSema
     throw new Error(report.error || '도면 분석 데이터를 로드할 수 없습니다.');
   }
 
-  const companyName = report.companyName || '미지정 고객사';
+  const companyName = report.companyName || '고객사 미지정';
   const primaryDrawingNo = report.primaryDrawingNo || '-';
   const detectedFields = report.step1_titleBlock.detectedFields;
 

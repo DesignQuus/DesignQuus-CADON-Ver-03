@@ -48,7 +48,7 @@ export async function GET(
       quote_no: qRow.quote_no,
       quote_version: qRow.quote_version,
       company_id: qRow.company_id,
-      company_name: qcRow?.company_name || compRow?.company_name || '미지정 고객사',
+      company_name: qcRow?.company_name || compRow?.company_name || '고객사 미지정',
       case_no: qcRow?.case_no || '-',
       case_name: qcRow?.case_name || '견적의뢰건',
       status: qRow.status,

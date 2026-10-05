@@ -150,7 +150,7 @@ export default function RecentQuotesTable({ quotes }: RecentQuotesTableProps) {
                       {q.case_name || '-'}
                     </td>
                     <td className="py-3 px-4 text-slate-600 font-medium">
-                      {q.company_name || '미지정 고객사'}
+                      {q.company_name || '고객사 미지정'}
                     </td>
                     <td className="py-3 px-4 text-center font-semibold text-slate-700 font-mono">
                       {q.item_count || 0}개
