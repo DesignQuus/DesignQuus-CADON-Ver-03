@@ -35,6 +35,13 @@ interface WebGlCadViewerProps {
     inProgress: boolean;
     excluded: boolean;
   };
+  onStatsChange?: (stats: {
+    totalLines: number;
+    textCount: number;
+    rasterCount: number;
+    loading: boolean;
+  }) => void;
+  hideHudOverlay?: boolean;
 }
 
 export default function WebGlCadViewer({
@@ -55,7 +62,9 @@ export default function WebGlCadViewer({
   excludedItemIds = [],
   isXRayMode = false,
   hideMode = 'GHOST',
-  estimateLayerVisibility = { unreviewed: true, reviewed: true, inProgress: true, excluded: true }
+  estimateLayerVisibility = { unreviewed: true, reviewed: true, inProgress: true, excluded: true },
+  onStatsChange,
+  hideHudOverlay = false,
 }: WebGlCadViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -92,6 +101,16 @@ export default function WebGlCadViewer({
 
   const cadTextsRef = useRef<Array<{ t: string; x: number; y: number; h: number; r: number; c?: string }>>([]);
   cadTextsRef.current = cadTexts;
+
+  // ⚡ Sync stats to parent toolbar
+  useEffect(() => {
+    onStatsChange?.({
+      totalLines,
+      textCount: cadTexts.length,
+      rasterCount,
+      loading
+    });
+  }, [totalLines, cadTexts.length, rasterCount, loading, onStatsChange]);
 
   // Spatial Grid for O(1) text culling across 14,000+ entities
   const textGridRef = useRef<{
@@ -2283,8 +2302,8 @@ export default function WebGlCadViewer({
         </div>
       )}
 
-      {/* Top Left: HUD Status Overlay */}
-      {!loading && !errorMsg && (
+      {/* Top Left: HUD Status Overlay (Rendered in canvas only if !hideHudOverlay) */}
+      {!loading && !errorMsg && !hideHudOverlay && (
         <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-20 pointer-events-auto">
           <div className="bg-slate-950/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-800 text-slate-300 text-[11px] font-mono flex items-center space-x-2 shadow-md pointer-events-none">
             <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse shrink-0" />
@@ -2308,19 +2327,21 @@ export default function WebGlCadViewer({
               </>
             )}
           </div>
+        </div>
+      )}
 
-          {/* OCR Trigger & Result Badge (Only if genuine rasters exist) */}
-          {rasterCount > 0 && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleTriggerOcr}
-                disabled={ocrLoading}
-                className="bg-slate-950/90 hover:bg-slate-800 text-cyan-300 hover:text-cyan-100 border border-cyan-500/40 px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                title="도면 표제란 이미지에 대한 AI OCR 분석을 수행합니다"
-              >
-                <Scan className={`w-3.5 h-3.5 ${ocrLoading ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`} />
-                <span>{ocrLoading ? 'AI OCR 분석 중...' : '래스터 AI OCR 분석'}</span>
-              </button>
+      {/* OCR Trigger & Result Badge (Only if genuine rasters exist) */}
+      {!loading && !errorMsg && rasterCount > 0 && (
+        <div className="absolute top-3 left-3 flex items-center gap-2 z-20 pointer-events-auto">
+          <button
+            onClick={handleTriggerOcr}
+            disabled={ocrLoading}
+            className="bg-slate-950/90 hover:bg-slate-800 text-cyan-300 hover:text-cyan-100 border border-cyan-500/40 px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+            title="도면 표제란 이미지에 대한 AI OCR 분석을 수행합니다"
+          >
+            <Scan className={`w-3.5 h-3.5 ${ocrLoading ? 'animate-spin text-cyan-400' : 'text-cyan-400'}`} />
+            <span>{ocrLoading ? 'AI OCR 분석 중...' : '래스터 AI OCR 분석'}</span>
+          </button>
 
               {ocrResult && (
                 <div className="bg-slate-950/95 border border-emerald-500/50 px-2 py-1 rounded-lg text-[11px] text-emerald-300 flex items-center gap-1.5 shadow-md animate-in fade-in">
@@ -2346,8 +2367,6 @@ export default function WebGlCadViewer({
               )}
             </div>
           )}
-        </div>
-      )}
 
       {/* Bottom Right: Floating Zoom/Fit Controls */}
       <div className="absolute bottom-4 right-4 flex items-center space-x-1 bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-700 z-20 shadow-xl">

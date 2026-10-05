@@ -507,6 +507,14 @@ export default function CadViewer({
   const [showBulkExcludeModal, setShowBulkExcludeModal] = useState(false);
   const bulkBarRef = useRef<HTMLDivElement>(null);
 
+  // ⚡ WebGL GPU Engine Live Stats (상단 헤더 바 우측 인라인 표시용)
+  const [cadStats, setCadStats] = useState<{
+    totalLines: number;
+    textCount: number;
+    rasterCount: number;
+    loading: boolean;
+  } | null>(null);
+
   // 💎 HD Vector SVG state
   const [hdSvgContent, setHdSvgContent] = useState<string | null>(null);
   const [loadingSvg, setLoadingSvg] = useState(false);
@@ -2037,7 +2045,17 @@ export default function CadViewer({
               </span>
             </button>
 
-            {/* 6. CAD 설정 모달 버튼 */}
+            {/* 6. WebGL GPU 엔진 상태 뱃지 */}
+            {cadStats && !cadStats.loading && (
+              <div className="hidden xl:flex bg-slate-950/90 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300 text-[11px] font-mono items-center space-x-1.5 shadow-2xs select-none">
+                <Sparkles className="w-3 h-3 text-amber-400 animate-pulse shrink-0" />
+                <span className="font-bold text-blue-400">WebGL GPU 60 FPS</span>
+                <span className="text-slate-600">|</span>
+                <span>{cadStats.totalLines.toLocaleString()}개 선분</span>
+              </div>
+            )}
+
+            {/* 7. CAD 설정 모달 버튼 */}
             <button
               onClick={handleOpenSettingsModal}
               className="p-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer shadow-2xs"
@@ -2049,94 +2067,130 @@ export default function CadViewer({
         </div>
       ) : (
         /* 1단계용 기본 전문 툴바 */
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-800 text-xs">
-        {/* Left: Active File & View Mode Indicator */}
-        <div className="flex items-center space-x-2.5 shrink-0">
-          {/* Active File Indicator */}
-          {selectedFile && (
-            <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-950/90 border border-slate-800 rounded-xl text-xs text-slate-300 shadow-xs">
-              <span className={`w-2 h-2 rounded-full shrink-0 ${drawings.length > 0 ? 'bg-emerald-400 ring-2 ring-emerald-400/30' : 'bg-amber-400 animate-pulse'}`} />
-              <span className="text-slate-400">선택 도면:</span>
-              {allFiles && allFiles.length > 1 ? (
-                <div className="relative inline-flex items-center">
-                  <select
-                    value={selectedFile.id}
-                    onChange={(e) => onSelectFile && onSelectFile(e.target.value)}
-                    className="bg-slate-900 text-white font-bold pl-2 pr-6 py-0.5 rounded border border-slate-700 hover:border-slate-500 text-xs focus:outline-hidden focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[200px] sm:max-w-[280px] truncate appearance-none"
-                    title="검토할 도면 파일 전환"
-                  >
-                    {allFiles.map((f: any) => (
-                      <option key={f.id} value={f.id}>
-                        {f.original_file_name} {f.has_derived_dxf ? '(DXF변환)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 pointer-events-none" />
+        <div className="flex flex-col gap-2 pb-3 border-b border-slate-800 text-xs">
+          {/* Row 1: 선택 도면 헤더 (Left) & WebGL GPU 60 FPS 인라인 상태 뱃지 (Right - 우측 상단 통합) */}
+          <div className="flex items-center justify-between gap-2.5 w-full">
+            {/* Left: Active File & View Mode Indicator */}
+            <div className="flex items-center space-x-2.5 shrink-0">
+              {/* Active File Indicator */}
+              {selectedFile && (
+                <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-950/90 border border-slate-800 rounded-xl text-xs text-slate-300 shadow-xs">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${drawings.length > 0 ? 'bg-emerald-400 ring-2 ring-emerald-400/30' : 'bg-amber-400 animate-pulse'}`} />
+                  <span className="text-slate-400">선택 도면:</span>
+                  {allFiles && allFiles.length > 1 ? (
+                    <div className="relative inline-flex items-center">
+                      <select
+                        value={selectedFile.id}
+                        onChange={(e) => onSelectFile && onSelectFile(e.target.value)}
+                        className="bg-slate-900 text-white font-bold pl-2 pr-6 py-0.5 rounded border border-slate-700 hover:border-slate-500 text-xs focus:outline-hidden focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[200px] sm:max-w-[280px] truncate appearance-none"
+                        title="검토할 도면 파일 전환"
+                      >
+                        {allFiles.map((f: any) => (
+                          <option key={f.id} value={f.id}>
+                            {f.original_file_name} {f.has_derived_dxf ? '(DXF변환)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 pointer-events-none" />
+                    </div>
+                  ) : (
+                    <span className="font-bold text-white truncate max-w-[200px] sm:max-w-[280px]" title={selectedFile.original_file_name}>
+                      {selectedFile.original_file_name}
+                    </span>
+                  )}
+                  <span className="px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 border border-blue-800/60 font-mono text-[10px]">
+                    {selectedFile.file_type === 'DWG' || selectedFile.original_file_name?.endsWith('.dwg')
+                      ? (drawings.length > 0 ? 'DWG (DXF 렌더링)' : 'DWG (분석 대기)')
+                      : (selectedFile.file_type || 'CAD')}
+                  </span>
+                  {viewMode === 'CAD' && (
+                    <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded bg-blue-900/60 text-blue-200 border border-blue-700/50 font-mono text-[10px] font-bold">
+                      CAD 도면
+                    </span>
+                  )}
+                  {viewMode === 'SHEET' && (
+                    <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded bg-amber-900/60 text-amber-200 border border-amber-700/50 font-mono text-[10px] font-bold">
+                      표제란 시트 ({drawings.length}개)
+                    </span>
+                  )}
+                  {viewMode === 'BLOCKS' && (
+                    <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded bg-teal-900/60 text-teal-200 border border-teal-700/50 font-mono text-[10px] font-bold">
+                      블록 대장 ({blocksData?.blocks?.length ?? 0}종)
+                    </span>
+                  )}
+                  {drawings.length > 0 && (
+                    <span className="hidden md:inline-flex text-slate-400 font-mono text-[10px] bg-slate-900/90 px-2 py-0.5 rounded border border-slate-800" title={`현재 분석 완료된 총 ${drawings.length}개 도면 시트`}>
+                      총 {drawings.length}시트
+                    </span>
+                  )}
                 </div>
-              ) : (
-                <span className="font-bold text-white truncate max-w-[200px] sm:max-w-[280px]" title={selectedFile.original_file_name}>
-                  {selectedFile.original_file_name}
-                </span>
               )}
-              <span className="px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 border border-blue-800/60 font-mono text-[10px]">
-                {selectedFile.file_type === 'DWG' || selectedFile.original_file_name?.endsWith('.dwg')
-                  ? (drawings.length > 0 ? 'DWG (DXF 렌더링)' : 'DWG (분석 대기)')
-                  : (selectedFile.file_type || 'CAD')}
-              </span>
-              {viewMode === 'CAD' && (
-                <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded bg-blue-900/60 text-blue-200 border border-blue-700/50 font-mono text-[10px] font-bold">
-                  CAD 도면
-                </span>
-              )}
-              {viewMode === 'SHEET' && (
-                <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded bg-amber-900/60 text-amber-200 border border-amber-700/50 font-mono text-[10px] font-bold">
-                  표제란 시트 ({drawings.length}개)
-                </span>
-              )}
-              {viewMode === 'BLOCKS' && (
-                <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded bg-teal-900/60 text-teal-200 border border-teal-700/50 font-mono text-[10px] font-bold">
-                  블록 대장 ({blocksData?.blocks?.length ?? 0}종)
-                </span>
-              )}
-              {drawings.length > 0 && (
-                <span className="hidden md:inline-flex text-slate-400 font-mono text-[10px] bg-slate-900/90 px-2 py-0.5 rounded border border-slate-800" title={`현재 분석 완료된 총 ${drawings.length}개 도면 시트`}>
-                  총 {drawings.length}시트
-                </span>
+
+              {/* Quick Add Drawing Button: 도면이 0개이거나 명시적 허용 시에만 노출 */}
+              {onUploadFile && showQuickUpload && drawings.length === 0 && (
+                <div className="flex items-center">
+                  <input
+                    type="file"
+                    ref={quickFileInputRef}
+                    accept=".dwg,.dxf,.pdf,.xls,.xlsx"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        onUploadFile(e.target.files[0]);
+                      }
+                      e.target.value = '';
+                    }}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => quickFileInputRef.current?.click()}
+                    disabled={isAnalyzing}
+                    className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-950/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-600 text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shadow-xs"
+                    title="추가 CAD 도면(DWG/DXF) 파일 즉시 업로드"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <span className="whitespace-nowrap">+ 도면 추가</span>
+                  </button>
+                </div>
               )}
             </div>
-          )}
 
-          {/* Quick Add Drawing Button: 도면이 0개이거나 명시적 허용 시에만 노출 */}
-          {onUploadFile && showQuickUpload && drawings.length === 0 && (
-            <div className="flex items-center">
-              <input
-                type="file"
-                ref={quickFileInputRef}
-                accept=".dwg,.dxf,.pdf,.xls,.xlsx"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    onUploadFile(e.target.files[0]);
-                  }
-                  e.target.value = '';
-                }}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => quickFileInputRef.current?.click()}
-                disabled={isAnalyzing}
-                className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-950/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-600 text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shadow-xs"
-                title="추가 CAD 도면(DWG/DXF) 파일 즉시 업로드"
-              >
-                <Upload className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                <span className="whitespace-nowrap">+ 도면 추가</span>
-              </button>
-            </div>
-          )}
-        </div>
+            {/* Right: WebGL GPU Engine Status Badge (상단 도면 헤더 바 우측 인라인 통합) */}
+            {viewMode === 'CAD' && (
+              cadStats && !cadStats.loading ? (
+                <div className="bg-slate-950/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-800 text-slate-300 text-[11px] font-mono flex items-center space-x-2 shadow-xs shrink-0 select-none animate-in fade-in duration-200 ml-auto">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse shrink-0" />
+                  <span className="font-bold text-blue-400">WebGL GPU 60 FPS</span>
+                  <span className="text-slate-600">|</span>
+                  <span>{cadStats.totalLines.toLocaleString()}개 선분</span>
+                  {cadStats.textCount > 0 && (
+                    <>
+                      <span className="text-slate-600">|</span>
+                      <span className={showTexts ? "text-emerald-400 font-semibold" : "text-slate-500"}>
+                        TXT {cadStats.textCount.toLocaleString()}개 {showTexts ? 'ON' : 'OFF'}
+                      </span>
+                    </>
+                  )}
+                  {cadStats.rasterCount > 0 && (
+                    <>
+                      <span className="text-slate-600">|</span>
+                      <span className="text-cyan-400 font-semibold">
+                        래스터(로고) {cadStats.rasterCount}개 ON
+                      </span>
+                    </>
+                  )}
+                </div>
+              ) : drawings.length > 0 ? (
+                <div className="bg-slate-950/90 px-3 py-1.5 rounded-xl border border-slate-800 text-slate-400 text-[11px] font-mono flex items-center space-x-2 shrink-0 ml-auto">
+                  <RefreshCw className="w-3 h-3 text-blue-400 animate-spin shrink-0" />
+                  <span className="text-slate-400 font-medium">GPU 엔진 준비 중...</span>
+                </div>
+              ) : null
+            )}
+          </div>
 
-        {/* Right: Actions, Dropdown & Controls */}
-        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Row 2: Actions, Dropdown & Controls */}
+          <div className="flex flex-wrap items-center gap-1.5">
           {/* Action Group: AutoCAD Unified Split Button (Launch & Settings) */}
           {caseId && (
             <div className="inline-flex items-center rounded-lg border border-rose-500/40 bg-rose-950/40 p-0.5 shadow-2xs">
@@ -2598,6 +2652,8 @@ export default function CadViewer({
             isXRayMode={isXRayMode}
             hideMode={estimateHideMode}
             estimateLayerVisibility={estimateLayerVisibility}
+            onStatsChange={setCadStats}
+            hideHudOverlay={true}
           />
         )}
 

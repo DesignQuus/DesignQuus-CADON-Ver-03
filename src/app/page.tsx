@@ -469,9 +469,94 @@ export default function HomePage() {
     }
   };
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadDashboardData = useCallback(async () => {
+    // 캐시가 전혀 없는 첫 방문일 때만 전체 로딩 인디케이터 표시
+    const hasAnyData = getClientCache('cases') || (typeof window !== 'undefined' && localStorage.getItem('cadon_cached_cases'));
+    if (!hasAnyData) {
+      setLoading(true);
+    }
 
+    try {
+      // 모든 핵심 API를 워터폴 없이 완전 동시 병렬(Promise.all)로 실행!
+      const [meRes, cData, qData, compData] = await Promise.all([
+        apiFetch('/api/auth/me').catch(() => null),
+        apiFetch('/api/quotation-cases').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        apiFetch('/api/quotes').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        apiFetch('/api/companies').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      ]);
+
+      // 1. 유저 인증 결과 처리
+      if (!meRes || !meRes.ok) {
+        if (!user) router.replace('/login');
+        return;
+      }
+      const meData = await meRes.json();
+      if (!meData?.user) {
+        if (!user) router.replace('/login');
+        return;
+      }
+
+      const normalizedUser: UserProfile = {
+        ...meData.user,
+        id: meData.user.id || meData.user.userId,
+        userId: meData.user.userId || meData.user.id
+      };
+      setUser(normalizedUser);
+      setClientCache('user', normalizedUser);
+      try {
+        localStorage.setItem('cadon_user', JSON.stringify(normalizedUser));
+      } catch {}
+
+      if (!['SUPER_ADMIN', 'TENANT_ADMIN'].includes(normalizedUser.role)) {
+        setCaseFilter('MY');
+      }
+
+      // 2. 견적의뢰 목록 (Stale-While-Revalidate 및 전역 캐시 저장)
+      if (cData && Array.isArray(cData.cases)) {
+        setCases(cData.cases);
+        setClientCache('cases', cData);
+        try {
+          localStorage.setItem('cadon_cached_cases', JSON.stringify(cData.cases));
+        } catch {}
+      }
+
+      // 3. 공식 견적서 목록 캐시 저장
+      if (qData && Array.isArray(qData.quotes)) {
+        setQuotes(qData.quotes);
+        setClientCache('quotes', qData);
+      }
+
+      // 4. 고객사 목록 캐시 저장
+      if (compData && Array.isArray(compData.companies)) {
+        setCompanies(compData.companies);
+        setClientCache('companies', compData);
+      }
+
+      // 5. If SUPER_ADMIN, fetch company stats and audit logs
+      if (normalizedUser.role === 'SUPER_ADMIN') {
+        const [adminCompRes, auditRes] = await Promise.all([
+          apiFetch('/api/companies?include_stats=true')
+            .then((r) => (r.ok ? r.json() : { companies: [] }))
+            .catch(() => ({ companies: [] })),
+          apiFetch('/api/admin/audit-logs?limit=1')
+            .then((r) => (r.ok ? r.json() : { total: 0 }))
+            .catch(() => ({ total: 0 }))
+        ]);
+        if (Array.isArray(adminCompRes.companies)) {
+          setCompanies(adminCompRes.companies);
+        }
+        if (typeof auditRes.total === 'number') {
+          setAuditCount(auditRes.total);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [router, user]);
+
+  useEffect(() => {
     // 클라이언트 마운트 즉시 캐시 복원 (서버 Hydration 에러 방지 및 0ms 즉시 표출)
     try {
       const cachedUser = getClientCache('user') || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('cadon_user') || 'null') : null);
@@ -490,104 +575,8 @@ export default function HomePage() {
       if (cachedCompanies && Array.isArray(cachedCompanies)) setCompanies(cachedCompanies);
     } catch {}
 
-    async function loadDashboardData() {
-      // 캐시가 전혀 없는 첫 방문일 때만 전체 로딩 인디케이터 표시
-      const hasAnyData = getClientCache('cases') || (typeof window !== 'undefined' && localStorage.getItem('cadon_cached_cases'));
-      if (!hasAnyData) {
-        setLoading(true);
-      }
-
-      try {
-        // 모든 핵심 API를 워터폴 없이 완전 동시 병렬(Promise.all)로 실행!
-        const [meRes, cData, qData, compData] = await Promise.all([
-          apiFetch('/api/auth/me').catch(() => null),
-          apiFetch('/api/quotation-cases').then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          apiFetch('/api/quotes').then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          apiFetch('/api/companies').then((r) => (r.ok ? r.json() : null)).catch(() => null)
-        ]);
-
-        if (!isMounted) return;
-
-        // 1. 유저 인증 결과 처리
-        if (!meRes || !meRes.ok) {
-          if (!user) router.replace('/login');
-          return;
-        }
-        const meData = await meRes.json();
-        if (!meData?.user) {
-          if (!user) router.replace('/login');
-          return;
-        }
-
-        const normalizedUser: UserProfile = {
-          ...meData.user,
-          id: meData.user.id || meData.user.userId,
-          userId: meData.user.userId || meData.user.id
-        };
-        setUser(normalizedUser);
-        setClientCache('user', normalizedUser);
-        try {
-          localStorage.setItem('cadon_user', JSON.stringify(normalizedUser));
-        } catch {}
-
-        if (!['SUPER_ADMIN', 'TENANT_ADMIN'].includes(normalizedUser.role)) {
-          setCaseFilter('MY');
-        }
-
-        // 2. 견적의뢰 목록 (Stale-While-Revalidate 및 전역 캐시 저장)
-        if (cData && Array.isArray(cData.cases)) {
-          setCases(cData.cases);
-          setClientCache('cases', cData);
-          try {
-            localStorage.setItem('cadon_cached_cases', JSON.stringify(cData.cases));
-          } catch {}
-        }
-
-        // 3. 공식 견적서 목록 캐시 저장
-        if (qData && Array.isArray(qData.quotes)) {
-          setQuotes(qData.quotes);
-          setClientCache('quotes', qData);
-        }
-
-        // 4. 고객사 목록 캐시 저장
-        if (compData && Array.isArray(compData.companies)) {
-          setCompanies(compData.companies);
-          setClientCache('companies', compData);
-        }
-
-        // 3. If SUPER_ADMIN, fetch company stats and audit logs
-        if (normalizedUser.role === 'SUPER_ADMIN') {
-          const [adminCompRes, auditRes] = await Promise.all([
-            apiFetch('/api/companies?include_stats=true')
-              .then((r) => (r.ok ? r.json() : { companies: [] }))
-              .catch(() => ({ companies: [] })),
-            apiFetch('/api/admin/audit-logs?limit=1')
-              .then((r) => (r.ok ? r.json() : { total: 0 }))
-              .catch(() => ({ total: 0 }))
-          ]);
-          if (!isMounted) return;
-          if (Array.isArray(adminCompRes.companies)) {
-            setCompanies(adminCompRes.companies);
-          }
-          if (typeof auditRes.total === 'number') {
-            setAuditCount(auditRes.total);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load dashboard data:', err);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    }
-
     loadDashboardData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [router]);
+  }, [loadDashboardData]);
 
   // Statistics calculation
   const stats = useMemo(() => {
