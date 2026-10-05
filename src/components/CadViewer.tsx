@@ -7,9 +7,14 @@ import {
   CheckCircle2, FileText, X, Search, ShieldCheck, Archive, Download,
   PanelLeftClose, PanelLeftOpen, FileSpreadsheet, ChevronDown, ChevronRight,
   Maximize2, Sparkles, Filter, Check, Settings, Play, RefreshCw, AlertCircle, AlertTriangle,
-  FolderOpen, Copy, MessageSquare, Ruler, Upload, FileCode2
+  FolderOpen, Copy, MessageSquare, Ruler, Upload, FileCode2, Boxes
 } from 'lucide-react';
 import WebGlCadViewer from './WebGlCadViewer';
+import BlockInspectorDrawer, { CadBlockItem } from './blocks/BlockInspectorDrawer';
+import BlockSheetTable from './blocks/BlockSheetTable';
+import EstimateLayerToolbar from './estimate/EstimateLayerToolbar';
+import EstimateLayerPanel, { UserEstimateGroup } from './estimate/EstimateLayerPanel';
+import PreflightInspectionModal from './estimate/PreflightInspectionModal';
 
 // Auto-Marquee on Hover Component (Method B: Single-line, compact width, auto-scrolls on hover)
 function HoverMarqueeText({ text }: { text: string }) {
@@ -118,8 +123,8 @@ interface CadViewerProps {
   onToggleBalloonNotice?: () => void;
   selectedBalloonNo?: string;
   selectedPartNo?: string;
-  controlledViewMode?: 'CAD' | 'SHEET';
-  onViewModeChange?: (mode: 'CAD' | 'SHEET') => void;
+  controlledViewMode?: 'CAD' | 'SHEET' | 'BLOCKS';
+  onViewModeChange?: (mode: 'CAD' | 'SHEET' | 'BLOCKS') => void;
   onUploadFile?: (file: File) => void;
   showQuickUpload?: boolean;
 }
@@ -157,8 +162,8 @@ export default function CadViewer({
   showQuickUpload = false
 }: CadViewerProps) {
   const quickFileInputRef = useRef<HTMLInputElement>(null);
-  // Mode switcher: 'CAD' (2D Vector Viewer) vs 'SHEET' (Full-width Excel Grid)
-  const [viewMode, setViewMode] = useState<'CAD' | 'SHEET'>(controlledViewMode || 'CAD');
+  // Mode switcher: 'CAD' (2D Vector Viewer) vs 'SHEET' (Full-width Excel Grid) vs 'BLOCKS' (Full CAD Blocks Sheet)
+  const [viewMode, setViewMode] = useState<'CAD' | 'SHEET' | 'BLOCKS'>(controlledViewMode || 'CAD');
 
   useEffect(() => {
     if (controlledViewMode && controlledViewMode !== viewMode) {
@@ -166,10 +171,50 @@ export default function CadViewer({
     }
   }, [controlledViewMode]);
 
-  const handleSetViewMode = useCallback((mode: 'CAD' | 'SHEET') => {
+  const handleSetViewMode = useCallback((mode: 'CAD' | 'SHEET' | 'BLOCKS') => {
     setViewMode(mode);
     if (onViewModeChange) onViewModeChange(mode);
   }, [onViewModeChange]);
+
+  // 🧩 CAD Block Inspector states
+  const [showBlockDrawer, setShowBlockDrawer] = useState(false);
+  const [blocksData, setBlocksData] = useState<{
+    summary: {
+      total_insert_count: number;
+      unique_block_count: number;
+      attribute_block_count: number;
+      dynamic_block_count: number;
+      standard_block_count: number;
+      hardware_candidate_count: number;
+    };
+    blocks: CadBlockItem[];
+  } | null>(null);
+  const [blocksLoading, setBlocksLoading] = useState(false);
+
+  const fetchBlocksData = useCallback(async () => {
+    if (!caseId) return;
+    setBlocksLoading(true);
+    try {
+      const url = selectedFile?.id 
+        ? `/api/quotation-cases/${caseId}/blocks?fileId=${selectedFile.id}`
+        : `/api/quotation-cases/${caseId}/blocks`;
+      const res = await apiFetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        setBlocksData(json);
+      }
+    } catch (err) {
+      console.error('Failed to fetch CAD blocks:', err);
+    } finally {
+      setBlocksLoading(false);
+    }
+  }, [caseId, selectedFile?.id]);
+
+  useEffect(() => {
+    if (caseId) {
+      fetchBlocksData();
+    }
+  }, [caseId, selectedFile?.id, fetchBlocksData]);
 
   // WebGL camera focus state
   const [webGlFocusBbox, setWebGlFocusBbox] = useState<{ min_x: number; min_y: number; max_x: number; max_y: number } | null>(null);
@@ -228,6 +273,234 @@ export default function CadViewer({
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
   const [isMaterialDropdownOpen, setIsMaterialDropdownOpen] = useState(false);
+
+  // 🎨 Phase 4: Estimate Layers & Human-Error Prevention System
+  const [estimateReviewedItems, setEstimateReviewedItems] = useState<string[]>([]);
+  const [estimateInProgressItems, setEstimateInProgressItems] = useState<string[]>([]);
+  const [estimateExcludedItems, setEstimateExcludedItems] = useState<string[]>([]);
+  const [estimateUserGroups, setEstimateUserGroups] = useState<UserEstimateGroup[]>([]);
+  const [estimateHideMode, setEstimateHideMode] = useState<'GHOST' | 'HIDE'>('GHOST');
+  const [isXRayMode, setIsXRayMode] = useState(false);
+  const [cascadeStamp, setCascadeStamp] = useState(false);
+  const [isEstimateLayerPanelOpen, setIsEstimateLayerPanelOpen] = useState(false);
+  const [isPreflightModalOpen, setIsPreflightModalOpen] = useState(false);
+  const [estimateLayerVisibility, setEstimateLayerVisibility] = useState({
+    unreviewed: true,
+    reviewed: true,
+    inProgress: true,
+    excluded: true
+  });
+
+  // Load Estimate Layers data from backend API
+  useEffect(() => {
+    if (!caseId) return;
+    const fetchEstimateLayers = async () => {
+      try {
+        const url = selectedFile?.id
+          ? `/api/quotation-cases/${caseId}/estimate-layers?fileId=${selectedFile.id}`
+          : `/api/quotation-cases/${caseId}/estimate-layers`;
+        const res = await apiFetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            setEstimateReviewedItems(json.data.reviewedItems || []);
+            setEstimateInProgressItems(json.data.inProgressItems || []);
+            setEstimateExcludedItems(json.data.excludedItems || []);
+            setEstimateUserGroups(json.data.userGroups || []);
+            if (json.data.hideMode) setEstimateHideMode(json.data.hideMode);
+            if (json.data.layerVisibility) setEstimateLayerVisibility(json.data.layerVisibility);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load estimate layers:', err);
+      }
+    };
+    fetchEstimateLayers();
+  }, [caseId, selectedFile?.id]);
+
+  // Save Estimate Layers data to backend API
+  const saveEstimateLayers = useCallback(async (updated: {
+    reviewedItems?: string[];
+    inProgressItems?: string[];
+    excludedItems?: string[];
+    userGroups?: UserEstimateGroup[];
+    hideMode?: 'GHOST' | 'HIDE';
+    layerVisibility?: typeof estimateLayerVisibility;
+  }) => {
+    if (!caseId) return;
+    try {
+      const payload = {
+        fileId: selectedFile?.id,
+        reviewedItems: updated.reviewedItems ?? estimateReviewedItems,
+        inProgressItems: updated.inProgressItems ?? estimateInProgressItems,
+        excludedItems: updated.excludedItems ?? estimateExcludedItems,
+        userGroups: updated.userGroups ?? estimateUserGroups,
+        hideMode: updated.hideMode ?? estimateHideMode,
+        layerVisibility: updated.layerVisibility ?? estimateLayerVisibility
+      };
+      await apiFetch(`/api/quotation-cases/${caseId}/estimate-layers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.error('Failed to save estimate layers:', err);
+    }
+  }, [caseId, selectedFile?.id, estimateReviewedItems, estimateInProgressItems, estimateExcludedItems, estimateUserGroups, estimateHideMode, estimateLayerVisibility]);
+
+  // 1-Click / Spacebar Stamp Toggle for current item
+  const handleToggleReviewStatus = useCallback((itemKey?: string) => {
+    let targetKey = itemKey;
+    if (!targetKey && selectedDrawingIdx >= 0 && drawings[selectedDrawingIdx]) {
+      targetKey = drawings[selectedDrawingIdx].drawing_no_raw || drawings[selectedDrawingIdx].id;
+    }
+    if (!targetKey) {
+      // 선택된 도면이 없으면 첫 번째 미검토 도면으로 지정
+      const unrev = drawings.find(d => {
+        const k = d.drawing_no_raw || d.id;
+        return !estimateReviewedItems.includes(k) && !estimateInProgressItems.includes(k) && !estimateExcludedItems.includes(k);
+      });
+      if (unrev) targetKey = unrev.drawing_no_raw || unrev.id;
+    }
+    if (!targetKey) return;
+
+    setEstimateReviewedItems((prev) => {
+      let next: string[];
+      if (prev.includes(targetKey!)) {
+        next = prev.filter(k => k !== targetKey);
+      } else {
+        next = [...prev, targetKey!];
+      }
+
+      // 연쇄 스탬프(Cascade Stamp) 활성화 시: 동일 도면명/품번 일괄 검토 처리
+      if (cascadeStamp && selectedDrawingIdx >= 0 && drawings[selectedDrawingIdx]) {
+        const curDwg = drawings[selectedDrawingIdx];
+        const sameParts = drawings.filter(d => 
+          (d.drawing_name_raw && d.drawing_name_raw === curDwg.drawing_name_raw) ||
+          (d.drawing_no_raw && d.drawing_no_raw === curDwg.drawing_no_raw)
+        );
+        const keysToAdd = sameParts.map(d => d.drawing_no_raw || d.id);
+        if (next.includes(targetKey!)) {
+          next = Array.from(new Set([...next, ...keysToAdd]));
+        }
+      }
+
+      saveEstimateLayers({ reviewedItems: next });
+      return next;
+    });
+  }, [selectedDrawingIdx, drawings, cascadeStamp, estimateReviewedItems, estimateInProgressItems, estimateExcludedItems, saveEstimateLayers]);
+
+  // Keyboard Shortcuts (Space: Stamp, X: X-Ray, Ctrl+G: Grouping)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || (activeEl as HTMLElement).isContentEditable)) {
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        handleToggleReviewStatus();
+      } else if (e.key === 'x' || e.key === 'X') {
+        if (!e.ctrlKey && !e.metaKey) {
+          setIsXRayMode(prev => !prev);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
+        e.preventDefault();
+        setIsEstimateLayerPanelOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleToggleReviewStatus]);
+
+  // Estimate Counts & Unreviewed List
+  const unreviewedList = useMemo(() => {
+    return drawings.filter(d => {
+      const id = String(d.id || '');
+      const no = String(d.drawing_no_raw || '').trim();
+      const isRev = estimateReviewedItems.includes(id) || estimateReviewedItems.includes(no);
+      const isProg = estimateInProgressItems.includes(id) || estimateInProgressItems.includes(no);
+      const isExc = estimateExcludedItems.includes(id) || estimateExcludedItems.includes(no);
+      return !isRev && !isProg && !isExc;
+    }).map(d => ({
+      id: d.id,
+      name: d.drawing_no_raw || d.drawing_name_raw || '도면',
+      spec: d.material || d.drawing_name_raw,
+      count: 1
+    }));
+  }, [drawings, estimateReviewedItems, estimateInProgressItems, estimateExcludedItems]);
+
+  const totalEstimateCount = drawings.length;
+  const reviewedEstimateCount = estimateReviewedItems.length;
+  const inProgressEstimateCount = estimateInProgressItems.length;
+  const excludedEstimateCount = estimateExcludedItems.length;
+  const unreviewedEstimateCount = Math.max(0, totalEstimateCount - reviewedEstimateCount - inProgressEstimateCount - excludedEstimateCount);
+
+  // Estimate Groups Handlers
+  const handleCreateGroup = useCallback((name: string) => {
+    const newGroup: UserEstimateGroup = {
+      id: `group_${Date.now()}`,
+      name,
+      itemIds: selectedRowIds.size > 0 ? Array.from(selectedRowIds) : (selectedDrawingIdx >= 0 && drawings[selectedDrawingIdx] ? [drawings[selectedDrawingIdx].drawing_no_raw || drawings[selectedDrawingIdx].id] : []),
+      color: '#14b8a6',
+      isVisible: true
+    };
+    const next = [...estimateUserGroups, newGroup];
+    setEstimateUserGroups(next);
+    saveEstimateLayers({ userGroups: next });
+  }, [selectedRowIds, selectedDrawingIdx, drawings, estimateUserGroups, saveEstimateLayers]);
+
+  const handleDeleteGroup = useCallback((groupId: string) => {
+    const next = estimateUserGroups.filter(g => g.id !== groupId);
+    setEstimateUserGroups(next);
+    saveEstimateLayers({ userGroups: next });
+  }, [estimateUserGroups, saveEstimateLayers]);
+
+  const handleToggleGroupVisibility = useCallback((groupId: string) => {
+    const next = estimateUserGroups.map(g => g.id === groupId ? { ...g, isVisible: !g.isVisible } : g);
+    setEstimateUserGroups(next);
+    saveEstimateLayers({ userGroups: next });
+  }, [estimateUserGroups, saveEstimateLayers]);
+
+  const handleResetAllReviews = useCallback(() => {
+    if (!window.confirm('모든 검토 완료 및 진행 상태를 초기화하시겠습니까?')) return;
+    setEstimateReviewedItems([]);
+    setEstimateInProgressItems([]);
+    setEstimateExcludedItems([]);
+    saveEstimateLayers({ reviewedItems: [], inProgressItems: [], excludedItems: [] });
+  }, [saveEstimateLayers]);
+
+  const handleToggleLayerVisibility = useCallback((layer: 'unreviewed' | 'reviewed' | 'inProgress' | 'excluded') => {
+    setEstimateLayerVisibility(prev => {
+      const next = { ...prev, [layer]: !prev[layer] };
+      saveEstimateLayers({ layerVisibility: next });
+      return next;
+    });
+  }, [saveEstimateLayers]);
+
+  const handleFocusDrawingByName = useCallback((name: string) => {
+    const idx = drawings.findIndex(d => (d.drawing_no_raw || '').trim() === name.trim() || (d.drawing_name_raw || '').trim() === name.trim());
+    if (idx >= 0) {
+      setSelectedDrawingIdx(idx);
+      const target = drawings[idx];
+      try {
+        const fbox = typeof target.frame_bbox_json === 'string' ? JSON.parse(target.frame_bbox_json) : target.frame_bbox;
+        const tbox = typeof target.title_block_bbox_json === 'string' ? JSON.parse(target.title_block_bbox_json) : target.title_block_bbox;
+        const box = fbox || tbox;
+        if (box && typeof box.min_x === 'number') {
+          setWebGlFocusBbox({
+            min_x: box.min_x,
+            min_y: box.min_y,
+            max_x: box.max_x,
+            max_y: box.max_y
+          });
+        }
+      } catch {}
+    }
+  }, [drawings]);
+
   const [customMaterialInput, setCustomMaterialInput] = useState('');
   const [showCustomMaterialModal, setShowCustomMaterialModal] = useState(false);
   const [bulkExcludeReason, setBulkExcludeReason] = useState('고객 사급품');
@@ -1750,6 +2023,20 @@ export default function CadViewer({
               TXT
             </button>
 
+            {/* 5-2. 🧩 블록 & 스마트 블록 인스펙터 버튼 */}
+            <button
+              type="button"
+              onClick={() => setShowBlockDrawer(true)}
+              className="px-2.5 py-1.5 rounded-lg border border-teal-500/50 bg-teal-950/60 hover:bg-teal-900 text-teal-200 hover:text-white text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-2xs shrink-0"
+              title="설계자가 작성한 일반 블록, 속성 블록(ATTRIB), 스마트 블록(*U) 데이터 조회 및 BOM 연동"
+            >
+              <Boxes className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              <span>블록 데이터</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-teal-900 text-teal-300 border border-teal-700">
+                {blocksData?.summary?.unique_block_count ?? 0}
+              </span>
+            </button>
+
             {/* 6. CAD 설정 모달 버튼 */}
             <button
               onClick={handleOpenSettingsModal}
@@ -1804,6 +2091,11 @@ export default function CadViewer({
               {viewMode === 'SHEET' && (
                 <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded bg-amber-900/60 text-amber-200 border border-amber-700/50 font-mono text-[10px] font-bold">
                   표제란 시트 ({drawings.length}개)
+                </span>
+              )}
+              {viewMode === 'BLOCKS' && (
+                <span className="hidden sm:inline-flex px-1.5 py-0.2 rounded bg-teal-900/60 text-teal-200 border border-teal-700/50 font-mono text-[10px] font-bold">
+                  블록 대장 ({blocksData?.blocks?.length ?? 0}종)
                 </span>
               )}
               {drawings.length > 0 && (
@@ -1969,6 +2261,52 @@ export default function CadViewer({
                 title="CAD 텍스트 레이어 토글"
               >
                 TXT
+              </button>
+
+              {/* 🧩 블록 & 스마트 블록 인스펙터 버튼 */}
+              <button
+                type="button"
+                onClick={() => setShowBlockDrawer(true)}
+                className="px-2.5 py-1.5 rounded-lg border border-teal-500/50 bg-teal-950/60 hover:bg-teal-900 text-teal-200 hover:text-white text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-2xs shrink-0"
+                title="설계자가 작성한 일반 블록, 속성 블록(ATTRIB), 스마트 블록(*U) 데이터 조회 및 BOM 연동"
+              >
+                <Boxes className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                <span>블록 데이터</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-teal-900 text-teal-300 border border-teal-700">
+                  {blocksData?.summary?.unique_block_count ?? 0}
+                </span>
+              </button>
+
+              {/* 🎨 캐드온 견적 레이어 버튼 */}
+              <button
+                type="button"
+                onClick={() => setIsEstimateLayerPanelOpen(true)}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-2xs shrink-0 ${
+                  isEstimateLayerPanelOpen
+                    ? 'border-emerald-500 bg-emerald-950/80 text-emerald-200 ring-2 ring-emerald-500/40'
+                    : 'border-slate-700 bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white'
+                }`}
+                title="휴먼 에러 방지 견적 레이어 및 사용자 그룹(Group/Ungroup) 패널 열기 (단축키: Ctrl+G)"
+              >
+                <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>견적 레이어</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                  {reviewedEstimateCount}/{totalEstimateCount}
+                </span>
+              </button>
+            </div>
+          )}
+
+          {/* Blocks-specific Controls (Visible when in BLOCKS mode) */}
+          {viewMode === 'BLOCKS' && (
+            <div className="flex items-center space-x-2 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80 animate-in fade-in">
+              <button
+                type="button"
+                onClick={() => setShowBlockDrawer(true)}
+                className="px-2.5 py-1.5 rounded-lg bg-teal-950 hover:bg-teal-900 border border-teal-500/60 text-teal-200 text-xs font-bold flex items-center space-x-1.5 cursor-pointer"
+              >
+                <Boxes className="w-3.5 h-3.5 text-teal-400" />
+                <span>블록 인스펙터 패널 열기</span>
               </button>
             </div>
           )}
@@ -2151,7 +2489,31 @@ export default function CadViewer({
       {/* ========================================================================= */}
       {/* 1. CAD VIEW MODE: WebGL High-Performance GPU CAD Engine (Three.js 60 FPS) */}
       {/* ========================================================================= */}
-      <div className={viewMode === 'CAD' ? 'flex-1 w-full my-2.5 relative' : 'hidden'}>
+      <div className={viewMode === 'CAD' ? 'flex-1 w-full my-2.5 relative flex flex-col space-y-2' : 'hidden'}>
+        {/* 🎨 캐드온 스마트 견적 레이어 툴바 */}
+        {drawings.length > 0 && (
+          <EstimateLayerToolbar
+            totalCount={totalEstimateCount}
+            reviewedCount={reviewedEstimateCount}
+            inProgressCount={inProgressEstimateCount}
+            excludedCount={excludedEstimateCount}
+            unreviewedCount={unreviewedEstimateCount}
+            isXRayMode={isXRayMode}
+            onToggleXRay={() => setIsXRayMode(prev => !prev)}
+            hideMode={estimateHideMode}
+            onToggleHideMode={() => {
+              const next = estimateHideMode === 'GHOST' ? 'HIDE' : 'GHOST';
+              setEstimateHideMode(next);
+              saveEstimateLayers({ hideMode: next });
+            }}
+            cascadeStamp={cascadeStamp}
+            onToggleCascadeStamp={() => setCascadeStamp(prev => !prev)}
+            isPanelOpen={isEstimateLayerPanelOpen}
+            onTogglePanel={() => setIsEstimateLayerPanelOpen(prev => !prev)}
+            onOpenPreflight={() => setIsPreflightModalOpen(true)}
+          />
+        )}
+
         {drawings.length === 0 ? (
           <div className="w-full h-full min-h-[550px] bg-slate-950 rounded-2xl border border-slate-800/80 flex flex-col items-center justify-center p-8 text-center select-none relative overflow-hidden">
             {/* Background CAD Grid Texture */}
@@ -2230,6 +2592,12 @@ export default function CadViewer({
             activeFileId={selectedFile?.id}
             reloadKey={`${selectedFile?.id || ''}_${drawings.length}`}
             onBomUpdated={onBomUpdated}
+            reviewedItemIds={estimateReviewedItems}
+            inProgressItemIds={estimateInProgressItems}
+            excludedItemIds={estimateExcludedItems}
+            isXRayMode={isXRayMode}
+            hideMode={estimateHideMode}
+            estimateLayerVisibility={estimateLayerVisibility}
           />
         )}
 
@@ -2969,6 +3337,77 @@ export default function CadViewer({
             )}
           </div>
         </div>
+
+      {/* ========================================================================= */}
+      {/* 3. BLOCKS VIEW MODE: Full CAD Blocks & Smart Blocks Spreadsheet Sheet     */}
+      {/* ========================================================================= */}
+      <div className={viewMode === 'BLOCKS' ? 'flex-1 w-full my-2.5 relative min-h-[580px]' : 'hidden'}>
+        <BlockSheetTable
+          caseId={caseId || ''}
+          blocks={blocksData?.blocks || []}
+          isLoading={blocksLoading}
+          onRefresh={fetchBlocksData}
+          onBomItemAdded={onBomUpdated}
+        />
+      </div>
+
+      {/* 🧩 CAD Block & Smart Block Inspector Slide-in Drawer */}
+      <BlockInspectorDrawer
+        isOpen={showBlockDrawer}
+        onClose={() => setShowBlockDrawer(false)}
+        caseId={caseId || ''}
+        blocks={blocksData?.blocks || []}
+        summary={blocksData?.summary || {
+          total_insert_count: 0,
+          unique_block_count: 0,
+          attribute_block_count: 0,
+          dynamic_block_count: 0,
+          standard_block_count: 0,
+          hardware_candidate_count: 0
+        }}
+        isLoading={blocksLoading}
+        onRefresh={fetchBlocksData}
+        onBomItemAdded={onBomUpdated}
+      />
+
+      {/* 🎨 스마트 견적 레이어 및 그룹 관리 사이드 패널 */}
+      <EstimateLayerPanel
+        isOpen={isEstimateLayerPanelOpen}
+        onClose={() => setIsEstimateLayerPanelOpen(false)}
+        layerVisibility={estimateLayerVisibility}
+        onToggleLayerVisibility={handleToggleLayerVisibility}
+        counts={{
+          unreviewed: unreviewedEstimateCount,
+          reviewed: reviewedEstimateCount,
+          inProgress: inProgressEstimateCount,
+          excluded: excludedEstimateCount
+        }}
+        userGroups={estimateUserGroups}
+        onCreateGroup={handleCreateGroup}
+        onDeleteGroup={handleDeleteGroup}
+        onToggleGroupVisibility={handleToggleGroupVisibility}
+        onResetAllReviews={handleResetAllReviews}
+        selectedCount={selectedRowIds.size}
+        onGroupSelectedItems={() => handleCreateGroup(`그룹 ${estimateUserGroups.length + 1}`)}
+      />
+
+      {/* 🛡️ 견적 사전 검사 (Pre-flight Inspection) 모달 */}
+      <PreflightInspectionModal
+        isOpen={isPreflightModalOpen}
+        onClose={() => setIsPreflightModalOpen(false)}
+        unreviewedItems={unreviewedList}
+        reviewedCount={reviewedEstimateCount}
+        totalCount={totalEstimateCount}
+        onFocusItem={handleFocusDrawingByName}
+        onStartFixing={() => {
+          setIsPreflightModalOpen(false);
+          setIsXRayMode(true);
+        }}
+        onConfirmProceed={() => {
+          setIsPreflightModalOpen(false);
+          alert('모든 도면 부품의 검토가 100% 완료되었습니다. 안심하고 견적서를 출력하거나 제출하셔도 좋습니다.');
+        }}
+      />
 
       {/* Bottom Status Bar */}
       <div className="flex flex-wrap items-center justify-end text-[11px] text-slate-400 pt-2 border-t border-slate-800 gap-2">

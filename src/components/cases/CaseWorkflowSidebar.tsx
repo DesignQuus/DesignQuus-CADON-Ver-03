@@ -63,6 +63,8 @@ interface CaseWorkflowSidebarProps {
   onToggleCollapse?: () => void;
   onBulkExportExcel?: () => void;
   isExportingExcel?: boolean;
+  onOpenInboxView?: () => void;
+  onInstantQuoteClick?: () => void;
 }
 
 export default function CaseWorkflowSidebar({
@@ -73,6 +75,8 @@ export default function CaseWorkflowSidebar({
   user,
   onSingleUploadClick,
   onBatchUploadClick,
+  onOpenInboxView,
+  onInstantQuoteClick,
   isDragging = false,
   onDragOver,
   onDragLeave,
@@ -140,82 +144,70 @@ export default function CaseWorkflowSidebar({
 
       {/* Vertical Steps List */}
       <div className="p-3 space-y-3 overflow-y-auto flex-1">
-        {/* STEP 01: 도면 접수 및 등록 (세로형 Drag & Drop 드롭존 통합) */}
+        {/* STEP 01: 도면 접수 및 등록 (슬림형 빠른 실행 & 드롭 가드) */}
         <div
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`rounded-lg border-[3px] transition-all p-3 space-y-2.5 ${
+          className={`rounded-lg border transition-all p-3 space-y-2.5 ${
             isDragging
-              ? 'border-blue-600 bg-blue-50/90 shadow-lg scale-[1.01] ring-4 ring-blue-500/20'
-              : 'border-blue-500 bg-gradient-to-b from-blue-50/60 via-white to-white shadow-xs hover:border-blue-600 hover:shadow-md'
+              ? 'border-indigo-600 bg-indigo-50/90 shadow-lg scale-[1.01] ring-4 ring-indigo-500/20'
+              : 'border-slate-200 bg-gradient-to-b from-slate-50/80 via-white to-white shadow-2xs hover:border-slate-300'
           }`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-1.5">
-              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-extrabold flex items-center justify-center shadow-2xs">
+              <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-[10px] font-extrabold flex items-center justify-center shadow-2xs">
                 1
               </span>
-              <span className="text-xs font-extrabold text-slate-900">도면 접수 & 등록</span>
+              <span className="text-xs font-extrabold text-slate-900">도면 접수 &amp; 등록</span>
             </div>
-            <span className="text-[10px] font-bold text-blue-800 bg-blue-100/90 px-2 py-0.5 rounded-full border border-blue-200 flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-              <span>원스톱 쾌속 시작</span>
+            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+              신규 등록
             </span>
           </div>
 
-          {/* Visual Drag & Drop Target Area */}
-          <div className="py-3 px-2 bg-white/90 rounded border border-dashed border-blue-200 flex flex-col items-center justify-center text-center space-y-1.5 shadow-2xs">
-            <div className="w-11 h-11 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
-              <UploadCloud className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs font-extrabold text-slate-900 leading-tight">
-                DWG 도면 파일을 여기에 끌어다 놓으세요
-              </p>
-              <p className="text-[10px] text-blue-600 font-bold mt-0.5">
-                (Drag & Drop)
-              </p>
-            </div>
-            <p className="text-[10.5px] text-slate-500 leading-snug px-1">
-              도면을 드롭하면 <strong className="text-slate-800 font-semibold">신규 프로젝트 자동 생성 ➔ 도면 업로드 ➔ AI BOM 추출 프로세스</strong>가 즉시 시작됩니다.
-            </p>
-          </div>
-
-          {/* Action Buttons for Step 1 (Enhanced Hover Highlights) */}
-          <div className="space-y-2 pt-0.5">
-            <button
-              onClick={onSingleUploadClick}
-              className="btn-hover-effect w-full px-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer shadow-xs group"
-              title="로컬 PC에서 단일 도면 파일(.dwg, .dxf)을 선택하여 즉시 업로드"
-            >
-              <FileCode2 className="w-4 h-4 text-blue-200 group-hover:scale-115 group-hover:rotate-6 transition-transform" />
-              <span>도면 파일 선택</span>
-            </button>
-
-            <button
-              onClick={onBatchUploadClick}
-              className="btn-hover-effect-secondary w-full px-3 py-2.5 bg-white text-blue-700 border border-blue-300 rounded text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer shadow-2xs group"
-              title="여러 장의 도면(ZIP 파일 포함)을 일괄 선택하여 통합/개별 처리"
-            >
-              <Folder className="w-4 h-4 text-blue-500 group-hover:scale-115 group-hover:-translate-y-0.5 transition-transform" />
-              <span>다중 도면 일괄 등록</span>
-            </button>
-
+          {/* AI 즉시 견적 (1순위 하이라이트 액션) */}
+          {onInstantQuoteClick && (
             <button
               type="button"
-              onClick={() => alert('기존 견적 복제는 견적 목록 테이블 각 행 우측의 복제 아이콘을 클릭하여 내 담당으로 즉시 복제하실 수 있습니다.')}
-              className="btn-hover-effect-secondary w-full px-3 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded text-[11px] font-semibold transition-all flex items-center justify-between cursor-pointer group"
-              title="기존 견적을 복제하여 신규 견적으로 생성 (테이블 행 메뉴에서 지원)"
+              onClick={onInstantQuoteClick}
+              className="w-full px-3 py-2 bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 rounded text-xs font-bold transition-all flex items-center justify-between shadow-xs cursor-pointer group"
+              title="도면만 넣으면 10초 만에 AI가 도면분석, BOM추출, 단가매칭을 끝내고 초안 견적서를 즉시 산출합니다."
             >
               <span className="flex items-center space-x-1.5">
-                <Copy className="w-3.5 h-3.5 text-slate-400 group-hover:scale-115 transition-transform" />
-                <span>기존 유사 견적 복제</span>
+                <Zap className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
+                <span>AI 즉시 견적</span>
               </span>
-              <span className="text-[9.5px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded font-bold border border-blue-200">
-                행 메뉴 지원
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 font-bold border border-slate-300">
+                10초 완성
               </span>
             </button>
+          )}
+
+          {/* Action Buttons for Step 1: 단일/정밀 등록 메인 단일화 & 다중 일괄 연계 */}
+          <div className="space-y-1.5 pt-0.5">
+            <button
+              type="button"
+              onClick={onSingleUploadClick}
+              className="btn-hover-effect w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs group"
+              title="도면 파일(.dwg, .dxf)을 업로드하여 정밀 AI 분석을 시작합니다."
+            >
+              <FileCode2 className="w-3.5 h-3.5 text-blue-200 group-hover:scale-110 transition-transform" />
+              <span>도면 등록 (정밀 분석)</span>
+            </button>
+            <div className="flex items-center justify-between text-[10.5px] px-1 text-slate-500">
+              <span>단일 CAD 도면 (.dwg, .dxf)</span>
+              <button
+                type="button"
+                onClick={onBatchUploadClick}
+                className="text-blue-600 hover:text-blue-800 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                title="여러 도면 파일(ZIP 파일 포함)을 한 번에 일괄 업로드합니다."
+              >
+                <Folder className="w-3 h-3 text-blue-500" />
+                <span>다중/ZIP 일괄 등록</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -382,34 +374,8 @@ export default function CaseWorkflowSidebar({
               </>
             )}
 
-            {/* [1단계/4단계 조치] 스마트 맥락 인지(Context-Aware) 견적서 즉시 발행 CTA 및 엑셀 일괄 다운로드 */}
-            {counts.ready === 1 && latestReadyCase ? (
-              <div className="space-y-1.5 mt-1.5">
-                <Link
-                  href={`/quotes/${latestReadyCase.id}/publish`}
-                  className="btn-hover-effect-primary w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all flex items-center justify-between shadow-xs group cursor-pointer"
-                  title={`[${latestReadyCase.case_no}] 최종 견적서 즉시 산출 및 발행 화면으로 직행`}
-                >
-                  <span className="flex items-center space-x-1.5 min-w-0">
-                    <Zap className="w-4 h-4 text-emerald-200 group-hover:scale-110 transition-transform shrink-0" />
-                    <span className="truncate font-extrabold">[{latestReadyCase.case_no}] 견적서 발행</span>
-                  </span>
-                  <ArrowRight className="w-3.5 h-3.5 text-emerald-200 group-hover:translate-x-1 transition-transform shrink-0" />
-                </Link>
-                {onBulkExportExcel && (
-                  <button
-                    type="button"
-                    onClick={onBulkExportExcel}
-                    disabled={isExportingExcel}
-                    className="w-full px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded text-[11px] font-bold flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 transition-colors shadow-2xs"
-                    title={`[${latestReadyCase.case_no}] 견적 BOM 엑셀 다운로드 (ZIP)`}
-                  >
-                    <DownloadCloud className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>{isExportingExcel ? '엑셀 압축 중...' : '엑셀 견적서 다운로드 (ZIP)'}</span>
-                  </button>
-                )}
-              </div>
-            ) : counts.ready > 1 ? (
+            {/* 견적 완료 건 CTA */}
+            {counts.ready > 0 ? (
               <div className="space-y-1.5 mt-1.5">
                 <button
                   type="button"
@@ -446,9 +412,9 @@ export default function CaseWorkflowSidebar({
               >
                 <span className="flex items-center space-x-1.5">
                   <FileSpreadsheet className="w-3.5 h-3.5 text-slate-400" />
-                  <span>견적 준비 대기건 없음</span>
+                  <span>견적 준비건 없음</span>
                 </span>
-                <span className="text-[10px] text-slate-400">0건</span>
+                <span className="text-[10.5px] font-bold text-slate-400">0건</span>
               </div>
             )}
           </div>

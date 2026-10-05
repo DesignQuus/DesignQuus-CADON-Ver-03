@@ -166,17 +166,29 @@ async function callWorkspaceMcpTool(
     const apiUrl =
       (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
       EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}${path}`, {
-      method: 'POST',
-      headers: { ...buildServerEgdeskHeaders(), ...visitorHeaders },
-      body,
-    });
+    try {
+      response = await fetch(`${apiUrl}${path}`, {
+        method: 'POST',
+        headers: { ...buildServerEgdeskHeaders(), ...visitorHeaders },
+        body,
+        signal: AbortSignal.timeout(3000)
+      });
+    } catch (fetchErr: any) {
+      console.warn(`[callWorkspaceMcpTool] Timeout/failure for ${path}:`, fetchErr?.message);
+      return { success: false, error: fetchErr?.message || 'Timeout' };
+    }
   } else {
-    response = await apiFetch(proxyPath, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...visitorHeaders },
-      body,
-    });
+    try {
+      response = await apiFetch(proxyPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...visitorHeaders },
+        body,
+        signal: AbortSignal.timeout(4000)
+      });
+    } catch (fetchErr: any) {
+      console.warn(`[callWorkspaceMcpTool:client] Proxy timeout for ${proxyPath}:`, fetchErr?.message);
+      return { success: false, error: fetchErr?.message || 'Proxy timeout' };
+    }
   }
   return parseEgdeskMcpToolResponse(response);
 }
@@ -347,18 +359,30 @@ export async function callUserDataTool(
     const apiUrl =
       (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_EGDESK_API_URL) ||
       EGDESK_CONFIG.apiUrl;
-    response = await fetch(`${apiUrl}/user-data/tools/call`, {
-      method: 'POST',
-      headers: buildServerEgdeskHeaders(),
-      body
-    });
+    try {
+      response = await fetch(`${apiUrl}/user-data/tools/call`, {
+        method: 'POST',
+        headers: buildServerEgdeskHeaders(),
+        body,
+        signal: AbortSignal.timeout(3000)
+      });
+    } catch (fetchErr: any) {
+      console.warn(`[callUserDataTool] EGDesk API timeout/failure (${fetchErr?.name || fetchErr?.message}), graceful fallback.`);
+      return { success: false, rows: [], error: fetchErr?.message || 'EGDesk API timeout' };
+    }
   } else {
     // Browser: use proxy for CORS and tunnel base path (proxy.ts injects routing headers)
-    response = await apiFetch('/__user_data_proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body
-    });
+    try {
+      response = await apiFetch('/__user_data_proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(4000)
+      });
+    } catch (fetchErr: any) {
+      console.warn(`[callUserDataTool:client] Proxy timeout/failure (${fetchErr?.name || fetchErr?.message}), graceful fallback.`);
+      return { success: false, rows: [], error: fetchErr?.message || 'Proxy timeout' };
+    }
   }
 
   return parseEgdeskMcpToolResponse(response);

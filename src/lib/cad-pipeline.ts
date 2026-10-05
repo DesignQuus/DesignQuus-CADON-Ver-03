@@ -6,7 +6,7 @@ import { getStorageSubdir, resolveStoragePath } from './storage';
 
 const SCRIPTS_DIR = path.join(process.cwd(), 'scripts');
 
-function runPythonScript(scriptName: string, args: string[]): Promise<any> {
+export function runPythonScript(scriptName: string, args: string[]): Promise<any> {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(SCRIPTS_DIR, scriptName);
     const proc = spawn('python', [scriptPath, ...args], {
@@ -205,6 +205,28 @@ export async function processCadFilePipeline(
     })
     .catch((svgErr) => console.warn('Vector SVG generation non-blocking warning:', svgErr));
 
+  // 2-C. Block & Smart Block Metadata Extraction (Non-blocking background pipeline)
+  const blocksJsonName = `${quotationCaseId}_${sourceFileId}__cad_blocks.json`;
+  const legacyBlocksJsonName = `${quotationCaseId}__cad_blocks.json`;
+  const blocksJsonPath = path.join(derivedStorageDir, blocksJsonName);
+  const blocksPromise = runPythonScript('block_extractor.py', [absoluteDxfPath, blocksJsonPath])
+    .then(() => {
+      try {
+        const legacyBlocksPath = path.join(derivedStorageDir, legacyBlocksJsonName);
+        if (fs.existsSync(blocksJsonPath)) {
+          fs.copyFileSync(blocksJsonPath, legacyBlocksPath);
+          const localDerived = path.join(process.cwd(), 'storage', 'derived');
+          if (localDerived !== derivedStorageDir) {
+            fs.copyFileSync(blocksJsonPath, path.join(localDerived, blocksJsonName));
+            fs.copyFileSync(blocksJsonPath, path.join(localDerived, legacyBlocksJsonName));
+          }
+        }
+      } catch (bCopyErr) {
+        console.warn('CAD Blocks metadata sync warning:', bCopyErr);
+      }
+    })
+    .catch((bErr) => console.warn('Block extractor non-blocking warning:', bErr));
+
   // 2. High-Performance Unified In-Memory Pipeline (Single-Pass 8-in-1 Engine)
   const parseRunId = `parse_${Date.now()}`;
   const tempPipelineJson = path.join(tempDir, `fast_pipeline_${parseRunId}.json`);
@@ -398,15 +420,15 @@ export async function processCadFilePipeline(
     const detectedProjName = structureResult.drawings.find((d: any) => d.project_name && d.project_name !== '-' && d.project_name !== '')?.project_name;
     if (detectedDesigner || detectedProjName) {
       try {
-        const caseRow = (await db.prepare('SELECT designer_name, project_name FROM quotation_cases WHERE id = ?').get(quotationCaseId)) as any;
+        const caseRow = (await db.prepare('SELECT designer_name, project_title FROM quotation_cases WHERE id = ?').get(quotationCaseId)) as any;
         const updates: string[] = [];
         const params: any[] = [];
         if (!caseRow?.designer_name && detectedDesigner) {
           updates.push('designer_name = ?');
           params.push(detectedDesigner);
         }
-        if (!caseRow?.project_name && detectedProjName) {
-          updates.push('project_name = ?');
+        if (!caseRow?.project_title && detectedProjName) {
+          updates.push('project_title = ?');
           params.push(detectedProjName);
         }
         if (updates.length > 0) {
@@ -690,7 +712,7 @@ async function runAiVlmRefinement(quotationCaseId: string) {
     const params: any[] = [now];
 
     if (tb?.projectName && tb.projectName !== '-') {
-      updates.push('project_name = ?');
+      updates.push('project_title = ?');
       params.push(tb.projectName);
     }
     if (tb?.designerCompany && tb.designerCompany !== '-') {
@@ -699,7 +721,7 @@ async function runAiVlmRefinement(quotationCaseId: string) {
     }
     if (notes.length > 0) {
       const memoText = notes.map((n: string) => `• ${n}`).join('\n');
-      updates.push('quote_memo = COALESCE(quote_memo || "\n\n", "") || "[AI 제조 특기사항 자동 감지]\n" || ?');
+      updates.push('notes = COALESCE(notes || "\n\n", "") || "[AI 제조 특기사항 자동 감지]\n" || ?');
       params.push(memoText);
     }
 

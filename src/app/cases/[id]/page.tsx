@@ -10,7 +10,7 @@ import {
   Folder, Calendar, Check, X, ShieldAlert, ShieldCheck, Clock, Send, ArrowDown, ArrowLeft, Home, Eye, Download, Info, Trash2, Trash,
   Search, Plus, Pencil, ChevronDown, ChevronUp, CheckSquare, Square, Coins, ExternalLink, MapPin,
   Table, LayoutGrid, Filter, RotateCcw, User, AlertCircle, Brain, Archive, Copy, Wrench,
-  GraduationCap, BookOpen
+  GraduationCap, BookOpen, Zap
 } from 'lucide-react';
 import CadViewer from '@/components/CadViewer';
 import QuotationDocumentPreview from '@/components/QuotationDocumentPreview';
@@ -708,10 +708,36 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
   const fetchData = async (isSilent: boolean = false) => {
     try {
       setFetchError(null);
-      if (!isSilent && !data && (typeof window === 'undefined' || !getClientCache(`case_${id}`))) {
+      const cached = typeof window !== 'undefined' ? getClientCache(`case_${id}`) : null;
+      if (!isSilent && !data && !cached) {
         setLoading(true);
       }
-      const res = await apiFetch(`/api/quotation-cases/${id}`);
+      
+      // [성능 가드] 4초 프론트엔드 통신 타임아웃 설정 (무한 스피너 원천 방지)
+      const controller = new AbortController();
+      const timeoutTimer = setTimeout(() => controller.abort(), 4000);
+
+      const res = await apiFetch(`/api/quotation-cases/${id}`, {
+        signal: controller.signal
+      }).catch((fetchErr: any) => {
+        clearTimeout(timeoutTimer);
+        console.warn(`[fetchData] API timeout or network issue:`, fetchErr?.message);
+        if (cached) {
+          setData(cached);
+          setLoading(false);
+        }
+        return null;
+      });
+      clearTimeout(timeoutTimer);
+
+      if (!res) {
+        if (!data && !cached) {
+          setFetchError('서버 응답 지연으로 로컬 복구 모드로 전환합니다.');
+        }
+        setLoading(false);
+        return;
+      }
+
       if (res.status === 401) {
         window.location.href = '/login';
         return;
@@ -2082,9 +2108,21 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
   if (!mounted || loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 space-y-4">
+      <div className="flex flex-col items-center justify-center py-32 space-y-4 select-none">
         <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
-        <div className="text-slate-600 font-semibold text-sm">견적 워크벤치 로딩 중...</div>
+        <div className="text-slate-600 font-semibold text-sm">견적 워크벤치 고속 동기화 중...</div>
+        <p className="text-xs text-slate-400">대용량 도면 및 CAD 데이터를 안전하게 불러오고 있습니다.</p>
+        <button
+          type="button"
+          onClick={() => {
+            const cached = typeof window !== 'undefined' ? getClientCache(`case_${id}`) : null;
+            if (cached) setData(cached);
+            setLoading(false);
+          }}
+          className="mt-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 rounded-lg text-xs font-medium transition-colors cursor-pointer border border-slate-300/80 shadow-2xs"
+        >
+          ⚡ 로컬 캐시로 즉시 열기
+        </button>
       </div>
     );
   }
@@ -2349,12 +2387,20 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             {qc.case_no}
           </span>
           <div className="flex items-center gap-1.5 min-w-0">
+            {/* ⚡ AI 즉시 견적 식별 뱃지 (#E9E9E9 소프트 쿨 그레이 룩) */}
+            {(qc.case_name?.includes('즉시 견적') || qc.case_name?.includes('즉시견적') || qc.notes?.includes('즉시 견적')) && (
+              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs" title="AI 즉시 견적으로 산출된 프로젝트입니다.">
+                <Zap className="w-2.5 h-2.5 text-amber-500" />
+                <span>AI 즉시 견적</span>
+              </span>
+            )}
+
             {(qc.primary_file_name || qc.case_name)?.toLowerCase().endsWith('.dwg') ? (
-              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
                 DWG
               </span>
             ) : (qc.primary_file_name || qc.case_name)?.toLowerCase().endsWith('.dxf') ? (
-              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-300 shadow-2xs">
                 DXF
               </span>
             ) : null}
@@ -2362,22 +2408,30 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               className="text-xs sm:text-sm font-bold text-slate-900 truncate max-w-[160px] md:max-w-[240px] xl:max-w-[360px]" 
               title={qc.primary_file_name || qc.case_name}
             >
-              {qc.primary_file_name || qc.case_name}
+              {(() => {
+                if (qc.primary_file_name) return qc.primary_file_name;
+                if (qc.case_name) {
+                  const matched = qc.case_name.match(/^\[(.*?)\]\s*AI\s*즉시\s*견적/);
+                  if (matched && matched[1]) return matched[1];
+                  return qc.case_name;
+                }
+                return '-';
+              })()}
             </h1>
           </div>
 
           {qc.visibility === 'SHARED' && (
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-700 shrink-0">
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300 shrink-0">
               사내공유
             </span>
           )}
           {qc.visibility === 'PRIVATE_PENDING' && (
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-700 shrink-0">
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
               공개심사중
             </span>
           )}
           {qc.visibility === 'PRIVATE' && (
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-red-100 text-red-700 shrink-0">
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-slate-200 text-slate-800 border border-slate-300 shrink-0">
               보안(비공개)
             </span>
           )}
@@ -2421,14 +2475,14 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
 
           <span className="text-slate-300 hidden sm:inline">|</span>
 
-          {/* 견적 준비 상태 뱃지 */}
+          {/* 견적 준비 상태 뱃지 (AutoCAD / DWG FastView 모노크롬 룩) */}
           <span
-            className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+            className={`text-[11px] font-bold px-2 py-0.5 rounded-[4px] border shrink-0 ${
               qc.quote_readiness === 'READY_FOR_QUOTE'
-                ? 'bg-emerald-100 text-emerald-800'
+                ? 'bg-slate-800 text-slate-100 border-slate-700'
                 : qc.status === 'ANALYZED'
-                ? 'bg-blue-100 text-blue-800'
-                : 'bg-amber-100 text-amber-800'
+                ? 'bg-slate-100 text-slate-800 border-slate-300'
+                : 'bg-amber-50 text-amber-800 border-amber-200'
             }`}
           >
             {qc.quote_readiness === 'READY_FOR_QUOTE'
@@ -2438,24 +2492,24 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               : '도면 등록 대기'}
           </span>
 
-          {/* 권한 뱃지 (인라인 통합) */}
+          {/* 권한 뱃지 (엔지니어링 쿨 슬레이트 룩) */}
           {isOwner ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 shrink-0">
-              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300 shrink-0">
+              <CheckCircle2 className="w-3 h-3 text-slate-600" />
               내 견적
             </span>
           ) : permission?.isSuspended ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-300 shrink-0">
-              <Sparkles className="w-3 h-3 text-indigo-600" />
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300 shrink-0">
+              <Sparkles className="w-3 h-3 text-slate-600" />
               결재 보류 모드
             </span>
           ) : canEdit ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-300 shrink-0">
-              <ShieldCheck className="w-3 h-3 text-blue-600" />
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-300 shrink-0">
+              <ShieldCheck className="w-3 h-3 text-slate-700" />
               최고관리자 승인
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300 shrink-0">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300 shrink-0">
               <Lock className="w-3 h-3 text-amber-600" />
               타 담당자 건
             </span>
@@ -2467,7 +2521,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               type="button"
               onClick={() => handleCloneVersion(latestQuote.id)}
               disabled={actionLoading}
-              className="btn-hover-effect px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs flex items-center space-x-1 cursor-pointer disabled:opacity-50 transition-all shrink-0"
+              className="btn-hover-effect px-2 py-0.5 rounded-[4px] text-[11px] font-bold bg-slate-800 hover:bg-slate-900 text-white border border-slate-700 shadow-2xs flex items-center space-x-1 cursor-pointer disabled:opacity-50 transition-all shrink-0"
               title="타 담당자 원본을 보존하고 내 전용 새 버전으로 복제하여 작업"
             >
               <Copy className="w-3 h-3" />
@@ -2750,12 +2804,12 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             )}
           </div>
           <div className="flex items-center space-x-2 shrink-0">
-            {/* 🎯 Primary Action CTA 버튼 (동선 낭비 없는 원클릭 다음 단계 전진) */}
+            {/* 🎯 Primary Action CTA 버튼 (오토캐드 단일 액션 컬러 원칙: CAD Blue 통일) */}
             {workflowStep === 1 && (
               <button
                 type="button"
                 onClick={() => { setWorkflowStep(2); setIsSidebarOpen(false); }}
-                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-blue-400/60"
+                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-blue-500"
                 title="2단계 AI 도면 파싱 및 검토 화면으로 전진합니다"
               >
                 <span>다음: 2. AI 도면 파싱</span>
@@ -2766,7 +2820,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               <button
                 type="button"
                 onClick={() => { setWorkflowStep(3); setIsSidebarOpen(false); }}
-                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-emerald-400/60"
+                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-blue-500"
                 title="3단계 가상 BOM 추출 및 부품 목록 확인 화면으로 전진합니다"
               >
                 <span>다음: 3. 가상 BOM 추출</span>
@@ -2777,7 +2831,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
               <button
                 type="button"
                 onClick={() => router.push(`/quotes/${id}/review`)}
-                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-indigo-400/60"
+                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-blue-500"
                 title="4단계 마스터 단가 매칭 및 견적 검토 화면으로 전진합니다"
               >
                 <span>다음: 4. 마스터 단가 매칭</span>
@@ -2791,7 +2845,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             <button
               type="button"
               onClick={handleOpenPatternModal}
-              className="inline-flex items-center space-x-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-slate-700"
+              className="inline-flex items-center space-x-1.5 px-2.5 py-1 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-200 shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95 border border-slate-700"
               title="현재 도면의 표제란 및 BOM 양식을 학습하여 동일 서식의 도면을 100% 자동 인식하도록 AI 지식 베이스(RAG)에 등록합니다"
             >
               <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
@@ -2800,11 +2854,11 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             <button
               type="button"
               onClick={() => handleOpenAiInsights(false)}
-              className="inline-flex items-center space-x-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 text-white shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95"
+              className="inline-flex items-center space-x-1.5 px-3 py-1 text-xs font-bold rounded bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 shadow-xs transition-all cursor-pointer hover:shadow-md active:scale-95"
               title="CADON BOM AI 기반 도면 표제란, 가공 특성 및 견적 자동화 심층 분석 리포트"
             >
-              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-              <span>CADON AI 도면·견적 심층분석</span>
+              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+              <span>CADON AI 심층분석</span>
             </button>
             <span className="text-slate-500 text-[10px] font-mono hidden md:inline">CADON Engine v3.0</span>
           </div>

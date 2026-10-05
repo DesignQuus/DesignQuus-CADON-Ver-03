@@ -107,7 +107,7 @@ export default function PipelineNavigator({
                 isActive
                   ? 'bg-white/20 text-white'
                   : isDone
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-slate-700 text-white'
                   : 'bg-slate-200 text-slate-600'
               }`}>
                 {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : item.step}
@@ -134,11 +134,11 @@ export default function PipelineNavigator({
             </>
           );
 
-          const classNameStr = `flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+          const classNameStr = `flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
             isActive
               ? 'bg-blue-600 text-white font-bold shadow-xs'
               : isDone
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+              ? 'bg-slate-100 text-slate-800 border border-slate-300 hover:bg-slate-200'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`;
 

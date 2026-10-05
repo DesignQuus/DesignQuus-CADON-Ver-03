@@ -11,6 +11,8 @@ import { useRouter } from 'next/navigation';
 import { getClientCache, setClientCache, isCacheFresh, fetchWithCache } from '@/lib/cacheStore';
 import { CaseActionConfirmModal, SKIP_CASE_TRASH_CONFIRM_KEY, CaseActionType } from '@/components/common/CaseActionConfirmModal';
 import { QuoteDeleteToast } from '@/components/common/QuoteDeleteConfirmModal';
+import DrawingInboxWorkbench from '@/components/inbox/DrawingInboxWorkbench';
+import AIInstantQuoteModal from '@/components/common/AIInstantQuoteModal';
 import {
   FileText,
   Plus,
@@ -72,11 +74,10 @@ interface ManagerTheme {
 }
 
 const THEME_PALETTES: ManagerTheme[] = [
-  { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', badge: 'bg-blue-600 text-white', dept: '영업 실무', initial: '영' },
-  { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', badge: 'bg-emerald-600 text-white', dept: '영업 실무', initial: '영' },
-  { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badge: 'bg-purple-600 text-white', dept: '영업 실무', initial: '영' },
-  { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', badge: 'bg-indigo-600 text-white', dept: '영업 실무', initial: '영' },
-  { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', badge: 'bg-amber-600 text-white', dept: '영업 실무', initial: '영' }
+  { bg: 'bg-slate-100', text: 'text-slate-800', border: 'border-slate-300', badge: 'bg-slate-700 text-white', dept: '영업 실무', initial: '영' },
+  { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200', badge: 'bg-slate-600 text-white', dept: '영업 실무', initial: '영' },
+  { bg: 'bg-zinc-100', text: 'text-zinc-800', border: 'border-zinc-300', badge: 'bg-zinc-700 text-white', dept: '영업 실무', initial: '영' },
+  { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200', badge: 'bg-slate-800 text-white', dept: '영업 실무', initial: '영' }
 ];
 
 export function getRoleBadgeLabel(role?: string): string {
@@ -152,6 +153,7 @@ export default function CasesPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [showModal, setShowModal] = useState(false);
+  const [isInstantQuoteModalOpen, setIsInstantQuoteModalOpen] = useState(false);
   const [caseName, setCaseName] = useState('');
   const [companies, setCompanies] = useState<any[]>([]);
   const [operators, setOperators] = useState<any[]>([]);
@@ -182,6 +184,9 @@ export default function CasesPage() {
   // Persistent Sidebar Collapsed State (테이블 넓게 보기 지원 & 로컬스토리지 기억)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  // 견적의뢰 대장 화면 내 인페이지 서브 뷰 전환 상태: 'CASES' (견적 대장) | 'INBOX' (도면 일괄 접수 대기열)
+  const [mainView, setMainView] = useState<'CASES' | 'INBOX'>('CASES');
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem('cadon_sidebar_collapsed');
@@ -192,8 +197,14 @@ export default function CasesPage() {
 
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
+      const viewParam = params.get('view');
+      if (viewParam === 'inbox') {
+        setMainView('INBOX');
+      }
       const tabParam = params.get('tab');
-      if (tabParam && ['ALL', 'READY_FOR_QUOTE', 'ANALYZED', 'PENDING', 'PRIVATE_APPROVAL', 'SECURE_VAULT', 'ARCHIVED', 'TRASHED'].includes(tabParam)) {
+      if (tabParam === 'inbox') {
+        setMainView('INBOX');
+      } else if (tabParam && ['ALL', 'READY_FOR_QUOTE', 'ANALYZED', 'PENDING', 'PRIVATE_APPROVAL', 'SECURE_VAULT', 'ARCHIVED', 'TRASHED'].includes(tabParam)) {
         setSelectedTab(tabParam as any);
       }
       const managerParam = params.get('manager');
@@ -1173,21 +1184,27 @@ export default function CasesPage() {
 
   const secureVaultCount = scopeActiveCases.filter(c => c.visibility === 'PRIVATE').length;
   
+  // 💡 견적 상태 판별 헬퍼 (금액이 0원인 건은 견적준비완료가 될 수 없으며, 분석완료/단가검토 단계로 유지하여 0원 견적서 발행 차단)
+  const isCaseQuotedStatus = (c: any) => c.status === 'QUOTED' || c.quote_status === 'APPROVED' || c.quote_status === 'ISSUED';
+  const isCaseReadyStatus = (c: any) => !isCaseQuotedStatus(c) && (c.quote_readiness === 'READY_FOR_QUOTE' || c.quote_readiness === 'QUOTE_READY') && Number(c.quote_total_amount || 0) > 0;
+  const isCaseAnalyzedStatus = (c: any) => !isCaseQuotedStatus(c) && !isCaseReadyStatus(c) && (c.status === 'ANALYZED' || (c.drawings_count > 0) || c.quote_readiness === 'READY_FOR_QUOTE');
+  const isCasePendingStatus = (c: any) => !isCaseQuotedStatus(c) && !isCaseReadyStatus(c) && !isCaseAnalyzedStatus(c);
+
   const totalCasesCount = scopeActiveCases.length;
-  const readyCount = scopeActiveCases.filter(c => c.quote_readiness === 'READY_FOR_QUOTE').length;
-  const analyzedCount = scopeActiveCases.filter(c => c.status === 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE').length;
-  const pendingCount = scopeActiveCases.filter(c => c.status !== 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE').length;
+  const readyCount = scopeActiveCases.filter(isCaseReadyStatus).length;
+  const analyzedCount = scopeActiveCases.filter(isCaseAnalyzedStatus).length;
+  const pendingCount = scopeActiveCases.filter(isCasePendingStatus).length;
   const pendingApprovalCount = scopeActiveCases.filter(c => c.visibility === 'PRIVATE_PENDING').length;
   // 사이드바 전사 보관함 및 휴지통 총 건수 (전체보기 요약과 100% 동기화)
   const archivedCount = archivedCases.length;
   const trashedCount = trashedCases.length;
 
   const latestReadyCase = useMemo(() => {
-    return scopeActiveCases.find(c => c.quote_readiness === 'READY_FOR_QUOTE') || null;
+    return scopeActiveCases.find(isCaseReadyStatus) || null;
   }, [scopeActiveCases]);
 
   const readyCaseIds = useMemo(() => {
-    return scopeActiveCases.filter(c => c.quote_readiness === 'READY_FOR_QUOTE').map(c => c.id);
+    return scopeActiveCases.filter(isCaseReadyStatus).map(c => c.id);
   }, [scopeActiveCases]);
 
   const totalDrawingsSum = scopeActiveCases.reduce((acc, c) => acc + (c.drawings_count || c.files_count || 0), 0);
@@ -1199,9 +1216,9 @@ export default function CasesPage() {
 
   // Filtered cases list
   const filteredCases = currentTabBaseCases.filter(c => {
-    if (selectedTab === 'READY_FOR_QUOTE' && c.quote_readiness !== 'READY_FOR_QUOTE') return false;
-    if (selectedTab === 'ANALYZED' && (c.status !== 'ANALYZED' || c.quote_readiness === 'READY_FOR_QUOTE')) return false;
-    if (selectedTab === 'PENDING' && (c.status === 'ANALYZED' || c.quote_readiness === 'READY_FOR_QUOTE')) return false;
+    if (selectedTab === 'READY_FOR_QUOTE' && !isCaseReadyStatus(c)) return false;
+    if (selectedTab === 'ANALYZED' && !isCaseAnalyzedStatus(c)) return false;
+    if (selectedTab === 'PENDING' && !isCasePendingStatus(c)) return false;
     if (selectedTab === 'PRIVATE_APPROVAL' && c.visibility !== 'PRIVATE_PENDING') return false;
     if (selectedTab === 'SECURE_VAULT' && c.visibility !== 'PRIVATE') return false;
     
@@ -1304,6 +1321,7 @@ export default function CasesPage() {
 
   // [Solution 3] 지능형 필터 완화: 탭을 클릭했을 때 현재 고객사 필터로 인해 0건이 되면 고객사 필터를 자동으로 'ALL'로 완화하여 데이터가 즉시 보이도록 처리
   const handleSelectTab = (tab: any) => {
+    setMainView('CASES');
     setSelectedTab(tab);
     // 보관함이나 휴지통 선택 시 전사 격리 목록을 즉시 조회할 수 있도록 필터 완화
     if (tab === 'TRASHED' || tab === 'ARCHIVED') {
@@ -1313,18 +1331,18 @@ export default function CasesPage() {
     }
     if (filterCompany !== 'ALL') {
       const willHaveItems = activeCases.some(c => {
-        if (tab === 'PENDING') return c.status !== 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE';
-        if (tab === 'ANALYZED') return c.status === 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE';
-        if (tab === 'READY_FOR_QUOTE') return c.quote_readiness === 'READY_FOR_QUOTE';
+        if (tab === 'PENDING') return isCasePendingStatus(c);
+        if (tab === 'ANALYZED') return isCaseAnalyzedStatus(c);
+        if (tab === 'READY_FOR_QUOTE') return isCaseReadyStatus(c);
         if (tab === 'ARCHIVED') return c.status === 'ARCHIVED' || c.lifecycle_status === 'ARCHIVED';
         if (tab === 'TRASHED') return isCaseDeleted(c) || c.lifecycle_status === 'TRASHED';
         return true;
       });
       const hasItemWithCurrentCompany = activeCases.some(c => {
         if (c.company_name !== filterCompany) return false;
-        if (tab === 'PENDING') return c.status !== 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE';
-        if (tab === 'ANALYZED') return c.status === 'ANALYZED' && c.quote_readiness !== 'READY_FOR_QUOTE';
-        if (tab === 'READY_FOR_QUOTE') return c.quote_readiness === 'READY_FOR_QUOTE';
+        if (tab === 'PENDING') return isCasePendingStatus(c);
+        if (tab === 'ANALYZED') return isCaseAnalyzedStatus(c);
+        if (tab === 'READY_FOR_QUOTE') return isCaseReadyStatus(c);
         if (tab === 'ARCHIVED') return c.status === 'ARCHIVED' || c.lifecycle_status === 'ARCHIVED';
         if (tab === 'TRASHED') return isCaseDeleted(c) || c.lifecycle_status === 'TRASHED';
         return true;
@@ -1444,99 +1462,165 @@ export default function CasesPage() {
           onToggleCollapse={handleToggleSidebar}
           onBulkExportExcel={() => handleBulkExportExcel(readyCaseIds)}
           isExportingExcel={exportingExcel}
+          onOpenInboxView={() => setMainView('INBOX')}
+          onInstantQuoteClick={() => setIsInstantQuoteModalOpen(true)}
         />
 
         {/* Right Column: Main Workbench */}
-        <div className="flex-1 min-w-0 space-y-1 w-full">
-          {/* Zone 2: 3-Step BOM Automation Guide & Key Metrics (Slim & Compact) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
-            {/* Step 1 */}
-            <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-blue-300 transition-colors flex items-center justify-between">
-              <div className="flex items-center space-x-2 min-w-0">
-                <span className="w-5 h-5 rounded bg-blue-100 text-blue-700 text-[11px] font-extrabold flex items-center justify-center shrink-0">
-                  1
+        <div className="flex-1 min-w-0 space-y-2 w-full">
+          {/* Sub Navigation Tab Bar: [ 📋 견적의뢰 대장 (N건) ] | [ ⚡ 도면 일괄 접수 대기열 ] */}
+          <div className="flex items-center justify-between bg-white border border-slate-200 rounded p-1 shadow-2xs">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setMainView('CASES')}
+                className={`px-3.5 py-1.5 rounded text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  mainView === 'CASES'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>견적의뢰 대장</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  mainView === 'CASES' ? 'bg-blue-700/90 text-white' : 'bg-slate-200 text-slate-700'
+                }`}>
+                  {totalCasesCount}건
                 </span>
-                <div className="min-w-0">
-                  <div className="flex items-center space-x-1">
-                    <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">CAD 도면 접수·분석</h3>
-                    <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1 py-0.2 rounded shrink-0">BOM 검출</span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-500 font-medium truncate">
-                    외곽선·표제란·BOM 자동 추출
-                  </p>
-                </div>
-              </div>
-              <div className="text-right shrink-0 pl-2">
-                <div className="text-[9.5px] font-semibold text-slate-400">분석 도면</div>
-                <div className="font-mono font-extrabold text-sm text-slate-900 leading-tight">
-                  {totalDrawingsSum.toLocaleString()} <span className="text-[11px] font-medium text-slate-500">장</span>
-                  {archivedCount > 0 && (
-                    <span className="text-[10px] font-bold text-slate-400 ml-1" title="보관함 포함 전사 누적 분석 도면 총수">
-                      (누적 {allTotalDrawingsSum.toLocaleString()}장)
-                    </span>
-                  )}
-                </div>
-                {archivedCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => handleSelectTab('ARCHIVED')}
-                    className="text-[9.5px] text-purple-700 hover:text-purple-900 font-bold hover:underline cursor-pointer flex items-center justify-end gap-1 mt-0.5"
-                    title="보관함에 안전 보관된 2건(246장) 즉시 조회"
-                  >
-                    <span>📦 보관함 {archivedCount}건 ({archivedDrawingsSum.toLocaleString()}장)</span>
-                  </button>
-                )}
-              </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMainView('INBOX')}
+                className={`px-3.5 py-1.5 rounded text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  mainView === 'INBOX'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-indigo-700 hover:bg-indigo-50/70'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                <span>도면 일괄 접수 대기열</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  mainView === 'INBOX' ? 'bg-indigo-700/90 text-white' : 'bg-indigo-100 text-indigo-700'
+                }`}>
+                  대기열
+                </span>
+              </button>
             </div>
 
-            {/* Step 2 */}
-            <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-emerald-300 transition-colors flex items-center justify-between">
-              <div className="flex items-center space-x-2 min-w-0">
-                <span className="w-5 h-5 rounded bg-emerald-100 text-emerald-700 text-[11px] font-extrabold flex items-center justify-center shrink-0">
-                  2
-                </span>
-                <div className="min-w-0">
-                  <div className="flex items-center space-x-1">
-                    <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">부품·단가 최적화</h3>
-                    <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 py-0.2 rounded shrink-0">단가 매칭</span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-500 font-medium truncate">
-                    사내 마스터 단가 1-클릭 일괄 매칭
-                  </p>
-                </div>
-              </div>
-              <div className="text-right shrink-0 pl-2">
-                <div className="text-[9.5px] font-semibold text-slate-400">정규화 BOM</div>
-                <div className="font-mono font-extrabold text-sm text-emerald-600 leading-tight">
-                  {totalBomItemsSum.toLocaleString()} <span className="text-[11px] font-medium text-slate-500">개</span>
-                </div>
-              </div>
+            <div className="text-[11px] text-slate-400 hidden sm:flex items-center gap-1.5 pr-2">
+              <Sparkles className="w-3 h-3 text-amber-500" />
+              <span>원클릭 탭 전환으로 실시간 도면 접수 &amp; 견적 관리</span>
             </div>
-
-            {/* Step 3 */}
-            <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-teal-300 transition-colors flex items-center justify-between">
-              <div className="flex items-center space-x-2 min-w-0">
-                <span className="w-5 h-5 rounded bg-teal-100 text-teal-700 text-[11px] font-extrabold flex items-center justify-center shrink-0">
-                  3
-                </span>
-                <div className="min-w-0">
-                  <div className="flex items-center space-x-1">
-                    <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">견적 산출·발행</h3>
-                    <span className="text-[9px] font-bold text-teal-600 bg-teal-50 px-1 py-0.2 rounded shrink-0">엑셀 출력</span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-500 font-medium truncate">
-                    인쇄용 표준 화이트 양식 & 엑셀
-                  </p>
-                </div>
-              </div>
-              <div className="text-right shrink-0 pl-2">
-                <div className="text-[9.5px] font-semibold text-slate-400">누적 견적 총액</div>
-                <div className="font-mono font-extrabold text-sm text-teal-700 leading-tight">
-                  {totalQuotedAmountSum.toLocaleString()} <span className="text-[11px] font-medium text-slate-500">원</span>
-                </div>
-              </div>
           </div>
-        </div>
+
+          {mainView === 'INBOX' ? (
+            <div className="bg-white rounded border border-slate-200 p-4 shadow-2xs">
+              <DrawingInboxWorkbench
+                showBackHeader={false}
+                onBackToCases={() => setMainView('CASES')}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Zone 2: 4-Step Standard Pipeline Guide & Key Metrics (AutoCAD / DWG FastView 저채도 엔지니어링 룩) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+                {/* Step 1: 도면 접수 */}
+                <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-slate-300 transition-colors flex items-center justify-between">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
+                      1
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-1">
+                        <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">도면 접수</h3>
+                        <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">CAD 파싱</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-medium truncate">
+                        DWG/DXF 도면 접수
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 pl-1.5">
+                    <div className="text-[9px] font-semibold text-slate-400">분석 도면</div>
+                    <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
+                      {totalDrawingsSum.toLocaleString()}<span className="text-[10px] font-medium text-slate-500">장</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step 2: AI BOM 분석 */}
+                <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-slate-300 transition-colors flex items-center justify-between">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
+                      2
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-1">
+                        <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">AI BOM 분석</h3>
+                        <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">표제란 검출</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-medium truncate">
+                        외곽선·BOM 품목 전개
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 pl-1.5">
+                    <div className="text-[9px] font-semibold text-slate-400">정규화 BOM</div>
+                    <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
+                      {totalBomItemsSum.toLocaleString()}<span className="text-[10px] font-medium text-slate-500">개</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step 3: 단가 검토 */}
+                <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-slate-300 transition-colors flex items-center justify-between">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
+                      3
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-1">
+                        <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">단가 검토</h3>
+                        <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">마스터 매칭</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-medium truncate">
+                        실적 단가 &amp; 임가공 산출
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 pl-1.5">
+                    <div className="text-[9px] font-semibold text-slate-400">검토 대기</div>
+                    <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
+                      {analyzedCount}<span className="text-[10px] font-medium text-slate-500">건</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step 4: 견적 발행 */}
+                <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-slate-300 transition-colors flex items-center justify-between">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
+                      4
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-1">
+                        <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">견적 발행</h3>
+                        <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">엑셀 출력</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-medium truncate">
+                        최종 견적서 &amp; 엑셀 배포
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 pl-1.5">
+                    <div className="text-[9px] font-semibold text-slate-400">누적 견적액</div>
+                    <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
+                      ₩{totalQuotedAmountSum.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
         {/* Zone 4: Enterprise High-Density Table / Card Grid Section */}
         <div className="space-y-2">
@@ -1772,7 +1856,7 @@ export default function CasesPage() {
             <select
               value={filterCompany}
               onChange={e => setFilterCompany(e.target.value)}
-              className="px-2 py-1 bg-white border border-slate-300 rounded text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-500 max-w-[125px] shrink-0"
+              className="px-2 py-1 bg-white border border-slate-300 rounded text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-500 w-28 sm:w-32 shrink-0"
               title="고객사별 견적 필터링"
             >
               <option value="ALL">🏢 모든 고객사 ({uniqueCompanies.length})</option>
@@ -1782,23 +1866,23 @@ export default function CasesPage() {
             </select>
 
             {/* 4. 스마트 통합 검색창 */}
-            <div className="relative w-36 sm:w-40 lg:w-44 shrink-0">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="relative w-28 sm:w-36 shrink-0">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="검색... (고객사, 건명)"
+                placeholder="검색 (고객사, 건명)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-6 py-1 bg-white border border-slate-300 rounded text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-colors font-medium shadow-2xs"
+                className="w-full pl-7 pr-5 py-1 bg-white border border-slate-300 rounded text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-colors font-medium shadow-2xs"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
                   title="검색어 초기화"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
                 </button>
               )}
             </div>
@@ -1818,15 +1902,26 @@ export default function CasesPage() {
               </select>
             </div>
 
-            {/* 6. 표준 신규 견적 등록 버튼 (AutoCAD Ribbon Style Primary Action) */}
+            {/* 6. 표준 신규 견적 등록 버튼 */}
             <button
               type="button"
               onClick={handleOpenUploadModal}
-              className="btn-hover-effect-tab inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-bold shadow-xs cursor-pointer shrink-0 transition-colors ml-1"
+              className="btn-hover-effect-tab inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-bold shadow-xs cursor-pointer shrink-0 transition-colors whitespace-nowrap"
               title="신규 도면 견적의뢰 건을 등록합니다."
             >
               <Plus className="w-3.5 h-3.5" />
               <span>신규 견적 등록</span>
+            </button>
+
+            {/* 7. ⚡ AI 즉시 견적 버튼 (Instant AI Quote) */}
+            <button
+              type="button"
+              onClick={() => setIsInstantQuoteModalOpen(true)}
+              className="btn-hover-effect-tab inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 rounded text-xs font-bold border border-slate-300 shadow-xs cursor-pointer shrink-0 transition-all whitespace-nowrap group"
+              title="도면만 넣으면 10초 만에 AI가 도면분석, BOM추출, 단가매칭을 끝내고 초안 견적서를 즉시 산출합니다."
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-500 group-hover:scale-110 transition-transform shrink-0" />
+              <span>AI 즉시 견적</span>
             </button>
           </div>
         </div>
@@ -2029,7 +2124,7 @@ export default function CasesPage() {
                     </th>
                     <th
                       onClick={() => handleSort('case_name')}
-                      className="py-3 px-3.5 cursor-pointer hover:bg-slate-100 transition-colors group min-w-[240px] whitespace-nowrap"
+                      className="py-3 px-3.5 cursor-pointer hover:bg-slate-100 transition-colors group min-w-[260px] whitespace-nowrap"
                     >
                       <span>견적의뢰 건명</span>
                       {renderSortIndicator('case_name')}
@@ -2156,9 +2251,10 @@ export default function CasesPage() {
                   ) : (
                     paginatedCases.map((c) => {
                       const isSelected = selectedCaseIds.includes(c.id);
-                      const isReady = c.quote_readiness === 'READY_FOR_QUOTE';
-                      const isAnalyzed = c.status === 'ANALYZED';
-                      const totalAmount = c.quote_total_amount;
+                      const totalAmount = Number(c.quote_total_amount || 0);
+                      const isQuoted = isCaseQuotedStatus(c);
+                      const isReady = isCaseReadyStatus(c);
+                      const isAnalyzed = isCaseAnalyzedStatus(c);
 
                       return (
                         <tr
@@ -2196,29 +2292,57 @@ export default function CasesPage() {
                           </td>
 
                           {/* Case Name */}
-                          <td className="py-3 px-3.5 min-w-[240px]">
-                            <div className="flex items-center justify-between gap-2.5 min-w-0">
-                              <div className="min-w-0 flex-1 flex items-center gap-1.5">
-                                {c.primary_file_name?.toLowerCase().endsWith('.dwg') ? (
-                                  <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
-                                    DWG
-                                  </span>
-                                ) : c.primary_file_name?.toLowerCase().endsWith('.dxf') ? (
-                                  <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                                    DXF
-                                  </span>
-                                ) : null}
-                                <SmartTruncateTooltip
-                                  text={
-                                    c.primary_file_name
-                                      ? (c.files_count && c.files_count > 1 ? `${c.primary_file_name} 외 ${c.files_count - 1}건` : c.primary_file_name)
-                                      : (c.case_name || '')
+                          <td className="py-3 pl-3.5 pr-5 min-w-[260px]">
+                            {(() => {
+                              const isInstantQuote = !!(c.case_name?.includes('즉시 견적') || c.case_name?.includes('즉시견적') || c.notes?.includes('즉시 견적'));
+                              const isDxf = c.primary_file_name?.toLowerCase().endsWith('.dxf') || c.case_name?.toLowerCase().includes('.dxf');
+                              const isDwg = !isDxf && (c.primary_file_name?.toLowerCase().endsWith('.dwg') || c.case_name?.toLowerCase().includes('.dwg') || isInstantQuote || true);
+
+                              const displayName = (() => {
+                                if (c.primary_file_name) {
+                                  return c.files_count && c.files_count > 1 ? `${c.primary_file_name} 외 ${c.files_count - 1}건` : c.primary_file_name;
+                                }
+                                if (c.case_name) {
+                                  const matched = c.case_name.match(/^\[(.*?)\]/);
+                                  if (matched && matched[1]) {
+                                    const base = matched[1].trim();
+                                    return (base.endsWith('.dwg') || base.endsWith('.dxf')) ? base : `${base}.dwg`;
                                   }
-                                  className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-[13.5px]"
-                                  maxWidthClass="max-w-[210px]"
-                                />
-                              </div>
-                              <div className="shrink-0 flex items-center gap-1.5 ml-auto">
+                                  return c.case_name;
+                                }
+                                return '-';
+                              })();
+
+                              return (
+                                <div className="flex items-center justify-between gap-2 min-w-0">
+                                  <div className="min-w-0 flex items-center gap-1.5 max-w-[260px] xl:max-w-[310px]">
+                                    {/* ⚡ AI 즉시 견적 식별 뱃지 (#E9E9E9 소프트 쿨 그레이 룩) */}
+                                    {isInstantQuote && (
+                                      <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs" title="AI 즉시 견적으로 자동 산출된 프로젝트입니다.">
+                                        <Zap className="w-2.5 h-2.5 text-amber-500" />
+                                        <span>AI 즉시 견적</span>
+                                      </span>
+                                    )}
+
+                                    {/* 도면 확장자 뱃지 (엔지니어링 표준 쿨 모노 뱃지) */}
+                                    {isDxf ? (
+                                      <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-300 shadow-2xs">
+                                        DXF
+                                      </span>
+                                    ) : (
+                                      <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
+                                        DWG
+                                      </span>
+                                    )}
+
+                                    {/* 파일명 말줄임 (뱃지 유무에 맞춰 우측 정렬 끝선 일치) */}
+                                    <SmartTruncateTooltip
+                                      text={displayName}
+                                      className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-[13.5px]"
+                                      maxWidthClass={isInstantQuote ? "max-w-[130px] xl:max-w-[175px]" : "max-w-[210px] xl:max-w-[260px]"}
+                                    />
+                                  </div>
+                                  <div className="shrink-0 flex items-center gap-1.5 ml-auto">
                                 {selectedTab === 'TRASHED' ? (
                                   <span
                                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200"
@@ -2250,7 +2374,9 @@ export default function CasesPage() {
                                 {c.visibility === 'PRIVATE' && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">공개 불가</span>}
                               </div>
                             </div>
-                          </td>
+                          );
+                        })()}
+                      </td>
 
                           {/* Customer & Project */}
                           <td className="py-3 px-3.5 min-w-[190px] w-56 whitespace-nowrap border-l border-slate-100">
@@ -2318,15 +2444,20 @@ export default function CasesPage() {
                           {/* Status Badge */}
                           <td className="py-3 px-3.5 text-center whitespace-nowrap">
                             <span
-                              className={`inline-block text-xs font-bold px-2.5 py-1 rounded-[3px] border ${
-                                isReady
-                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                  : isAnalyzed
-                                  ? 'bg-blue-50 text-blue-800 border-blue-300'
-                                  : 'bg-amber-50 text-amber-800 border-amber-300'
-                              }`}
+                              className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs"
                             >
-                              {isReady ? '견적준비완료' : isAnalyzed ? '분석완료' : '도면등록대기'}
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  isQuoted
+                                    ? 'bg-emerald-500'
+                                    : isReady
+                                    ? 'bg-amber-500'
+                                    : isAnalyzed
+                                    ? 'bg-indigo-500'
+                                    : 'bg-blue-500'
+                                }`}
+                              />
+                              <span>{isQuoted ? '견적발행완료' : isReady ? '견적준비완료' : isAnalyzed ? '분석완료' : '도면등록대기'}</span>
                             </span>
                           </td>
 
@@ -2351,13 +2482,13 @@ export default function CasesPage() {
 
                           {/* Quoted Total Amount */}
                           <td className="py-3 px-3.5 text-right whitespace-nowrap font-mono font-extrabold">
-                            {totalAmount ? (
+                            {totalAmount > 0 ? (
                               <span className="text-blue-700 text-[13.5px]">
                                 ₩{Number(totalAmount).toLocaleString()}
                               </span>
                             ) : (
-                              <span className="text-slate-400 font-normal text-xs bg-slate-100 px-1.5 py-0.5 rounded">
-                                {isReady ? '0원' : '단가 미매칭'}
+                              <span className="text-amber-700 font-bold text-xs bg-amber-50 border border-amber-200 px-2 py-0.5 rounded" title="단가 검토 및 산출이 필요합니다.">
+                                단가 미매칭 (검토 필요)
                               </span>
                             )}
                           </td>
@@ -2427,43 +2558,53 @@ export default function CasesPage() {
                                 </>
                               ) : (
                                 <>
-                                  {/* Next Action Context Button */}
-                                  {isReady ? (
+                                  {/* Next Action Context Button (오토캐드 단일 액션 컬러 원칙 적용: w-[122px] 통일) */}
+                                  {isQuoted ? (
+                                    <Link
+                                      href={`/cases/${c.id}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition-all shadow-xs group w-[122px]"
+                                      title="완료된 견적서 확인 및 세부 검토"
+                                    >
+                                      <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                                      <span className="whitespace-nowrap">견적서 보기</span>
+                                    </Link>
+                                  ) : isReady ? (
                                     <Link
                                       href={`/quotes/${c.id}/publish`}
                                       onClick={(e) => e.stopPropagation()}
-                                      className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-xs group"
+                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group w-[122px]"
                                       title="최종 견적서 발행 및 다운로드 바로가기"
                                     >
-                                      <FileSpreadsheet className="w-3.5 h-3.5" />
-                                      <span>견적서 발행</span>
+                                      <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                                      <span className="whitespace-nowrap">견적서 발행</span>
                                     </Link>
                                   ) : isAnalyzed ? (
                                     <Link
                                       href={`/quotes/${c.id}/review`}
                                       onClick={(e) => e.stopPropagation()}
-                                      className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group"
+                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group w-[122px]"
                                       title="추출된 BOM 및 단가 매칭 검토 바로가기"
                                     >
-                                      <span>BOM·단가 검토</span>
-                                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                                      <span className="whitespace-nowrap">BOM·단가 검토</span>
+                                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform shrink-0" />
                                     </Link>
                                   ) : (
                                     <Link
                                       href={`/cases/${c.id}`}
                                       onClick={(e) => e.stopPropagation()}
-                                      className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-all shadow-xs group"
+                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group w-[122px]"
                                       title="CAD 도면 등록 및 AI 분석 바로가기"
                                     >
-                                      <UploadCloud className="w-3.5 h-3.5" />
-                                      <span>도면 등록</span>
+                                      <UploadCloud className="w-3.5 h-3.5 shrink-0" />
+                                      <span className="whitespace-nowrap">도면 등록</span>
                                     </Link>
                                   )}
                                   <button
                                     type="button"
                                     onClick={() => openArchiveModal([c.id])}
                                     title="견적건 보관함으로 이동 (보류/이력)"
-                                    className="p-1.5 text-purple-700 hover:bg-purple-50 rounded border border-purple-300 transition-colors cursor-pointer"
+                                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded border border-slate-200 transition-colors cursor-pointer"
                                   >
                                     <Archive className="w-3.5 h-3.5" />
                                   </button>
@@ -2471,7 +2612,7 @@ export default function CasesPage() {
                                     type="button"
                                     onClick={() => handleTrashCases([c.id], c.case_name)}
                                     title="견적건 삭제 (휴지통으로 이동)"
-                                    className="p-1.5 text-rose-700 hover:bg-rose-50 rounded border border-rose-300 transition-colors cursor-pointer"
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded border border-slate-200 hover:border-rose-300 transition-colors cursor-pointer"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -2565,6 +2706,8 @@ export default function CasesPage() {
             </div>
           </div>
         )}
+            </>
+          )}
         </div>
       </div>
 
@@ -3039,6 +3182,19 @@ export default function CasesPage() {
           </div>
         </div>
       )}
+
+      {/* ⚡ AI 즉시 견적 원스톱 팝업 모달 */}
+      <AIInstantQuoteModal
+        isOpen={isInstantQuoteModalOpen}
+        onClose={() => {
+          setIsInstantQuoteModalOpen(false);
+          fetchCases();
+        }}
+        onSuccess={() => {
+          setIsInstantQuoteModalOpen(false);
+          fetchCases();
+        }}
+      />
 
       {/* ⚠️ 견적의뢰 대장 화면 정중앙 액션 확인 모달 (브라우저 confirm 대체) */}
       <CaseActionConfirmModal

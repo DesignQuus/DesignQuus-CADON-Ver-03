@@ -23,6 +23,18 @@ interface WebGlCadViewerProps {
   reloadKey?: string | number;
   activeFileId?: string;
   onBomUpdated?: () => Promise<void> | void;
+  // 🎨 Estimate Layers Props
+  reviewedItemIds?: string[];
+  inProgressItemIds?: string[];
+  excludedItemIds?: string[];
+  isXRayMode?: boolean;
+  hideMode?: 'GHOST' | 'HIDE';
+  estimateLayerVisibility?: {
+    unreviewed: boolean;
+    reviewed: boolean;
+    inProgress: boolean;
+    excluded: boolean;
+  };
 }
 
 export default function WebGlCadViewer({
@@ -37,7 +49,13 @@ export default function WebGlCadViewer({
   onResetFocus,
   reloadKey,
   activeFileId,
-  onBomUpdated
+  onBomUpdated,
+  reviewedItemIds = [],
+  inProgressItemIds = [],
+  excludedItemIds = [],
+  isXRayMode = false,
+  hideMode = 'GHOST',
+  estimateLayerVisibility = { unreviewed: true, reviewed: true, inProgress: true, excluded: true }
 }: WebGlCadViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -210,9 +228,33 @@ export default function WebGlCadViewer({
     needsRenderRef.current = true;
   }, []);
 
+  // 🎨 Estimate Layers Refs
+  const reviewedItemIdsRef = useRef(reviewedItemIds);
+  reviewedItemIdsRef.current = reviewedItemIds;
+  const inProgressItemIdsRef = useRef(inProgressItemIds);
+  inProgressItemIdsRef.current = inProgressItemIds;
+  const excludedItemIdsRef = useRef(excludedItemIds);
+  excludedItemIdsRef.current = excludedItemIds;
+  const isXRayModeRef = useRef(isXRayMode);
+  isXRayModeRef.current = isXRayMode;
+  const hideModeRef = useRef(hideMode);
+  hideModeRef.current = hideMode;
+  const estimateLayerVisibilityRef = useRef(estimateLayerVisibility);
+  estimateLayerVisibilityRef.current = estimateLayerVisibility;
+
   useEffect(() => {
     requestRender();
-  }, [showOverlays, showTexts, requestRender]);
+  }, [
+    showOverlays, 
+    showTexts, 
+    reviewedItemIds, 
+    inProgressItemIds, 
+    excludedItemIds, 
+    isXRayMode, 
+    hideMode, 
+    estimateLayerVisibility, 
+    requestRender
+  ]);
 
   // Track current active file id to prevent race conditions in async fetches
   const currentFileIdRef = useRef<string | undefined>(activeFileId);
@@ -810,8 +852,13 @@ export default function WebGlCadViewer({
             tctx.restore();
           }
 
-          // 4. Render Detection Overlays (도면 프레임, 표제란, BOM 영역 오버레이 & 뱃지)
-          if (showOverlaysRef.current && drawingsRef.current.length > 0 && cameraRef.current) {
+          // 4. Render Detection Overlays & Estimate Layers (도면 프레임, 견적 신호등, 고스트 15%, 누락 X-Ray)
+          const hasEstimateData = (reviewedItemIdsRef.current && reviewedItemIdsRef.current.length > 0) ||
+            (inProgressItemIdsRef.current && inProgressItemIdsRef.current.length > 0) ||
+            (excludedItemIdsRef.current && excludedItemIdsRef.current.length > 0);
+          const shouldRenderOverlays = showOverlaysRef.current || isXRayModeRef.current || hasEstimateData;
+
+          if (shouldRenderOverlays && drawingsRef.current.length > 0 && cameraRef.current) {
             tctx.save();
             tctx.scale(dpr, dpr);
             const dwgs = drawingsRef.current;
@@ -820,7 +867,15 @@ export default function WebGlCadViewer({
             const frustumW = (cam.right - cam.left) / cam.zoom;
             const scale = w / frustumW;
 
-            // ① 도면 시트 프레임 (스카이 블루 외곽선 & 소프트 글로우 필)
+            const reviewedList = reviewedItemIdsRef.current || [];
+            const inProgressList = inProgressItemIdsRef.current || [];
+            const excludedList = excludedItemIdsRef.current || [];
+            const layerVis = estimateLayerVisibilityRef.current || { unreviewed: true, reviewed: true, inProgress: true, excluded: true };
+            const isXRay = !!isXRayModeRef.current;
+            const isHide = hideModeRef.current === 'HIDE';
+            const isGhost = hideModeRef.current === 'GHOST';
+
+            // ① 도면 시트 프레임 (견적 레이어 신호등 및 고스트/X-Ray 연동)
             for (let i = 0; i < dwgs.length; i++) {
               const d = dwgs[i];
               const fbox = typeof d.frame_bbox_json === 'string' ? JSON.parse(d.frame_bbox_json) : d.frame_bbox;
@@ -833,31 +888,118 @@ export default function WebGlCadViewer({
               // Viewport Culling
               if (sx + sw < -50 || sx > w + 50 || sy + sh < -50 || sy > h + 50) continue;
 
-              // Light glowing fill
-              tctx.fillStyle = 'rgba(56, 189, 248, 0.06)';
+              const dwgId = String(d.id || '');
+              const dwgNo = String(d.drawing_no_raw || '').trim();
+              const dwgName = String(d.drawing_name_raw || '').trim();
+
+              const isItemReviewed = reviewedList.includes(dwgId) || reviewedList.includes(dwgNo) || reviewedList.includes(dwgName);
+              const isItemInProgress = inProgressList.includes(dwgId) || inProgressList.includes(dwgNo) || inProgressList.includes(dwgName);
+              const isItemExcluded = excludedList.includes(dwgId) || excludedList.includes(dwgNo) || excludedList.includes(dwgName);
+              const isItemUnreviewed = !isItemReviewed && !isItemInProgress && !isItemExcluded;
+
+              // 레이어 가시성 필터링
+              if (isItemReviewed && !layerVis.reviewed) continue;
+              if (isItemInProgress && !layerVis.inProgress) continue;
+              if (isItemExcluded && !layerVis.excluded) continue;
+              if (isItemUnreviewed && !layerVis.unreviewed) continue;
+
+              // 완료 품목 완전 숨김(HIDE) 처리
+              if (isItemReviewed && isHide) continue;
+
+              // 색상 및 스타일 결정
+              let fillColor = 'rgba(56, 189, 248, 0.06)';
+              let strokeColor = '#38bdf8';
+              let lineWidth = 1.5;
+              let statusBadgeText = `${i + 1}. ${dwgNo || '시트'}`;
+              let badgeBg = 'rgba(15, 23, 42, 0.9)';
+              let badgeColor = '#38bdf8';
+
+              if (isXRay) {
+                if (isItemUnreviewed) {
+                  // 🔍 X-Ray 모드: 미검토 부품만 눈부신 네온 로즈로 초강력 하이라이트!
+                  fillColor = 'rgba(244, 63, 94, 0.28)';
+                  strokeColor = '#f43f5e';
+                  lineWidth = 3.0;
+                  statusBadgeText = `⚠️ [미검토 누락!] ${dwgNo || '부품'}`;
+                  badgeBg = 'rgba(136, 19, 55, 0.95)';
+                  badgeColor = '#fda4af';
+                } else {
+                  // 검토 완료 및 기타 부품은 어둡게 딤 처리
+                  fillColor = 'rgba(15, 23, 42, 0.4)';
+                  strokeColor = 'rgba(71, 85, 105, 0.3)';
+                  lineWidth = 1.0;
+                  statusBadgeText = `✓ ${dwgNo}`;
+                  badgeBg = 'rgba(15, 23, 42, 0.6)';
+                  badgeColor = '#64748b';
+                }
+              } else if (isItemReviewed) {
+                // 🟢 검토 완료
+                if (isGhost) {
+                  // 👻 고스트 15% 반투명 처리
+                  fillColor = 'rgba(16, 185, 129, 0.03)';
+                  strokeColor = 'rgba(16, 185, 129, 0.25)';
+                  lineWidth = 1.0;
+                  statusBadgeText = `🟢 [완료] ${dwgNo}`;
+                  badgeBg = 'rgba(6, 78, 59, 0.6)';
+                  badgeColor = '#6ee7b7';
+                } else {
+                  fillColor = 'rgba(16, 185, 129, 0.14)';
+                  strokeColor = '#10b981';
+                  lineWidth = 2.0;
+                  statusBadgeText = `🟢 [완료] ${dwgNo}`;
+                  badgeBg = 'rgba(6, 78, 59, 0.92)';
+                  badgeColor = '#34d399';
+                }
+              } else if (isItemInProgress) {
+                // 🟡 단가 대기 / 외주
+                fillColor = 'rgba(245, 158, 11, 0.16)';
+                strokeColor = '#f59e0b';
+                lineWidth = 1.8;
+                statusBadgeText = `🟡 [진행] ${dwgNo}`;
+                badgeBg = 'rgba(120, 53, 15, 0.92)';
+                badgeColor = '#fbbf24';
+              } else if (isItemExcluded) {
+                // ⚪ 가공 제외 / 사급
+                fillColor = 'rgba(100, 116, 139, 0.08)';
+                strokeColor = '#64748b';
+                lineWidth = 1.0;
+                statusBadgeText = `⚪ [제외] ${dwgNo}`;
+                badgeBg = 'rgba(30, 41, 59, 0.85)';
+                badgeColor = '#94a3b8';
+              } else {
+                // 🔴 미검토 (기본)
+                fillColor = 'rgba(56, 189, 248, 0.06)';
+                strokeColor = '#38bdf8';
+                lineWidth = 1.5;
+                statusBadgeText = `🔴 [미검토] ${dwgNo}`;
+                badgeBg = 'rgba(15, 23, 42, 0.9)';
+                badgeColor = '#38bdf8';
+              }
+
+              // Glowing fill
+              tctx.fillStyle = fillColor;
               tctx.fillRect(sx, sy, sw, sh);
 
-              // 1.5px crisp border
-              tctx.strokeStyle = '#38bdf8';
-              tctx.lineWidth = 1.5;
+              // Border
+              tctx.strokeStyle = strokeColor;
+              tctx.lineWidth = lineWidth;
               tctx.strokeRect(sx, sy, sw, sh);
 
-              // Mini Sheet Tag
+              // Mini Sheet Status Tag
               if (sw > 40 && sh > 25) {
-                const tagW = Math.min(Math.max(sw * 0.45, 36), 140);
-                const tagH = 16;
-                tctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                const tagW = Math.min(Math.max(sw * 0.45, 40), 160);
+                const tagH = 17;
+                tctx.fillStyle = badgeBg;
                 tctx.fillRect(sx, sy, tagW, tagH);
-                tctx.strokeStyle = '#38bdf8';
+                tctx.strokeStyle = strokeColor;
                 tctx.lineWidth = 1;
                 tctx.strokeRect(sx, sy, tagW, tagH);
 
-                tctx.fillStyle = '#38bdf8';
-                tctx.font = 'bold 9px sans-serif';
+                tctx.fillStyle = badgeColor;
+                tctx.font = 'bold 9.5px sans-serif';
                 tctx.textAlign = 'left';
                 tctx.textBaseline = 'middle';
-                const labelText = `${i + 1}. ${d.drawing_no_raw || '시트'}`;
-                tctx.fillText(labelText, sx + 4, sy + tagH / 2, tagW - 8);
+                tctx.fillText(statusBadgeText, sx + 4, sy + tagH / 2, tagW - 8);
               }
 
               // ② 표제란 영역 (에메랄드 그린 외곽선 & 필)

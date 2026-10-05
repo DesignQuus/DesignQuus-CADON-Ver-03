@@ -195,7 +195,7 @@ export default function CustomerSelectCombobox({
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className={`w-full pl-9 pr-28 py-2.5 rounded-xl border text-xs font-semibold transition-all focus:outline-none ${
+          className={`w-full pl-9 pr-28 py-2.5 rounded-lg border text-xs font-semibold transition-all focus:outline-none ${
             isCurrentAuto
               ? 'border-indigo-400 bg-indigo-50/30 text-indigo-950 focus:ring-2 focus:ring-indigo-500/20'
               : value.isNew
@@ -302,7 +302,7 @@ export default function CustomerSelectCombobox({
 
       {/* 드롭다운 목록 (플로팅) */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden max-h-64 flex flex-col">
+        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-lg shadow-xl border border-slate-200 z-50 overflow-hidden max-h-64 flex flex-col">
           {/* 드롭다운 상단 검색 팁/헤더 */}
           <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 text-[10.5px] font-semibold text-slate-400 flex items-center justify-between">
             <span>고객사 목록 ({filteredCompanies.length}개 검색됨)</span>

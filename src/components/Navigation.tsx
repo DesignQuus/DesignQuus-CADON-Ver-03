@@ -4,7 +4,7 @@ import { apiFetch } from '@/lib/api';
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home, Users, Building2, LayoutDashboard, FileSpreadsheet, Database, Inbox } from 'lucide-react';
+import { Layers, FileText, CheckCircle2, ShieldAlert, ShieldCheck, LogOut, UserCheck, Sliders, ArrowLeft, Home, Users, Building2, LayoutDashboard, FileSpreadsheet, Database } from 'lucide-react';
 import { prefetchPageData, warmupRoute } from '@/lib/cacheStore';
 
 export default function Navigation() {
@@ -161,7 +161,7 @@ export default function Navigation() {
               onMouseEnter={() => handleLinkWarmup('/cases')}
               onClick={() => { if (!pathname.startsWith('/cases')) setPendingPath('/cases'); }}
               className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                (activeRoute === '/cases' || activeRoute.startsWith('/cases/'))
+                (activeRoute === '/cases' || activeRoute.startsWith('/cases/') || activeRoute.startsWith('/inbox'))
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
@@ -172,7 +172,7 @@ export default function Navigation() {
               {user?.name && !isSuperAdmin && (user.myActiveCasesCount ?? 0) > 0 && (
                 <span
                   className={`ml-1 px-1.5 py-0.2 rounded-full text-[11px] font-black inline-flex items-center gap-0.5 tracking-tight transition-all ${
-                    (activeRoute === '/cases' || activeRoute.startsWith('/cases/'))
+                    (activeRoute === '/cases' || activeRoute.startsWith('/cases/') || activeRoute.startsWith('/inbox'))
                       ? 'bg-blue-600 text-white shadow-2xs'
                       : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                   }`}
@@ -182,21 +182,6 @@ export default function Navigation() {
                   <span>{user.myActiveCasesCount}</span>
                 </span>
               )}
-            </Link>
-
-            {/* 2-2. 일괄 접수함 */}
-            <Link
-              href="/inbox"
-              onMouseEnter={() => handleLinkWarmup('/inbox')}
-              onClick={() => { if (!pathname.startsWith('/inbox')) setPendingPath('/inbox'); }}
-              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
-                activeRoute.startsWith('/inbox')
-                  ? 'bg-blue-50 text-blue-700 font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <Inbox className="w-4 h-4 text-indigo-600" />
-              <span>일괄 접수함</span>
             </Link>
 
             {/* 3. 견적서 관리 */}

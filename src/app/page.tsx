@@ -40,12 +40,14 @@ import {
   Filter,
   Trash2,
   Search,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from 'lucide-react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import CustomerSelectCombobox, { CustomerSelectionValue, AUTO_DETECT_CUSTOMER } from '@/components/common/CustomerSelectCombobox';
 import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
 import { QuoteDeleteConfirmModal, QuoteDeleteToast, SKIP_CONFIRM_KEY } from '@/components/common/QuoteDeleteConfirmModal';
+import AIInstantQuoteModal from '@/components/common/AIInstantQuoteModal';
 
 interface UserProfile {
   id?: string;
@@ -149,6 +151,9 @@ export default function HomePage() {
       return () => clearTimeout(timer);
     }
   }, [deleteToast]);
+
+  // ⚡ AI 즉시 견적 모달 상태
+  const [isInstantQuoteModalOpen, setIsInstantQuoteModalOpen] = useState(false);
 
   // Persistent Sidebar State: 전체보기 첫 화면 기본 상태는 '사이드 탭이 열린 상태(true)'
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -651,10 +656,10 @@ export default function HomePage() {
   // Stage '3': 단가 마스터 매칭 & 원가 산출 (단가 검토 및 공정 임가공 산출)
   // Stage '4': 공식 견적서 발행 & 승인 (견적 금액 확정 및 엑셀 배포 완료)
   const getCasePipelineStage = (c: any): PipelineStage => {
-    // 4단계: 공식 견적서 발행 & 승인 (견적 금액 확정 완료)
-    if ((c.quote_total_amount && Number(c.quote_total_amount) > 0) || c.quote_readiness === 'READY_FOR_QUOTE') return '4';
-    // 3단계: 단가 마스터 매칭 & 원가 산출 (멀티레벨 BOM 추출 완료 후 단가 매칭 진행)
-    if (Number(c.bom_items_count || 0) > 0 || c.status === 'ANALYZED') {
+    // 4단계: 공식 견적서 발행 & 승인 (견적 금액 확정 완료 및 0원 초과 유효 금액일 때만 4단계로 집계)
+    if (c.quote_total_amount && Number(c.quote_total_amount) > 0) return '4';
+    // 3단계: 단가 마스터 매칭 & 원가 산출 (멀티레벨 BOM 추출 완료 후 단가 매칭 진행 또는 0원 미완성 건)
+    if (Number(c.bom_items_count || 0) > 0 || c.status === 'ANALYZED' || c.quote_readiness === 'READY_FOR_QUOTE') {
       return '3';
     }
     // 2단계: 멀티레벨 BOM 자동 전개 (CAD 도면 등록 후 AI 기하/텍스트 파싱 진행)
@@ -1077,16 +1082,42 @@ export default function HomePage() {
                 </span>
               </div>
 
-              {/* 파이프라인 진입 시작점: 신규 도면 견적 등록 버튼 */}
-              <button
-                type="button"
-                onClick={handleOpenUploadModal}
-                className="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold shadow-md shadow-blue-600/20 hover:shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Plus className="w-4 h-4 stroke-[3]" />
-                <span>신규 도면 견적 등록</span>
-                <UploadCloud className="w-3.5 h-3.5 text-blue-200" />
-              </button>
+              {/* 파이프라인 진입 시작점: ⚡ AI 즉시 견적 / 신규 도면 견적 등록 / 도면 일괄 접수함 */}
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsInstantQuoteModalOpen(true)}
+                  className="w-full py-2.5 px-3 rounded-lg bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 text-xs font-bold border border-slate-300 shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer group"
+                  title="도면만 넣으면 10초 만에 AI가 도면분석, BOM추출, 단가매칭을 끝내고 초안 견적서를 즉시 산출합니다"
+                >
+                  <Zap className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
+                  <span>AI 즉시 견적 (10초 완성)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenUploadModal}
+                  className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  title="단일 또는 샘플 도면으로 신규 견적 프로젝트를 즉시 생성합니다"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>표준 정밀 견적 등록</span>
+                </button>
+
+                <Link
+                  href="/cases?view=inbox"
+                  className="w-full py-1.5 px-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all flex items-center justify-between shadow-2xs group cursor-pointer"
+                  title="여러 도면 파일을 한 번에 업로드하고 대기열 순서 및 통합 견적을 관리합니다"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-slate-600 group-hover:scale-110 transition-transform" />
+                    <span>도면 일괄 접수함</span>
+                  </span>
+                  <span className="text-[10px] bg-indigo-200/80 text-indigo-800 px-1.5 py-0.2 rounded-full font-bold">
+                    대기열
+                  </span>
+                </Link>
+              </div>
 
               <div className="space-y-1 text-xs">
                 {/* Step 1: 도면 접수 & CAD 파싱 */}
@@ -1523,26 +1554,44 @@ export default function HomePage() {
                             {c.case_no}
                           </span>
                           <span className="text-slate-300 shrink-0 font-light">|</span>
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            {c.primary_file_name?.toLowerCase().endsWith('.dwg') ? (
-                              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                          <div className="flex items-center gap-1.5 min-w-0 max-w-[280px] xl:max-w-[360px]">
+                            {/* ⚡ AI 즉시 견적 식별 뱃지 (#E9E9E9 소프트 쿨 그레이 룩) */}
+                            {(c.case_name?.includes('즉시 견적') || c.case_name?.includes('즉시견적') || (c as any).notes?.includes('즉시 견적')) && (
+                              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs" title="AI 즉시 견적으로 산출된 프로젝트입니다.">
+                                <Zap className="w-2.5 h-2.5 text-amber-500" />
+                                <span>AI 즉시 견적</span>
+                              </span>
+                            )}
+
+                            {(c.primary_file_name?.toLowerCase().endsWith('.dwg') || c.case_name?.toLowerCase().includes('.dwg') || (!c.primary_file_name?.toLowerCase().endsWith('.dxf') && !c.case_name?.toLowerCase().includes('.dxf'))) ? (
+                              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
                                 DWG
                               </span>
-                            ) : c.primary_file_name?.toLowerCase().endsWith('.dxf') ? (
-                              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                            ) : (
+                              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-300 shadow-2xs">
                                 DXF
                               </span>
-                            ) : null}
+                            )}
+
                             <SmartTruncateTooltip
-                              text={
-                                c.primary_file_name
-                                  ? (c.files_count && c.files_count > 1 ? `${c.primary_file_name} 외 ${c.files_count - 1}건` : c.primary_file_name)
-                                  : (c.case_name || '도면 견적의뢰')
-                              }
+                              text={(() => {
+                                if (c.primary_file_name) {
+                                  return c.files_count && c.files_count > 1 ? `${c.primary_file_name} 외 ${c.files_count - 1}건` : c.primary_file_name;
+                                }
+                                if (c.case_name) {
+                                  const matched = c.case_name.match(/^\[(.*?)\]/);
+                                  if (matched && matched[1]) {
+                                    const base = matched[1].trim();
+                                    return (base.endsWith('.dwg') || base.endsWith('.dxf')) ? base : `${base}.dwg`;
+                                  }
+                                  return c.case_name;
+                                }
+                                return '도면 견적의뢰';
+                              })()}
                               className={`font-bold text-xs ${
                                 isDeleted ? 'text-slate-500 line-through' : 'text-slate-800 group-hover:text-blue-700'
                               }`}
-                              maxWidthClass="max-w-[200px] xl:max-w-[280px] 2xl:max-w-[380px]"
+                              maxWidthClass={(c.case_name?.includes('즉시 견적') || c.case_name?.includes('즉시견적') || (c as any).notes?.includes('즉시 견적')) ? "max-w-[130px] xl:max-w-[180px]" : "max-w-[200px] xl:max-w-[280px]"}
                               showCopy={true}
                             />
                           </div>
@@ -1635,8 +1684,9 @@ export default function HomePage() {
                           </div>
                         ) : isArchived ? (
                           <div className="flex items-center justify-center gap-1">
-                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
-                              보관완료
+                            <span className="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                              <span>보관완료</span>
                             </span>
                             <span className="text-[10px] text-slate-500 font-medium">
                               (격리)
@@ -1646,21 +1696,21 @@ export default function HomePage() {
                           <div className="relative group/status flex items-center justify-center">
                             <Link
                               href="/quotes"
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-extrabold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              <span>5/5 견적발행 완료</span>
-                              <ChevronRight className="w-3 h-3 text-emerald-600" />
+                              <span>4/4 견적발행 완료</span>
+                              <ChevronRight className="w-3 h-3 text-slate-500" />
                             </Link>
 
                             {/* 💡 호버 안내 카드 */}
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
                               <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
                                 <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
-                                  <span>📌</span> 다음 기능 안내
+                                  <span>📌</span> 파이프라인 단계 안내
                                 </span>
-                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-emerald-100 text-emerald-800">
-                                  5단계 : 발행완료
+                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300">
+                                  4단계 : 발행완료
                                 </span>
                               </div>
                               <div className="space-y-1 text-[11px] text-slate-600">
@@ -1674,12 +1724,12 @@ export default function HomePage() {
                           <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/quotes/${c.id}/review`}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                             >
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                              <span>4/5 단가검토</span>
-                              <span className="text-[10.5px] font-semibold text-amber-700">({c.bom_items_count}건 대기)</span>
-                              <ChevronRight className="w-3 h-3 text-amber-600" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                              <span>3/4 단가검토</span>
+                              <span className="text-[10.5px] font-semibold text-slate-600">({c.bom_items_count}건 대기)</span>
+                              <ChevronRight className="w-3 h-3 text-slate-500" />
                             </Link>
 
                             {/* 💡 마우스 호버 시 다음 단계 안내 카드 */}
@@ -1689,7 +1739,7 @@ export default function HomePage() {
                                   <span>📌</span> 다음 진행 단계 가이드
                                 </span>
                                 <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800">
-                                  4단계 : 단가검토
+                                  3단계 : 단가검토
                                 </span>
                               </div>
                               <div className="space-y-1.5 text-[11px] text-slate-600">
@@ -1704,7 +1754,7 @@ export default function HomePage() {
                                 <div className="pl-3.5 text-[10px] text-slate-500 space-y-0.5 border-l-2 border-indigo-200 my-1">
                                   <div>• <strong>[⚡ AI 공학원가 산출]</strong> 버튼으로 단가 자동 계산</div>
                                   <div>• 사내 마스터 단가 대조 및 비도면 부대비용 추가</div>
-                                  <div>• <strong>[결재 상신]</strong> 누르면 5단계 견적서 즉시 발행</div>
+                                  <div>• <strong>[견적 확정]</strong> 시 4단계 최종 견적서 즉시 발행</div>
                                 </div>
                               </div>
                               <div className="mt-2 pt-1.5 border-t border-slate-100 text-center">
@@ -1719,26 +1769,26 @@ export default function HomePage() {
                           <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/cases/${c.id}`}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                              <span>2/5 AI파싱</span>
-                              <span className="text-[10px] text-indigo-600 font-medium">({c.drawings_count}매)</span>
-                              <ChevronRight className="w-3 h-3 text-indigo-600" />
+                              <span>2/4 AI BOM 분석</span>
+                              <span className="text-[10px] text-slate-600 font-medium">({c.drawings_count}매)</span>
+                              <ChevronRight className="w-3 h-3 text-slate-500" />
                             </Link>
 
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
                               <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
                                 <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
-                                  <span>📌</span> 다음 기능 안내
+                                  <span>📌</span> 파이프라인 단계 안내
                                 </span>
                                 <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-indigo-100 text-indigo-800">
-                                  2단계 : 파싱완료
+                                  2단계 : BOM 분석중
                                 </span>
                               </div>
                               <div className="space-y-1 text-[11px] text-slate-600">
                                 <div>• 도면 {c.drawings_count}매 외곽선 및 도곽 감지 완료</div>
-                                <div className="text-slate-800 font-bold">👉 클릭 시 3단계 [가상 BOM 추출 및 풍선기호 검증] 화면으로 이동합니다.</div>
+                                <div className="text-slate-800 font-bold">👉 클릭 시 3단계 [단가 검토 및 산출] 화면으로 이동합니다.</div>
                               </div>
                               <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-300"></div>
                             </div>
@@ -1747,19 +1797,19 @@ export default function HomePage() {
                           <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/cases/${c.id}`}
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                              <span>1/5 도면접수 대기</span>
-                              <ChevronRight className="w-3 h-3 text-blue-600" />
+                              <span>1/4 도면접수 완료</span>
+                              <ChevronRight className="w-3 h-3 text-slate-500" />
                             </Link>
 
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
                               <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
                                 <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
-                                  <span>📌</span> 다음 기능 안내
+                                  <span>📌</span> 파이프라인 단계 안내
                                 </span>
-                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-blue-100 text-blue-800">
+                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300">
                                   1단계 : 접수완료
                                 </span>
                               </div>
@@ -1774,11 +1824,11 @@ export default function HomePage() {
                           <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/cases/${c.id}?step=1`}
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                              <span>사전접수 (도면대기)</span>
-                              <ChevronRight className="w-3 h-3 text-amber-600" />
+                              <span>1/4 도면접수 대기</span>
+                              <ChevronRight className="w-3 h-3 text-slate-500" />
                             </Link>
 
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
@@ -2079,13 +2129,13 @@ export default function HomePage() {
               <tbody className="divide-y divide-slate-100">
                 {paginatedQuotes.map((q, idx) => {
                   const globalIdx = (quotePage - 1) * quotePageSize + idx + 1;
-                  let statusBadge = 'bg-slate-100 text-slate-700 border-slate-200';
+                  let statusBadge = 'rounded bg-slate-100 text-slate-700 border-slate-200';
                   let statusLabel = '임시저장 (DRAFT)';
                   if (q.status === 'APPROVED') {
-                    statusBadge = 'bg-blue-50 text-blue-700 border-blue-200';
+                    statusBadge = 'rounded-full bg-[#E9E9E9] text-slate-800 border-slate-300';
                     statusLabel = '승인완료';
                   } else if (q.status === 'ISSUED') {
-                    statusBadge = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                    statusBadge = 'rounded-full bg-[#E9E9E9] text-slate-800 border-slate-300';
                     statusLabel = '공식발행';
                   }
 
@@ -2127,45 +2177,55 @@ export default function HomePage() {
                         ₩{Number(q.total_amount || 0).toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10.5px] font-bold border ${statusBadge}`}>
+                        <span className={`inline-flex items-center justify-center h-[26px] px-2.5 text-[10.5px] font-bold border ${statusBadge}`}>
                           {statusLabel}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center space-x-1.5">
-                          {Number(q.total_amount || 0) > 0 && ['APPROVED', 'ISSUED'].includes(q.status) ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDownloadExcel(q.id, q.quote_no)}
-                              disabled={downloadingQuoteId === q.id}
-                              className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-                              title="한국 표준 견적서 양식 Excel (.xlsx) 즉시 다운로드"
-                            >
-                              {downloadingQuoteId === q.id ? (
-                                <Clock className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Download className="w-3.5 h-3.5" />
-                              )}
-                              <span>엑셀출력</span>
-                            </button>
+                          {Number(q.total_amount || 0) > 0 ? (
+                            <div className="flex items-center space-x-1">
+                              <Link
+                                href={`/quotes/${q.quotation_case_id}/publish`}
+                                className="inline-flex items-center space-x-1 h-[26px] px-2.5 bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 rounded-full text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
+                                title="견적서 세부 및 공식 웹뷰어 확인"
+                              >
+                                <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
+                                <span>견적서 보기</span>
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadExcel(q.id, q.quote_no)}
+                                disabled={downloadingQuoteId === q.id}
+                                className="inline-flex items-center space-x-1 h-[26px] px-2.5 bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 rounded-full text-[11px] font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                                title="한국 표준 견적서 양식 Excel (.xlsx) 즉시 다운로드"
+                              >
+                                {downloadingQuoteId === q.id ? (
+                                  <Clock className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                                ) : (
+                                  <Download className="w-3.5 h-3.5 text-emerald-600" />
+                                )}
+                                <span>엑셀</span>
+                              </button>
+                            </div>
                           ) : (
                             <Link
                               href={`/quotes/${q.quotation_case_id}/review`}
-                              className="inline-flex items-center space-x-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-[11px] font-bold border border-amber-300 transition-all shadow-2xs cursor-pointer"
+                              className="inline-flex items-center space-x-1.5 h-[26px] px-2.5 bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 rounded-full text-[11px] font-bold border border-slate-300 transition-all shadow-2xs cursor-pointer"
                               title="단가가 0원인 임시저장(초안) 견적서입니다. 단가검토 화면에서 금액을 확정하세요."
                             >
-                              <span>단가검토</span>
-                              <ChevronRight className="w-3 h-3 text-amber-600" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                              <span>BOM·단가 검토 ➔</span>
                             </Link>
                           )}
 
                           <button
                             type="button"
                             onClick={() => handleDeleteQuoteClick(q.id, q.quote_no)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                            className="w-[26px] h-[26px] flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors cursor-pointer border border-transparent hover:border-rose-200"
                             title="견적서 영구 삭제"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -2490,6 +2550,19 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* ⚡ AI 즉시 견적 원스톱 팝업 모달 */}
+      <AIInstantQuoteModal
+        isOpen={isInstantQuoteModalOpen}
+        onClose={() => {
+          setIsInstantQuoteModalOpen(false);
+          loadDashboardData();
+        }}
+        onSuccess={() => {
+          setIsInstantQuoteModalOpen(false);
+          loadDashboardData();
+        }}
+      />
 
       {/* ⚠️ 견적서 삭제 커스텀 확인 모달 */}
       <QuoteDeleteConfirmModal

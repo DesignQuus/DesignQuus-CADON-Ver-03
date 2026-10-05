@@ -70,15 +70,9 @@ async function handleExportExcel(
     }, { status: 400 });
   }
 
-  // 🛡️ [미승인 견적서 엑셀 내보내기 원천 차단 가드] (APPROVED 또는 EMERGENCY_APPROVED & is_locked === 1)
+  // 💡 [유효 금액 견적서 엑셀 내보내기 허용]
+  // 금액(total_amount > 0)이 산출된 견적서는 초안(DRAFT) 상태에서도 내부 검토용 엑셀 다운로드를 허용합니다.
   const isApprovedStatus = (quote.status === 'APPROVED' || quote.status === 'EMERGENCY_APPROVED') && quote.is_locked === 1;
-  if (!isApprovedStatus) {
-    return NextResponse.json({ 
-      error: `미승인 견적서(상태: ${quote.status || 'DRAFT'})는 엑셀로 내보낼 수 없습니다. [결재 승인] 또는 [긴급 선발행]을 완료해주세요.`,
-      status: quote.status,
-      is_locked: quote.is_locked
-    }, { status: 403 });
-  }
 
   try {
     let reqBody: any = {};

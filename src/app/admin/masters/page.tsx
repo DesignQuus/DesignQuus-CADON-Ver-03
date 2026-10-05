@@ -135,8 +135,140 @@ interface MasterProduct {
   created_at: string;
 }
 
+interface PartCostBreakdownInfo {
+  materialRatePerKg: number;
+  materialCost: number;
+  processName: string;
+  processRateStr: string;
+  processCost: number;
+  cycleTimeHours: number;
+  treatmentName: string;
+  treatmentCost: number;
+}
+
+function getPartCostBreakdown(
+  it: MasterProduct,
+  matRates: Record<string, number>,
+  procRates: Record<string, number>
+): PartCostBreakdownInfo {
+  const mat = (it.material || 'SS400').toUpperCase().trim();
+  const matRate = matRates[mat] || (mat.includes('SUS') ? 5500 : mat.includes('AL') ? 6500 : mat.includes('45C') ? 2200 : 1800);
+  const cat = it.category || 'MACHINING';
+  const unitPrice = it.unit_price || 0;
+
+  let processName = 'CNC 선반';
+  let processRateStr = '40,000원/h';
+  let hourlyRate = procRates['HOURLY_LATHE_RATE'] || 40000;
+  let treatmentName = '일반 방청';
+
+  if (cat === 'SHEET_METAL') {
+    processName = '레이저/절곡';
+    const laserM = procRates['SHEET_LASER_PER_METER'] || 1800;
+    processRateStr = `${laserM.toLocaleString()}원/m`;
+    hourlyRate = procRates['HOURLY_WELDING_RATE'] || 38000;
+    treatmentName = mat.includes('AL') ? '아노다이징' : mat.includes('SUS') ? '산세/연마' : '분체도장';
+  } else if (cat === 'COMMERCIAL' || cat === 'FASTENER') {
+    processName = '규격 조달';
+    processRateStr = '마크업 8%';
+    hourlyRate = 0;
+    treatmentName = '아연도금(기본)';
+  } else if (cat === 'CASTING') {
+    processName = '주조 성형';
+    const castR = procRates['CASTING_PER_KG_RATE'] || 2500;
+    processRateStr = `${castR.toLocaleString()}원/kg`;
+    hourlyRate = procRates['HOURLY_MACHINE_RATE'] || 45000;
+    treatmentName = '쇼트블라스트';
+  } else if (cat === 'INJECTION') {
+    processName = '사출 성형';
+    processRateStr = '32,000원/h';
+    hourlyRate = 32000;
+    treatmentName = '무도장(소재색)';
+  } else if (cat === 'ASSEMBLY') {
+    processName = '조립/검수';
+    const assyR = procRates['HOURLY_ASSEMBLY_RATE'] || 35000;
+    processRateStr = `${assyR.toLocaleString()}원/h`;
+    hourlyRate = assyR;
+    treatmentName = '최종 포장';
+  } else {
+    // MACHINING
+    const sName = (it.standard_name || '').toUpperCase();
+    if (sName.includes('SHAFT') || sName.includes('PIN') || sName.includes('ROLLER')) {
+      processName = 'CNC 선반';
+      const latheR = procRates['HOURLY_LATHE_RATE'] || 40000;
+      processRateStr = `${latheR.toLocaleString()}원/h`;
+      hourlyRate = latheR;
+      treatmentName = mat.includes('45C') ? 'Q/T 열처리' : mat.includes('AL') ? '아노다이징' : '흑착색(방청)';
+    } else {
+      processName = 'MCT 밀링';
+      const machR = procRates['HOURLY_MACHINE_RATE'] || 45000;
+      processRateStr = `${machR.toLocaleString()}원/h`;
+      hourlyRate = machR;
+      treatmentName = mat.includes('AL') ? '아노다이징' : mat.includes('SUS') ? '버프연마' : '니켈도금';
+    }
+  }
+
+  let materialCost = 0;
+  let processCost = 0;
+  let treatmentCost = 0;
+  let cycleTimeHours = 0;
+
+  if (unitPrice > 0) {
+    if (cat === 'COMMERCIAL' || cat === 'FASTENER') {
+      materialCost = Math.round(unitPrice * 0.92);
+      processCost = Math.round(unitPrice * 0.08);
+      treatmentCost = 0;
+    } else {
+      materialCost = Math.round(unitPrice * 0.28);
+      processCost = Math.round(unitPrice * 0.48);
+      treatmentCost = Math.round(unitPrice * 0.08);
+      if (hourlyRate > 0) {
+        cycleTimeHours = Number((processCost / hourlyRate).toFixed(1));
+      }
+    }
+  }
+
+  return {
+    materialRatePerKg: matRate,
+    materialCost,
+    processName,
+    processRateStr,
+    processCost,
+    cycleTimeHours,
+    treatmentName,
+    treatmentCost
+  };
+}
+
 export default function MasterDataManagerPage() {
-  const [activeTab, setActiveTab] = useState<'products' | 'settings'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'learned' | 'settings'>('products');
+  const [learnedItems, setLearnedItems] = useState<any[]>([]);
+  const [loadingLearned, setLoadingLearned] = useState<boolean>(false);
+  const [learnedSearchQuery, setLearnedSearchQuery] = useState<string>('');
+
+  const fetchLearnedItems = async () => {
+    setLoadingLearned(true);
+    try {
+      const res = await apiFetch('/api/manual-prices?mode=ALL_LEARNED');
+      const data = await res.json();
+      if (res.ok && data.list) {
+        setLearnedItems(data.list);
+      }
+    } catch (err) {
+      console.warn('자가학습 풀 로딩 오류:', err);
+    } finally {
+      setLoadingLearned(false);
+    }
+  };
+
+  const handlePromoteToStandard = (item: any) => {
+    setNewName(item.standard_name || item.item_name || '');
+    setNewSpec(item.specification || '');
+    setNewMaterial(item.material || 'SS400');
+    setNewPrice(Number(item.unit_price || 0));
+    setNewCategory('MACHINING');
+    setNewCode(`STD-${Date.now().toString().slice(-6)}`);
+    setShowAddModal(true);
+  };
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -153,6 +285,12 @@ export default function MasterDataManagerPage() {
   const [bulkCustomPriceInput, setBulkCustomPriceInput] = useState('');
   const [bulkCategory, setBulkCategory] = useState<string>('MACHINING');
   const [isApplyingCategory, setIsApplyingCategory] = useState<boolean>(false);
+
+  // ⚡ 추천 1: 스마트 일괄 원가·임률 설정 모달 상태
+  const [showBulkCostModal, setShowBulkCostModal] = useState<boolean>(false);
+  const [bulkModalProcess, setBulkModalProcess] = useState<string>('MACHINING_LATHE');
+  const [bulkModalTreatment, setBulkModalTreatment] = useState<string>('QT');
+  const [bulkModalTargetPrice, setBulkModalTargetPrice] = useState<string>('');
 
   // 10대 부품 분류 & 실무 대표 품목 스마트 피커 모달 상태
   const [categoryPickerState, setCategoryPickerState] = useState<{
@@ -716,6 +854,64 @@ export default function MasterDataManagerPage() {
     }
   };
 
+  // ⚡ 추천 1: 선택 품목 스마트 일괄 원가·임률 설정 적용
+  const handleApplyBulkCostSettings = async () => {
+    if (selectedIds.length === 0) return;
+    const priceNum = bulkModalTargetPrice ? Number(bulkModalTargetPrice.replace(/[^0-9]/g, '')) : 0;
+
+    let catToApply = 'MACHINING';
+    if (bulkModalProcess.startsWith('SHEET')) catToApply = 'SHEET_METAL';
+    else if (bulkModalProcess.startsWith('COMMERCIAL')) catToApply = 'COMMERCIAL';
+    else if (bulkModalProcess.startsWith('CASTING')) catToApply = 'CASTING';
+
+    // 1. 클라이언트 UI 즉시 반영 (0ms)
+    setItems((prev) =>
+      prev.map((p) => {
+        if (selectedIds.includes(p.id)) {
+          return {
+            ...p,
+            category: catToApply,
+            unit_price: priceNum > 0 ? priceNum : p.unit_price
+          };
+        }
+        return p;
+      })
+    );
+
+    if (priceNum > 0) {
+      setModifiedItems((prev) => {
+        const next = { ...prev };
+        selectedIds.forEach((id) => { next[id] = priceNum; });
+        return next;
+      });
+    }
+
+    // 2. 서버 DB 자동 반영
+    try {
+      const payload = selectedIds.map((id) => {
+        const item = items.find((p) => p.id === id);
+        return {
+          id,
+          category: catToApply,
+          unit_price: priceNum > 0 ? priceNum : item?.unit_price || 0
+        };
+      });
+      await apiFetch('/api/admin/masters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'batch_update_products',
+          items: payload
+        })
+      });
+      alert(`선택된 ${selectedIds.length}개 품목의 원가·임률 설정이 일괄 적용 및 저장되었습니다.`);
+    } catch (err: any) {
+      console.error('일괄 원가 설정 저장 실패:', err);
+    }
+
+    setShowBulkCostModal(false);
+  };
+
   // 4. 선택 및 수정된 품목 일괄 DB 저장
   const handleSaveModifiedItems = async () => {
     const targetIds = Array.from(new Set([...selectedIds, ...Object.keys(modifiedItems)]));
@@ -1023,7 +1219,7 @@ export default function MasterDataManagerPage() {
           </div>
         </div>
 
-        {/* Tab Controls */}
+        {/* Tab Controls (3단 탭: 표준 품목 / 실무 자가학습 단가 풀 / 임률 설정) */}
         <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-[4px] border border-slate-200">
           <button
             onClick={() => setActiveTab('products')}
@@ -1033,6 +1229,19 @@ export default function MasterDataManagerPage() {
           >
             <Layers className="w-3.5 h-3.5" />
             <span>표준 품목 및 단가 대장</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('learned');
+              fetchLearnedItems();
+            }}
+            className={`px-3 py-1.5 rounded-[4px] text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
+              activeTab === 'learned' ? 'bg-white text-purple-700 shadow-xs ring-1 ring-purple-300' : 'text-slate-600 hover:text-slate-900'
+            }`}
+            title="도면 검수 승인 및 견적 진행 과정에서 AI가 자동 학습하고 누적한 실무 단가 풀입니다."
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+            <span>⚡ 실무 자가학습 단가 풀</span>
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -1177,16 +1386,19 @@ export default function MasterDataManagerPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs table-fixed">
                 <colgroup>
+                  <col style={{ width: '40px' }} />
                   <col style={{ width: '44px' }} />
-                  <col style={{ width: '48px' }} />
-                  <col style={{ width: '130px' }} />
-                  <col style={{ minWidth: '150px' }} />
                   <col style={{ width: '120px' }} />
-                  <col style={{ width: '110px' }} />
+                  <col style={{ minWidth: '150px' }} />
+                  <col style={{ width: '150px' }} />
+                  <col style={{ width: '165px' }} />
+                  <col style={{ width: '135px' }} />
                   <col style={{ width: '105px' }} />
-                  <col style={{ width: '145px' }} />
-                  <col style={{ width: '130px' }} />
-                  <col style={{ width: '48px' }} />
+                  <col style={{ width: '85px' }} />
+                  <col style={{ width: '105px' }} />
+                  <col style={{ width: '135px' }} />
+                  <col style={{ width: '115px' }} />
+                  <col style={{ width: '44px' }} />
                 </colgroup>
                 <thead>
                   <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 select-none h-8.5">
@@ -1203,6 +1415,9 @@ export default function MasterDataManagerPage() {
                     <th className="py-1.5 px-2 text-center font-mono text-[11px]">No</th>
                     <th className="py-1.5 px-3 text-[11px]">마스터 코드</th>
                     <th className="py-1.5 px-3 text-[11px]">표준 품명</th>
+                    <th className="py-1.5 px-3 text-right text-[11px] whitespace-nowrap">소재 시세 · 재료비</th>
+                    <th className="py-1.5 px-3 text-right text-[11px] whitespace-nowrap">가공 임률 · 표준공수</th>
+                    <th className="py-1.5 px-3 text-center text-[11px] whitespace-nowrap">후처리 · 열처리</th>
                     <th className="py-1.5 px-3 text-left text-[11px]">규격 (Spec)</th>
                     <th className="py-1.5 px-3 text-left text-[11px]">재질</th>
                     <th className="py-1.5 px-3 text-left text-[11px] whitespace-nowrap">
@@ -1216,14 +1431,14 @@ export default function MasterDataManagerPage() {
                 <tbody className="divide-y divide-slate-100 font-sans">
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className="py-8 text-center text-slate-400">
+                      <td colSpan={13} className="py-8 text-center text-slate-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-500" />
                         기준정보 데이터를 불러오는 중입니다...
                       </td>
                     </tr>
                   ) : filteredItems.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-8 text-center text-slate-400">
+                      <td colSpan={13} className="py-8 text-center text-slate-400">
                         {searchTerm.trim() ? (
                           <>검색어 &apos;{searchTerm}&apos;에 일치하는 품목이 없습니다.</>
                         ) : categoryFilter !== 'ALL' ? (
@@ -1237,6 +1452,7 @@ export default function MasterDataManagerPage() {
                     paginatedItems.map((it, idx) => {
                       const globalIdx = (currentPage - 1) * pageSize + idx + 1;
                       const isSelected = selectedIds.includes(it.id);
+                      const breakdown = getPartCostBreakdown(it, materialRates, processRates);
 
                       return (
                         <tr
@@ -1268,6 +1484,70 @@ export default function MasterDataManagerPage() {
                           <td className="py-1 px-3 font-medium text-slate-900 truncate text-[11.5px]" title={it.standard_name}>
                             {it.standard_name}
                           </td>
+
+                          {/* 1. 소재 시세 · 재료비 (1행 처리) */}
+                          <td className="py-1 px-3 text-right whitespace-nowrap">
+                            {breakdown.materialCost > 0 ? (
+                              <div className="flex items-center justify-end gap-1.5 leading-none">
+                                <span className="font-mono font-bold text-slate-900 text-[11.5px]">
+                                  ₩{breakdown.materialCost.toLocaleString()}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono" title={`소재 시세: ${breakdown.materialRatePerKg.toLocaleString()}원/kg`}>
+                                  ({breakdown.materialRatePerKg.toLocaleString()}원/kg)
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-end gap-1.5 leading-none">
+                                <span className="text-slate-300 font-mono text-[11px]">-</span>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  ({breakdown.materialRatePerKg.toLocaleString()}원/kg)
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 2. 가공 임률 · 표준공수 (1행 처리) */}
+                          <td className="py-1 px-3 text-right whitespace-nowrap">
+                            {breakdown.processCost > 0 ? (
+                              <div className="flex items-center justify-end gap-1.5 leading-none">
+                                <span className="font-mono font-bold text-blue-700 text-[11.5px]">
+                                  ₩{breakdown.processCost.toLocaleString()}
+                                </span>
+                                <span className="text-[10px] text-blue-600/90 font-medium truncate max-w-[95px]" title={`가공비: ${breakdown.processName} (${breakdown.processRateStr})`}>
+                                  ({breakdown.processName}{breakdown.cycleTimeHours > 0 ? ` ${breakdown.cycleTimeHours}h` : ''})
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-end gap-1.5 leading-none">
+                                <span className="text-slate-300 font-mono text-[11px]">-</span>
+                                <span className="text-[10px] text-slate-400 truncate max-w-[100px]" title={breakdown.processRateStr}>
+                                  ({breakdown.processName})
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 3. 후처리 · 열처리 (1행 처리) */}
+                          <td className="py-1 px-3 text-center whitespace-nowrap">
+                            {breakdown.treatmentCost > 0 ? (
+                              <div className="flex items-center justify-center gap-1.5 leading-none">
+                                <span className="font-mono font-semibold text-emerald-700 text-[11px]">
+                                  ₩{breakdown.treatmentCost.toLocaleString()}
+                                </span>
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9.5px] font-semibold border border-emerald-200/80 leading-none truncate max-w-[70px]" title={breakdown.treatmentName}>
+                                  {breakdown.treatmentName}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1.5 leading-none">
+                                <span className="text-slate-300 font-mono text-[11px]">-</span>
+                                <span className="text-[10px] text-slate-400 truncate max-w-[80px]" title={breakdown.treatmentName}>
+                                  ({breakdown.treatmentName})
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
                           <td className="py-1 px-3 text-left font-mono text-slate-600 truncate text-[11px]" title={it.specification || '-'}>
                             {it.specification || '-'}
                           </td>
@@ -1440,7 +1720,19 @@ export default function MasterDataManagerPage() {
                           </td>
                           {editingPriceId === it.id ? (
                             <td className="py-0.5 px-3 text-right" onClick={(e) => e.stopPropagation()}>
-                              <div className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.2 shadow-2xs ring-2 ring-blue-100 justify-end w-full max-w-[155px]">
+                              <div
+                                className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.2 shadow-2xs ring-2 ring-blue-100 justify-end w-full max-w-[170px]"
+                                title={
+                                  selectedIds.includes(it.id) && selectedIds.length > 1
+                                    ? `Enter: 단일 저장 | Ctrl+Enter: 선택된 ${selectedIds.length}개 일괄 동시 적용`
+                                    : 'Enter: 저장 | Esc: 취소'
+                                }
+                              >
+                                {selectedIds.includes(it.id) && selectedIds.length > 1 && (
+                                  <span className="text-[9px] text-blue-600 bg-blue-50 px-1 py-0.2 rounded font-bold shrink-0 border border-blue-200">
+                                    Ctrl+↵
+                                  </span>
+                                )}
                                 <span className="text-slate-400 font-mono text-[11px] shrink-0">₩</span>
                                 <input
                                   type="text"
@@ -1454,7 +1746,21 @@ export default function MasterDataManagerPage() {
                                   maxLength={15}
                                   onBlur={() => setEditingPriceId(null)}
                                   onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === 'Escape') {
+                                    if (e.key === 'Enter') {
+                                      // ⚡ 추천 2: Ctrl+Enter 다중 선택 품목 동시 적용
+                                      if ((e.ctrlKey || e.metaKey) && selectedIds.includes(it.id) && selectedIds.length > 1) {
+                                        const currentPrice = it.unit_price;
+                                        setItems((prev) =>
+                                          prev.map((p) => (selectedIds.includes(p.id) ? { ...p, unit_price: currentPrice } : p))
+                                        );
+                                        setModifiedItems((prev) => {
+                                          const next = { ...prev };
+                                          selectedIds.forEach((id) => { next[id] = currentPrice; });
+                                          return next;
+                                        });
+                                      }
+                                      setEditingPriceId(null);
+                                    } else if (e.key === 'Escape') {
                                       setEditingPriceId(null);
                                     }
                                   }}
@@ -1735,6 +2041,20 @@ export default function MasterDataManagerPage() {
                   </button>
                 </div>
 
+                {/* ⚡ 추천 1: 스마트 원가·임률 일괄 설정 버튼 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkModalTargetPrice(bulkCustomPriceInput || '');
+                    setShowBulkCostModal(true);
+                  }}
+                  className="px-2.5 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md active:scale-95 border border-blue-400/40"
+                  title="선택된 품목들의 가공설비, 임률, 후처리, 단가를 한 번에 시뮬레이션하고 일괄 설정합니다."
+                >
+                  <Calculator className="w-3.5 h-3.5 text-amber-300" />
+                  <span>원가·임률 일괄 설정</span>
+                </button>
+
                 <div className="h-4 w-px bg-slate-700 hidden md:block" />
 
                 {/* 메인 저장 및 액션 버튼들 */}
@@ -1789,6 +2109,170 @@ export default function MasterDataManagerPage() {
             </>
           )}
           </>
+        ) : activeTab === 'learned' ? (
+          /* Tab: Learned (실무 자가학습 단가 풀 대장) */
+          <div className="space-y-3">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-500/30 text-purple-200 border border-purple-400/40">
+                    AI Knowledge Base
+                  </span>
+                  <h2 className="text-base font-extrabold tracking-tight flex items-center gap-1.5">
+                    <span>⚡ 실무 자가학습 단가 풀 (Manual Price Pool)</span>
+                  </h2>
+                </div>
+                <p className="text-xs text-purple-200/90 leading-relaxed max-w-2xl">
+                  도면 검수 승인 및 견적 산출 과정에서 사용자가 입력한 단가와 품목 정보가 AI에 의해 자동으로 누적 학습된 실무 단가 저장소입니다. 
+                  도면 파일이나 견적 건이 삭제되어도 이 학습 데이터베이스는 <strong className="text-amber-300 font-bold">영구 보존</strong>되며, 필요 시 원클릭으로 공식 표준 품목으로 승격할 수 있습니다.
+                </p>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={fetchLearnedItems}
+                  disabled={loadingLearned}
+                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold border border-white/20 transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  title="최신 자가학습 데이터 새로고침"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingLearned ? 'animate-spin' : ''}`} />
+                  <span>새로고침</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-2.5">
+              <div className="flex items-center space-x-2 w-full sm:w-auto flex-1 max-w-md">
+                <div className="relative w-full">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={learnedSearchQuery}
+                    onChange={(e) => setLearnedSearchQuery(e.target.value)}
+                    placeholder="학습 품목명, 규격, 재질, 고객사 검색..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded border border-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+                  />
+                  {learnedSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setLearnedSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="text-xs font-bold text-slate-600 flex items-center space-x-2">
+                <span>총 학습 부품: <strong className="text-purple-700 font-mono">{learnedItems.length}</strong>건</span>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 sticky top-0 z-10 font-bold">
+                    <tr>
+                      <th className="py-2.5 px-3 text-center w-12">No.</th>
+                      <th className="py-2.5 px-3">학습 품목명 (도면 원문 / 표준)</th>
+                      <th className="py-2.5 px-3">규격 (Specification)</th>
+                      <th className="py-2.5 px-3">재질 (Material)</th>
+                      <th className="py-2.5 px-3 text-right">최근 학습단가</th>
+                      <th className="py-2.5 px-3 text-center">검증 횟수</th>
+                      <th className="py-2.5 px-3 text-center">출처</th>
+                      <th className="py-2.5 px-3">고객사</th>
+                      <th className="py-2.5 px-3 text-center">최근 학습일시</th>
+                      <th className="py-2.5 px-3 text-center w-28">표준 승격</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {loadingLearned ? (
+                      <tr>
+                        <td colSpan={10} className="py-12 text-center text-slate-400">
+                          <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-purple-600" />
+                          <span>자가학습 단가 풀을 불러오는 중입니다...</span>
+                        </td>
+                      </tr>
+                    ) : learnedItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="py-12 text-center text-slate-400">
+                          <span>아직 자가학습된 단가 데이터가 없습니다. 도면 승인 및 견적 작성 시 자동 축적됩니다.</span>
+                        </td>
+                      </tr>
+                    ) : (
+                      learnedItems
+                        .filter((item) => {
+                          if (!learnedSearchQuery.trim()) return true;
+                          const q = learnedSearchQuery.toLowerCase().trim();
+                          return (
+                            (item.item_name || '').toLowerCase().includes(q) ||
+                            (item.standard_name || '').toLowerCase().includes(q) ||
+                            (item.specification || '').toLowerCase().includes(q) ||
+                            (item.material || '').toLowerCase().includes(q) ||
+                            (item.company_name || '').toLowerCase().includes(q)
+                          );
+                        })
+                        .map((item, idx) => (
+                          <tr key={item.id || idx} className="hover:bg-purple-50/40 transition-colors">
+                            <td className="py-2 px-3 text-center font-mono text-slate-400 text-[11px]">
+                              {idx + 1}
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="font-bold text-slate-900">{item.item_name}</div>
+                              {item.standard_name && item.standard_name !== item.item_name && (
+                                <div className="text-[10px] text-purple-700 font-semibold">
+                                  표준명: {item.standard_name}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 font-mono text-slate-700 text-[11px]">
+                              {item.specification || '-'}
+                            </td>
+                            <td className="py-2 px-3">
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 font-mono">
+                                {item.material || item.standard_material || 'SS400'}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-bold text-blue-700">
+                              ₩{Number(item.unit_price || 0).toLocaleString()}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                {item.approval_count || 1}회 승인
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <span className="text-[10px] text-slate-500 font-medium">
+                                {item.source === 'DRAWING_APPROVAL' ? '도면승인' : item.source === 'QUOTE_MANUAL' ? '수동견적' : item.source || '자가학습'}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-slate-600 font-medium text-[11px]">
+                              {item.company_name || '-'}
+                            </td>
+                            <td className="py-2 px-3 text-center font-mono text-slate-400 text-[10px]">
+                              {item.last_used_at?.slice(0, 10) || item.created_at?.slice(0, 10) || '-'}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handlePromoteToStandard(item)}
+                                className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded text-[11px] font-bold border border-purple-200 transition-colors cursor-pointer"
+                                title="이 실무 단가를 표준 부품 단가 대장에 등록합니다."
+                              >
+                                표준 등록
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         ) : (
           /* Tab 2: Settings (소재 시세 & 임률 설정) */
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-6">
@@ -2626,6 +3110,142 @@ export default function MasterDataManagerPage() {
           setCategoryPickerState((prev) => ({ ...prev, isOpen: false }));
         }}
       />
+
+      {/* ⚡ 추천 1: 스마트 일괄 원가·임률 설정 모달 */}
+      {showBulkCostModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-400/40 flex items-center justify-center">
+                  <Calculator className="w-4 h-4 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">선택 품목 일괄 원가·임률 설정</h3>
+                  <p className="text-[11px] text-slate-300">선택된 {selectedIds.length}개 품목의 투입 설비, 후처리, 기준단가를 일괄 적용합니다.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBulkCostModal(false)}
+                className="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 space-y-4 overflow-y-auto text-xs">
+              {/* Selected items chip list */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1.5">선택된 대상 품목 ({selectedIds.length}건)</label>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                  {items.filter(it => selectedIds.includes(it.id)).map(it => (
+                    <span key={it.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-mono text-slate-700 shadow-2xs">
+                      <strong className="text-blue-600 font-semibold">{it.standard_name}</strong>
+                      <span className="text-slate-400">({it.material || 'SS400'})</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* 1. 공통 가공설비 & 임률 */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">1. 적용 가공설비 & 기준 임률</label>
+                <select
+                  value={bulkModalProcess}
+                  onChange={(e) => setBulkModalProcess(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 focus:bg-white cursor-pointer"
+                >
+                  <option value="MACHINING_LATHE">CNC 선반 가공 (시간당 임률: 40,000원/h)</option>
+                  <option value="MACHINING_MCT">MCT 머시닝센터 가공 (시간당 임률: 45,000원/h)</option>
+                  <option value="SHEET_LASER">판금 레이저 절단 & 절곡 (1,800원/m · 800원/회)</option>
+                  <option value="MACHINING_5AXIS">5축 / 고속 가공 (시간당 임률: 65,000원/h)</option>
+                  <option value="COMMERCIAL_BUY">표준 기성품 규격 조달 (관리 마크업: 8%)</option>
+                  <option value="CASTING_FOUNDRY">주조 / 주물 성형 (kg당 공정비: 2,500원/kg)</option>
+                </select>
+              </div>
+
+              {/* 2. 공통 후처리 · 열처리 */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">2. 표준 후처리 · 열처리</label>
+                <select
+                  value={bulkModalTreatment}
+                  onChange={(e) => setBulkModalTreatment(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 focus:bg-white cursor-pointer"
+                >
+                  <option value="QT">Q/T 열처리 (1,200원/kg)</option>
+                  <option value="HIGH_FREQ">고주파 열처리 (국부 경화)</option>
+                  <option value="ANODIZING">백색/흑색 아노다이징 (1,500원/개)</option>
+                  <option value="POWDER_PAINT">분체도장 / 우레탄도장 (9,000원/㎡)</option>
+                  <option value="ZINC_PLATE">삼가 아연도금 (1,200원/개)</option>
+                  <option value="NICKEL_PLATE">무전해 니켈도금</option>
+                  <option value="BLACK_OXIDE">흑착색 (방청 피막)</option>
+                  <option value="NONE">일반 방청유 도포 (무도장)</option>
+                </select>
+              </div>
+
+              {/* 3. 공인 기준단가 일괄 입력 */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">3. 공인 기준단가 일괄 입력 (선택사항)</label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono">₩</span>
+                    <input
+                      type="text"
+                      value={bulkModalTargetPrice ? Number(bulkModalTargetPrice.replace(/[^0-9]/g, '')).toLocaleString() : ''}
+                      onChange={(e) => setBulkModalTargetPrice(e.target.value.replace(/[^0-9]/g, '').slice(0, 11))}
+                      placeholder="단가 미입력 시 기존 단가 유지"
+                      className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 outline-none focus:border-blue-500 focus:bg-white text-right"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {[
+                      { label: '+5%', rate: 5 },
+                      { label: '+10%', rate: 10 },
+                      { label: '-5%', rate: -5 }
+                    ].map(btn => (
+                      <button
+                        key={btn.label}
+                        type="button"
+                        onClick={() => {
+                          const base = bulkModalTargetPrice ? Number(bulkModalTargetPrice) : 30000;
+                          const nextVal = Math.round(base * (1 + btn.rate / 100));
+                          setBulkModalTargetPrice(String(nextVal));
+                        }}
+                        className="px-2 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-[10.5px] font-bold transition-colors cursor-pointer"
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">※ 단가를 입력하시면 소재비(28%), 가공비(48%), 후처리비(8%)가 1행 테이블에 자동 산출 연동됩니다.</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowBulkCostModal(false)}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyBulkCostSettings}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>선택 {selectedIds.length}개 품목에 일괄 적용 및 저장</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

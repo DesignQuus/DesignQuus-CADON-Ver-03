@@ -45,9 +45,9 @@ if (typeof process !== 'undefined') {
 import {
   executeSQL,
   queryTable,
-  insertRows,
-  updateRows,
-  deleteRows,
+  insertRows as remoteInsertRows,
+  updateRows as remoteUpdateRows,
+  deleteRows as remoteDeleteRows,
   listTables,
   createTable,
   deleteTable,
@@ -55,12 +55,71 @@ import {
 } from '../../egdesk-helpers';
 import { setupDatabase } from './setup-db';
 
+let localSqliteInstance: any = null;
+
+export function getLocalSqlite(): any {
+  if (localSqliteInstance) return localSqliteInstance;
+  try {
+    const { DatabaseSync } = require('node:sqlite');
+    const projectId = process.env.NEXT_PUBLIC_EGDESK_PROJECT_ID || '8dd35536-8cbb-4e1c-bb65-b35f2920cb03';
+    const envName = process.env.NEXT_PUBLIC_EGDESK_ENV || 'development';
+
+    const candidates = [
+      process.env.CADON_SQLITE_PATH,
+      process.env.APPDATA ? path.join(process.env.APPDATA, 'egdesk', 'user-data', envName, 'projects', projectId, 'user_data.db') : null,
+      process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'AppData', 'Roaming', 'egdesk', 'user-data', envName, 'projects', projectId, 'user_data.db') : null,
+      process.env.HOME ? path.join(process.env.HOME, '.egdesk', 'user-data', envName, 'projects', projectId, 'user_data.db') : null,
+    ].filter(Boolean) as string[];
+
+    for (const c of candidates) {
+      if (fs.existsSync(c)) {
+        localSqliteInstance = new DatabaseSync(c);
+        try {
+          localSqliteInstance.exec('PRAGMA journal_mode = WAL;');
+          localSqliteInstance.exec('PRAGMA busy_timeout = 5000;');
+        } catch {}
+        console.log(`[db.ts] ⚡ [Direct SQLite Engine] Connected to: ${c}`);
+        return localSqliteInstance;
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[db.ts] Direct node:sqlite skipped: ${err.message}`);
+  }
+  return null;
+}
+
+export async function insertRows(tableName: string, rows: Record<string, any>[]): Promise<any> {
+  if (!rows || rows.length === 0) return { success: true, inserted: 0 };
+  const local = getLocalSqlite();
+  if (local) {
+    try {
+      const sample = rows[0];
+      const cols = Object.keys(sample);
+      const placeholders = cols.map(() => '?').join(', ');
+      const stmt = local.prepare(`INSERT INTO ${tableName} (${cols.join(', ')}) VALUES (${placeholders})`);
+      for (const row of rows) {
+        const vals = cols.map(c => row[c] !== undefined ? row[c] : null);
+        stmt.run(...vals);
+      }
+      return { success: true, inserted: rows.length };
+    } catch (err: any) {
+      console.warn(`[insertRows] local SQLite insert fallback to remote: ${err.message}`);
+    }
+  }
+  return await remoteInsertRows(tableName, rows);
+}
+
+export async function updateRows(tableName: string, updates: Record<string, any>, options?: any): Promise<any> {
+  return await remoteUpdateRows(tableName, updates, options);
+}
+
+export async function deleteRows(tableName: string, options?: any): Promise<any> {
+  return await remoteDeleteRows(tableName, options);
+}
+
 export {
   executeSQL,
   queryTable,
-  insertRows,
-  updateRows,
-  deleteRows,
   listTables,
   createTable,
   deleteTable,
@@ -309,35 +368,74 @@ export async function executeDmlOrQuery(sql: string, params: any[] = []): Promis
 }
 
 /**
- * 이지데스크 도구 기반 비동기 db 객체 인터페이스
- * 기존 db.prepare(...).all/get/run() 및 exec, transaction 코드가 무결하게 동작하도록 지원
+ * 이지데스크 및 로컬 SQLite 통합 인터페이스
+ * 로컬 SQLite 사용 가능 시 0.001초 Direct Engine 구동, 미사용 시 HTTP DML 자동 Fallback
  */
 export const db = {
-  prepare: (sql: string) => ({
-    all: async (...params: any[]) => {
-      const res = await executeDmlOrQuery(sql, params);
-      return (res?.rows || []) as any[];
-    },
-    get: async (...params: any[]) => {
-      const res = await executeDmlOrQuery(sql, params);
-      return res?.rows?.[0] ?? undefined;
-    },
-    run: async (...params: any[]) => {
-      const res = await executeDmlOrQuery(sql, params);
-      return {
-        changes: res?.updated || res?.deleted || res?.inserted || 1,
-        lastInsertRowid: res?.insertedIds?.[0] || 0
-      };
+  prepare: (sql: string) => {
+    const local = getLocalSqlite();
+    if (local) {
+      try {
+        const stmt = local.prepare(sql);
+        return {
+          all: async (...params: any[]) => {
+            return stmt.all(...params) as any[];
+          },
+          get: async (...params: any[]) => {
+            return stmt.get(...params) ?? undefined;
+          },
+          run: async (...params: any[]) => {
+            const res = stmt.run(...params);
+            return {
+              changes: res?.changes || 1,
+              lastInsertRowid: res?.lastInsertRowid || 0
+            };
+          }
+        };
+      } catch (err: any) {
+        console.warn(`[db.prepare] Direct SQLite statement error, falling back to HTTP: ${err.message}`);
+      }
     }
-  }),
+    return {
+      all: async (...params: any[]) => {
+        const res = await executeDmlOrQuery(sql, params);
+        return (res?.rows || []) as any[];
+      },
+      get: async (...params: any[]) => {
+        const res = await executeDmlOrQuery(sql, params);
+        return res?.rows?.[0] ?? undefined;
+      },
+      run: async (...params: any[]) => {
+        const res = await executeDmlOrQuery(sql, params);
+        return {
+          changes: res?.updated || res?.deleted || res?.inserted || 1,
+          lastInsertRowid: res?.insertedIds?.[0] || 0
+        };
+      }
+    };
+  },
   exec: async (sql: string) => {
+    const local = getLocalSqlite();
+    if (local) {
+      try {
+        local.exec(sql);
+        return;
+      } catch (e: any) {
+        console.warn(`[db.exec] Direct SQLite exec error, falling back to HTTP: ${e.message}`);
+      }
+    }
     const stmts = sql.split(';').map(s => s.trim()).filter(Boolean);
     for (const s of stmts) {
       await executeDmlOrQuery(s);
     }
   },
-  pragma: (_cmd: string) => {
-    // No-op for EGDesk My DB managed server
+  pragma: (cmd: string) => {
+    const local = getLocalSqlite();
+    if (local) {
+      try {
+        local.exec(`PRAGMA ${cmd};`);
+      } catch {}
+    }
   },
   transaction: (fn: (...args: any[]) => any) => {
     return async (...args: any[]) => {
