@@ -2763,7 +2763,7 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
             caseName: data?.case?.case_name,
             companyName: data?.case?.company_name,
             drawingsCount: drawings.length,
-            bomCount: bomAreas.length,
+            bomCount: rawBomItems.length,
             quoteItemCount: normalizedItems.length
           }}
           onStepChange={(s) => {
