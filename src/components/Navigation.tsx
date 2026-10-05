@@ -116,7 +116,7 @@ export default function Navigation() {
       {pendingPath && (
         <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 animate-pulse z-[60]" />
       )}
-      <div className="w-full px-2.5 sm:px-3 h-16 flex items-center justify-between">
+      <div className="w-full px-3 h-16 flex items-center justify-between">
         <div className="flex items-center space-x-4 sm:space-x-6">
           <Link
             href="/"

@@ -1020,7 +1020,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 w-full px-2.5 sm:px-3 py-3 relative">
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/70 w-full px-3 py-3 relative">
       {/* 버티컬 북마크 견출 탭 (펼치기) - 홈 */}
       {!isSidebarOpen && (
         <SidebarBookmarkTab
@@ -1033,10 +1033,10 @@ export default function HomePage() {
       )}
 
       {/* Main Split Layout: Left Control Panel + Right Main Work Table */}
-      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-1' : 'gap-0'}`}>
+      <div className={`flex items-start transition-all duration-200 ${isSidebarOpen ? 'gap-3' : 'gap-0'}`}>
         {/* LEFT SIDEBAR: Pipeline & KPI Control Tower */}
         {isSidebarOpen && (
-          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 flex flex-col sticky top-4 relative z-20 h-[calc(100vh-5rem)]">
+          <aside className="w-80 shrink-0 bg-white border border-slate-200/90 rounded-2xl shadow-xs p-4 flex flex-col sticky top-3 relative z-20 h-[calc(100vh-4.75rem)]">
             {/* 버티컬 북마크 견출 탭 (접기) */}
             <SidebarBookmarkTab
               mode="collapse"
@@ -1330,7 +1330,7 @@ export default function HomePage() {
       )}
 
         {/* RIGHT MAIN WORKSPACE: Cases Table & Recent Quotes (Maximized Height, Zero Scroll!) */}
-        <div className="flex-1 min-w-0 space-y-2">
+        <div className="flex-1 min-w-0 space-y-3">
           {/* 4. Recent Quotation Cases Table */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-50/50 via-white to-white">
