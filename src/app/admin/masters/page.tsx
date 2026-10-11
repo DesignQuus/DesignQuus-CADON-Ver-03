@@ -1927,11 +1927,11 @@ export default function MasterDataManagerPage() {
                           {/* 1. 소재 시세 · 재료비 (방법 1: 시세 좌측 + 금액 우측끝 고정 정렬 & 균일한 40px 간격 형성) */}
                           <td className="py-1.5 pl-4 pr-6 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-2.5 leading-none">
-                              <span className="text-[13px] text-slate-500 font-bold font-mono whitespace-nowrap" title={`소재 시세: ${breakdown.materialRatePerKg.toLocaleString()}원/kg`}>
+                              <span className="text-[14px] text-slate-600 font-normal font-mono whitespace-nowrap" title={`소재 시세: ${breakdown.materialRatePerKg.toLocaleString()}원/kg`}>
                                 ({breakdown.materialRatePerKg.toLocaleString()}원/kg)
                               </span>
                               {breakdown.materialCost > 0 ? (
-                                <span className="font-mono font-black text-slate-900 text-[15px] tabular-nums min-w-[72px] text-right">
+                                <span className="font-mono font-bold text-slate-900 text-[15px] tabular-nums min-w-[72px] text-right">
                                   ₩{breakdown.materialCost.toLocaleString()}
                                 </span>
                               ) : (
@@ -1943,7 +1943,7 @@ export default function MasterDataManagerPage() {
                           {/* 2. 가공 단가 · 표준 공임 (방법 1: 공정/공수 좌측 + 가공비 우측끝 고정 정렬 & 균일한 40px 간격 형성) */}
                           <td className="py-1.5 pl-4 pr-6 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-2.5 leading-none">
-                              <span className="text-[13px] text-blue-600 font-normal truncate max-w-[145px]" title={`가공비: ${breakdown.processName} (${breakdown.processRateStr})`}>
+                              <span className="text-[14px] text-blue-600 font-normal font-mono truncate max-w-[145px]" title={`가공비: ${breakdown.processName} (${breakdown.processRateStr})`}>
                                 ({breakdown.processName}{breakdown.cycleTimeHours > 0 ? ` ${breakdown.cycleTimeHours}h` : ''})
                               </span>
                               {breakdown.processCost > 0 ? (
