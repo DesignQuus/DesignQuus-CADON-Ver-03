@@ -50,7 +50,7 @@ export default function SmartTruncateTooltip({
 
   return (
     <div
-      className="relative inline-flex items-center max-w-full"
+      className="relative inline-flex items-center max-w-full min-w-0"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >

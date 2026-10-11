@@ -9,7 +9,7 @@ import {
   ExternalLink, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Sparkles, Layers, Zap, Database, HelpCircle, Coins,
   Columns2, GripVertical
 } from 'lucide-react';
-import QuoteLineGrid, { QuoteReviewLine, InclusionType } from '@/components/review/QuoteLineGrid';
+import QuoteLineGrid, { QuoteReviewLine, InclusionType, BomStructureType } from '@/components/review/QuoteLineGrid';
 import SmartBatchActionBar from '@/components/review/SmartBatchActionBar';
 import CostBreakdownPanel from '@/components/review/CostBreakdownPanel';
 import { isCadNoiseItem, addCustomNoiseKeyword } from '@/lib/cad-noise-detector';
@@ -526,8 +526,17 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
 
                 const hasPrice = supplyPrice > 0;
                 let inclusionType: InclusionType = 'INCLUDED';
+                let bomStructure: BomStructureType = 'NORMAL';
+
                 if (isAssembly) {
-                  inclusionType = 'EXCLUDED';
+                  if (qi.remark?.includes('[ASSEMBLY_PURCHASED]')) {
+                    inclusionType = 'ASSEMBLY_PURCHASED';
+                    bomStructure = 'PURCHASED';
+                  } else {
+                    // AutoCAD Mechanical BOM 기본 표준: PHANTOM (단품별 개별 합산, 상위 조립품 ₩0)
+                    inclusionType = 'ASSEMBLY_PHANTOM';
+                    bomStructure = 'PHANTOM';
+                  }
                 } else if (qi.remark?.includes('[ANNOTATION_NOISE]') || noiseCheck.isNoise) {
                   // 🧹 도면 표제란/주석 노이즈(이경중, A3, 10U+00B0, 2 SET 등) 사전 자동 격리!
                   inclusionType = 'ANNOTATION_NOISE';
@@ -542,8 +551,11 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   inclusionType = 'FASTENER_EXCLUDED';
                 }
 
-                const isIncluded = !isAssembly && inclusionType === 'INCLUDED';
-                const isConfirmed = isAssembly || inclusionType !== 'INCLUDED' || (hasPrice && isIncluded);
+                const isAssemblyPurchased = inclusionType === 'ASSEMBLY_PURCHASED';
+                const isIncluded = isAssembly ? isAssemblyPurchased : (inclusionType === 'INCLUDED');
+                const isConfirmed = isAssembly
+                  ? (isAssemblyPurchased ? (hasPrice && qi.is_confirmed) : true)
+                  : (inclusionType !== 'INCLUDED' || (hasPrice && isIncluded));
                 const structured = parseRemark(qi.remark);
 
                 return {
@@ -554,17 +566,20 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType: partType,
                   material: cleanMaterial,
                   quantity: Number(qi.quantity) || 1,
-                  unitCost: isAssembly || inclusionType !== 'INCLUDED' ? 0 : unitCost,
-                  supplyPrice: isAssembly || inclusionType !== 'INCLUDED' ? 0 : supplyPrice,
-                  status: isAssembly || inclusionType !== 'INCLUDED' ? 'CONFIRMED' : (isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW'),
+                  unitCost: isAssembly ? (isAssemblyPurchased ? unitCost : 0) : (inclusionType !== 'INCLUDED' ? 0 : unitCost),
+                  supplyPrice: isAssembly ? (isAssemblyPurchased ? supplyPrice : 0) : (inclusionType !== 'INCLUDED' ? 0 : supplyPrice),
+                  status: isAssembly
+                    ? (isAssemblyPurchased ? (hasPrice ? 'CONFIRMED' : 'NEEDS_REVIEW') : 'CONFIRMED')
+                    : (isConfirmed ? 'CONFIRMED' : 'NEEDS_REVIEW'),
                   balloonNo: String(qi.item_no || idx + 1),
                   memo: structured.text,
                   specification: resolvedSpec,
                   isAssembly,
+                  bomStructure,
                   isIncluded,
                   inclusionType,
                   excludeReason: isAssembly
-                    ? '조립도 (가공품 제외)'
+                    ? (isAssemblyPurchased ? undefined : 'AutoCAD Phantom (단품 합산)')
                     : inclusionType === 'ANNOTATION_NOISE'
                     ? (noiseCheck.reason || '도면 주석/표제란 노이즈 격리')
                     : inclusionType === 'FASTENER_EXCLUDED'
@@ -714,8 +729,17 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                 });
 
                 let inclusionType: InclusionType = 'INCLUDED';
+                let bomStructure: BomStructureType = 'NORMAL';
+
                 if (isAssembly) {
-                  inclusionType = 'EXCLUDED';
+                  if (it.remark?.includes('[ASSEMBLY_PURCHASED]')) {
+                    inclusionType = 'ASSEMBLY_PURCHASED';
+                    bomStructure = 'PURCHASED';
+                  } else {
+                    // AutoCAD Mechanical BOM 기본 표준: PHANTOM (단품별 개별 합산, 상위 조립품 ₩0)
+                    inclusionType = 'ASSEMBLY_PHANTOM';
+                    bomStructure = 'PHANTOM';
+                  }
                 } else if (noiseCheck.isNoise) {
                   inclusionType = 'ANNOTATION_NOISE';
                 } else if (it.is_quote_included === 0) {
@@ -724,7 +748,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   inclusionType = 'FASTENER_EXCLUDED';
                 }
 
-                const isIncluded = !isAssembly && inclusionType === 'INCLUDED';
+                const isAssemblyPurchased = inclusionType === 'ASSEMBLY_PURCHASED';
+                const isIncluded = isAssembly ? isAssemblyPurchased : (inclusionType === 'INCLUDED');
 
                 return {
                   id: it.id,
@@ -734,16 +759,19 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
                   partType: partType,
                   material: cleanMaterial,
                   quantity: Number(it.quantity) || 1,
-                  unitCost: isAssembly || inclusionType !== 'INCLUDED' ? 0 : unitCost,
-                  supplyPrice: isAssembly || inclusionType !== 'INCLUDED' ? 0 : supplyPrice,
-                  status: isAssembly || inclusionType !== 'INCLUDED' || supplyPrice > 0 ? 'CONFIRMED' : 'NEEDS_REVIEW',
+                  unitCost: isAssembly ? (isAssemblyPurchased ? unitCost : 0) : (inclusionType !== 'INCLUDED' ? 0 : unitCost),
+                  supplyPrice: isAssembly ? (isAssemblyPurchased ? supplyPrice : 0) : (inclusionType !== 'INCLUDED' ? 0 : supplyPrice),
+                  status: isAssembly
+                    ? (isAssemblyPurchased ? (supplyPrice > 0 ? 'CONFIRMED' : 'NEEDS_REVIEW') : 'CONFIRMED')
+                    : (inclusionType !== 'INCLUDED' || supplyPrice > 0 ? 'CONFIRMED' : 'NEEDS_REVIEW'),
                   balloonNo: String(idx + 1),
                   specification: resolvedSpec,
                   isAssembly,
+                  bomStructure,
                   isIncluded,
                   inclusionType,
                   excludeReason: isAssembly
-                    ? '조립도 (가공품 제외)'
+                    ? (isAssemblyPurchased ? undefined : 'AutoCAD Phantom (단품 합산)')
                     : inclusionType === 'ANNOTATION_NOISE'
                     ? (noiseCheck.reason || '도면 주석/표제란 노이즈 격리')
                     : inclusionType === 'FASTENER_EXCLUDED'
@@ -1064,6 +1092,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
   // 선택 행 업데이트
   const handleUpdateSelected = (updated: Partial<QuoteReviewLine>) => {
     if (!selectedLine) return;
+    if (updated.inclusionType && updated.inclusionType !== selectedLine.inclusionType) {
+      handleUpdateLineInclusion(selectedLine.id, updated.inclusionType);
+    }
     handleUpdateLinePrice(selectedLine.id, updated);
   };
 
@@ -1165,49 +1196,61 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     }
   };
 
-  // 🏷️ 단일 행 inclusionType 업데이트
+  // 🏷️ 단일 행 inclusionType 업데이트 (AutoCAD Mechanical BOM 표준 완벽 지원)
   const handleUpdateLineInclusion = async (lineId: string, inclusionType: InclusionType) => {
     const target = lines.find((l) => l.id === lineId);
     if (!target) return;
 
-    // 🛡️ 조립도는 노이즈가 아니므로 조립제외로 보호
-    if (inclusionType === 'ANNOTATION_NOISE') {
-      if (target.isAssembly) {
-        alert('조립도(Assembly)는 도면 노이즈가 아니므로 [조립제외]로 관리됩니다.');
+    // 🛡️ 조립도 보호 및 노이즈 격리 세이프가드
+    if (target.isAssembly) {
+      if (inclusionType === 'ANNOTATION_NOISE') {
+        alert('조립도(Assembly)는 도면 노이즈가 아니므로 [단품합산(Phantom)] 또는 [세트발주(Purchased)]로 관리됩니다.');
         return;
       }
-      const check = isCadNoiseItem({
-        partNo: target.partNo,
-        partName: target.partName,
-        material: target.material,
-        specification: target.specification
-      });
-      if (!check.isNoise) {
-        const ok = confirm(`'${target.partName}'은(는) 정상 가공 부품으로 분석됩니다.\n정말 도면 노이즈로 격리실에 보내시겠습니까?`);
-        if (!ok) return;
+    } else {
+      if (inclusionType === 'ANNOTATION_NOISE') {
+        const check = isCadNoiseItem({
+          partNo: target.partNo,
+          partName: target.partName,
+          material: target.material,
+          specification: target.specification
+        });
+        if (!check.isNoise) {
+          const ok = confirm(`'${target.partName}'은(는) 정상 가공 부품으로 분석됩니다.\n정말 도면 노이즈로 격리실에 보내시겠습니까?`);
+          if (!ok) return;
+        }
       }
     }
 
-    const isExcluded = inclusionType === 'EXCLUDED' || inclusionType === 'FASTENER_EXCLUDED' || inclusionType === 'ANNOTATION_NOISE';
+    const isAssemblyPurchased = inclusionType === 'ASSEMBLY_PURCHASED';
+    const isAssemblyPhantom = inclusionType === 'ASSEMBLY_PHANTOM';
+    const isExcluded = inclusionType === 'EXCLUDED' || inclusionType === 'FASTENER_EXCLUDED' || inclusionType === 'ANNOTATION_NOISE' || isAssemblyPhantom;
     const isSupplied = inclusionType === 'CUSTOMER_SUPPLIED';
-    const isNowConfirmed = inclusionType !== 'INCLUDED';
+    const isNowConfirmed = inclusionType !== 'INCLUDED' && !isAssemblyPurchased;
 
     setLines((prev) =>
       prev.map((l) => {
         if (l.id !== lineId) return l;
+        const newBomStructure: BomStructureType = isAssemblyPurchased ? 'PURCHASED' : isAssemblyPhantom ? 'PHANTOM' : (l.bomStructure || 'NORMAL');
+        const nextPrice = isAssemblyPurchased ? (l.supplyPrice > 0 ? l.supplyPrice : 0) : (isExcluded || isSupplied ? 0 : l.supplyPrice);
+        const nextCost = isAssemblyPurchased ? (l.unitCost > 0 ? l.unitCost : Math.round(nextPrice * 0.82)) : (isExcluded || isSupplied ? 0 : l.unitCost);
+
         return {
           ...l,
           inclusionType,
-          isIncluded: !isExcluded,
-          status: isNowConfirmed ? 'CONFIRMED' : (l.supplyPrice > 0 ? 'CONFIRMED' : 'NEEDS_REVIEW'),
-          unitCost: isExcluded || isSupplied ? 0 : l.unitCost,
-          supplyPrice: isExcluded || isSupplied ? 0 : l.supplyPrice,
+          bomStructure: newBomStructure,
+          isIncluded: isAssemblyPurchased ? true : !isExcluded,
+          status: isAssemblyPurchased ? (nextPrice > 0 ? 'CONFIRMED' : 'NEEDS_REVIEW') : isNowConfirmed ? 'CONFIRMED' : (l.supplyPrice > 0 ? 'CONFIRMED' : 'NEEDS_REVIEW'),
+          unitCost: nextCost,
+          supplyPrice: nextPrice,
           excludeReason: inclusionType === 'ANNOTATION_NOISE'
             ? '도면 주석/표제란 노이즈 격리'
             : inclusionType === 'FASTENER_EXCLUDED'
             ? '표준 체결구 제외'
             : isSupplied
             ? '고객 사급품'
+            : isAssemblyPhantom
+            ? 'AutoCAD Phantom (단품 합산)'
             : isExcluded
             ? '견적 제외'
             : undefined
@@ -1216,7 +1259,9 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     );
 
     try {
-      const tag = inclusionType === 'ANNOTATION_NOISE' ? '[ANNOTATION_NOISE]' :
+      const tag = inclusionType === 'ASSEMBLY_PURCHASED' ? '[ASSEMBLY_PURCHASED]' :
+                  inclusionType === 'ASSEMBLY_PHANTOM' ? '[ASSEMBLY_PHANTOM]' :
+                  inclusionType === 'ANNOTATION_NOISE' ? '[ANNOTATION_NOISE]' :
                   inclusionType === 'FASTENER_EXCLUDED' ? '[FASTENER_EXCLUDED]' :
                   inclusionType === 'CUSTOMER_SUPPLIED' ? '[CUSTOMER_SUPPLIED]' :
                   inclusionType === 'EXCLUDED' ? '[EXCLUDED]' : '[INCLUDED]';
@@ -1226,8 +1271,8 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
         body: JSON.stringify({
           lineId,
           isConfirmed: isNowConfirmed,
-          unitPrice: isExcluded || isSupplied ? 0 : undefined,
-          unitCost: isExcluded || isSupplied ? 0 : undefined,
+          unitPrice: (isExcluded || isSupplied) && !isAssemblyPurchased ? 0 : undefined,
+          unitCost: (isExcluded || isSupplied) && !isAssemblyPurchased ? 0 : undefined,
           remark: tag
         })
       });
@@ -1925,23 +1970,34 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
     }
   };
 
-  // 실제 공급가액에 합산되는 유효 견적 대상 (조립도 및 제외품목 제외, 사급품은 0원으로 포함)
+  // 실제 공급가액에 합산되는 유효 견적 대상 (오토캐드 BOM 표준 반영)
+  // - PHANTOM(단품합산 - 기본): 조립품은 ₩0(합산 제외), 하위 단품들이 견적에 합산됨.
+  // - PURCHASED(세트발주): 조립품 자체 단가가 공급가액에 합산됨.
   const quoteActiveLines = lines.filter((l) => {
-    if (l.isAssembly) return false;
+    if (l.isAssembly) {
+      return l.bomStructure === 'PURCHASED' || l.inclusionType === 'ASSEMBLY_PURCHASED';
+    }
     const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
     return inc === 'INCLUDED' || inc === 'CUSTOMER_SUPPLIED';
   });
 
-  // 미확정 건수: 견적 대상(INCLUDED) 품목 중 미확정 상태인 건수
+  // 미확정 건수: 견적 대상 품목 중 미확정 상태이거나 단가미확보인 건수
   const unconfirmedCount = quoteActiveLines.filter((l) => {
+    if (l.isAssembly) {
+      const isPurchased = l.bomStructure === 'PURCHASED' || l.inclusionType === 'ASSEMBLY_PURCHASED';
+      return isPurchased && (l.status !== 'CONFIRMED' || l.supplyPrice <= 0);
+    }
     const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
     return inc === 'INCLUDED' && l.status !== 'CONFIRMED';
   }).length;
 
-  // 단가 미확보(0원): 견적 대상(INCLUDED)인데 공급단가가 0원 이하인 항목만 카운트!
+  // 단가 미확보(0원): 견적 대상 품목인데 공급단가가 0원 이하인 항목만 카운트!
   // (사급품 CUSTOMER_SUPPLIED 및 체결구 제외 FASTENER_EXCLUDED는 0원이어도 정상 처리되므로 차단하지 않음)
   const zeroPriceCount = lines.filter((l) => {
-    if (l.isAssembly) return false;
+    if (l.isAssembly) {
+      const isPurchased = l.bomStructure === 'PURCHASED' || l.inclusionType === 'ASSEMBLY_PURCHASED';
+      return isPurchased && l.supplyPrice <= 0;
+    }
     const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
     return inc === 'INCLUDED' && l.supplyPrice <= 0;
   }).length;
@@ -1956,9 +2012,12 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
       return;
     }
 
-    // 0원 미확보 품목 최종 점검: 견적 포함 대상(INCLUDED) 중 공급단가가 0원인 품목이 있으면 차단 (사급품/제외품 제외)
+    // 0원 미확보 품목 최종 점검: 견적 포함 대상 중 공급단가가 0원인 품목이 있으면 차단 (사급품/제외품 제외)
     const activeZeroPrice = lines.filter((l) => {
-      if (l.isAssembly) return false;
+      if (l.isAssembly) {
+        const isPurchased = l.bomStructure === 'PURCHASED' || l.inclusionType === 'ASSEMBLY_PURCHASED';
+        return isPurchased && l.supplyPrice <= 0;
+      }
       const inc = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
       return inc === 'INCLUDED' && l.supplyPrice <= 0;
     });

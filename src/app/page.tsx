@@ -868,7 +868,10 @@ export default function HomePage() {
   };
 
   const getQuotePageNumbers = () => {
-    const maxButtons = 5;
+    if (quoteTotalPages <= 10) {
+      return Array.from({ length: quoteTotalPages }, (_, i) => i + 1);
+    }
+    const maxButtons = 10;
     let start = Math.max(1, quotePage - Math.floor(maxButtons / 2));
     let end = start + maxButtons - 1;
 

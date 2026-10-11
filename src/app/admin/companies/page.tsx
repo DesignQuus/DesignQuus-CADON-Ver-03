@@ -1,7 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/api';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -28,9 +28,50 @@ import {
   UserCheck,
   Trash2,
   Save,
-  MessageSquare
+  MessageSquare,
+  RotateCcw
 } from 'lucide-react';
 import { formatPhoneNumber } from '@/lib/formatters';
+import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
+
+export type CompanyColKey =
+  | 'no'
+  | 'name'
+  | 'code'
+  | 'status'
+  | 'cases'
+  | 'createdAt'
+  | 'actions';
+
+export const DEFAULT_COMPANY_COL_WIDTHS: Record<CompanyColKey, number> = {
+  no: 52,
+  name: 260,
+  code: 140,
+  status: 115,
+  cases: 120,
+  createdAt: 115,
+  actions: 280,
+};
+
+export const MIN_COMPANY_COL_WIDTHS: Record<CompanyColKey, number> = {
+  no: 40,
+  name: 150,
+  code: 90,
+  status: 80,
+  cases: 80,
+  createdAt: 80,
+  actions: 220,
+};
+
+export const COMPANY_COL_INDEX_MAP: Record<CompanyColKey, number> = {
+  no: 0,
+  name: 1,
+  code: 2,
+  status: 3,
+  cases: 4,
+  createdAt: 5,
+  actions: 6,
+};
 
 interface Company {
   id: string;
@@ -100,6 +141,135 @@ export default function AdminCompaniesPage() {
   const [newContactIsPrimary, setNewContactIsPrimary] = useState(false);
   const [newContactMemo, setNewContactMemo] = useState('');
   const [addingContact, setAddingContact] = useState(false);
+
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // ⚡ 엑셀 스타일 열 너비 상태 및 실시간 드래그 리사이즈 핸들러
+  const [colWidths, setColWidths] = useState<Record<CompanyColKey, number>>(DEFAULT_COMPANY_COL_WIDTHS);
+  const resizingRef = useRef<{
+    colKey: CompanyColKey;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  // 로컬 스토리지에서 사용자가 커스텀 설정한 열 폭 복원 (글자 가림 방지 안전 보정)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cadon_companies_col_widths');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setColWidths((prev) => {
+          const next = { ...prev };
+          (Object.keys(DEFAULT_COMPANY_COL_WIDTHS) as CompanyColKey[]).forEach((k) => {
+            const cachedVal = parsed[k];
+            next[k] = cachedVal ? Math.max(DEFAULT_COMPANY_COL_WIDTHS[k], cachedVal) : DEFAULT_COMPANY_COL_WIDTHS[k];
+          });
+          return next;
+        });
+      }
+    } catch {}
+  }, []);
+
+  const handleColResizeStart = (e: React.MouseEvent, colKey: CompanyColKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = {
+      colKey,
+      startX: e.clientX,
+      startWidth: colWidths[colKey] || DEFAULT_COMPANY_COL_WIDTHS[colKey],
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { colKey: key, startX, startWidth } = resizingRef.current;
+      const delta = moveEvent.clientX - startX;
+      const minW = MIN_COMPANY_COL_WIDTHS[key as CompanyColKey] || 40;
+      const newW = Math.max(minW, Math.round(startWidth + delta));
+      setColWidths((prev) => ({ ...prev, [key]: newW }));
+    };
+
+    const handleMouseUp = () => {
+      if (resizingRef.current) {
+        setColWidths((latest) => {
+          try {
+            localStorage.setItem('cadon_companies_col_widths', JSON.stringify(latest));
+          } catch {}
+          return latest;
+        });
+      }
+      resizingRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // ⚡ 엑셀(Excel) 표준: 열 경계 더블클릭 시 콘텐츠/텍스트 길이에 딱 맞추는 Auto-fit
+  const handleAutoFitColWidth = (colKey: CompanyColKey) => {
+    const colIdx = COMPANY_COL_INDEX_MAP[colKey];
+    if (colIdx === undefined || !tableContainerRef.current) return;
+
+    const table = tableContainerRef.current.querySelector('table');
+    if (!table) return;
+
+    const th = table.querySelectorAll('thead th')[colIdx] as HTMLElement;
+    let maxContentWidth = 0;
+    if (th) {
+      const span = th.querySelector('span');
+      const thTextWidth = span ? span.getBoundingClientRect().width : th.scrollWidth;
+      maxContentWidth = Math.max(maxContentWidth, thTextWidth + 36);
+    }
+
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach((row: Element) => {
+      const td = row.querySelectorAll('td')[colIdx] as HTMLElement;
+      if (td) {
+        const truncatedElem = td.querySelector('.truncate') as HTMLElement;
+        const inner = td.firstElementChild as HTMLElement;
+        let cellW = inner ? inner.scrollWidth : td.scrollWidth;
+        if (truncatedElem && truncatedElem.scrollWidth > cellW) {
+          cellW = truncatedElem.scrollWidth;
+        }
+
+        const totalCellW = cellW + 32;
+        if (totalCellW > maxContentWidth) {
+          maxContentWidth = totalCellW;
+        }
+      }
+    });
+
+    const minW = MIN_COMPANY_COL_WIDTHS[colKey] || 40;
+    const optimalWidth = Math.max(minW, Math.min(Math.ceil(maxContentWidth), 520));
+
+    setColWidths((prev) => {
+      const next = { ...prev, [colKey]: optimalWidth };
+      try {
+        localStorage.setItem('cadon_companies_col_widths', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleResetAllColWidths = () => {
+    setColWidths(DEFAULT_COMPANY_COL_WIDTHS);
+    try {
+      localStorage.removeItem('cadon_companies_col_widths');
+    } catch {}
+  };
+
+  const totalTableWidth = useMemo(() => {
+    return (Object.keys(DEFAULT_COMPANY_COL_WIDTHS) as CompanyColKey[]).reduce(
+      (sum, k) => sum + (colWidths[k] || DEFAULT_COMPANY_COL_WIDTHS[k]),
+      0
+    );
+  }, [colWidths]);
 
   // 1. 인증 확인 (SUPER_ADMIN 전용)
   useEffect(() => {
@@ -631,16 +801,28 @@ export default function AdminCompaniesPage() {
           </div>
         </div>
 
-        {/* 검색창 */}
-        <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="고객사명, 식별코드 검색"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
+        {/* ⚡ 열 폭 초기화 및 검색창 */}
+        <div className="flex items-center space-x-2 w-full md:w-auto">
+          <button
+            type="button"
+            onClick={handleResetAllColWidths}
+            className="px-3 py-2 rounded-xl text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 transition-all flex items-center space-x-1.5 cursor-pointer shadow-2xs shrink-0"
+            title="사용자가 조절한 테이블 열 폭을 기본 표준 폭으로 초기화합니다."
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+            <span>열 폭 초기화</span>
+          </button>
+
+          <div className="relative w-full md:w-72">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="고객사명, 식별코드 검색"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
         </div>
       </div>
 
@@ -654,29 +836,133 @@ export default function AdminCompaniesPage() {
           <span className="text-[11px] text-slate-500">세창인터내쇼날 발주 의뢰 고객사 목록</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+        <div
+          ref={tableContainerRef}
+          className="overflow-x-auto overflow-y-auto max-h-[620px] 2xl:max-h-[750px] scrollbar-thin"
+        >
+          <table
+            className="w-full text-left text-xs border-collapse table-fixed"
+            style={{ width: `max(100%, ${totalTableWidth}px)` }}
+          >
+            <colgroup>
+              <col style={{ width: `${colWidths.no}px` }} />
+              <col style={{ width: `${colWidths.name}px` }} />
+              <col style={{ width: `${colWidths.code}px` }} />
+              <col style={{ width: `${colWidths.status}px` }} />
+              <col style={{ width: `${colWidths.cases}px` }} />
+              <col style={{ width: `${colWidths.createdAt}px` }} />
+              <col style={{ width: `${colWidths.actions}px` }} />
+              {/* 8번째 고스트 스페이서 컬럼 */}
+              <col className="w-auto" />
+            </colgroup>
+            <thead className="bg-slate-50/90 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider sticky top-0 z-10 shadow-2xs">
               <tr>
-                <th className="px-4 py-3.5">고객사(발주처)명</th>
-                <th className="px-4 py-3.5 text-center">식별 코드</th>
-                <th className="px-4 py-3.5 text-center">거래 상태</th>
-                <th className="px-4 py-3.5 text-center">견적의뢰 접수</th>
-                <th className="px-4 py-3.5">등록일</th>
-                <th className="px-4 py-3.5 text-right">관리 액션</th>
+                {/* 0. 순번 (No.) */}
+                <th
+                  className="py-3 px-3 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                  title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                  onDoubleClick={() => handleAutoFitColWidth('no')}
+                >
+                  <span>No.</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'no')}
+                  />
+                </th>
+
+                {/* 1. 고객사(발주처)명 */}
+                <th
+                  className="py-3 px-4 relative group/th select-none bg-slate-50 border-b border-slate-200"
+                  title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                  onDoubleClick={() => handleAutoFitColWidth('name')}
+                >
+                  <span>고객사(발주처)명</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'name')}
+                  />
+                </th>
+
+                {/* 2. 식별 코드 */}
+                <th
+                  className="py-3 px-4 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                  title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                  onDoubleClick={() => handleAutoFitColWidth('code')}
+                >
+                  <span>식별 코드</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'code')}
+                  />
+                </th>
+
+                {/* 3. 거래 상태 */}
+                <th
+                  className="py-3 px-4 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                  title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                  onDoubleClick={() => handleAutoFitColWidth('status')}
+                >
+                  <span>거래 상태</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'status')}
+                  />
+                </th>
+
+                {/* 4. 견적의뢰 접수 */}
+                <th
+                  className="py-3 px-4 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                  title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                  onDoubleClick={() => handleAutoFitColWidth('cases')}
+                >
+                  <span>견적의뢰 접수</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'cases')}
+                  />
+                </th>
+
+                {/* 5. 등록일 */}
+                <th
+                  className="py-3 px-4 relative group/th select-none bg-slate-50 border-b border-slate-200"
+                  title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                  onDoubleClick={() => handleAutoFitColWidth('createdAt')}
+                >
+                  <span>등록일</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'createdAt')}
+                  />
+                </th>
+
+                {/* 6. 관리 액션 */}
+                <th
+                  className="py-3 px-4 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                  title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                  onDoubleClick={() => handleAutoFitColWidth('actions')}
+                >
+                  <span>관리 액션</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'actions')}
+                  />
+                </th>
+
+                {/* 7. 8번째 고스트 스페이서 헤더 */}
+                <th className="p-0 bg-slate-50/90 border-b border-slate-200 pointer-events-none" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
                     <span>고객사 목록 및 실시간 지표를 불러오는 중입니다...</span>
                   </td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center text-slate-400">
+                  <td colSpan={8} className="px-4 py-16 text-center text-slate-400">
                     <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                     <p className="text-sm font-bold text-slate-700 mb-1">등록된 고객사가 없거나 검색 결과가 없습니다.</p>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
@@ -692,7 +978,7 @@ export default function AdminCompaniesPage() {
                   </td>
                 </tr>
               ) : (
-                filteredClients.map((comp) => {
+                filteredClients.map((comp, idx) => {
                   const isActive = comp.is_active === 1 && !comp.deleted_at;
 
                   return (
@@ -700,19 +986,26 @@ export default function AdminCompaniesPage() {
                       key={comp.id}
                       className={`hover:bg-slate-50/70 transition-colors ${!isActive ? 'bg-rose-50/20' : ''}`}
                     >
+                      {/* No. 행번호 */}
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                        <span className="font-mono text-slate-400 text-xs font-bold">
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                      </td>
+
                       {/* 회사명 */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center space-x-2.5">
                           <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0">
                             <Building2 className="w-3.5 h-3.5" />
                           </div>
-                          <div>
-                            <div className="font-bold text-slate-900 flex items-center space-x-1.5">
-                              <span>{comp.company_name}</span>
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                                발주 고객사
-                              </span>
-                            </div>
+                          <div className="min-w-0 flex items-center space-x-1.5">
+                            <SmartTruncateTooltip text={comp.company_name} maxWidthClass="max-w-[200px] 2xl:max-w-[320px]">
+                              <span className="font-bold text-slate-900 truncate">{comp.company_name}</span>
+                            </SmartTruncateTooltip>
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+                              발주 고객사
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -792,6 +1085,9 @@ export default function AdminCompaniesPage() {
                           </button>
                         )}
                       </td>
+
+                      {/* 8. 8번째 고스트 스페이서 셀 */}
+                      <td className="p-0 pointer-events-none" />
                     </tr>
                   );
                 })

@@ -148,6 +148,65 @@ function getRemainingTrashDays(deletedAt: string | null | undefined): number {
   return Math.max(1, Math.min(30, diffDays));
 }
 
+export type CaseColKey =
+  | 'select'
+  | 'no'
+  | 'caseNo'
+  | 'caseName'
+  | 'company'
+  | 'manager'
+  | 'status'
+  | 'drawings'
+  | 'bom'
+  | 'amount'
+  | 'date'
+  | 'actions';
+
+export const DEFAULT_CASE_COL_WIDTHS: Record<CaseColKey, number> = {
+  select: 44,
+  no: 52,
+  caseNo: 145,
+  caseName: 350, // 도면 뱃지 및 건명 텍스트 여유 폭 확보
+  company: 220,
+  manager: 165,
+  status: 125,
+  drawings: 85,
+  bom: 95,
+  amount: 185, // '단가 미매칭 (검토 필요)' 뱃지가 잘리지 않고, 40px 우측 간격 확보
+  date: 115,
+  actions: 215, // 단일 액션 버튼(122px) + 간격(6px) + 보관(28px) + 간격(6px) + 삭제(28px) = 190px 중앙 정렬 확보
+};
+
+export const MIN_CASE_COL_WIDTHS: Record<CaseColKey, number> = {
+  select: 36,
+  no: 40,
+  caseNo: 110,
+  caseName: 160,
+  company: 140,
+  manager: 110,
+  status: 90,
+  drawings: 65,
+  bom: 75,
+  amount: 120,
+  date: 85,
+  actions: 195,
+};
+
+export const CASE_COL_INDEX_MAP: Record<CaseColKey, number> = {
+  select: 0,
+  no: 1,
+  caseNo: 2,
+  caseName: 3,
+  company: 4,
+  manager: 5,
+  status: 6,
+  drawings: 7,
+  bom: 8,
+  amount: 9,
+  date: 10,
+  actions: 11,
+};
+
 export default function CasesPage() {
   const [cases, setCases] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
@@ -180,6 +239,135 @@ export default function CasesPage() {
   const [pageSize, setPageSize] = useState<number>(20);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // ⚡ 엑셀 스타일 열 너비 상태 및 실시간 드래그 리사이즈 핸들러
+  const [colWidths, setColWidths] = useState<Record<CaseColKey, number>>(DEFAULT_CASE_COL_WIDTHS);
+  const resizingRef = useRef<{
+    colKey: CaseColKey;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  // 로컬 스토리지에서 사용자가 커스텀 설정한 열 폭 복원 (글자 가림 방지 안전 보정)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cadon_cases_col_widths');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setColWidths((prev) => {
+          const next = { ...prev };
+          (Object.keys(DEFAULT_CASE_COL_WIDTHS) as CaseColKey[]).forEach((k) => {
+            const cachedVal = parsed[k];
+            next[k] = cachedVal ? Math.max(DEFAULT_CASE_COL_WIDTHS[k], cachedVal) : DEFAULT_CASE_COL_WIDTHS[k];
+          });
+          return next;
+        });
+      }
+    } catch {}
+  }, []);
+
+  const handleColResizeStart = (e: React.MouseEvent, colKey: CaseColKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = {
+      colKey,
+      startX: e.clientX,
+      startWidth: colWidths[colKey] || DEFAULT_CASE_COL_WIDTHS[colKey],
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { colKey: key, startX, startWidth } = resizingRef.current;
+      const delta = moveEvent.clientX - startX;
+      const minW = MIN_CASE_COL_WIDTHS[key as CaseColKey] || 40;
+      const newW = Math.max(minW, Math.round(startWidth + delta));
+      setColWidths((prev) => ({ ...prev, [key]: newW }));
+    };
+
+    const handleMouseUp = () => {
+      if (resizingRef.current) {
+        setColWidths((latest) => {
+          try {
+            localStorage.setItem('cadon_cases_col_widths', JSON.stringify(latest));
+          } catch {}
+          return latest;
+        });
+      }
+      resizingRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // ⚡ 엑셀(Excel) 표준: 열 경계 더블클릭 시 콘텐츠/텍스트 길이에 딱 맞추는 Auto-fit
+  const handleAutoFitColWidth = (colKey: CaseColKey) => {
+    const colIdx = CASE_COL_INDEX_MAP[colKey];
+    if (colIdx === undefined || !tableContainerRef.current) return;
+
+    const table = tableContainerRef.current.querySelector('table');
+    if (!table) return;
+
+    const th = table.querySelectorAll('thead th')[colIdx] as HTMLElement;
+    let maxContentWidth = 0;
+    if (th) {
+      const span = th.querySelector('span');
+      const thTextWidth = span ? span.getBoundingClientRect().width : th.scrollWidth;
+      maxContentWidth = Math.max(maxContentWidth, thTextWidth + 36);
+    }
+
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach((row: Element) => {
+      const td = row.querySelectorAll('td')[colIdx] as HTMLElement;
+      if (td) {
+        const truncatedElem = td.querySelector('.truncate') as HTMLElement;
+        const inner = td.firstElementChild as HTMLElement;
+        let cellW = inner ? inner.scrollWidth : td.scrollWidth;
+        if (truncatedElem && truncatedElem.scrollWidth > cellW) {
+          cellW = truncatedElem.scrollWidth;
+        }
+
+        const totalCellW = cellW + 32;
+        if (totalCellW > maxContentWidth) {
+          maxContentWidth = totalCellW;
+        }
+      }
+    });
+
+    const minW = MIN_CASE_COL_WIDTHS[colKey] || 40;
+    const optimalWidth = Math.max(minW, Math.min(Math.ceil(maxContentWidth), 520));
+
+    setColWidths((prev) => {
+      const next = { ...prev, [colKey]: optimalWidth };
+      try {
+        localStorage.setItem('cadon_cases_col_widths', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleResetAllColWidths = () => {
+    setColWidths(DEFAULT_CASE_COL_WIDTHS);
+    try {
+      localStorage.removeItem('cadon_cases_col_widths');
+    } catch {}
+  };
+
+  const totalTableWidth = useMemo(() => {
+    return (Object.keys(DEFAULT_CASE_COL_WIDTHS) as CaseColKey[]).reduce(
+      (sum, k) => sum + (colWidths[k] || DEFAULT_CASE_COL_WIDTHS[k]),
+      0
+    );
+  }, [colWidths]);
 
   // Persistent Sidebar Collapsed State (테이블 넓게 보기 지원 & 로컬스토리지 기억)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -1469,12 +1657,12 @@ export default function CasesPage() {
         {/* Right Column: Main Workbench */}
         <div className="flex-1 min-w-0 space-y-2 w-full">
           {/* Sub Navigation Tab Bar: [ 📋 견적의뢰 대장 (N건) ] | [ ⚡ 도면 일괄 접수 대기열 ] */}
-          <div className="flex items-center justify-between bg-white border border-slate-200 rounded p-1 shadow-2xs">
+          <div className="flex items-center justify-between bg-white border border-slate-200 rounded-[4px] p-1 shadow-2xs">
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setMainView('CASES')}
-                className={`px-3.5 py-1.5 rounded text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1.5 rounded text-[14px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   mainView === 'CASES'
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -1482,7 +1670,7 @@ export default function CasesPage() {
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span>견적의뢰 대장</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                <span className={`px-1.5 py-0.2 rounded-full text-xs font-bold ${
                   mainView === 'CASES' ? 'bg-blue-700/90 text-white' : 'bg-slate-200 text-slate-700'
                 }`}>
                   {totalCasesCount}건
@@ -1492,7 +1680,7 @@ export default function CasesPage() {
               <button
                 type="button"
                 onClick={() => setMainView('INBOX')}
-                className={`px-3.5 py-1.5 rounded text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1.5 rounded text-[14px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   mainView === 'INBOX'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-indigo-700 hover:bg-indigo-50/70'
@@ -1500,7 +1688,7 @@ export default function CasesPage() {
               >
                 <Layers className="w-3.5 h-3.5 text-indigo-400" />
                 <span>도면 일괄 접수 대기열</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                <span className={`px-1.5 py-0.2 rounded-full text-xs font-bold ${
                   mainView === 'INBOX' ? 'bg-indigo-700/90 text-white' : 'bg-indigo-100 text-indigo-700'
                 }`}>
                   대기열
@@ -1508,7 +1696,7 @@ export default function CasesPage() {
               </button>
             </div>
 
-            <div className="text-[11px] text-slate-400 hidden sm:flex items-center gap-1.5 pr-2">
+            <div className="text-[13px] text-slate-400 hidden sm:flex items-center gap-1.5 pr-2">
               <Sparkles className="w-3 h-3 text-amber-500" />
               <span>원클릭 탭 전환으로 실시간 도면 접수 &amp; 견적 관리</span>
             </div>
@@ -1523,109 +1711,109 @@ export default function CasesPage() {
             </div>
           ) : (
             <>
-              {/* Zone 2: 4-Step Standard Pipeline Guide & Key Metrics (AutoCAD / DWG FastView 저채도 엔지니어링 룩) */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
-                {/* Step 1: 도면 접수 */}
-                <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-slate-300 transition-colors flex items-center justify-between">
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
-                      1
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-1">
-                        <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">도면 접수</h3>
-                        <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">CAD 파싱</span>
+              {/* Master Console: All-in-One Integrated Layout (표준단가·임률 스타일 라인 철 구조) */}
+              <div className="bg-white rounded-[4px] border border-slate-200 shadow-2xs overflow-hidden flex flex-col">
+                {/* Zone 2: 4-Step Standard Pipeline Ribbon (1px 세선 divide-x & 저채도 엔지니어링 룩) */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-slate-200 bg-slate-50/80 border-b border-slate-200 shrink-0">
+                  {/* Step 1: 도면 접수 */}
+                  <div className="px-3.5 py-2 hover:bg-slate-100/60 transition-colors flex items-center justify-between">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
+                        1
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-1">
+                          <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">도면 접수</h3>
+                          <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">CAD 파싱</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium truncate">
+                          DWG/DXF 도면 접수
+                        </p>
                       </div>
-                      <p className="text-[10px] text-slate-500 font-medium truncate">
-                        DWG/DXF 도면 접수
-                      </p>
+                    </div>
+                    <div className="text-right shrink-0 pl-1.5">
+                      <div className="text-[9px] font-semibold text-slate-400">분석 도면</div>
+                      <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
+                        {totalDrawingsSum.toLocaleString()}<span className="text-[10px] font-medium text-slate-500">장</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right shrink-0 pl-1.5">
-                    <div className="text-[9px] font-semibold text-slate-400">분석 도면</div>
-                    <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
-                      {totalDrawingsSum.toLocaleString()}<span className="text-[10px] font-medium text-slate-500">장</span>
+
+                  {/* Step 2: AI BOM 분석 */}
+                  <div className="px-3.5 py-2 hover:bg-slate-100/60 transition-colors flex items-center justify-between">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
+                        2
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-1">
+                          <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">AI BOM 분석</h3>
+                          <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">표제란 검출</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium truncate">
+                          외곽선·BOM 품목 전개
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 pl-1.5">
+                      <div className="text-[9px] font-semibold text-slate-400">정규화 BOM</div>
+                      <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
+                        {totalBomItemsSum.toLocaleString()}<span className="text-[10px] font-medium text-slate-500">개</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 3: 단가 검토 */}
+                  <div className="px-3.5 py-2 hover:bg-slate-100/60 transition-colors flex items-center justify-between">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
+                        3
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-1">
+                          <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">단가 검토</h3>
+                          <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">마스터 매칭</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium truncate">
+                          실적 단가 &amp; 임가공 산출
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 pl-1.5">
+                      <div className="text-[9px] font-semibold text-slate-400">검토 대기</div>
+                      <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
+                        {analyzedCount}<span className="text-[10px] font-medium text-slate-500">건</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 4: 견적 발행 */}
+                  <div className="px-3.5 py-2 hover:bg-slate-100/60 transition-colors flex items-center justify-between">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
+                        4
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-1">
+                          <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">견적 발행</h3>
+                          <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">엑셀 출력</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium truncate">
+                          최종 견적서 &amp; 엑셀 배포
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 pl-1.5">
+                      <div className="text-[9px] font-semibold text-slate-400">누적 견적액</div>
+                      <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
+                        ₩{totalQuotedAmountSum.toLocaleString()}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Step 2: AI BOM 분석 */}
-                <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-slate-300 transition-colors flex items-center justify-between">
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
-                      2
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-1">
-                        <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">AI BOM 분석</h3>
-                        <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">표제란 검출</span>
-                      </div>
-                      <p className="text-[10px] text-slate-500 font-medium truncate">
-                        외곽선·BOM 품목 전개
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0 pl-1.5">
-                    <div className="text-[9px] font-semibold text-slate-400">정규화 BOM</div>
-                    <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
-                      {totalBomItemsSum.toLocaleString()}<span className="text-[10px] font-medium text-slate-500">개</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 3: 단가 검토 */}
-                <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-slate-300 transition-colors flex items-center justify-between">
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
-                      3
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-1">
-                        <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">단가 검토</h3>
-                        <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">마스터 매칭</span>
-                      </div>
-                      <p className="text-[10px] text-slate-500 font-medium truncate">
-                        실적 단가 &amp; 임가공 산출
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0 pl-1.5">
-                    <div className="text-[9px] font-semibold text-slate-400">검토 대기</div>
-                    <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
-                      {analyzedCount}<span className="text-[10px] font-medium text-slate-500">건</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 4: 견적 발행 */}
-                <div className="bg-white px-3 py-2 rounded border border-slate-200 shadow-2xs hover:border-slate-300 transition-colors flex items-center justify-between">
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <span className="w-5 h-5 rounded bg-slate-800 text-slate-100 text-[11px] font-extrabold flex items-center justify-center shrink-0">
-                      4
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-1">
-                        <h3 className="font-extrabold text-slate-900 text-xs tracking-tight truncate">견적 발행</h3>
-                        <span className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded shrink-0">엑셀 출력</span>
-                      </div>
-                      <p className="text-[10px] text-slate-500 font-medium truncate">
-                        최종 견적서 &amp; 엑셀 배포
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0 pl-1.5">
-                    <div className="text-[9px] font-semibold text-slate-400">누적 견적액</div>
-                    <div className="font-mono font-extrabold text-xs text-slate-900 leading-tight">
-                      ₩{totalQuotedAmountSum.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-        {/* Zone 4: Enterprise High-Density Table / Card Grid Section */}
-        <div className="space-y-2">
-          {/* Header Context Banner: 현재 관제 모드 (내 담당 관제 vs 전사 공유 견적) */}
-          <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-0.5 pb-0.5">
+                {/* Header Context Banner: 현재 관제 모드 (내 담당 관제 vs 전사 공유 견적) */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-slate-100/60 border-b border-slate-200 shrink-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
                 <FileText className="w-4 h-4 text-blue-600" />
@@ -1689,7 +1877,7 @@ export default function CasesPage() {
           </div>
 
           {/* Top Control Toolbar (Unified Single-Row High Density) */}
-          <div className="bg-white px-3 py-1.5 rounded border border-slate-200 shadow-xs flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+          <div className="bg-white px-3 py-1.5 border-b border-slate-200 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar shrink-0">
           {/* Status Tabs (Single Row, No-Wrap) */}
           <div className="flex items-center gap-1 shrink-0">
             <button
@@ -1902,6 +2090,17 @@ export default function CasesPage() {
               </select>
             </div>
 
+            {/* 5-2. ⚡ 열 폭 초기화 버튼 */}
+            <button
+              type="button"
+              onClick={handleResetAllColWidths}
+              className="btn-hover-effect-tab inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded text-xs font-bold border border-slate-300 shadow-2xs cursor-pointer shrink-0 transition-all whitespace-nowrap"
+              title="사용자가 조절한 테이블 열 폭을 기본 표준 폭으로 초기화합니다."
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+              <span>열 폭 초기화</span>
+            </button>
+
             {/* 6. 표준 신규 견적 등록 버튼 */}
             <button
               type="button"
@@ -1925,10 +2124,9 @@ export default function CasesPage() {
             </button>
           </div>
         </div>
-        </div>
 
         {/* Sub-bar: Filtering Summary & Bulk Selection Status */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-700 font-medium bg-slate-50 px-4 py-2.5 rounded-[3px] border border-slate-200/80 gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-600 font-medium bg-slate-50/70 px-3.5 py-1.5 border-b border-slate-200 gap-2 shrink-0">
           <div className="flex items-center flex-wrap gap-2">
             {selectedTab === 'ARCHIVED' ? (
               <span>
@@ -2076,12 +2274,12 @@ export default function CasesPage() {
 
         {/* Main Data Container */}
         {loading ? (
-          <div className="text-center py-20 text-slate-500 font-medium bg-white rounded-[4px] border border-slate-200">
+          <div className="text-center py-20 text-slate-500 font-medium">
             <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
             <span>견적 프로젝트 데이터 로딩 중...</span>
           </div>
         ) : cases.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-[4px] border border-slate-200 shadow-xs">
+          <div className="text-center py-20">
             <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-800 font-bold text-sm">등록된 견적 프로젝트가 없습니다.</p>
             <p className="text-slate-500 text-xs mt-1">상단 툴바 또는 아래 버튼을 눌러 첫 번째 견적 프로젝트를 등록해 보세요.</p>
@@ -2095,15 +2293,40 @@ export default function CasesPage() {
           </div>
         ) : (
           /* Enterprise High-Density Data Grid Table (Single Standard View) */
-          <div className="bg-white rounded-[4px] border border-slate-200 shadow-xs overflow-hidden min-h-[340px]">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/90 border-b border-slate-200 text-xs font-extrabold text-slate-800 select-none">
-                    <th className="py-3 px-3.5 w-10 text-center">
+          <div
+            ref={tableContainerRef}
+            className="overflow-x-auto overflow-y-auto max-h-[620px] 2xl:max-h-[750px] scrollbar-thin"
+          >
+              <table
+                className="w-full text-left border-collapse table-fixed"
+                style={{ width: `max(100%, ${totalTableWidth}px)` }}
+              >
+                <colgroup>
+                  <col style={{ width: `${colWidths.select}px` }} />
+                  <col style={{ width: `${colWidths.no}px` }} />
+                  <col style={{ width: `${colWidths.caseNo}px` }} />
+                  <col style={{ width: `${colWidths.caseName}px` }} />
+                  <col style={{ width: `${colWidths.company}px` }} />
+                  <col style={{ width: `${colWidths.manager}px` }} />
+                  <col style={{ width: `${colWidths.status}px` }} />
+                  <col style={{ width: `${colWidths.drawings}px` }} />
+                  <col style={{ width: `${colWidths.bom}px` }} />
+                  <col style={{ width: `${colWidths.amount}px` }} />
+                  <col style={{ width: `${colWidths.date}px` }} />
+                  <col style={{ width: `${colWidths.actions}px` }} />
+                  {/* 13번째 고스트 스페이서 컬럼: 대화면 잉여 여백 흡수 */}
+                  <col className="w-auto" />
+                </colgroup>
+                <thead className="sticky top-0 z-10 bg-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                  <tr className="bg-slate-100 text-slate-800 text-[13px] font-extrabold border-b border-slate-200 select-none h-9">
+                    {/* 0. 체크박스 */}
+                    <th
+                      className="py-2 px-2 text-center relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                    >
                       <button
                         onClick={handleToggleSelectAll}
-                        className="cursor-pointer text-slate-400 hover:text-slate-700 flex items-center justify-center mx-auto"
+                        className="cursor-pointer text-slate-500 hover:text-blue-600 transition-colors flex items-center justify-center mx-auto"
                         title={isAllPageSelected ? '현재 페이지 전체 해제' : '현재 페이지 전체 선택'}
                       >
                         {isAllPageSelected ? (
@@ -2111,70 +2334,263 @@ export default function CasesPage() {
                         ) : isSomePageSelected ? (
                           <Minus className="w-4 h-4 text-blue-600" />
                         ) : (
-                          <Square className="w-4 h-4" />
+                          <Square className="w-4 h-4 text-slate-400" />
                         )}
                       </button>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'select')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('select');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
+
+                    {/* 1. 순번 (No.) */}
+                    <th
+                      className="py-2 px-2 text-center font-mono text-[13px] font-extrabold relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                    >
+                      <span>No.</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'no')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('no');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
+                    </th>
+
+                    {/* 2. 관리번호 */}
                     <th
                       onClick={() => handleSort('case_no')}
-                      className="py-3 px-3.5 cursor-pointer hover:bg-slate-100 transition-colors w-36 whitespace-nowrap group"
+                      className="py-2 px-3.5 text-[13px] font-extrabold cursor-pointer hover:bg-slate-200/70 transition-colors whitespace-nowrap relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
                     >
-                      <span>관리번호</span>
-                      {renderSortIndicator('case_no')}
+                      <div className="flex items-center space-x-1">
+                        <span>관리번호</span>
+                        {renderSortIndicator('case_no')}
+                      </div>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'caseNo')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('caseNo');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
+
+                    {/* 3. 견적의뢰 건명 */}
                     <th
                       onClick={() => handleSort('case_name')}
-                      className="py-3 px-3.5 cursor-pointer hover:bg-slate-100 transition-colors group min-w-[260px] whitespace-nowrap"
+                      className="py-2 px-3.5 text-[13px] font-extrabold cursor-pointer hover:bg-slate-200/70 transition-colors whitespace-nowrap relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
                     >
-                      <span>견적의뢰 건명</span>
-                      {renderSortIndicator('case_name')}
+                      <div className="flex items-center space-x-1">
+                        <span>견적의뢰 건명</span>
+                        {renderSortIndicator('case_name')}
+                      </div>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'caseName')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('caseName');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
-                    <th className="py-3 px-3.5 min-w-[190px] w-56 whitespace-nowrap border-l border-slate-200/80">
+
+                    {/* 4. 고객사 / 프로젝트 */}
+                    <th
+                      className="py-2 px-3.5 text-[13px] font-extrabold whitespace-nowrap relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                    >
                       <span>고객사 / 프로젝트</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'company')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('company');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
-                    <th className="py-3 px-3.5 w-40 text-center whitespace-nowrap">
+
+                    {/* 5. 견적 담당자 */}
+                    <th
+                      className="py-2 px-3.5 text-center text-[13px] font-extrabold whitespace-nowrap relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                    >
                       <span>견적 담당자</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'manager')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('manager');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
-                    <th className="py-3 px-3.5 w-32 text-center whitespace-nowrap">
+
+                    {/* 6. 진행 상태 */}
+                    <th
+                      className="py-2 px-3.5 text-center text-[13px] font-extrabold whitespace-nowrap relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                    >
                       <span>진행 상태</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'status')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('status');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
+
+                    {/* 7. 도면수 */}
                     <th
                       onClick={() => handleSort('drawings')}
-                      className="py-3 px-3.5 text-center cursor-pointer hover:bg-slate-100 transition-colors w-20 whitespace-nowrap group"
+                      className="py-2 px-3.5 text-center text-[13px] font-extrabold cursor-pointer hover:bg-slate-200/70 transition-colors whitespace-nowrap relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
                     >
-                      <span>도면수</span>
-                      {renderSortIndicator('drawings')}
+                      <div className="flex items-center justify-center space-x-1">
+                        <span>도면수</span>
+                        {renderSortIndicator('drawings')}
+                      </div>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'drawings')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('drawings');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
+
+                    {/* 8. BOM품목 */}
                     <th
                       onClick={() => handleSort('bom')}
-                      className="py-3 px-3.5 text-center cursor-pointer hover:bg-slate-100 transition-colors w-24 whitespace-nowrap group"
+                      className="py-2 px-3.5 text-center text-[13px] font-extrabold cursor-pointer hover:bg-slate-200/70 transition-colors whitespace-nowrap relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
                     >
-                      <span>BOM품목</span>
-                      {renderSortIndicator('bom')}
+                      <div className="flex items-center justify-center space-x-1">
+                        <span>BOM품목</span>
+                        {renderSortIndicator('bom')}
+                      </div>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'bom')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('bom');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
+
+                    {/* 9. 견적 합계액 (우측 정렬 & 40px 간격 균일화 pl-4 pr-6) */}
                     <th
                       onClick={() => handleSort('amount')}
-                      className="py-3 px-3.5 text-right cursor-pointer hover:bg-slate-100 transition-colors w-36 whitespace-nowrap group"
+                      className="py-2 pl-4 pr-6 text-right text-[13px] font-extrabold cursor-pointer hover:bg-slate-200/70 transition-colors whitespace-nowrap relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
                     >
-                      <span>견적 합계액</span>
-                      {renderSortIndicator('amount')}
+                      <div className="flex items-center justify-end space-x-1">
+                        <span>견적 합계액</span>
+                        {renderSortIndicator('amount')}
+                      </div>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'amount')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('amount');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
+
+                    {/* 10. 의뢰일자 */}
                     <th
                       onClick={() => handleSort('date')}
-                      className="py-3 px-3.5 text-center cursor-pointer hover:bg-slate-100 transition-colors w-28 whitespace-nowrap group"
+                      className="py-2 px-3.5 text-center text-[13px] font-extrabold cursor-pointer hover:bg-slate-200/70 transition-colors whitespace-nowrap relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
                     >
-                      <span>의뢰일자</span>
-                      {renderSortIndicator('date')}
+                      <div className="flex items-center justify-center space-x-1">
+                        <span>의뢰일자</span>
+                        {renderSortIndicator('date')}
+                      </div>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'date')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('date');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
-                    <th className="py-3 px-3.5 text-center w-24 whitespace-nowrap">
+
+                    {/* 11. 작업 */}
+                    <th
+                      className="py-2 px-2.5 text-center text-[13px] font-extrabold whitespace-nowrap relative select-none bg-slate-100 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤 / 드래그: 열 폭 조절"
+                    >
                       <span>작업</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'actions')}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleAutoFitColWidth('actions');
+                        }}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 내용에 맞게 자동 맞춤 (Auto-fit)"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
+
+                    {/* 12. 13번째 고스트 스페이서 헤더 */}
+                    <th className="p-0 bg-slate-100 border-b border-slate-200 select-none pointer-events-none" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-800 text-[13px]">
+                <tbody className="divide-y divide-slate-200/80 font-sans text-slate-800 text-[13px]">
                   {paginatedCases.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="py-12 px-4 text-center">
+                      <td colSpan={13} className="py-12 px-4 text-center">
                         <div className="max-w-lg mx-auto bg-slate-50/90 border border-slate-200 rounded-2xl p-6 shadow-2xs">
                           <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">
                             <Filter className="w-6 h-6" />
@@ -2249,7 +2665,7 @@ export default function CasesPage() {
                       </td>
                     </tr>
                   ) : (
-                    paginatedCases.map((c) => {
+                    paginatedCases.map((c, idx) => {
                       const isSelected = selectedCaseIds.includes(c.id);
                       const totalAmount = Number(c.quote_total_amount || 0);
                       const isQuoted = isCaseQuotedStatus(c);
@@ -2264,15 +2680,18 @@ export default function CasesPage() {
                           onMouseEnter={handleRowMouseEnter}
                           onMouseMove={handleRowMouseMove}
                           onMouseLeave={handleRowMouseLeave}
-                          className={`transition-colors cursor-pointer group ${
+                          className={`cursor-pointer select-none border-b border-slate-200/80 transition-colors ${
                             isSelected
-                              ? 'bg-blue-50/70 hover:bg-blue-50'
-                              : 'hover:bg-slate-50/90'
+                              ? 'bg-blue-100/80 hover:bg-blue-100'
+                              : idx % 2 === 1
+                                ? 'bg-slate-100/50 hover:bg-blue-50/80'
+                                : 'bg-white hover:bg-blue-50/80'
                           }`}
                         >
                           {/* Checkbox */}
                           <td
-                            className="py-3 px-3.5 text-center"
+                            className="py-2.5 px-2 text-center"
+                            style={{ boxShadow: isSelected ? 'inset 3px 0 0 #2563eb' : 'none' }}
                             onClick={(e) => handleToggleSelect(c.id, e)}
                           >
                             <div className="flex items-center justify-center">
@@ -2284,15 +2703,22 @@ export default function CasesPage() {
                             </div>
                           </td>
 
+                          {/* Row Number (No.) */}
+                          <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                            <span className="font-mono text-slate-400 text-xs font-bold">
+                              {String((currentPage - 1) * pageSize + idx + 1).padStart(2, '0')}
+                            </span>
+                          </td>
+
                           {/* Case No */}
-                          <td className="py-3 px-3.5 whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 whitespace-nowrap">
                             <span className="font-mono text-xs font-bold px-2.5 py-1 bg-slate-100 group-hover:bg-blue-100/60 text-slate-800 rounded-[3px] transition-colors">
                               {c.case_no}
                             </span>
                           </td>
 
                           {/* Case Name */}
-                          <td className="py-3 pl-3.5 pr-5 min-w-[260px]">
+                          <td className="py-2.5 px-3.5 overflow-hidden">
                             {(() => {
                               const isInstantQuote = !!(c.case_name?.includes('즉시 견적') || c.case_name?.includes('즉시견적') || c.notes?.includes('즉시 견적'));
                               const pName = (c.primary_file_name || '').toLowerCase();
@@ -2313,8 +2739,8 @@ export default function CasesPage() {
                               const subFileName = (!isFileNameAlreadyInTitle && rawFile && rawFile !== displayName) ? rawFile : null;
 
                               return (
-                                <div className="flex items-center justify-between gap-2 min-w-0">
-                                  <div className="min-w-0 flex items-center gap-1.5 max-w-[340px] xl:max-w-[440px]">
+                                <div className="flex items-center justify-between gap-1.5 min-w-0 w-full overflow-hidden">
+                                  <div className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden">
                                     {/* ⚡ AI 즉시 견적 식별 뱃지 (#E9E9E9 소프트 쿨 그레이 룩) */}
                                     {isInstantQuote && (
                                       <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs" title="AI 즉시 견적으로 자동 산출된 프로젝트입니다.">
@@ -2335,16 +2761,18 @@ export default function CasesPage() {
                                     )}
 
                                     {/* 도면명 메인 표시 및 스마트 툴팁 */}
-                                    <SmartTruncateTooltip
-                                      text={displayName}
-                                      className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-[13.5px]"
-                                      maxWidthClass={isInstantQuote ? "max-w-[180px] xl:max-w-[240px]" : "max-w-[240px] xl:max-w-[320px]"}
-                                      showCopy={true}
-                                    />
+                                    <div className="min-w-0 flex-1 overflow-hidden">
+                                      <SmartTruncateTooltip
+                                        text={displayName}
+                                        className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-[13.5px] truncate block"
+                                        maxWidthClass="w-full max-w-full"
+                                        showCopy={true}
+                                      />
+                                    </div>
 
                                     {subFileName && (
                                       <span
-                                        className="text-[11px] font-mono text-slate-400 group-hover:text-slate-500 truncate max-w-[120px] xl:max-w-[160px] shrink-0"
+                                        className="text-[11px] font-mono text-slate-400 group-hover:text-slate-500 truncate max-w-[110px] shrink-0"
                                         title={`첨부 파일명: ${subFileName}`}
                                       >
                                         ({subFileName})
@@ -2388,39 +2816,43 @@ export default function CasesPage() {
                       </td>
 
                           {/* Customer & Project */}
-                          <td className="py-3 px-3.5 min-w-[190px] w-56 whitespace-nowrap border-l border-slate-100">
-                            <div className="space-y-0.5">
-                              <div className="font-bold text-slate-900 flex items-center space-x-1.5 text-[13px]">
+                          <td className="py-2.5 px-3.5 whitespace-nowrap overflow-hidden">
+                            <div className="space-y-0.5 min-w-0 overflow-hidden">
+                              <div className="font-bold text-slate-900 flex items-center space-x-1.5 text-[13px] min-w-0 overflow-hidden">
                                 <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                 {c.company_id === 'comp_unassigned' || c.company_name === '고객사 미지정' ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
                                     ⚠️ 고객사 미지정
                                   </span>
                                 ) : (
-                                  <SmartTruncateTooltip
-                                    text={c.company_name || ''}
-                                    className="text-slate-900 font-bold"
-                                    maxWidthClass="max-w-[160px]"
-                                  />
+                                  <div className="min-w-0 flex-1 overflow-hidden">
+                                    <SmartTruncateTooltip
+                                      text={c.company_name || ''}
+                                      className="text-slate-900 font-bold truncate block"
+                                      maxWidthClass="w-full max-w-full"
+                                    />
+                                  </div>
                                 )}
                               </div>
-                              <div className="text-xs text-slate-600 font-medium flex items-center space-x-1.5">
+                              <div className="text-xs text-slate-600 font-medium flex items-center space-x-1.5 min-w-0 overflow-hidden">
                                 <Folder className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                 {c.company_id === 'comp_unassigned' ? (
-                                  <span className="text-slate-400 text-xs">도면 분석 대기 (프로젝트 미정)</span>
+                                  <span className="text-slate-400 text-xs truncate">도면 분석 대기 (프로젝트 미정)</span>
                                 ) : (
-                                  <SmartTruncateTooltip
-                                    text={c.project_name || '-'}
-                                    className="text-slate-600 font-medium text-xs"
-                                    maxWidthClass="max-w-[160px]"
-                                  />
+                                  <div className="min-w-0 flex-1 overflow-hidden">
+                                    <SmartTruncateTooltip
+                                      text={c.project_name || '-'}
+                                      className="text-slate-600 font-medium text-xs truncate block"
+                                      maxWidthClass="w-full max-w-full"
+                                    />
+                                  </div>
                                 )}
                               </div>
                             </div>
                           </td>
 
                           {/* Quote Manager Badge (독립 전용 열 & 1-클릭 필터) */}
-                          <td className="py-3 px-3.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <td className="py-2.5 px-3.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             {(() => {
                               const mgrInfo = uniqueManagers.find(m => m.id === c.created_by_user_id);
                               const managerDisplayName = c.created_by_name || mgrInfo?.name || (c.created_by_user_id === user?.userId ? user?.name : null) || '담당자 미지정';
@@ -2434,8 +2866,10 @@ export default function CasesPage() {
                                   type="button"
                                   onClick={() => setFilterManager(isFiltered ? 'ALL' : c.created_by_user_id)}
                                   title={`${managerDisplayName} 건만 필터링 (클릭)`}
-                                  className={`btn-hover-effect-tab inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-[4px] border ${theme.bg} ${theme.text} ${theme.border} text-xs font-bold transition-all hover:shadow-xs hover:scale-105 cursor-pointer ${
-                                    isFiltered ? 'ring-2 ring-blue-500 shadow-xs ring-offset-1 font-black' : ''
+                                  className={`btn-hover-effect-tab inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-[4px] border text-xs font-bold transition-all hover:shadow-xs cursor-pointer outline-none focus:outline-none ${
+                                    isFiltered
+                                      ? 'border-blue-500 bg-blue-50/90 text-blue-900 font-extrabold shadow-2xs'
+                                      : `${theme.bg} ${theme.text} ${theme.border}`
                                   }`}
                                 >
                                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${theme.badge} shrink-0 shadow-2xs`}>
@@ -2451,7 +2885,7 @@ export default function CasesPage() {
                           </td>
 
                           {/* Status Badge */}
-                          <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
                             <span
                               className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs"
                             >
@@ -2471,13 +2905,13 @@ export default function CasesPage() {
                           </td>
 
                           {/* Drawings Count */}
-                          <td className="py-3 px-3.5 text-center font-mono font-bold text-slate-900 whitespace-nowrap text-[13px]">
+                          <td className="py-2.5 px-3.5 text-center font-mono font-bold text-slate-900 whitespace-nowrap text-[13px]">
                             {c.drawings_count || c.files_count || 0}
                             <span className="text-xs font-semibold text-slate-600 ml-0.5">장</span>
                           </td>
 
                           {/* BOM Items Count */}
-                          <td className="py-3 px-3.5 text-center font-mono font-bold text-slate-900 whitespace-nowrap text-[13px]">
+                          <td className="py-2.5 px-3.5 text-center font-mono font-bold text-slate-900 whitespace-nowrap text-[13px]">
                             {c.bom_items_count ? (
                               <span className="text-blue-700 font-extrabold">
                                 {c.bom_items_count} <span className="text-xs font-semibold text-slate-600 ml-0.5">개</span>
@@ -2490,7 +2924,7 @@ export default function CasesPage() {
                           </td>
 
                           {/* Quoted Total Amount */}
-                          <td className="py-3 px-3.5 text-right whitespace-nowrap font-mono font-extrabold">
+                          <td className="py-2.5 pl-4 pr-6 text-right whitespace-nowrap font-mono font-extrabold">
                             {totalAmount > 0 ? (
                               <span className="text-blue-700 text-[13.5px]">
                                 ₩{Number(totalAmount).toLocaleString()}
@@ -2503,20 +2937,20 @@ export default function CasesPage() {
                           </td>
 
                           {/* Request Date */}
-                          <td className="py-3 px-3.5 text-center font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 text-center font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">
                             {c.request_date || c.created_at?.slice(0, 10) || '-'}
                           </td>
 
                           {/* Actions (Smart Action CTA by Lifecycle Status) */}
-                          <td className="py-3 px-3.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center space-x-1.5">
+                          <td className="py-2.5 px-2.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center space-x-1.5 mx-auto">
                               {selectedTab === 'TRASHED' || c.lifecycle_status === 'TRASHED' || Boolean(c.deleted_at) ? (
                                 <>
                                   <button
                                     type="button"
                                     onClick={() => handleRestoreCases([c.id])}
                                     title="견적건 활성 상태로 복원"
-                                    className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs border border-emerald-300 transition-all cursor-pointer shadow-2xs"
+                                    className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs border border-emerald-300 transition-all cursor-pointer shadow-2xs shrink-0"
                                   >
                                     <RotateCcw className="w-3.5 h-3.5" />
                                     <span>복원</span>
@@ -2525,14 +2959,14 @@ export default function CasesPage() {
                                     type="button"
                                     onClick={() => handlePermanentDeleteCases([c.id], c.case_name)}
                                     title="완전 영구 삭제 (복구 불가)"
-                                    className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-300 transition-all cursor-pointer shadow-2xs"
+                                    className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-300 transition-all cursor-pointer shadow-2xs shrink-0"
                                   >
                                     <Trash className="w-3.5 h-3.5" />
                                     <span>영구 삭제</span>
                                   </button>
                                   <Link
                                     href={`/cases/${c.id}`}
-                                    className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded border border-slate-200 transition-colors"
+                                    className="w-7 h-7 inline-flex items-center justify-center text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded border border-slate-200 transition-colors shrink-0"
                                     title="견적 건 열기 (읽기 모드)"
                                   >
                                     <ChevronRight className="w-3.5 h-3.5" />
@@ -2544,7 +2978,7 @@ export default function CasesPage() {
                                     type="button"
                                     onClick={() => handleRestoreCases([c.id])}
                                     title="작업 활성 상태로 복원"
-                                    className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs border border-purple-300 transition-all cursor-pointer shadow-2xs"
+                                    className="btn-hover-effect-tab inline-flex items-center space-x-1 px-2.5 py-1.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs border border-purple-300 transition-all cursor-pointer shadow-2xs shrink-0"
                                   >
                                     <RotateCcw className="w-3.5 h-3.5" />
                                     <span>보관 해제</span>
@@ -2553,13 +2987,13 @@ export default function CasesPage() {
                                     type="button"
                                     onClick={() => handleTrashCases([c.id], c.case_name)}
                                     title="휴지통으로 이동"
-                                    className="p-1.5 text-rose-700 hover:bg-rose-50 rounded border border-rose-300 transition-colors cursor-pointer"
+                                    className="w-7 h-7 inline-flex items-center justify-center text-rose-700 hover:bg-rose-50 rounded border border-rose-300 transition-colors cursor-pointer shrink-0"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                   <Link
                                     href={`/cases/${c.id}`}
-                                    className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded border border-slate-200 transition-colors"
+                                    className="w-7 h-7 inline-flex items-center justify-center text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded border border-slate-200 transition-colors shrink-0"
                                     title="견적 건 상세 보기"
                                   >
                                     <ChevronRight className="w-3.5 h-3.5" />
@@ -2572,7 +3006,7 @@ export default function CasesPage() {
                                     <Link
                                       href={`/cases/${c.id}`}
                                       onClick={(e) => e.stopPropagation()}
-                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition-all shadow-xs group w-[122px]"
+                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition-all shadow-xs group w-[122px] shrink-0"
                                       title="완료된 견적서 확인 및 세부 검토"
                                     >
                                       <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
@@ -2582,7 +3016,7 @@ export default function CasesPage() {
                                     <Link
                                       href={`/quotes/${c.id}/publish`}
                                       onClick={(e) => e.stopPropagation()}
-                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group w-[122px]"
+                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group w-[122px] shrink-0"
                                       title="최종 견적서 발행 및 다운로드 바로가기"
                                     >
                                       <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
@@ -2592,7 +3026,7 @@ export default function CasesPage() {
                                     <Link
                                       href={`/quotes/${c.id}/review`}
                                       onClick={(e) => e.stopPropagation()}
-                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group w-[122px]"
+                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group w-[122px] shrink-0"
                                       title="추출된 BOM 및 단가 매칭 검토 바로가기"
                                     >
                                       <span className="whitespace-nowrap">BOM·단가 검토</span>
@@ -2602,7 +3036,7 @@ export default function CasesPage() {
                                     <Link
                                       href={`/cases/${c.id}`}
                                       onClick={(e) => e.stopPropagation()}
-                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group w-[122px]"
+                                      className="btn-hover-effect-tab inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-xs group w-[122px] shrink-0"
                                       title="CAD 도면 등록 및 AI 분석 바로가기"
                                     >
                                       <UploadCloud className="w-3.5 h-3.5 shrink-0" />
@@ -2613,7 +3047,7 @@ export default function CasesPage() {
                                     type="button"
                                     onClick={() => openArchiveModal([c.id])}
                                     title="견적건 보관함으로 이동 (보류/이력)"
-                                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded border border-slate-200 transition-colors cursor-pointer"
+                                    className="w-7 h-7 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded border border-slate-200 transition-colors cursor-pointer shrink-0"
                                   >
                                     <Archive className="w-3.5 h-3.5" />
                                   </button>
@@ -2621,7 +3055,7 @@ export default function CasesPage() {
                                     type="button"
                                     onClick={() => handleTrashCases([c.id], c.case_name)}
                                     title="견적건 삭제 (휴지통으로 이동)"
-                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded border border-slate-200 hover:border-rose-300 transition-colors cursor-pointer"
+                                    className="w-7 h-7 inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded border border-slate-200 hover:border-rose-300 transition-colors cursor-pointer shrink-0"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -2629,6 +3063,9 @@ export default function CasesPage() {
                               )}
                             </div>
                           </td>
+
+                          {/* 13번째 고스트 스페이서 셀 */}
+                          <td className="p-0 pointer-events-none" />
                         </tr>
                       );
                     })
@@ -2636,12 +3073,11 @@ export default function CasesPage() {
                 </tbody>
               </table>
             </div>
-          </div>
         )}
 
         {/* Enterprise Pagination Controls */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-2 border-t border-slate-200 bg-slate-50/80 gap-3 shrink-0">
             <div className="text-xs text-slate-700 font-medium hidden sm:block">
               전체 <strong className="text-slate-900 font-bold">{sortedCases.length}</strong>개 항목 중 {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, sortedCases.length)}번째
             </div>
@@ -2715,6 +3151,7 @@ export default function CasesPage() {
             </div>
           </div>
         )}
+              </div>
             </>
           )}
         </div>

@@ -38,10 +38,14 @@ export default function CostBreakdownPanel({
     );
   }
 
-  // 🚀 사급품 또는 견적 제외(조립도, 체결구, 수동제외) 품목에 대한 전용 가이드 뷰 제공
-  const incType = line.inclusionType || (line.isAssembly ? 'EXCLUDED' : line.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+  // 🚀 AutoCAD Mechanical BOM 판정: 세트발주(Purchased) vs 단품합산(Phantom)
+  const isAssemblyPurchased = Boolean(line.isAssembly && (line.bomStructure === 'PURCHASED' || line.inclusionType === 'ASSEMBLY_PURCHASED'));
+  const isAssemblyPhantom = Boolean(line.isAssembly && !isAssemblyPurchased);
 
-  if (line.isAssembly || incType !== 'INCLUDED') {
+  // 사급품 또는 견적 제외(체결구, 수동제외, 도면노이즈, 팬텀조립품) 품목에 대한 전용 가이드 뷰 제공
+  const incType = line.inclusionType || (isAssemblyPhantom ? 'ASSEMBLY_PHANTOM' : isAssemblyPurchased ? 'ASSEMBLY_PURCHASED' : (line.isIncluded === false ? 'EXCLUDED' : 'INCLUDED'));
+
+  if (isAssemblyPhantom || (!isAssemblyPurchased && (line.isAssembly || incType !== 'INCLUDED'))) {
     const isSupplied = incType === 'CUSTOMER_SUPPLIED';
     const isFastener = incType === 'FASTENER_EXCLUDED';
     const isNoise = incType === 'ANNOTATION_NOISE';
@@ -57,7 +61,7 @@ export default function CostBreakdownPanel({
               isFastener ? 'bg-indigo-100 text-indigo-800 border-indigo-200' :
               'bg-slate-100 text-slate-700 border-slate-200'
             }`}>
-              {line.isAssembly ? '조립도 자동 제외' :
+              {line.isAssembly ? '⚙️ AutoCAD BOM: 단품합산(Phantom)' :
                isNoise ? '🧹 도면 주석/표제란 노이즈 격리' :
                isSupplied ? '📦 고객 사급품 (단가 0원 정상)' :
                isFastener ? '🔩 표준 체결구 제외' : '🚫 견적 제외'}
@@ -79,7 +83,15 @@ export default function CostBreakdownPanel({
                 <span>⭐ 사내 노이즈 학습</span>
               </button>
             )}
-            {!line.isAssembly && (
+            {line.isAssembly ? (
+              <button
+                onClick={() => onUpdateLine({ inclusionType: 'ASSEMBLY_PURCHASED', bomStructure: 'PURCHASED', isIncluded: true })}
+                className="px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-300 font-bold text-[10.5px] transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                title="조립품 완제품 세트 단가를 견적 총액에 직접 반영 (AutoCAD Purchased 표준)"
+              >
+                <span>📦 세트 턴키 발주(Purchased)로 전환</span>
+              </button>
+            ) : (
               <button
                 onClick={() => onUpdateLine({ inclusionType: 'INCLUDED', isIncluded: true })}
                 className="px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-[10.5px] transition-colors cursor-pointer"
@@ -90,28 +102,68 @@ export default function CostBreakdownPanel({
           </div>
         </div>
 
-        <div className="my-auto text-center py-5 px-4 bg-slate-50 rounded-lg border border-dashed border-slate-300 space-y-2">
-          <div className="text-2xl">
-            {line.isAssembly ? '📦' : isNoise ? '🧹' : isSupplied ? '🤝' : isFastener ? '🔩' : '🚫'}
+        {line.isAssembly ? (
+          <div className="my-auto py-3 px-3 bg-purple-50/60 rounded-xl border border-purple-200 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">⚙️</span>
+              <div>
+                <h4 className="font-bold text-slate-900 text-xs">AutoCAD Mechanical BOM 조립품 구조 관리</h4>
+                <p className="text-[11px] text-slate-500">현재 오토캐드 표준 <strong>[단품 합산(Phantom)]</strong> 모드로 적용되어 있습니다.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="p-2.5 rounded-lg bg-white border-2 border-purple-400 shadow-2xs">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold text-purple-900 flex items-center gap-1">⚙️ 단품 합산 (Phantom)</span>
+                  <span className="px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 text-[9px] font-bold">적용 중</span>
+                </div>
+                <p className="text-slate-600 text-[10.5px] leading-relaxed">
+                  상위 조립품은 <strong>₩0</strong>(자재비 배제)으로 두고, 하위 가공품·판금품·구매품의 단가를 <strong>개별 합산</strong>합니다.
+                </p>
+                <div className="mt-2 text-[10px] text-purple-700 font-medium">✓ 이중 계산 원천 차단</div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 transition-all shadow-2xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-bold text-slate-800 flex items-center gap-1">📦 세트 발주 (Purchased)</span>
+                  </div>
+                  <p className="text-slate-600 text-[10.5px] leading-relaxed">
+                    조립품 자체를 단일 완성품(턴키 세트)으로 취급하여 <strong>세트 단가를 견적 총액에 합산</strong>합니다.
+                  </p>
+                </div>
+                <button
+                  onClick={() => onUpdateLine({ inclusionType: 'ASSEMBLY_PURCHASED', bomStructure: 'PURCHASED', isIncluded: true })}
+                  className="mt-2 w-full py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10.5px] transition-colors"
+                >
+                  세트 발주 모드로 전환
+                </button>
+              </div>
+            </div>
           </div>
-          <p className="font-bold text-slate-800 text-xs">
-            {line.isAssembly ? '해당 도면은 완제품/모듈 단위 조립도(Assembly)입니다.' :
-             isNoise ? '도면 표제란, 도면 주기(Note), 또는 깨진 텍스트로 판정된 [노이즈 격리] 항목입니다.' :
-             isSupplied ? '본 품목은 고객사에서 무상 지급하는 [사급품]입니다.' :
-             isFastener ? '본 품목은 볼트/너트/와셔 등 [표준 체결구]로 견적 대상에서 제외되었습니다.' :
-             '본 품목은 담당자에 의해 [견적 제외] 처리되었습니다.'}
-          </p>
-          <p className="text-[11px] text-slate-500 leading-relaxed max-w-md mx-auto">
-            {line.isAssembly ? '조립도는 하위 단품 가공품들이 조립된 최종 도면이므로 중복 견적 방지를 위해 가공비가 자동 0원(배제) 처리됩니다.' :
-             isNoise ? (line.excludeReason ? `격리 사유: ${line.excludeReason}. 실제 가공 부품이 아니므로 견적 대상에서 안전하게 격리되어 결재 상신을 방해하지 않습니다.` : '도면 텍스트 노이즈로 분류되어 견적 대상에서 안전하게 격리되었습니다.') :
-             isSupplied ? '사급품은 고객사가 직접 제공하므로 자사 가공비 및 공급단가가 0원으로 정상 처리되며, 결재 상신이 허용됩니다.' :
-             isFastener ? '기성 규격 체결구는 별도 견적 항목에서 제외 처리되어 공급단가 0원으로 정상 반영됩니다.' :
-             '견적 대상에서 제외된 품목은 결재 상신 및 총액 계산에서 제외됩니다. 필요시 우측 상단 복원 버튼을 클릭하세요.'}
-          </p>
-        </div>
+        ) : (
+          <div className="my-auto text-center py-5 px-4 bg-slate-50 rounded-lg border border-dashed border-slate-300 space-y-2">
+            <div className="text-2xl">
+              {isNoise ? '🧹' : isSupplied ? '🤝' : isFastener ? '🔩' : '🚫'}
+            </div>
+            <p className="font-bold text-slate-800 text-xs">
+              {isNoise ? '도면 표제란, 도면 주기(Note), 또는 깨진 텍스트로 판정된 [노이즈 격리] 항목입니다.' :
+               isSupplied ? '본 품목은 고객사에서 무상 지급하는 [사급품]입니다.' :
+               isFastener ? '본 품목은 볼트/너트/와셔 등 [표준 체결구]로 견적 대상에서 제외되었습니다.' :
+               '본 품목은 담당자에 의해 [견적 제외] 처리되었습니다.'}
+            </p>
+            <p className="text-[11px] text-slate-500 leading-relaxed max-w-md mx-auto">
+              {isNoise ? (line.excludeReason ? `격리 사유: ${line.excludeReason}. 실제 가공 부품이 아니므로 견적 대상에서 안전하게 격리되어 결재 상신을 방해하지 않습니다.` : '도면 텍스트 노이즈로 분류되어 견적 대상에서 안전하게 격리되었습니다.') :
+               isSupplied ? '사급품은 고객사가 직접 제공하므로 자사 가공비 및 공급단가가 0원으로 정상 처리되며, 결재 상신이 허용됩니다.' :
+               isFastener ? '기성 규격 체결구는 별도 견적 항목에서 제외 처리되어 공급단가 0원으로 정상 반영됩니다.' :
+               '견적 대상에서 제외된 품목은 결재 상신 및 총액 계산에서 제외됩니다. 필요시 우측 상단 복원 버튼을 클릭하세요.'}
+            </p>
+          </div>
+        )}
 
         <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-slate-400 text-[11px]">
-          <span>상태: {isNoise ? '🧹 도면 노이즈 격리 완료 (0원 정상 허용)' : isSupplied ? '사급품 등록 완료 (0원 정상)' : '견적 제외 완료'}</span>
+          <span>상태: {line.isAssembly ? '⚙️ AutoCAD Phantom (단품 합산 대기)' : isNoise ? '🧹 도면 노이즈 격리 완료 (0원 정상 허용)' : isSupplied ? '사급품 등록 완료 (0원 정상)' : '견적 제외 완료'}</span>
           <span>부품유형: {line.partType}</span>
         </div>
       </div>
@@ -245,6 +297,31 @@ export default function CostBreakdownPanel({
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm h-full flex flex-col justify-between text-xs space-y-2">
+      {/* AutoCAD BOM Purchased 세트발주 안내 배너 */}
+      {isAssemblyPurchased && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">📦</span>
+            <div>
+              <div className="font-bold text-indigo-900 text-xs flex items-center gap-1.5">
+                <span>AutoCAD BOM 표준: 세트 턴키 발주 (Purchased)</span>
+                <span className="px-1.5 py-0.2 rounded bg-indigo-200 text-indigo-800 text-[9.5px] font-bold">견적 총액 합산</span>
+              </div>
+              <p className="text-[10.5px] text-indigo-700 mt-0.5">
+                완제품 세트 단가가 견적 총액에 직접 반영되며, 하위 단품의 이중 합산이 방지됩니다.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onUpdateLine({ inclusionType: 'ASSEMBLY_PHANTOM', bomStructure: 'PHANTOM', isIncluded: false, supplyPrice: 0, unitCost: 0 })}
+            className="px-2.5 py-1 rounded bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-300 font-bold text-[10.5px] transition-colors shrink-0 shadow-2xs cursor-pointer"
+            title="단품별 개별 합산(Phantom) 방식으로 되돌리기"
+          >
+            ⚙️ 단품 합산(Phantom)으로 전환
+          </button>
+        </div>
+      )}
+
       {/* 1. 헤더 & 마스터 DB 영구 등록/갱신 액션 */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
         <div className="flex items-center gap-2 flex-wrap">

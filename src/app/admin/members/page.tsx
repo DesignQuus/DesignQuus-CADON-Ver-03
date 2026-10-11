@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch } from '@/lib/api';
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { 
   ShieldCheck, Users, Search, Plus, Edit, Trash2, Key, 
   RefreshCw, AlertTriangle, UserCheck, UserPlus, Phone, 
@@ -44,6 +44,53 @@ const ROLE_LABELS: Record<string, { label: string; color: string }> = {
   SALES_USER: { label: "영업담당 (실무)", color: "bg-blue-100 text-blue-800 border-blue-200" },
   REVIEWER: { label: "가공·설계 검토 (실무)", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
   GUEST: { label: "조회 전용", color: "bg-slate-100 text-slate-800 border-slate-200" },
+};
+
+export type MemberColKey =
+  | 'order'
+  | 'empNo'
+  | 'name'
+  | 'activeCases'
+  | 'role'
+  | 'dept'
+  | 'phone'
+  | 'status'
+  | 'actions';
+
+export const DEFAULT_MEMBER_COL_WIDTHS: Record<MemberColKey, number> = {
+  order: 88,
+  empNo: 110,
+  name: 180,
+  activeCases: 120,
+  role: 160,
+  dept: 140,
+  phone: 140,
+  status: 110,
+  actions: 150,
+};
+
+export const MIN_MEMBER_COL_WIDTHS: Record<MemberColKey, number> = {
+  order: 76,
+  empNo: 80,
+  name: 120,
+  activeCases: 90,
+  role: 120,
+  dept: 100,
+  phone: 100,
+  status: 80,
+  actions: 120,
+};
+
+export const MEMBER_COL_INDEX_MAP: Record<MemberColKey, number> = {
+  order: 0,
+  empNo: 1,
+  name: 2,
+  activeCases: 3,
+  role: 4,
+  dept: 5,
+  phone: 6,
+  status: 7,
+  actions: 8,
 };
 
 export const getOperatorDeptAndTitle = (op: Operator) => {
@@ -101,6 +148,117 @@ export default function MembersManagementPage() {
   const [memberReorderSaving, setMemberReorderSaving] = useState(false);
   const [memberReorderSaved, setMemberReorderSaved] = useState(false);
   const memberReorderTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // --- 열 너비 조절 (Smart Grid Resizing & Ghost Spacer) ---
+  const [colWidths, setColWidths] = useState<Record<MemberColKey, number>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('cadon_members_col_widths');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          return { ...DEFAULT_MEMBER_COL_WIDTHS, ...parsed };
+        }
+      } catch (e) {
+        console.error('Failed to load member col widths', e);
+      }
+    }
+    return DEFAULT_MEMBER_COL_WIDTHS;
+  });
+
+  const resizingRef = useRef<{
+    colKey: MemberColKey | null;
+    startX: number;
+    startWidth: number;
+  }>({
+    colKey: null,
+    startX: 0,
+    startWidth: 0,
+  });
+
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  const totalTableWidth = useMemo(() => {
+    return Object.values(colWidths).reduce((sum, w) => sum + w, 0);
+  }, [colWidths]);
+
+  const handleColResizeStart = (e: React.MouseEvent, colKey: MemberColKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = {
+      colKey,
+      startX: e.clientX,
+      startWidth: colWidths[colKey],
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingRef.current.colKey) return;
+      const deltaX = moveEvent.clientX - resizingRef.current.startX;
+      const minW = MIN_MEMBER_COL_WIDTHS[resizingRef.current.colKey];
+      const newWidth = Math.max(minW, resizingRef.current.startWidth + deltaX);
+      setColWidths((prev) => {
+        const updated = { ...prev, [resizingRef.current.colKey!]: newWidth };
+        try {
+          localStorage.setItem('cadon_members_col_widths', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    };
+
+    const handleMouseUp = () => {
+      resizingRef.current = { colKey: null, startX: 0, startWidth: 0 };
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleAutoFitColWidth = (colKey: MemberColKey) => {
+    const colIdx = MEMBER_COL_INDEX_MAP[colKey];
+    if (colIdx === undefined || !tableContainerRef.current) return;
+
+    const table = tableContainerRef.current.querySelector('table');
+    if (!table) return;
+
+    let maxContentWidth = MIN_MEMBER_COL_WIDTHS[colKey];
+
+    const ths = table.querySelectorAll('thead th');
+    if (ths[colIdx]) {
+      const thEl = ths[colIdx] as HTMLElement;
+      const textSpan = thEl.querySelector('span');
+      const textW = textSpan ? textSpan.scrollWidth + 36 : thEl.scrollWidth;
+      if (textW > maxContentWidth) maxContentWidth = textW;
+    }
+
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach((row) => {
+      const cells = row.querySelectorAll('td');
+      if (cells[colIdx]) {
+        const cell = cells[colIdx] as HTMLElement;
+        const cellScrollW = cell.scrollWidth + 24;
+        if (cellScrollW > maxContentWidth) {
+          maxContentWidth = cellScrollW;
+        }
+      }
+    });
+
+    const finalWidth = Math.min(Math.max(maxContentWidth, MIN_MEMBER_COL_WIDTHS[colKey]), 500);
+    setColWidths((prev) => {
+      const updated = { ...prev, [colKey]: finalWidth };
+      try {
+        localStorage.setItem('cadon_members_col_widths', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const handleResetAllColWidths = () => {
+    setColWidths(DEFAULT_MEMBER_COL_WIDTHS);
+    try {
+      localStorage.removeItem('cadon_members_col_widths');
+    } catch {}
+  };
 
   // 모달 상태
   const [showAddModal, setShowAddModal] = useState(false);
@@ -1244,6 +1402,16 @@ export default function MembersManagementPage() {
               <Sliders className="w-3.5 h-3.5 text-indigo-600" />
               <span>부서 관리</span>
             </button>
+
+            <button
+              type="button"
+              onClick={handleResetAllColWidths}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-800 flex items-center space-x-1 transition-colors cursor-pointer shrink-0"
+              title="테이블 모든 열의 너비를 기본값으로 초기화합니다"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+              <span>열 폭 초기화</span>
+            </button>
           </div>
 
           <div className="relative flex-1 sm:w-56 sm:flex-initial">
@@ -1271,204 +1439,339 @@ export default function MembersManagementPage() {
 
       {/* 사내 임직원 명부 테이블 */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
-            <tr>
-              <th className="px-3 py-3 text-center w-20">순서</th>
-              <th className="px-4 py-3">사원번호</th>
-              <th className="px-4 py-3">성명 (아이디)</th>
-              <th className="px-4 py-3 text-center">진행 견적</th>
-              <th className="px-4 py-3">권한 등급</th>
-              <th className="px-4 py-3">소속 부서</th>
-              <th className="px-4 py-3">연락처</th>
-              <th className="px-4 py-3">상태</th>
-              <th className="px-4 py-3 text-right">관리 액션</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {isLoading ? (
+        <div ref={tableContainerRef} className="overflow-x-auto w-full">
+          <table
+            className="table-fixed text-left text-xs border-collapse"
+            style={{ width: `max(100%, ${totalTableWidth}px)` }}
+          >
+            <colgroup>
+              <col style={{ width: `${colWidths.order}px` }} />
+              <col style={{ width: `${colWidths.empNo}px` }} />
+              <col style={{ width: `${colWidths.name}px` }} />
+              <col style={{ width: `${colWidths.activeCases}px` }} />
+              <col style={{ width: `${colWidths.role}px` }} />
+              <col style={{ width: `${colWidths.dept}px` }} />
+              <col style={{ width: `${colWidths.phone}px` }} />
+              <col style={{ width: `${colWidths.status}px` }} />
+              <col style={{ width: `${colWidths.actions}px` }} />
+              {/* 10. 10번째 고스트 스페이서 컬럼 */}
+              <col className="w-auto" />
+            </colgroup>
+            <thead className="bg-slate-50/90 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider select-none">
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
-                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500" />
-                  <span>데이터를 불러오는 중입니다...</span>
-                </td>
-              </tr>
-            ) : errorMsg && operators.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-4 py-12 text-center">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <AlertTriangle className="w-8 h-8 text-amber-500 mb-1" />
-                    <p className="text-sm font-bold text-slate-700">{errorMsg}</p>
-                    <p className="text-xs text-slate-400">데이터베이스와의 일시적 연결 지연이 발생했습니다.</p>
-                    <button
-                      type="button"
-                      onClick={() => fetchData()}
-                      className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>데이터 다시 불러오기</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ) : filteredOperators.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
-                  등록된 임직원 계정이 없거나 검색 결과가 없습니다.
-                </td>
-              </tr>
-            ) : (
-            filteredOperators.map((op, idx) => {
-              const roleMeta = ROLE_LABELS[op.role] || { label: op.role, color: "bg-slate-100 text-slate-800" };
-              const isDeleted = Boolean(op.deleted_at || op.is_deleted);
-              const isSuperAdmin = op.login_id === "admin";
-              const isSelf = op.id === currentUser?.id || op.login_id === currentUser?.loginId;
-              const isFirst = idx === 0;
-              const isLast = idx === filteredOperators.length - 1;
-              const isBeingDragged = draggedMemberIndex === idx;
-              const isDragOver = dragOverMemberIndex === idx;
-
-              return (
-                <tr
-                  key={op.id}
-                  draggable={true}
-                  onDragStart={(e) => handleMemberDragStart(e, idx)}
-                  onDragOver={(e) => handleMemberDragOver(e, idx)}
-                  onDragEnd={handleMemberDragEnd}
-                  onDrop={(e) => handleMemberDrop(e, idx)}
-                  className={`group hover:bg-slate-50/80 transition-colors ${
-                    isDeleted ? "bg-rose-50/30" : ""
-                  } ${
-                    isBeingDragged
-                      ? "opacity-40 bg-indigo-50/50"
-                      : isDragOver
-                      ? "border-t-2 border-indigo-500 bg-indigo-50/30"
-                      : ""
-                  }`}
+                {/* 1. 순서 */}
+                <th
+                  className="px-3 py-3 text-center relative group/th"
+                  onDoubleClick={() => handleAutoFitColWidth('order')}
                 >
-                  {/* 순서 변경 (호버 시에만 슬림 노출: 평소에는 단정한 01, 호버 시 ▲▼ 등장, Zero Layout Shift) */}
-                  <td className="px-2 py-3 text-center whitespace-nowrap">
-                    <div className="inline-flex items-center justify-center min-w-[76px] h-7 px-1.5 rounded-lg group-hover:bg-slate-100/70 transition-colors">
-                      {/* 드래그 핸들 (⋮⋮) */}
-                      <div
-                        className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-500 hover:!text-indigo-600 p-0.5 rounded transition shrink-0"
-                        title="마우스로 끌어서 원하는 위치로 이동"
+                  <span>순서</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'order')}
+                  />
+                </th>
+
+                {/* 2. 사원번호 */}
+                <th
+                  className="px-4 py-3 relative group/th"
+                  onDoubleClick={() => handleAutoFitColWidth('empNo')}
+                >
+                  <span>사원번호</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'empNo')}
+                  />
+                </th>
+
+                {/* 3. 성명 (아이디) */}
+                <th
+                  className="px-4 py-3 relative group/th"
+                  onDoubleClick={() => handleAutoFitColWidth('name')}
+                >
+                  <span>성명 (아이디)</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'name')}
+                  />
+                </th>
+
+                {/* 4. 진행 견적 */}
+                <th
+                  className="px-4 py-3 text-center relative group/th"
+                  onDoubleClick={() => handleAutoFitColWidth('activeCases')}
+                >
+                  <span>진행 견적</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'activeCases')}
+                  />
+                </th>
+
+                {/* 5. 권한 등급 */}
+                <th
+                  className="px-4 py-3 relative group/th"
+                  onDoubleClick={() => handleAutoFitColWidth('role')}
+                >
+                  <span>권한 등급</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'role')}
+                  />
+                </th>
+
+                {/* 6. 소속 부서 */}
+                <th
+                  className="px-4 py-3 relative group/th"
+                  onDoubleClick={() => handleAutoFitColWidth('dept')}
+                >
+                  <span>소속 부서</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'dept')}
+                  />
+                </th>
+
+                {/* 7. 연락처 */}
+                <th
+                  className="px-4 py-3 relative group/th"
+                  onDoubleClick={() => handleAutoFitColWidth('phone')}
+                >
+                  <span>연락처</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'phone')}
+                  />
+                </th>
+
+                {/* 8. 상태 */}
+                <th
+                  className="px-4 py-3 relative group/th"
+                  onDoubleClick={() => handleAutoFitColWidth('status')}
+                >
+                  <span>상태</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'status')}
+                  />
+                </th>
+
+                {/* 9. 관리 액션 */}
+                <th
+                  className="px-4 py-3 text-right relative group/th"
+                  onDoubleClick={() => handleAutoFitColWidth('actions')}
+                >
+                  <span>관리 액션</span>
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-400 group-hover/th:bg-slate-300 transition-colors"
+                    onMouseDown={(e) => handleColResizeStart(e, 'actions')}
+                  />
+                </th>
+
+                {/* 10. 10번째 고스트 스페이서 헤더 */}
+                <th className="p-0 bg-slate-50/90 border-b border-slate-200 pointer-events-none" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500" />
+                    <span>데이터를 불러오는 중입니다...</span>
+                  </td>
+                </tr>
+              ) : errorMsg && operators.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-12 text-center">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <AlertTriangle className="w-8 h-8 text-amber-500 mb-1" />
+                      <p className="text-sm font-bold text-slate-700">{errorMsg}</p>
+                      <p className="text-xs text-slate-400">데이터베이스와의 일시적 연결 지연이 발생했습니다.</p>
+                      <button
+                        type="button"
+                        onClick={() => fetchData()}
+                        className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
                       >
-                        <GripVertical className="w-3.5 h-3.5" />
-                      </div>
-
-                      {/* 순서 번호 (두 자리 모노스페이스) */}
-                      <span className="w-6 text-center text-xs font-mono font-bold text-slate-400 group-hover:text-slate-800 transition-colors">
-                        {String(idx + 1).padStart(2, '0')}
-                      </span>
-
-                      {/* 화살표 이동 버튼 (▲, ▼) - 평소에는 투명(opacity-0), 호버 시 부드럽게 등장 */}
-                      <div className="flex items-center space-x-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                        <button
-                          type="button"
-                          disabled={isFirst}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMoveMember(idx, 'UP');
-                          }}
-                          className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-100/70 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-300 cursor-pointer disabled:cursor-not-allowed transition"
-                          title="위로 1칸 이동"
-                        >
-                          <ChevronUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isLast}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMoveMember(idx, 'DOWN');
-                          }}
-                          className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-100/70 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-300 cursor-pointer disabled:cursor-not-allowed transition"
-                          title="아래로 1칸 이동"
-                        >
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>데이터 다시 불러오기</span>
+                      </button>
                     </div>
                   </td>
-
-                  <td className="px-4 py-3 font-mono font-bold text-slate-700">
-                    {op.employee_number || <span className="text-slate-300 font-normal">-</span>}
+                </tr>
+              ) : filteredOperators.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-12 text-center text-slate-400">
+                    등록된 임직원 계정이 없거나 검색 결과가 없습니다.
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    <div className="flex items-center space-x-1.5">
-                      <span>{op.name}</span>
-                      <span className="text-slate-400 font-mono text-[11px]">({op.login_id})</span>
-                      {isSelf && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-bold">
-                          본인
+                </tr>
+              ) : (
+              filteredOperators.map((op, idx) => {
+                const roleMeta = ROLE_LABELS[op.role] || { label: op.role, color: "bg-slate-100 text-slate-800" };
+                const isDeleted = Boolean(op.deleted_at || op.is_deleted);
+                const isSuperAdmin = op.login_id === "admin";
+                const isSelf = op.id === currentUser?.id || op.login_id === currentUser?.loginId;
+                const isFirst = idx === 0;
+                const isLast = idx === filteredOperators.length - 1;
+                const isBeingDragged = draggedMemberIndex === idx;
+                const isDragOver = dragOverMemberIndex === idx;
+
+                return (
+                  <tr
+                    key={op.id}
+                    draggable={true}
+                    onDragStart={(e) => handleMemberDragStart(e, idx)}
+                    onDragOver={(e) => handleMemberDragOver(e, idx)}
+                    onDragEnd={handleMemberDragEnd}
+                    onDrop={(e) => handleMemberDrop(e, idx)}
+                    className={`group hover:bg-slate-50/80 transition-colors ${
+                      isDeleted ? "bg-rose-50/30" : ""
+                    } ${
+                      isBeingDragged
+                        ? "opacity-40 bg-indigo-50/50"
+                        : isDragOver
+                        ? "border-t-2 border-indigo-500 bg-indigo-50/30"
+                        : ""
+                    }`}
+                  >
+                    {/* 순서 변경 (호버 시에만 슬림 노출: 평소에는 단정한 01, 호버 시 ▲▼ 등장, Zero Layout Shift) */}
+                    <td className="px-2 py-3 text-center whitespace-nowrap">
+                      <div className="inline-flex items-center justify-center min-w-[76px] h-7 px-1.5 rounded-lg group-hover:bg-slate-100/70 transition-colors">
+                        {/* 드래그 핸들 (⋮⋮) */}
+                        <div
+                          className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-500 hover:!text-indigo-600 p-0.5 rounded transition shrink-0"
+                          title="마우스로 끌어서 원하는 위치로 이동"
+                        >
+                          <GripVertical className="w-3.5 h-3.5" />
+                        </div>
+
+                        {/* 순서 번호 (두 자리 모노스페이스) */}
+                        <span className="w-6 text-center text-xs font-mono font-bold text-slate-400 group-hover:text-slate-800 transition-colors">
+                          {String(idx + 1).padStart(2, '0')}
                         </span>
+
+                        {/* 화살표 이동 버튼 (▲, ▼) - 평소에는 투명(opacity-0), 호버 시 부드럽게 등장 */}
+                        <div className="flex items-center space-x-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                          <button
+                            type="button"
+                            disabled={isFirst}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveMember(idx, 'UP');
+                            }}
+                            className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-100/70 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-300 cursor-pointer disabled:cursor-not-allowed transition"
+                            title="위로 1칸 이동"
+                          >
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isLast}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveMember(idx, 'DOWN');
+                            }}
+                            className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-100/70 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-300 cursor-pointer disabled:cursor-not-allowed transition"
+                            title="아래로 1칸 이동"
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* 사원번호 */}
+                    <td className="px-4 py-3 font-mono font-bold text-slate-700 whitespace-nowrap">
+                      {op.employee_number || <span className="text-slate-300 font-normal">-</span>}
+                    </td>
+
+                    {/* 성명 (아이디) */}
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      <div className="flex items-center space-x-1.5 min-w-0">
+                        <SmartTruncateTooltip text={`${op.name} (${op.login_id})`} maxWidthClass="max-w-[140px] 2xl:max-w-[220px]">
+                          <span className="font-bold truncate">{op.name}</span>
+                        </SmartTruncateTooltip>
+                        <span className="text-slate-400 font-mono text-[11px] shrink-0">({op.login_id})</span>
+                        {isSelf && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-bold shrink-0">
+                            본인
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* 진행 견적 */}
+                    <td className="px-4 py-3 text-center whitespace-nowrap">
+                      {(op.active_cases_count ?? 0) > 0 ? (
+                        <a
+                          href={`/cases?manager=${op.id}`}
+                          className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-colors shadow-2xs group cursor-pointer"
+                          title={`클릭 시 '${op.name}' 담당자의 진행 견적 ${op.active_cases_count}건 목록으로 이동`}
+                        >
+                          <FileSpreadsheet className="w-3 h-3 text-blue-500" />
+                          <span>진행 {op.active_cases_count}건</span>
+                          <span className="text-[10px] text-blue-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5">↗</span>
+                        </a>
+                      ) : (
+                        <span className="text-slate-300 font-mono text-xs">-</span>
                       )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {(op.active_cases_count ?? 0) > 0 ? (
-                      <a
-                        href={`/cases?manager=${op.id}`}
-                        className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-colors shadow-2xs group cursor-pointer"
-                        title={`클릭 시 '${op.name}' 담당자의 진행 견적 ${op.active_cases_count}건 목록으로 이동`}
-                      >
-                        <FileSpreadsheet className="w-3 h-3 text-blue-500" />
-                        <span>진행 {op.active_cases_count}건</span>
-                        <span className="text-[10px] text-blue-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5">↗</span>
-                      </a>
-                    ) : (
-                      <span className="text-slate-300 font-mono text-xs">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1 items-start">
-                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${roleMeta.color}`}>
-                        {roleMeta.label}
-                      </span>
+                    </td>
+
+                    {/* 권한 등급 */}
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${roleMeta.color}`}>
+                          {roleMeta.label}
+                        </span>
+                        {(() => {
+                          const perm = userPermissions.find((p) => p.user_id === op.id);
+                          if (!perm) return null;
+                          return (
+                            <div className="flex items-center gap-1 text-[10px]">
+                              {perm.can_edit_price ? (
+                                <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 font-semibold border border-blue-200" title="단가 직접 수정 가능">
+                                  단가수정
+                                </span>
+                              ) : null}
+                              {perm.can_approve_quote ? (
+                                <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200" title="견적 최종 승인 가능">
+                                  견적승인
+                                </span>
+                              ) : null}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </td>
+
+                    {/* 소속 부서 */}
+                    <td className="px-4 py-3 text-slate-700">
                       {(() => {
-                        const perm = userPermissions.find((p) => p.user_id === op.id);
-                        if (!perm) return null;
+                        const info = getOperatorDeptAndTitle(op);
+                        const Icon = info.icon;
                         return (
-                          <div className="flex items-center gap-1 text-[10px]">
-                            {perm.can_edit_price ? (
-                              <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 font-semibold border border-blue-200" title="단가 직접 수정 가능">
-                                단가수정
-                              </span>
-                            ) : null}
-                            {perm.can_approve_quote ? (
-                              <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200" title="견적 최종 승인 가능">
-                                견적승인
-                              </span>
-                            ) : null}
+                          <div className="flex items-center space-x-1.5 min-w-0">
+                            <Icon className={`w-3.5 h-3.5 ${info.color} shrink-0`} />
+                            <SmartTruncateTooltip text={info.dept} maxWidthClass="max-w-[120px] 2xl:max-w-[180px]">
+                              <span className="font-semibold text-slate-800 truncate">{info.dept}</span>
+                            </SmartTruncateTooltip>
                           </div>
                         );
                       })()}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {(() => {
-                      const info = getOperatorDeptAndTitle(op);
-                      const Icon = info.icon;
-                      return (
-                        <div className="flex items-center space-x-1.5">
-                          <Icon className={`w-3.5 h-3.5 ${info.color} shrink-0`} />
-                          <span className="font-semibold text-slate-800">{info.dept}</span>
-                        </div>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {op.phone ? (
-                      <span className="flex items-center space-x-1 font-mono text-[11px]">
-                        <Phone className="w-3 h-3 text-slate-400" />
-                        <span>{op.phone}</span>
-                      </span>
-                    ) : (
-                      <span className="text-slate-300 font-mono">-</span>
-                    )}
-                  </td>
-                    <td className="px-4 py-3">
+                    </td>
+
+                    {/* 연락처 */}
+                    <td className="px-4 py-3 text-slate-600">
+                      {op.phone ? (
+                        <span className="flex items-center space-x-1 font-mono text-[11px] whitespace-nowrap">
+                          <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{formatPhoneNumber(op.phone)}</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 font-mono">-</span>
+                      )}
+                    </td>
+
+                    {/* 상태 */}
+                    <td className="px-4 py-3 whitespace-nowrap">
                       {isDeleted ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">
                           정지 (소프트삭제)
@@ -1479,7 +1782,9 @@ export default function MembersManagementPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right space-x-1">
+
+                    {/* 관리 액션 */}
+                    <td className="px-4 py-3 text-right space-x-1 whitespace-nowrap">
                       {isDeleted ? (
                         <button
                           onClick={() => handleRestore(op)}
@@ -1516,12 +1821,16 @@ export default function MembersManagementPage() {
                         </>
                       )}
                     </td>
+
+                    {/* 10. 10번째 고스트 스페이서 셀 */}
+                    <td className="p-0 pointer-events-none" />
                   </tr>
                 );
               })
             )}
           </tbody>
         </table>
+      </div>
 
         {/* 테이블 하단 상태바 및 순서 자동 저장 인디케이터 (Zero Layout Shift) */}
         <div className="px-4 py-2.5 bg-slate-50/80 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">

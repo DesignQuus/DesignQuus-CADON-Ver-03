@@ -82,8 +82,9 @@ def build_multilevel_bom(raw_bom_data: dict, structure_data: dict, root_order_qt
         dname = d.get("drawing_name_raw", "").strip()
         dtype = d.get("drawing_type", "SUB_PART")
         dmat = d.get("material") or "UNKNOWN"
-        dqty = float(d.get("quantity") or 1.0)
-        dspec = d.get("specification") if (d.get("specification") and d.get("specification") != "-") else (d.get("scale") or "-")
+        raw_spec = (d.get("specification") or "-").strip()
+        is_noise = not raw_spec or raw_spec in ["-", "--", "None", "1/1", "1 / 1"] or bool(re.match(r'^[0-9]+\s*[\/-]\s*[0-9]+$', raw_spec))
+        dspec = "-" if is_noise else raw_spec
         dsurf = d.get("surface_treatment") or "-"
         dscale = d.get("scale") or "-"
         drev = d.get("revision") or "R00"

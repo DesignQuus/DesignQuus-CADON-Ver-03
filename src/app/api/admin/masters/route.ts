@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
+import { inferPartSpecification, isNoiseSpec } from '@/lib/part-spec-analyzer';
 
 // 기본 소재 단가 및 공정 임률 설정 (제조업 표준 기준)
 const DEFAULT_MATERIAL_RATES: Record<string, number> = {
@@ -199,11 +200,14 @@ export async function POST(req: NextRequest) {
 
       const prodId = `prod_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       const priceId = `pm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const finalSpec = isNoiseSpec(specification)
+        ? inferPartSpecification({ name: standard_name, code: master_code, category, material })
+        : (specification || '').trim();
 
       await db.prepare(`
         INSERT INTO product_masters (id, master_code, standard_name, category, specification, material, unit, status, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
-      `).run(prodId, master_code.trim(), standard_name.trim(), category || 'MACHINING', specification || '', material || 'SS400', unit || 'EA', now);
+      `).run(prodId, master_code.trim(), standard_name.trim(), category || 'MACHINING', finalSpec, material || 'SS400', unit || 'EA', now);
 
       if (Number(unit_price) > 0) {
         await db.prepare(`
@@ -214,10 +218,10 @@ export async function POST(req: NextRequest) {
 
       await recordActivity(req, session, {
         activityType: 'ADMIN_ACTION',
-        details: `신규 마스터 품목 등록: ${master_code} (${standard_name}, 단가: ${unit_price || 0}원)`
+        details: `신규 마스터 품목 등록: ${master_code} (${standard_name}, 규격: ${finalSpec}, 단가: ${unit_price || 0}원)`
       });
 
-      return NextResponse.json({ success: true, id: prodId });
+      return NextResponse.json({ success: true, id: prodId, specification: finalSpec });
     }
 
     // 2. 대량 엑셀/JSON 일괄 업로드 (Bulk Import)
@@ -241,13 +245,17 @@ export async function POST(req: NextRequest) {
         const unit = (it.unit || it['단위'] || 'EA').toString().trim();
         const price = Number(it.unit_price || it.price || it['단가'] || it['기준단가'] || 0);
 
+        const effectiveSpec = isNoiseSpec(spec)
+          ? inferPartSpecification({ name: effectiveName, code: effectiveCode, category: cat, material: mat })
+          : spec;
+
         const prodId = `prod_${Date.now()}_${insertedCount}_${Math.random().toString(36).slice(2, 5)}`;
         const priceId = `pm_${Date.now()}_${insertedCount}_${Math.random().toString(36).slice(2, 5)}`;
 
         await db.prepare(`
           INSERT OR REPLACE INTO product_masters (id, master_code, standard_name, category, specification, material, unit, status, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
-        `).run(prodId, effectiveCode, effectiveName, cat, spec, mat, unit, now);
+        `).run(prodId, effectiveCode, effectiveName, cat, effectiveSpec, mat, unit, now);
 
         if (price > 0) {
           await db.prepare(`
@@ -344,6 +352,41 @@ export async function POST(req: NextRequest) {
       });
 
       return NextResponse.json({ success: true, count: updatedCount });
+    }
+
+    // 5. AI 규격 자동 분석 및 일괄 보정 (AI Specification Inference)
+    if (action === 'analyze_specs') {
+      const rows = (await db.prepare(`
+        SELECT id, master_code, standard_name, category, material, specification
+        FROM product_masters
+      `).all()) as any[];
+
+      let enrichedCount = 0;
+      const stmt = db.prepare('UPDATE product_masters SET specification = ?, updated_at = ? WHERE id = ?');
+
+      for (const r of rows) {
+        if (isNoiseSpec(r.specification)) {
+          const newSpec = inferPartSpecification({
+            name: r.standard_name,
+            code: r.master_code,
+            category: r.category,
+            material: r.material,
+            existingSpec: r.specification
+          });
+
+          if (newSpec && newSpec !== '-' && newSpec !== r.specification) {
+            await stmt.run(newSpec, now, r.id);
+            enrichedCount++;
+          }
+        }
+      }
+
+      await recordActivity(req, session, {
+        activityType: 'ADMIN_ACTION',
+        details: `마스터 품목 규격(Spec) AI 자동 분석 및 보정 완료: 총 ${enrichedCount}건`
+      });
+
+      return NextResponse.json({ success: true, count: enrichedCount });
     }
 
     return NextResponse.json({ error: '알 수 없는 요청 액션입니다.' }, { status: 400 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { apiFetch } from '@/lib/api';
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { getClientCache, setClientCache } from '@/lib/cacheStore';
 import { QuoteDeleteConfirmModal, QuoteDeleteToast, SKIP_CONFIRM_KEY } from '@/components/common/QuoteDeleteConfirmModal';
@@ -30,7 +30,8 @@ import {
   History,
   Layers,
   Sparkles,
-  Sliders
+  Sliders,
+  RotateCcw
 } from 'lucide-react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import PriceAdjustmentModal from '@/components/quotes/PriceAdjustmentModal';
@@ -66,6 +67,57 @@ interface QuoteGroup {
   latestQuote: QuoteItem;
   historyQuotes: QuoteItem[];
 }
+
+export type QuoteColKey =
+  | 'no'
+  | 'quoteNo'
+  | 'company'
+  | 'caseName'
+  | 'itemCount'
+  | 'subtotal'
+  | 'tax'
+  | 'totalAmount'
+  | 'status'
+  | 'actions';
+
+export const DEFAULT_QUOTE_COL_WIDTHS: Record<QuoteColKey, number> = {
+  no: 56,
+  quoteNo: 185, // 견적 번호, 버전, 발행일, 이력 토글
+  company: 200, // 고객사 / 발주처명
+  caseName: 300, // 도면 / 견적의뢰명 (글자 잘림 0% 확보)
+  itemCount: 115, // 품목수 및 단가수정 뱃지
+  subtotal: 145, // 공급가액 (우측 40px 여백 일관화)
+  tax: 125, // 부가세
+  totalAmount: 165, // 최종 견적 총액
+  status: 105, // 결재 상태
+  actions: 245, // 출력 및 액션 버튼들
+};
+
+export const MIN_QUOTE_COL_WIDTHS: Record<QuoteColKey, number> = {
+  no: 40,
+  quoteNo: 120,
+  company: 120,
+  caseName: 160,
+  itemCount: 80,
+  subtotal: 90,
+  tax: 80,
+  totalAmount: 100,
+  status: 80,
+  actions: 180,
+};
+
+export const QUOTE_COL_INDEX_MAP: Record<QuoteColKey, number> = {
+  no: 0,
+  quoteNo: 1,
+  company: 2,
+  caseName: 3,
+  itemCount: 4,
+  subtotal: 5,
+  tax: 6,
+  totalAmount: 7,
+  status: 8,
+  actions: 9,
+};
 
 export default function QuotesListPage() {
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
@@ -339,6 +391,142 @@ export default function QuotesListPage() {
     return pages;
   };
 
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // 페이지 또는 페이지당 행수 변경 시 테이블 스크롤 최상단 복귀
+  useEffect(() => {
+    if (tableContainerRef.current) {
+      tableContainerRef.current.scrollTop = 0;
+    }
+  }, [currentPage, pageSize]);
+
+  // ⚡ 엑셀 스타일 열 너비 상태 및 실시간 드래그 리사이즈 핸들러
+  const [colWidths, setColWidths] = useState<Record<QuoteColKey, number>>(DEFAULT_QUOTE_COL_WIDTHS);
+  const resizingRef = useRef<{
+    colKey: QuoteColKey;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  // 로컬 스토리지에서 사용자가 커스텀 설정한 열 폭 복원 (글자 가림 방지 안전 보정)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cadon_quotes_col_widths');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setColWidths((prev) => {
+          const next = { ...prev };
+          (Object.keys(DEFAULT_QUOTE_COL_WIDTHS) as QuoteColKey[]).forEach((k) => {
+            const cachedVal = parsed[k];
+            next[k] = cachedVal ? Math.max(DEFAULT_QUOTE_COL_WIDTHS[k], cachedVal) : DEFAULT_QUOTE_COL_WIDTHS[k];
+          });
+          return next;
+        });
+      }
+    } catch {}
+  }, []);
+
+  const handleColResizeStart = (e: React.MouseEvent, colKey: QuoteColKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = {
+      colKey,
+      startX: e.clientX,
+      startWidth: colWidths[colKey] || DEFAULT_QUOTE_COL_WIDTHS[colKey],
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { colKey: key, startX, startWidth } = resizingRef.current;
+      const delta = moveEvent.clientX - startX;
+      const minW = MIN_QUOTE_COL_WIDTHS[key as QuoteColKey] || 40;
+      const newW = Math.max(minW, Math.round(startWidth + delta));
+      setColWidths((prev) => ({ ...prev, [key]: newW }));
+    };
+
+    const handleMouseUp = () => {
+      if (resizingRef.current) {
+        setColWidths((latest) => {
+          try {
+            localStorage.setItem('cadon_quotes_col_widths', JSON.stringify(latest));
+          } catch {}
+          return latest;
+        });
+      }
+      resizingRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // ⚡ 엑셀(Excel) 표준: 열 경계 더블클릭 시 콘텐츠/텍스트 길이에 딱 맞추는 Auto-fit
+  const handleAutoFitColWidth = (colKey: QuoteColKey) => {
+    const colIdx = QUOTE_COL_INDEX_MAP[colKey];
+    if (colIdx === undefined || !tableContainerRef.current) return;
+
+    const table = tableContainerRef.current.querySelector('table');
+    if (!table) return;
+
+    const th = table.querySelectorAll('thead th')[colIdx] as HTMLElement;
+    let maxContentWidth = 0;
+    if (th) {
+      const span = th.querySelector('span');
+      const thTextWidth = span ? span.getBoundingClientRect().width : th.scrollWidth;
+      maxContentWidth = Math.max(maxContentWidth, thTextWidth + 36);
+    }
+
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach((row: Element) => {
+      const td = row.querySelectorAll('td')[colIdx] as HTMLElement;
+      if (td) {
+        const truncatedElem = td.querySelector('.truncate') as HTMLElement;
+        const inner = td.firstElementChild as HTMLElement;
+        let cellW = inner ? inner.scrollWidth : td.scrollWidth;
+        if (truncatedElem && truncatedElem.scrollWidth > cellW) {
+          cellW = truncatedElem.scrollWidth;
+        }
+
+        const totalCellW = cellW + 32;
+        if (totalCellW > maxContentWidth) {
+          maxContentWidth = totalCellW;
+        }
+      }
+    });
+
+    const minW = MIN_QUOTE_COL_WIDTHS[colKey] || 40;
+    const optimalWidth = Math.max(minW, Math.min(Math.ceil(maxContentWidth), 520));
+
+    setColWidths((prev) => {
+      const next = { ...prev, [colKey]: optimalWidth };
+      try {
+        localStorage.setItem('cadon_quotes_col_widths', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleResetAllColWidths = () => {
+    setColWidths(DEFAULT_QUOTE_COL_WIDTHS);
+    try {
+      localStorage.removeItem('cadon_quotes_col_widths');
+    } catch {}
+  };
+
+  const totalTableWidth = useMemo(() => {
+    return (Object.keys(DEFAULT_QUOTE_COL_WIDTHS) as QuoteColKey[]).reduce(
+      (sum, k) => sum + (colWidths[k] || DEFAULT_QUOTE_COL_WIDTHS[k]),
+      0
+    );
+  }, [colWidths]);
+
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
       {/* 1. Page Header */}
@@ -477,6 +665,17 @@ export default function QuotesListPage() {
                 </button>
               )}
 
+              {/* ⚡ 열 폭 기본값 초기화 버튼 */}
+              <button
+                type="button"
+                onClick={handleResetAllColWidths}
+                className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition-all flex items-center space-x-1.5 cursor-pointer shadow-2xs shrink-0"
+                title="사용자가 조절한 테이블 열 폭을 기본 표준 폭으로 초기화합니다."
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                <span>열 폭 초기화</span>
+              </button>
+
               {/* Search Box */}
               <form onSubmit={handleSearchSubmit} className="relative min-w-[240px]">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -515,20 +714,152 @@ export default function QuotesListPage() {
               </Link>
             </div>
           ) : (
-            <div className="overflow-x-auto overflow-y-auto max-h-[580px] 2xl:max-h-[700px] scrollbar-thin">
-              <table className="w-full text-left text-xs border-collapse">
+            <div
+              ref={tableContainerRef}
+              className="overflow-x-auto overflow-y-auto max-h-[580px] 2xl:max-h-[700px] scrollbar-thin"
+            >
+              <table
+                className="w-full text-left text-xs border-collapse table-fixed"
+                style={{ width: `max(100%, ${totalTableWidth}px)` }}
+              >
+                <colgroup>
+                  <col style={{ width: `${colWidths.no}px` }} />
+                  <col style={{ width: `${colWidths.quoteNo}px` }} />
+                  <col style={{ width: `${colWidths.company}px` }} />
+                  <col style={{ width: `${colWidths.caseName}px` }} />
+                  <col style={{ width: `${colWidths.itemCount}px` }} />
+                  <col style={{ width: `${colWidths.subtotal}px` }} />
+                  <col style={{ width: `${colWidths.tax}px` }} />
+                  <col style={{ width: `${colWidths.totalAmount}px` }} />
+                  <col style={{ width: `${colWidths.status}px` }} />
+                  <col style={{ width: `${colWidths.actions}px` }} />
+                  {/* 11번째 고스트 스페이서 컬럼: 대화면 잉여 여백을 흡수하여 각 열의 독립적인 폭 보존 */}
+                  <col className="w-auto" />
+                </colgroup>
                 <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
                   <tr className="text-slate-600 font-bold">
-                    <th className="py-2.5 px-3 text-center w-14 bg-slate-50">No.</th>
-                    <th className="py-2.5 px-4 bg-slate-50">견적 번호</th>
-                    <th className="py-2.5 px-4 bg-slate-50">고객사 / 발주처</th>
-                    <th className="py-2.5 px-4 bg-slate-50">도면 / 견적의뢰명</th>
-                    <th className="py-2.5 px-4 text-center bg-slate-50">품목수</th>
-                    <th className="py-2.5 px-4 text-right bg-slate-50">공급가액</th>
-                    <th className="py-2.5 px-4 text-right bg-slate-50">부가세</th>
-                    <th className="py-2.5 px-4 text-right font-extrabold text-slate-900 bg-slate-50">최종 견적 총액</th>
-                    <th className="py-2.5 px-4 text-center bg-slate-50">결재 상태</th>
-                    <th className="py-2.5 px-4 text-center bg-slate-50">출력 및 액션</th>
+                    <th
+                      className="py-2.5 px-3 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
+                      onDoubleClick={() => handleAutoFitColWidth('no')}
+                    >
+                      <span>No.</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                        onMouseDown={(e) => handleColResizeStart(e, 'no')}
+                      />
+                    </th>
+
+                    <th
+                      className="py-2.5 px-4 relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
+                      onDoubleClick={() => handleAutoFitColWidth('quoteNo')}
+                    >
+                      <span>견적 번호</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                        onMouseDown={(e) => handleColResizeStart(e, 'quoteNo')}
+                      />
+                    </th>
+
+                    <th
+                      className="py-2.5 px-4 relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
+                      onDoubleClick={() => handleAutoFitColWidth('company')}
+                    >
+                      <span>고객사 / 발주처</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                        onMouseDown={(e) => handleColResizeStart(e, 'company')}
+                      />
+                    </th>
+
+                    <th
+                      className="py-2.5 px-4 relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
+                      onDoubleClick={() => handleAutoFitColWidth('caseName')}
+                    >
+                      <span>도면 / 견적의뢰명</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                        onMouseDown={(e) => handleColResizeStart(e, 'caseName')}
+                      />
+                    </th>
+
+                    <th
+                      className="py-2.5 px-4 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
+                      onDoubleClick={() => handleAutoFitColWidth('itemCount')}
+                    >
+                      <span>품목수</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                        onMouseDown={(e) => handleColResizeStart(e, 'itemCount')}
+                      />
+                    </th>
+
+                    <th
+                      className="py-2.5 pl-4 pr-6 text-right relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
+                      onDoubleClick={() => handleAutoFitColWidth('subtotal')}
+                    >
+                      <span>공급가액</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                        onMouseDown={(e) => handleColResizeStart(e, 'subtotal')}
+                      />
+                    </th>
+
+                    <th
+                      className="py-2.5 pl-4 pr-6 text-right relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
+                      onDoubleClick={() => handleAutoFitColWidth('tax')}
+                    >
+                      <span>부가세</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                        onMouseDown={(e) => handleColResizeStart(e, 'tax')}
+                      />
+                    </th>
+
+                    <th
+                      className="py-2.5 pl-4 pr-6 text-right font-extrabold text-slate-900 relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
+                      onDoubleClick={() => handleAutoFitColWidth('totalAmount')}
+                    >
+                      <span>최종 견적 총액</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                        onMouseDown={(e) => handleColResizeStart(e, 'totalAmount')}
+                      />
+                    </th>
+
+                    <th
+                      className="py-2.5 px-4 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
+                      onDoubleClick={() => handleAutoFitColWidth('status')}
+                    >
+                      <span>결재 상태</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                        onMouseDown={(e) => handleColResizeStart(e, 'status')}
+                      />
+                    </th>
+
+                    <th
+                      className="py-2.5 px-4 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
+                      onDoubleClick={() => handleAutoFitColWidth('actions')}
+                    >
+                      <span>출력 및 액션</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 group-hover/th:bg-slate-300 transition-colors"
+                        onMouseDown={(e) => handleColResizeStart(e, 'actions')}
+                      />
+                    </th>
+
+                    {/* 11번째 고스트 스페이서 헤더 (우측 남는 잉여 폭 흡수) */}
+                    <th className="p-0 bg-slate-50 border-b border-slate-200 pointer-events-none" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -612,7 +943,7 @@ export default function QuotesListPage() {
                               <SmartTruncateTooltip
                                 text={q.case_name}
                                 className="font-semibold text-slate-800 text-xs"
-                                maxWidthClass="max-w-[240px]"
+                                maxWidthClass="max-w-[320px] 2xl:max-w-[480px]"
                               />
                             </div>
                             <div className="text-[10px] text-slate-400 font-mono mt-0.5">{q.case_no}</div>
@@ -643,17 +974,17 @@ export default function QuotesListPage() {
                           </td>
 
                           {/* Subtotal */}
-                          <td className="py-3.5 px-4 text-right font-mono text-slate-600">
+                          <td className="py-3.5 pl-4 pr-6 text-right font-mono text-slate-600">
                             ₩{Number(q.subtotal || 0).toLocaleString()}
                           </td>
 
                           {/* Tax */}
-                          <td className="py-3.5 px-4 text-right font-mono text-slate-400 text-[11px]">
+                          <td className="py-3.5 pl-4 pr-6 text-right font-mono text-slate-400 text-[11px]">
                             ₩{Number(q.tax_amount || 0).toLocaleString()}
                           </td>
 
                           {/* Total Amount */}
-                          <td className="py-3.5 px-4 text-right font-mono font-black text-sm text-blue-700">
+                          <td className="py-3.5 pl-4 pr-6 text-right font-mono font-black text-sm text-blue-700">
                             ₩{Number(q.total_amount || 0).toLocaleString()}
                           </td>
 
@@ -758,6 +1089,9 @@ export default function QuotesListPage() {
                               </div>
                             </div>
                           </td>
+
+                          {/* 11번째 고스트 스페이서 셀 */}
+                          <td className="p-0 pointer-events-none" />
                         </tr>
 
                         {/* 2. 이전 수정 이력 서브 행 (아코디언 확장 시 표출) */}
@@ -829,17 +1163,17 @@ export default function QuotesListPage() {
                               </td>
 
                               {/* Subtotal */}
-                              <td className="py-2.5 px-4 text-right font-mono text-slate-500">
+                              <td className="py-2.5 pl-4 pr-6 text-right font-mono text-slate-500">
                                 ₩{Number(hq.subtotal || 0).toLocaleString()}
                               </td>
 
                               {/* Tax */}
-                              <td className="py-2.5 px-4 text-right font-mono text-slate-400 text-[11px]">
+                              <td className="py-2.5 pl-4 pr-6 text-right font-mono text-slate-400 text-[11px]">
                                 ₩{Number(hq.tax_amount || 0).toLocaleString()}
                               </td>
 
                               {/* Total Amount */}
-                              <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-600">
+                              <td className="py-2.5 pl-4 pr-6 text-right font-mono font-bold text-slate-600">
                                 ₩{Number(hq.total_amount || 0).toLocaleString()}
                               </td>
 
@@ -898,6 +1232,9 @@ export default function QuotesListPage() {
                                   </button>
                                 </div>
                               </td>
+
+                              {/* 11번째 고스트 스페이서 셀 */}
+                              <td className="p-0 pointer-events-none" />
                             </tr>
                           ))}
                       </React.Fragment>

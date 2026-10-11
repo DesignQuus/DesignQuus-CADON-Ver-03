@@ -4,6 +4,7 @@ import { apiFetch } from '@/lib/api';
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { Download, Clock, Plus, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 
 interface QuoteItem {
   id: string;
@@ -100,20 +101,34 @@ export default function RecentQuotesTable({ quotes }: RecentQuotesTableProps) {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-100">
+          <table className="w-full text-left text-xs border-collapse table-fixed">
+            <colgroup>
+              <col style={{ width: '52px' }} />
+              <col style={{ width: '160px' }} />
+              <col style={{ width: '260px' }} />
+              <col style={{ width: '180px' }} />
+              <col style={{ width: '90px' }} />
+              <col style={{ width: '180px' }} />
+              <col style={{ width: '110px' }} />
+              <col style={{ width: '110px' }} />
+              {/* 고스트 스페이서 컬럼 */}
+              <col className="w-auto" />
+            </colgroup>
+            <thead className="bg-slate-50/80 text-slate-600 border-b border-slate-200">
               <tr>
+                <th className="py-3 px-3 font-bold text-center">No.</th>
                 <th className="py-3 px-4 font-bold">견적번호 / 버전</th>
                 <th className="py-3 px-4 font-bold">연동 케이스명</th>
                 <th className="py-3 px-4 font-bold">고객사</th>
                 <th className="py-3 px-4 font-bold text-center">품목 수</th>
-                <th className="py-3 px-4 font-bold text-right">견적 총액 (VAT포함)</th>
+                <th className="py-3 pl-4 pr-6 font-bold text-right">견적 총액 (VAT포함)</th>
                 <th className="py-3 px-4 font-bold text-center">상태</th>
                 <th className="py-3 px-4 font-bold text-center">원클릭 엑셀</th>
+                <th className="p-0 pointer-events-none" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {recentQuotes.map((q) => {
+            <tbody className="divide-y divide-slate-100 font-medium">
+              {recentQuotes.map((q, idx) => {
                 let statusBadge = 'bg-slate-100 text-slate-700 border-slate-200';
                 let statusLabel = '임시저장 (DRAFT)';
                 if (q.status === 'APPROVED') {
@@ -129,6 +144,14 @@ export default function RecentQuotesTable({ quotes }: RecentQuotesTableProps) {
                     key={q.id}
                     className="hover:bg-emerald-50/30 transition-colors"
                   >
+                    {/* No. 순번 */}
+                    <td className="py-3 px-3 text-center whitespace-nowrap">
+                      <span className="font-mono text-slate-400 text-xs font-bold">
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                    </td>
+
+                    {/* 견적번호 / 버전 */}
                     <td className="py-3 px-4">
                       <div className="flex items-center space-x-1.5">
                         <Link
@@ -143,26 +166,46 @@ export default function RecentQuotesTable({ quotes }: RecentQuotesTableProps) {
                         </span>
                       </div>
                       <span className="text-[11px] text-slate-400 block mt-0.5">
-                        {q.quote_date || new Date(q.created_at).toLocaleDateString('ko-KR')}
+                        {q.quote_date || (q.created_at ? q.created_at.slice(0, 10) : '-')}
                       </span>
                     </td>
-                    <td className="py-3 px-4 font-semibold text-slate-800 max-w-[200px] truncate">
-                      {q.case_name || '-'}
+
+                    {/* 연동 케이스명 */}
+                    <td className="py-3 px-4">
+                      <SmartTruncateTooltip
+                        text={q.case_name || '-'}
+                        className="font-semibold text-slate-800 text-xs"
+                        maxWidthClass="max-w-[240px]"
+                      />
                     </td>
+
+                    {/* 고객사 */}
                     <td className="py-3 px-4 text-slate-600 font-medium">
-                      {q.company_name || '고객사 미지정'}
+                      <SmartTruncateTooltip
+                        text={q.company_name || '고객사 미지정'}
+                        className="text-slate-600 font-medium text-xs"
+                        maxWidthClass="max-w-[160px]"
+                      />
                     </td>
+
+                    {/* 품목 수 */}
                     <td className="py-3 px-4 text-center font-semibold text-slate-700 font-mono">
                       {q.item_count || 0}개
                     </td>
-                    <td className="py-3 px-4 text-right font-black text-slate-900 font-mono text-sm">
+
+                    {/* 견적 총액 (우측 정렬 & 40px 간격 균일화 pl-4 pr-6) */}
+                    <td className="py-3 pl-4 pr-6 text-right font-black text-slate-900 font-mono text-sm">
                       ₩{Number(q.total_amount || 0).toLocaleString()}
                     </td>
+
+                    {/* 상태 */}
                     <td className="py-3 px-4 text-center">
                       <span className={`inline-block px-2 py-0.5 rounded text-[10.5px] font-bold border ${statusBadge}`}>
                         {statusLabel}
                       </span>
                     </td>
+
+                    {/* 원클릭 엑셀 */}
                     <td className="py-3 px-4 text-center">
                       <button
                         type="button"
@@ -179,6 +222,9 @@ export default function RecentQuotesTable({ quotes }: RecentQuotesTableProps) {
                         <span>엑셀출력</span>
                       </button>
                     </td>
+
+                    {/* 고스트 스페이서 셀 */}
+                    <td className="p-0 pointer-events-none" />
                   </tr>
                 );
               })}

@@ -146,7 +146,7 @@ export default function Navigation() {
               href="/"
               onMouseEnter={() => handleLinkWarmup('/')}
               onClick={() => { if (pathname !== '/') setPendingPath('/'); }}
-              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+              className={`px-2.5 py-1.5 rounded-md text-[16px] font-semibold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 activeRoute === '/'
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -161,7 +161,7 @@ export default function Navigation() {
               href="/cases"
               onMouseEnter={() => handleLinkWarmup('/cases')}
               onClick={() => { if (pathname !== '/cases') setPendingPath('/cases'); }}
-              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+              className={`px-2.5 py-1.5 rounded-md text-[16px] font-semibold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 (activeRoute === '/cases' || activeRoute.startsWith('/cases/') || activeRoute.startsWith('/inbox'))
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -172,14 +172,14 @@ export default function Navigation() {
               <span>견적의뢰</span>
               {user?.name && !isSuperAdmin && (user.myActiveCasesCount ?? 0) > 0 && (
                 <span
-                  className={`ml-1 px-1.5 py-0.2 rounded-full text-[11px] font-black inline-flex items-center gap-0.5 tracking-tight transition-all ${
+                  className={`ml-1 px-1.5 py-0.2 rounded-full text-xs font-black inline-flex items-center gap-0.5 tracking-tight transition-all ${
                     (activeRoute === '/cases' || activeRoute.startsWith('/cases/') || activeRoute.startsWith('/inbox'))
                       ? 'bg-blue-600 text-white shadow-2xs'
                       : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                   }`}
                   title={`${user.name} 담당 진행 견적: ${user.myActiveCasesCount}건`}
                 >
-                  <span className="text-[10px] opacity-85 font-medium">내</span>
+                  <span className="text-[11px] opacity-85 font-medium">내</span>
                   <span>{user.myActiveCasesCount}</span>
                 </span>
               )}
@@ -190,7 +190,7 @@ export default function Navigation() {
               href="/quotes"
               onMouseEnter={() => handleLinkWarmup('/quotes')}
               onClick={() => { if (pathname !== '/quotes') setPendingPath('/quotes'); }}
-              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+              className={`px-2.5 py-1.5 rounded-md text-[16px] font-semibold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 activeRoute.startsWith('/quotes')
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -211,7 +211,7 @@ export default function Navigation() {
                 href="/admin/companies"
                 onMouseEnter={() => handleLinkWarmup('/admin/companies')}
                 onClick={() => { if (pathname !== '/admin/companies') setPendingPath('/admin/companies'); }}
-                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+                className={`px-2.5 py-1.5 rounded-md text-[16px] font-semibold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   activeRoute.startsWith('/admin/companies')
                     ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -222,20 +222,20 @@ export default function Navigation() {
               </Link>
             )}
 
-            {/* 5. 표준 단가·임률 */}
+            {/* 5. 원가 기준 */}
             <Link
               href="/admin/masters"
               onMouseEnter={() => handleLinkWarmup('/admin/masters')}
               onClick={() => { if (pathname !== '/admin/masters') setPendingPath('/admin/masters'); }}
-              className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+              className={`px-2.5 py-1.5 rounded-md text-[16px] font-semibold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                 activeRoute.startsWith('/admin/masters')
                   ? 'bg-blue-50 text-blue-700 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
-              title="자재·가공비·외주비 표준 단가 및 가공 임률 관리"
+              title="자재·가공비·외주비 기준 단가 및 공임·원가 기준 관리"
             >
               <Database className="w-4 h-4 text-amber-600" />
-              <span>표준 단가·임률</span>
+              <span>원가 기준</span>
             </Link>
 
             {/* 6. 사원·권한 관리 (사원 관리 + 권한 설정 통합) */}
@@ -244,7 +244,7 @@ export default function Navigation() {
                 href="/admin/members"
                 onMouseEnter={() => handleLinkWarmup('/admin/members')}
                 onClick={() => { if (pathname !== '/admin/members') setPendingPath('/admin/members'); }}
-                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+                className={`px-2.5 py-1.5 rounded-md text-[16px] font-semibold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   activeRoute.startsWith('/admin/members') || activeRoute.startsWith('/admin/permissions')
                     ? 'bg-blue-50 text-blue-700 font-bold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -266,7 +266,7 @@ export default function Navigation() {
                 href="/admin/audit"
                 onMouseEnter={() => handleLinkWarmup('/admin/audit')}
                 onClick={() => { if (!pathname.startsWith('/admin/audit')) setPendingPath('/admin/audit'); }}
-                className={`px-2.5 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
+                className={`px-2.5 py-1.5 rounded-md text-[16px] font-semibold transition-all flex items-center space-x-1.5 whitespace-nowrap shrink-0 ${
                   activeRoute.startsWith('/admin/audit')
                     ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'

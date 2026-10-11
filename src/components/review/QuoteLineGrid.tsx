@@ -7,7 +7,16 @@ import {
   Sparkles, ShieldCheck, Database, Plus
 } from 'lucide-react';
 
-export type InclusionType = 'INCLUDED' | 'CUSTOMER_SUPPLIED' | 'FASTENER_EXCLUDED' | 'EXCLUDED' | 'ANNOTATION_NOISE';
+export type BomStructureType = 'NORMAL' | 'PHANTOM' | 'PURCHASED' | 'REFERENCE';
+
+export type InclusionType = 
+  | 'INCLUDED' 
+  | 'CUSTOMER_SUPPLIED' 
+  | 'FASTENER_EXCLUDED' 
+  | 'EXCLUDED' 
+  | 'ANNOTATION_NOISE'
+  | 'ASSEMBLY_PHANTOM'
+  | 'ASSEMBLY_PURCHASED';
 
 export interface SimilarityBreakdown {
   totalScore: number; // 0 ~ 100 (가중 평균)
@@ -35,6 +44,7 @@ export interface QuoteReviewLine {
   memo?: string;
   specification?: string;
   isAssembly?: boolean;
+  bomStructure?: BomStructureType;
   isIncluded?: boolean;
   inclusionType?: InclusionType;
   excludeReason?: string;
@@ -206,9 +216,13 @@ export default function QuoteLineGrid({
     };
   }, [stopAutoScroll, updateIndicator, lines]);
 
-  // 견적 대상 부품: 조립도, 제외품, 체결구제외, 도면노이즈를 제외한 실 가공/구매 대상
+  // 📐 AutoCAD Mechanical BOM 헬퍼: 세트발주(Purchased) 여부 판정
+  const isLineAssemblyPurchased = (l: QuoteReviewLine) =>
+    Boolean(l.isAssembly && (l.bomStructure === 'PURCHASED' || l.inclusionType === 'ASSEMBLY_PURCHASED'));
+
+  // 견적 대상 부품: AutoCAD BOM 규칙 반영 (세트발주 조립품 포함, 단품합산 조립도/제외품/체결구/노이즈 제외)
   const quoteTargetLines = lines.filter((l) => {
-    if (l.isAssembly) return false;
+    if (l.isAssembly) return isLineAssemblyPurchased(l);
     const incType = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
     return incType === 'INCLUDED' || incType === 'CUSTOMER_SUPPLIED';
   });
@@ -219,7 +233,7 @@ export default function QuoteLineGrid({
   }).length;
 
   const excludedCount = lines.filter((l) => {
-    if (l.isAssembly) return true;
+    if (l.isAssembly) return !isLineAssemblyPurchased(l);
     const incType = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
     return incType === 'EXCLUDED' || incType === 'FASTENER_EXCLUDED';
   }).length;
@@ -239,13 +253,17 @@ export default function QuoteLineGrid({
 
   const filtered = lines.filter((l) => {
     const incType = l.inclusionType || (l.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+    const isPurchasedAssy = isLineAssemblyPurchased(l);
+
     if (filterType === 'ALL') {
-      // 기본 ALL 뷰: 조립도, 견적제외, 체결구제외, 도면노이즈는 숨김 처리되어 진짜 부품만 깨끗하게 노출!
-      return !l.isAssembly && incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED' && incType !== 'ANNOTATION_NOISE';
+      // 기본 ALL 뷰: 세트발주(Purchased) 조립품은 노출, 단품합산(Phantom) 조립품 및 견적제외, 체결구제외, 도면노이즈는 숨김
+      if (l.isAssembly) return isPurchasedAssy;
+      return incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED' && incType !== 'ANNOTATION_NOISE';
     }
     if (filterType === 'MODIFIED') {
       // ⚡ 단가 직접 수정 품목 전용 뷰
-      return !l.isAssembly && incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED' && incType !== 'ANNOTATION_NOISE' && isLineModified(l);
+      if (l.isAssembly && !isPurchasedAssy) return false;
+      return incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED' && incType !== 'ANNOTATION_NOISE' && isLineModified(l);
     }
     if (filterType === 'NOISE') {
       // 🧹 도면 주석/노이즈 격리실 전용 뷰
@@ -253,16 +271,19 @@ export default function QuoteLineGrid({
     }
     if (filterType === 'WITH_ASSEMBLY') return true;
     if (filterType === 'NEEDS_REVIEW') {
-      return !l.isAssembly && incType === 'INCLUDED' && l.status === 'NEEDS_REVIEW';
+      if (l.isAssembly) return isPurchasedAssy && (l.status === 'NEEDS_REVIEW' || l.supplyPrice <= 0);
+      return incType === 'INCLUDED' && l.status === 'NEEDS_REVIEW';
     }
     if (filterType === 'UNCONFIRMED') {
-      return !l.isAssembly && incType === 'INCLUDED' && l.status !== 'CONFIRMED';
+      if (l.isAssembly) return isPurchasedAssy && (l.status !== 'CONFIRMED' || l.supplyPrice <= 0);
+      return incType === 'INCLUDED' && l.status !== 'CONFIRMED';
     }
     if (filterType === 'SUPPLIED') {
       return incType === 'CUSTOMER_SUPPLIED';
     }
     if (filterType === 'EXCLUDED') {
-      return l.isAssembly || incType === 'EXCLUDED' || incType === 'FASTENER_EXCLUDED';
+      if (l.isAssembly) return !isPurchasedAssy;
+      return incType === 'EXCLUDED' || incType === 'FASTENER_EXCLUDED';
     }
     if (['MACHINING', 'SHEET_METAL', 'CASTING', 'COMMERCIAL', 'ELECTRICAL'].includes(filterType)) {
       return l.partType === filterType && !l.isAssembly && incType !== 'EXCLUDED' && incType !== 'FASTENER_EXCLUDED' && incType !== 'ANNOTATION_NOISE';
@@ -456,11 +477,14 @@ export default function QuoteLineGrid({
             {filtered.map((row, rowIdx) => {
               const isSelected = lines.indexOf(row) === selectedIndex;
               const isChecked = selectedIds.includes(row.id);
-              const incType: InclusionType = row.inclusionType || (row.isIncluded === false ? 'EXCLUDED' : 'INCLUDED');
+              const isAssemblyPurchased = Boolean(row.isAssembly && (row.bomStructure === 'PURCHASED' || row.inclusionType === 'ASSEMBLY_PURCHASED'));
+              const isAssemblyPhantom = Boolean(row.isAssembly && !isAssemblyPurchased);
+
+              const incType: InclusionType = row.inclusionType || (isAssemblyPhantom ? 'ASSEMBLY_PHANTOM' : isAssemblyPurchased ? 'ASSEMBLY_PURCHASED' : (row.isIncluded === false ? 'EXCLUDED' : 'INCLUDED'));
               const isNoise = incType === 'ANNOTATION_NOISE';
               const isSupplied = incType === 'CUSTOMER_SUPPLIED';
               const isFastenerExcluded = incType === 'FASTENER_EXCLUDED';
-              const isExcluded = incType === 'EXCLUDED' || row.isAssembly || isFastenerExcluded || isNoise;
+              const isExcluded = incType === 'EXCLUDED' || isAssemblyPhantom || isFastenerExcluded || isNoise;
 
               const isConfirmed = row.status === 'CONFIRMED';
               const isNeedsReview = row.status === 'NEEDS_REVIEW';
@@ -559,7 +583,15 @@ export default function QuoteLineGrid({
                         );
                       })()}
                       {row.isAssembly && (
-                        <span className="px-1 py-0.2 text-[9px] rounded bg-purple-100 text-purple-700 font-bold shrink-0">조립제외</span>
+                        isAssemblyPurchased ? (
+                          <span className="px-1 py-0.2 text-[9px] rounded bg-indigo-100 text-indigo-800 font-bold border border-indigo-300 shrink-0" title="오토캐드 BOM 표준: 세트 턴키 발주 (조립품 세트 단가 합산)">
+                            📦 세트발주
+                          </span>
+                        ) : (
+                          <span className="px-1 py-0.2 text-[9px] rounded bg-purple-100 text-purple-700 font-bold border border-purple-200 shrink-0" title="오토캐드 BOM 표준: Phantom (단품별 개별 합산, 조립품 ₩0)">
+                            ⚙️ 단품합산
+                          </span>
+                        )
                       )}
                       {isNoise && (
                         <span className="px-1 py-0.2 text-[9px] rounded bg-amber-100 text-amber-800 font-bold border border-amber-300 shrink-0">
@@ -595,7 +627,7 @@ export default function QuoteLineGrid({
                   </td>
                   <td className="px-1.5 py-1.5 w-14 min-w-[54px] truncate" title={row.material}>{row.material}</td>
                   <td className="px-1 py-1 text-center font-sans tabular-nums w-10 min-w-[38px] leading-normal" onClick={(e) => e.stopPropagation()}>
-                    {isNoise || isExcluded || row.isAssembly ? (
+                    {isNoise || isExcluded || isAssemblyPhantom ? (
                       <span className="text-slate-400 font-sans tabular-nums text-xs leading-normal">{row.quantity}</span>
                     ) : (
                       <input
@@ -618,6 +650,8 @@ export default function QuoteLineGrid({
                       <span className="text-cyan-700 font-medium text-[10px]">사급(₩0)</span>
                     ) : isFastenerExcluded ? (
                       <span className="text-slate-500 font-medium text-[10px]">체결구제외</span>
+                    ) : isAssemblyPhantom ? (
+                      <span className="text-purple-700 font-medium text-[10px]" title="AutoCAD Phantom: 하위 단품 전량 합산으로 조립품 원가 0원">단품합산(₩0)</span>
                     ) : isExcluded ? (
                       <span className="text-slate-400 font-medium text-[10px]">견적제외</span>
                     ) : (row.unitCost > 0 ? `₩${row.unitCost.toLocaleString()}` : <span className="text-slate-400">₩0</span>)}
@@ -637,6 +671,10 @@ export default function QuoteLineGrid({
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-600 border border-slate-300 font-bold" title="표준 체결구 제외">
                         <Wrench className="w-3 h-3 text-slate-500 shrink-0" />
                         체결구 제외
+                      </span>
+                    ) : isAssemblyPhantom ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-purple-50 text-purple-800 border border-purple-200 font-bold" title="AutoCAD BOM Phantom: 조립품 자체는 0원 처리되며, 하위 구성 단품들이 견적에 전량 합산됩니다">
+                        ⚙️ 단품합산 (₩0)
                       </span>
                     ) : isExcluded ? (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 border border-rose-200 font-bold" title="견적 대상 제외">
@@ -727,9 +765,102 @@ export default function QuoteLineGrid({
                   {/* 견적 상태 열 */}
                   <td className="px-1.5 py-1.5 text-center relative w-20 min-w-[76px]" onClick={(e) => e.stopPropagation()}>
                     {row.isAssembly ? (
-                      <span className="px-2 py-1 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                        조립제외
-                      </span>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <div className="relative">
+                          <button
+                            onClick={() => setOpenDropdownId(openDropdownId === row.id ? null : row.id)}
+                            className={`px-2 py-1 rounded text-[10.5px] font-bold flex items-center gap-1 transition-all border shadow-2xs cursor-pointer whitespace-nowrap ${
+                              isAssemblyPurchased
+                                ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-400 ring-1 ring-indigo-200'
+                                : incType === 'EXCLUDED'
+                                ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 ring-1 ring-rose-200'
+                                : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-300 ring-1 ring-purple-200'
+                            }`}
+                            title="오토캐드 BOM 표준 모드 변경: 단품합산(Phantom) / 세트발주(Purchased) / 견적제외"
+                          >
+                            <span>
+                              {isAssemblyPurchased ? '📦 세트발주' :
+                               incType === 'EXCLUDED' ? '🚫 견적 제외' : '⚙️ 단품합산'}
+                            </span>
+                            <ChevronDown className={`w-3 h-3 opacity-60 transition-transform ${openDropdownId === row.id ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {/* 조립품 전용 AutoCAD Mechanical BOM 드롭다운 */}
+                          {openDropdownId === row.id && onUpdateLineInclusion && (
+                            <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-40 w-48 text-left text-xs font-semibold animate-in fade-in zoom-in-95">
+                              <div className="px-2.5 py-1 text-[10px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
+                                AutoCAD BOM 조립품 관리
+                              </div>
+                              <button
+                                onClick={() => {
+                                  onUpdateLineInclusion(row.id, 'ASSEMBLY_PHANTOM');
+                                  setOpenDropdownId(null);
+                                }}
+                                className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between transition-colors ${
+                                  !isAssemblyPurchased && incType !== 'EXCLUDED' ? 'bg-purple-50 text-purple-800 font-bold' : 'hover:bg-slate-50 text-slate-800'
+                                }`}
+                                title="상위 조립품 ₩0, 하위 부품 전량 견적에 합산 (AutoCAD 기본값)"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <span>⚙️</span> 단품합산 (Phantom)
+                                </span>
+                                {!isAssemblyPurchased && incType !== 'EXCLUDED' && <Check className="w-3.5 h-3.5 text-purple-600" />}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  onUpdateLineInclusion(row.id, 'ASSEMBLY_PURCHASED');
+                                  setOpenDropdownId(null);
+                                }}
+                                className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between transition-colors ${
+                                  isAssemblyPurchased ? 'bg-indigo-50 text-indigo-800 font-bold' : 'hover:bg-indigo-50/60 text-slate-800'
+                                }`}
+                                title="조립품 완제품 세트 단가 견적에 합산"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <span>📦</span> 세트발주 (Purchased)
+                                </span>
+                                {isAssemblyPurchased && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  onUpdateLineInclusion(row.id, 'EXCLUDED');
+                                  setOpenDropdownId(null);
+                                }}
+                                className={`w-full px-2.5 py-1.5 text-left flex items-center justify-between transition-colors ${
+                                  incType === 'EXCLUDED' ? 'bg-rose-50 text-rose-800 font-bold' : 'hover:bg-rose-50/60 text-slate-800'
+                                }`}
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <Ban className="w-3.5 h-3.5 text-rose-500" /> 견적 제외
+                                </span>
+                                {incType === 'EXCLUDED' && <Check className="w-3.5 h-3.5 text-rose-600" />}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 조립품 확정 상태 뱃지 */}
+                        {isAssemblyPurchased ? (
+                          <button
+                            onClick={() => onToggleConfirm(row.id)}
+                            className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold transition-all ${
+                              isConfirmed ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800' :
+                              row.supplyPrice <= 0 ? 'bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 animate-pulse' :
+                              'bg-amber-100 hover:bg-amber-200 text-amber-800'
+                            }`}
+                          >
+                            {isConfirmed ? '확정' : row.supplyPrice <= 0 ? '0원' : '미확정'}
+                          </button>
+                        ) : incType === 'EXCLUDED' ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 text-slate-600 border border-slate-300 whitespace-nowrap">
+                            제외
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-purple-100 text-purple-700 border border-purple-200 whitespace-nowrap" title="하위 부품 단품 합산 방식">
+                            합산대기
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <div className="flex items-center justify-center gap-1.5">
                         {/* 💎 견적 포함 유형 뱃지 & 간편 드롭다운 (선택된 내용 완벽 표시) */}
