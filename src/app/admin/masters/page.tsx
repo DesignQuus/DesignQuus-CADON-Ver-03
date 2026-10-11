@@ -1515,7 +1515,7 @@ export default function MasterDataManagerPage() {
             }`}
           >
             <Sliders className="w-4 h-4" />
-            <span>소재 시세 & 가공 임률 설정</span>
+            <span>소재 시세 & 가공 단가 설정</span>
           </button>
         </div>
       </header>
