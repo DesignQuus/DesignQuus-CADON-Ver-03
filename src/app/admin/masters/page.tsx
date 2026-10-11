@@ -2552,8 +2552,8 @@ export default function MasterDataManagerPage() {
                     <span>⚡ 실무 자가학습 단가 풀 (Manual Price Pool)</span>
                   </h2>
                 </div>
-                <p className="text-[16px] text-purple-200/90 leading-relaxed max-w-4xl">
-                  도면 검수 승인 및 견적 산출 과정에서 사용자가 입력한 단가와 품목 정보가 AI에 의해 자동으로 누적 학습된 실무 단가 저장소입니다. 
+                <p className="text-[16px] text-purple-200/90 leading-relaxed max-w-4xl break-keep">
+                  도면 검수 승인 및 견적 산출 과정에서 사용자가 입력한 단가와 품목 정보가 AI에 의해 자동으로 누적 학습된 실무 단가 저장소입니다.<br />
                   도면 파일이나 견적 건이 삭제되어도 이 학습 데이터베이스는 <strong className="text-amber-300 font-bold">영구 보존</strong>되며, 필요 시 원클릭으로 공식 표준 품목으로 승격할 수 있습니다.
                 </p>
               </div>
