@@ -85,7 +85,7 @@ export function getLocalSqlite(): any {
         localSqliteInstance = new DatabaseSync(c, { readOnly: true });
         try {
           localSqliteInstance.exec('PRAGMA query_only = ON;');
-          localSqliteInstance.exec('PRAGMA busy_timeout = 2000;');
+          localSqliteInstance.exec('PRAGMA busy_timeout = 5000;');
         } catch {}
         console.log(`[db.ts] ⚡ [Direct SQLite Read Engine (ReadOnly)] Connected to: ${c}`);
         return localSqliteInstance;
@@ -124,7 +124,9 @@ export function getWritableLocalSqlite(): any {
     if (dbPath) {
       localWritableSqliteInstance = new DatabaseSync(dbPath);
       try {
-        localWritableSqliteInstance.exec('PRAGMA busy_timeout = 3000;');
+        localWritableSqliteInstance.exec('PRAGMA busy_timeout = 5000;');
+        localWritableSqliteInstance.exec('PRAGMA journal_mode = WAL;');
+        localWritableSqliteInstance.exec('PRAGMA synchronous = NORMAL;');
       } catch {}
       console.log(`[db.ts] ⚡ [Direct SQLite Writable Engine] Ready for: ${dbPath}`);
       return localWritableSqliteInstance;

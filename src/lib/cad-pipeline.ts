@@ -6,7 +6,7 @@ import { getStorageSubdir, resolveStoragePath } from './storage';
 
 const SCRIPTS_DIR = path.join(process.cwd(), 'scripts');
 
-export function runPythonScript(scriptName: string, args: string[]): Promise<any> {
+export function runPythonScript(scriptName: string, args: string[], timeoutMs: number = 120000): Promise<any> {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(SCRIPTS_DIR, scriptName);
     const proc = spawn('python', [scriptPath, ...args], {
@@ -16,6 +16,18 @@ export function runPythonScript(scriptName: string, args: string[]): Promise<any
 
     let stdout = '';
     let stderr = '';
+    let isSettled = false;
+
+    // 장시간 좀비 프로세스 방지: 지정 시간 초과 시 강제 종료
+    const timer = setTimeout(() => {
+      if (!isSettled) {
+        isSettled = true;
+        try {
+          proc.kill('SIGKILL');
+        } catch {}
+        reject(new Error(`[runPythonScript] 스크립트 실행 시간 초과 (${timeoutMs / 1000}초): ${scriptName}`));
+      }
+    }, timeoutMs);
 
     proc.stdout.on('data', (data) => {
       stdout += data.toString('utf-8');
@@ -26,6 +38,10 @@ export function runPythonScript(scriptName: string, args: string[]): Promise<any
     });
 
     proc.on('close', (code) => {
+      if (isSettled) return;
+      isSettled = true;
+      clearTimeout(timer);
+
       if (code !== 0 && !stdout.trim()) {
         return reject(new Error(`Script ${scriptName} failed (code ${code}): ${stderr}`));
       }
@@ -44,6 +60,9 @@ export function runPythonScript(scriptName: string, args: string[]): Promise<any
     });
 
     proc.on('error', (err) => {
+      if (isSettled) return;
+      isSettled = true;
+      clearTimeout(timer);
       reject(err);
     });
   });
