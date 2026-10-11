@@ -45,7 +45,7 @@ if (typeof process !== 'undefined') {
 
 import {
   executeSQL,
-  queryTable,
+  queryTable as remoteQueryTable,
   insertRows as remoteInsertRows,
   updateRows as remoteUpdateRows,
   deleteRows as remoteDeleteRows,
@@ -138,7 +138,28 @@ export function getWritableLocalSqlite(): any {
 export async function insertRows(tableName: string, rows: Record<string, any>[]): Promise<any> {
   if (!rows || rows.length === 0) return { success: true, inserted: 0 };
   
-  // 1차: EGDesk 공식 원격 API 시도 (2초 타임아웃 가드)
+  // 1차: Writable Local SQLite 우선 실행 (초고속 0.001초 & 트랜잭션 일괄 처리)
+  const writable = getWritableLocalSqlite();
+  if (writable) {
+    try {
+      const keys = Object.keys(rows[0]);
+      const placeholders = keys.map(() => '?').join(', ');
+      const sql = `INSERT OR REPLACE INTO ${tableName} (${keys.join(', ')}) VALUES (${placeholders})`;
+      const stmt = writable.prepare(sql);
+      
+      writable.exec('BEGIN TRANSACTION;');
+      for (const row of rows) {
+        stmt.run(...keys.map(k => (row[k] !== undefined ? row[k] : null)));
+      }
+      writable.exec('COMMIT;');
+      return { success: true, inserted: rows.length };
+    } catch (err: any) {
+      try { writable.exec('ROLLBACK;'); } catch {}
+      console.warn(`[db.ts] Direct SQLite insertRows error (${err.message}), falling back to remote...`);
+    }
+  }
+
+  // 2차 Fallback: EGDesk 공식 원격 API 시도 (2초 타임아웃 가드)
   try {
     const remotePromise = remoteInsertRows(tableName, rows);
     const timeoutPromise = new Promise((_, reject) =>
@@ -146,34 +167,15 @@ export async function insertRows(tableName: string, rows: Record<string, any>[])
     );
     return await Promise.race([remotePromise, timeoutPromise]);
   } catch (err: any) {
-    // 2차 Fallback: EGDesk 응답 지연/프리징/fetch failed 발생 시 Direct SQLite로 즉시 쓰기
-    console.warn(`[db.ts] Remote insertRows failed (${err.message}), falling back to direct SQLite write...`);
-    const writable = getWritableLocalSqlite();
-    if (writable) {
-      for (const row of rows) {
-        const keys = Object.keys(row);
-        const placeholders = keys.map(() => '?').join(', ');
-        const sql = `INSERT OR REPLACE INTO ${tableName} (${keys.join(', ')}) VALUES (${placeholders})`;
-        const stmt = writable.prepare(sql);
-        stmt.run(...keys.map(k => row[k]));
-      }
-      return { success: true, inserted: rows.length };
-    }
+    console.warn(`[db.ts] Remote insertRows failed (${err.message})`);
     throw err;
   }
 }
 
 export async function updateRows(tableName: string, updates: Record<string, any>, options?: any): Promise<any> {
-  try {
-    const remotePromise = remoteUpdateRows(tableName, updates, options);
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('EGDesk remote timeout')), 2000)
-    );
-    return await Promise.race([remotePromise, timeoutPromise]);
-  } catch (err: any) {
-    console.warn(`[db.ts] Remote updateRows failed (${err.message}), falling back to direct SQLite...`);
-    const writable = getWritableLocalSqlite();
-    if (writable && options?.filters) {
+  const writable = getWritableLocalSqlite();
+  if (writable && options?.filters) {
+    try {
       const setKeys = Object.keys(updates);
       const setClause = setKeys.map(k => `${k} = ?`).join(', ');
       const filterKeys = Object.keys(options.filters);
@@ -183,22 +185,27 @@ export async function updateRows(tableName: string, updates: Record<string, any>
       const stmt = writable.prepare(sql);
       const res = stmt.run(...params);
       return { success: true, updated: res.changes || 1 };
+    } catch (err: any) {
+      console.warn(`[db.ts] Direct SQLite updateRows error (${err.message}), falling back to remote...`);
     }
-    throw err;
   }
-}
 
-export async function deleteRows(tableName: string, options?: any): Promise<any> {
   try {
-    const remotePromise = remoteDeleteRows(tableName, options);
+    const remotePromise = remoteUpdateRows(tableName, updates, options);
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('EGDesk remote timeout')), 2000)
     );
     return await Promise.race([remotePromise, timeoutPromise]);
   } catch (err: any) {
-    console.warn(`[db.ts] Remote deleteRows failed (${err.message}), falling back to direct SQLite...`);
-    const writable = getWritableLocalSqlite();
-    if (writable && options?.filters) {
+    console.warn(`[db.ts] Remote updateRows failed (${err.message})`);
+    throw err;
+  }
+}
+
+export async function deleteRows(tableName: string, options?: any): Promise<any> {
+  const writable = getWritableLocalSqlite();
+  if (writable && options?.filters) {
+    try {
       const filterKeys = Object.keys(options.filters);
       const filterClause = filterKeys.map(k => `${k} = ?`).join(' AND ');
       const sql = `DELETE FROM ${tableName} WHERE ${filterClause}`;
@@ -206,14 +213,57 @@ export async function deleteRows(tableName: string, options?: any): Promise<any>
       const stmt = writable.prepare(sql);
       const res = stmt.run(...params);
       return { success: true, deleted: res.changes || 1 };
+    } catch (err: any) {
+      console.warn(`[db.ts] Direct SQLite deleteRows error (${err.message}), falling back to remote...`);
     }
+  }
+
+  try {
+    const remotePromise = remoteDeleteRows(tableName, options);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('EGDesk remote timeout')), 2000)
+    );
+    return await Promise.race([remotePromise, timeoutPromise]);
+  } catch (err: any) {
+    console.warn(`[db.ts] Remote deleteRows failed (${err.message})`);
     throw err;
   }
 }
 
+export async function queryTable(tableName: string, options?: any): Promise<any> {
+  const local = getLocalSqlite();
+  if (local) {
+    try {
+      let sql = `SELECT * FROM ${tableName}`;
+      const params: any[] = [];
+      if (options?.filters && Object.keys(options.filters).length > 0) {
+        const conds = Object.keys(options.filters).map(k => {
+          params.push(options.filters[k]);
+          return `${k} = ?`;
+        });
+        sql += ` WHERE ${conds.join(' AND ')}`;
+      }
+      if (options?.orderBy) {
+        sql += ` ORDER BY ${options.orderBy}`;
+      }
+      if (options?.limit) {
+        sql += ` LIMIT ${Number(options.limit)}`;
+      }
+      if (options?.offset) {
+        sql += ` OFFSET ${Number(options.offset)}`;
+      }
+      const stmt = local.prepare(sql);
+      const rows = stmt.all(...params) as any[];
+      return { rows, totalCount: rows.length };
+    } catch (err: any) {
+      console.warn(`[db.ts] Direct SQLite queryTable error (${err.message}), falling back to remote...`);
+    }
+  }
+  return await remoteQueryTable(tableName, options);
+}
+
 export {
   executeSQL,
-  queryTable,
   listTables,
   createTable,
   deleteTable,
@@ -373,8 +423,19 @@ export async function executeDmlOrQuery(sql: string, params: any[] = []): Promis
     }
   }
 
-  // 4. DELETE FROM 쿼리는 이지데스크 deleteRows로 번역
+  // 4. DELETE FROM 쿼리는 Direct Writable SQLite 우선 실행 (초고속 0.001초)
   if (upper.startsWith('DELETE FROM')) {
+    const writable = getWritableLocalSqlite();
+    if (writable) {
+      try {
+        const stmt = writable.prepare(cleanSql);
+        const res = stmt.run(...params);
+        return { success: true, changes: res.changes || 0, deleted: res.changes || 0 };
+      } catch (err: any) {
+        console.warn(`[executeDmlOrQuery] Direct SQLite DELETE error (${err.message}), falling back to remote...`);
+      }
+    }
+
     const match = cleanSql.match(/DELETE\s+FROM\s+([a-zA-Z0-9_]+)(?:\s+WHERE\s+(.+))?$/is);
     if (match) {
       const tableName = match[1];
@@ -493,7 +554,32 @@ export const db = {
       }
     }
 
-    // 쓰기(INSERT/UPDATE/DELETE) 또는 로컬 SQLite 미사용/실패 시 EGDesk 공식 HTTP API로 안전 위임
+    // ⚡ 쓰기 쿼리(INSERT/UPDATE/DELETE)에 대해 Direct Writable SQLite 우선 적용! (0.001초)
+    const writable = getWritableLocalSqlite();
+    if (writable) {
+      try {
+        const stmt = writable.prepare(sql);
+        return {
+          all: async (...params: any[]) => {
+            return stmt.all(...params) as any[];
+          },
+          get: async (...params: any[]) => {
+            return stmt.get(...params) ?? undefined;
+          },
+          run: async (...params: any[]) => {
+            const res = stmt.run(...params);
+            return {
+              changes: res?.changes ?? 1,
+              lastInsertRowid: res?.lastInsertRowid ?? 0
+            };
+          }
+        };
+      } catch (err: any) {
+        console.warn(`[db.prepare] Direct SQLite write error, falling back to HTTP: ${err.message}`);
+      }
+    }
+
+    // 로컬 SQLite 미사용/실패 시 EGDesk 공식 HTTP API로 안전 위임
     return {
       all: async (...params: any[]) => {
         const res = await executeDmlOrQuery(sql, params);
