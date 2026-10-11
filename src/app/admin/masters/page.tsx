@@ -1943,11 +1943,11 @@ export default function MasterDataManagerPage() {
                           {/* 2. 가공 단가 · 표준 공임 (방법 1: 공정/공수 좌측 + 가공비 우측끝 고정 정렬 & 균일한 40px 간격 형성) */}
                           <td className="py-1.5 pl-4 pr-6 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-2.5 leading-none">
-                              <span className="text-[13px] text-blue-600 font-bold truncate max-w-[145px]" title={`가공비: ${breakdown.processName} (${breakdown.processRateStr})`}>
+                              <span className="text-[13px] text-blue-600 font-normal truncate max-w-[145px]" title={`가공비: ${breakdown.processName} (${breakdown.processRateStr})`}>
                                 ({breakdown.processName}{breakdown.cycleTimeHours > 0 ? ` ${breakdown.cycleTimeHours}h` : ''})
                               </span>
                               {breakdown.processCost > 0 ? (
-                                <span className="font-mono font-black text-blue-700 text-[15px] tabular-nums min-w-[72px] text-right">
+                                <span className="font-mono font-normal text-blue-700 text-[15px] tabular-nums min-w-[72px] text-right">
                                   ₩{breakdown.processCost.toLocaleString()}
                                 </span>
                               ) : (
@@ -2025,7 +2025,7 @@ export default function MasterDataManagerPage() {
                                   title={`클릭하여 부품 분류 & 대표 품목 스마트 피커 열기 (현재: ${catLabel}${hasDistinctSubItem ? ` > ${subItem}` : ''})`}
                                 >
                                   {/* 대분류 (분류 고유 컬러 텍스트) */}
-                                  <span className={`font-bold text-[13px] ${getPartCategoryTextClass(it.category)} leading-none shrink-0`}>
+                                  <span className={`font-normal text-[13px] ${getPartCategoryTextClass(it.category)} leading-none shrink-0`}>
                                     {catLabel}
                                   </span>
 
@@ -2033,7 +2033,7 @@ export default function MasterDataManagerPage() {
                                   {hasDistinctSubItem && (
                                     <>
                                       <span className="text-slate-300 font-normal text-[12px] leading-none select-none shrink-0">›</span>
-                                      <span className="font-extrabold text-[13px] text-slate-800 group-hover:text-blue-700 leading-none truncate max-w-[110px]">
+                                      <span className="font-normal text-[13px] text-slate-800 group-hover:text-blue-700 leading-none truncate max-w-[110px]">
                                         {subItem}
                                       </span>
                                     </>
