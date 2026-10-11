@@ -2669,7 +2669,7 @@ export default function HomePage() {
                   ) : (
                     <>
                       <Sparkles className="w-5 h-5" />
-                      <span>⚡ 도면 등록 및 AI 분석 시작 (0.5초 즉시 전환)</span>
+                      <span>⚡ 도면 등록 및 AI 분석 시작</span>
                     </>
                   )}
                 </button>
