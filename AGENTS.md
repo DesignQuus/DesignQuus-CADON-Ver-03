@@ -112,3 +112,23 @@ See `.agents/rules/egdesk-dev-context.md` for full details.
   3. **가짜 업체 유입 방지 가드 (Anti-Bogus Header Guard)**:
      - `PROJECT NO`, `DWG NO`, `CUSTOMER`, `TITLE` 등 표제란 헤더 명칭이나 플레이스홀더가 `companies` 테이블에 신규 업체로 등록되는 것을 파이프라인(`src/lib/cad-pipeline.ts`) 단에서 원천 차단합니다.
 
+## 표준 원가 관리 그리드 및 타이포그래피 보존 규칙 (Cost Management Grid & Typography Standard Rule)
+- **절대 원칙**: 원가 기준 관리 센터(`/admin/masters`) 및 프로젝트 전반의 마스터 그리드 테이블과 폰트 형식은 본 표준 규격으로 확정·동결(Freeze)되었습니다. **사용자의 명시적 지시나 사전 승낙(Approval)이 없는 한, 이 그리드 레이아웃과 폰트 스타일은 절대 임의로 변경하거나 수정할 수 없습니다.**
+- **핵심 타이포그래피 및 그리드 표준 규격**:
+  1. **규격 (Spec) 기준축**:
+     - `font-mono text-[14px] font-normal text-slate-800 tabular-nums` (고정폭 모노스페이스, 14px, 400 굵기).
+  2. **소재 시세 · 재료비**:
+     - **시세**: `font-mono text-[14px] font-normal text-slate-600` (규격과 동일 폰트/크기/굵기 일체화, 차분한 슬레이트 그레이).
+     - **금액**: `font-mono text-[15px] font-bold text-slate-900 tabular-nums` (수치 가독성 극대화, 15px 볼드 강조).
+  3. **가공 단가 · 표준 공임**:
+     - **공정/공수**: `font-mono text-[14px] font-normal text-blue-600` (규격과 동일 폰트/크기/굵기 일체화, 가공 고유 청색 식별).
+     - **금액**: `font-mono text-[15px] font-bold text-blue-700 tabular-nums` (재료비와 동일한 15px 볼드, 블루 강조).
+  4. **후처리 · 열처리**:
+     - **뱃지**: `px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[12.5px] font-bold border border-emerald-200`.
+     - **금액**: `font-mono font-extrabold text-emerald-800 text-[14.5px] tabular-nums`.
+  5. **부품 분류 · 대표 품목 (원클릭 스마트 피커)**:
+     - **대분류명**: `font-bold text-[13px]` (분류 고유 컬러 텍스트).
+     - **대표 품목명**: `font-normal text-[13px] text-slate-800 group-hover:text-blue-700`.
+- **수정 통제 원칙 (Strict Change Control)**:
+  - 본 그리드의 폰트 종류, 크기, 굵기, 색상, 정렬, 열 너비 구조를 수정해야 할 상황이 발생하면, **반드시 사용자에게 변경 필요성과 변경 전/후 비교안을 보고하고 사전 승낙을 득한 후에만 수정**을 진행합니다.
+
