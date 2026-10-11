@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/api';
 import { getClientCache, setClientCache, isCacheFresh, fetchWithCache } from '@/lib/cacheStore';
@@ -321,21 +321,109 @@ export default function MasterDataManagerPage() {
     }
   };
 
-  const handlePromoteToStandard = (item: any) => {
-    setNewName(item.standard_name || item.item_name || '');
-    setNewSpec(item.specification || '');
-    setNewMaterial(item.material || 'SS400');
-    setNewPrice(Number(item.unit_price || 0));
-    setNewCategory('MACHINING');
-    setNewCode(`STD-${Date.now().toString().slice(-6)}`);
-    setShowAddModal(true);
-  };
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
   // ⚡ SSR 하이드레이션 불일치 방지: 초기 상태는 서버/클라이언트 동일 기본값으로 유지하고, 마운트 직후(useEffect) 캐시를 즉각 복원
   const [items, setItems] = useState<MasterProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // 💡 자가학습 품목의 실제 유효 규격 산출 (노이즈 '1 / 1' 필터링 및 표준 마스터 품목 규격 실시간 연동)
+  const getEffectiveLearnedSpec = useCallback((item: any) => {
+    // 1. 표준 품목 및 단가 대장(items)에서 매칭되는 품목의 실제 규격 우선 탐색
+    const nameToMatch = (item.standard_name || item.item_name || '').trim().toLowerCase();
+    if (nameToMatch && items.length > 0) {
+      const matchedMaster = items.find((m) => {
+        const mName = (m.standard_name || '').trim().toLowerCase();
+        const mCode = (m.master_code || '').trim().toLowerCase();
+        return (mName && mName === nameToMatch) || (mCode && nameToMatch.includes(mCode));
+      });
+
+      if (matchedMaster) {
+        const rawMasterSpec = matchedMaster.specification;
+        if (rawMasterSpec && !isNoiseSpec(rawMasterSpec) && rawMasterSpec !== '-') {
+          return rawMasterSpec;
+        }
+        const inferredMasterSpec = inferPartSpecification({
+          name: matchedMaster.standard_name,
+          code: matchedMaster.master_code,
+          category: matchedMaster.category,
+          material: matchedMaster.material,
+          existingSpec: rawMasterSpec
+        });
+        if (inferredMasterSpec && inferredMasterSpec !== '-') {
+          return inferredMasterSpec;
+        }
+      }
+    }
+
+    // 2. 학습 품목 자체의 규격이 유효한지(노이즈 '1 / 1' 등이 아닌지) 검사
+    const rawItemSpec = item.specification;
+    if (rawItemSpec && !isNoiseSpec(rawItemSpec) && rawItemSpec !== '-') {
+      return rawItemSpec;
+    }
+
+    // 3. 자체 형상/품명 기반 규격 역산 추정
+    const inferred = inferPartSpecification({
+      name: item.standard_name || item.item_name || '',
+      code: '',
+      category: 'MACHINING',
+      material: item.material || item.standard_material || 'SS400',
+      existingSpec: rawItemSpec
+    });
+
+    return inferred && inferred !== '-' ? inferred : '-';
+  }, [items]);
+
+  const handlePromoteToStandard = (item: any) => {
+    const effSpec = getEffectiveLearnedSpec(item);
+    setNewName(item.standard_name || item.item_name || '');
+    setNewSpec(effSpec !== '-' ? effSpec : (!isNoiseSpec(item.specification) ? item.specification : ''));
+    setNewMaterial(item.material || 'SS400');
+    setNewPrice(Number(item.unit_price || 0));
+    setNewCategory('MACHINING');
+    setNewCode(`STD-${Date.now().toString().slice(-6)}`);
+    setShowAddModal(true);
+  };
+
+  // 자가학습 단가 풀 대장 엑셀(.xlsx) 다운로드
+  const handleExportLearnedExcel = async () => {
+    if (learnedItems.length === 0) return;
+    try {
+      const XLSX = await import('xlsx');
+      const exportData = learnedItems.map((item, idx) => ({
+        'No': idx + 1,
+        '학습품목명': item.item_name || '',
+        '표준품명': item.standard_name || item.item_name || '',
+        '규격(Spec)': getEffectiveLearnedSpec(item),
+        '재질': item.material || item.standard_material || 'SS400',
+        '최근학습단가(원)': Number(item.unit_price || 0),
+        '검증횟수': item.approval_count || 1,
+        '출처': item.source === 'DRAWING_APPROVAL' ? '도면승인' : item.source === 'QUOTE_MANUAL' ? '수동견적' : item.source || '자가학습',
+        '고객사': item.company_name || '-',
+        '최근학습일시': item.last_used_at?.slice(0, 10) || item.created_at?.slice(0, 10) || '-'
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      ws['!cols'] = [
+        { wch: 6 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 24 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 10 },
+        { wch: 12 },
+        { wch: 18 },
+        { wch: 14 }
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '자가학습_단가풀');
+      XLSX.writeFile(wb, `CADON_자가학습단가풀_${new Date().toISOString().substring(0, 10)}.xlsx`);
+    } catch (e) {
+      alert('엑셀 다운로드 중 오류가 발생했습니다.');
+    }
+  };
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null); // 개별 단가 인라인 편집 상태 (다중 선택과 완전 분리)
@@ -2497,40 +2585,52 @@ export default function MasterDataManagerPage() {
                   )}
                 </div>
               </div>
-              <div className="text-xs font-bold text-slate-600 flex items-center space-x-2">
-                <span>총 학습 부품: <strong className="text-purple-700 font-mono">{learnedItems.length}</strong>건</span>
+              <div className="flex items-center space-x-3 shrink-0">
+                <div className="text-xs font-bold text-slate-600 flex items-center space-x-2">
+                  <span>총 학습 부품: <strong className="text-purple-700 font-mono text-[13px]">{learnedItems.length}</strong>건</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleExportLearnedExcel}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  title="자가학습 단가 풀 대장을 엑셀 파일(.xlsx)로 내려받습니다."
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>엑셀 서식 다운로드</span>
+                </button>
               </div>
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
-              <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 sticky top-0 z-10 font-bold">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto max-h-[calc(100vh-260px)]">
+                <table className="w-full text-left border-collapse font-sans">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-700 text-[14px] font-extrabold sticky top-0 z-10 select-none">
                     <tr>
-                      <th className="py-2.5 px-3 text-center w-12">No.</th>
-                      <th className="py-2.5 px-3">학습 품목명 (도면 원문 / 표준)</th>
-                      <th className="py-2.5 px-3">규격 (Specification)</th>
-                      <th className="py-2.5 px-3">재질 (Material)</th>
-                      <th className="py-2.5 px-3 text-right">최근 학습단가</th>
-                      <th className="py-2.5 px-3 text-center">검증 횟수</th>
-                      <th className="py-2.5 px-3 text-center">출처</th>
-                      <th className="py-2.5 px-3">고객사</th>
-                      <th className="py-2.5 px-3 text-center">최근 학습일시</th>
-                      <th className="py-2.5 px-3 text-center w-28">표준 승격</th>
+                      <th className="py-2 px-2 text-center w-12">No.</th>
+                      <th className="py-2 px-4 text-left min-w-[200px]">학습 품목명 (도면 원문 / 표준)</th>
+                      <th className="py-2 px-4 text-left min-w-[170px]">규격 (Specification)</th>
+                      <th className="py-2 px-4 text-left min-w-[90px]">재질 (Material)</th>
+                      <th className="py-2 pl-4 pr-6 text-right min-w-[130px]">최근 학습단가</th>
+                      <th className="py-2 px-3 text-center min-w-[95px]">검증 횟수</th>
+                      <th className="py-2 px-3 text-center min-w-[85px]">출처</th>
+                      <th className="py-2 px-4 text-left min-w-[110px]">고객사</th>
+                      <th className="py-2 px-3 text-center min-w-[110px]">최근 학습일시</th>
+                      <th className="py-2 px-3 text-center w-28">표준 승격</th>
+                      <th className="p-0 bg-slate-100 border-b border-slate-200 select-none pointer-events-none" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-200/80 font-sans">
                     {loadingLearned ? (
                       <tr>
-                        <td colSpan={10} className="py-12 text-center text-slate-400">
+                        <td colSpan={11} className="py-12 text-center text-slate-400">
                           <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-purple-600" />
                           <span>자가학습 단가 풀을 불러오는 중입니다...</span>
                         </td>
                       </tr>
                     ) : learnedItems.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="py-12 text-center text-slate-400">
+                        <td colSpan={11} className="py-12 text-center text-slate-400">
                           <span>아직 자가학습된 단가 데이터가 없습니다. 도면 승인 및 견적 작성 시 자동 축적됩니다.</span>
                         </td>
                       </tr>
@@ -2547,58 +2647,69 @@ export default function MasterDataManagerPage() {
                             (item.company_name || '').toLowerCase().includes(q)
                           );
                         })
-                        .map((item, idx) => (
-                          <tr key={item.id || idx} className="hover:bg-purple-50/40 transition-colors">
-                            <td className="py-2 px-3 text-center font-mono text-slate-400 text-[11px]">
-                              {idx + 1}
-                            </td>
-                            <td className="py-2 px-3">
-                              <div className="font-bold text-slate-900">{item.item_name}</div>
-                              {item.standard_name && item.standard_name !== item.item_name && (
-                                <div className="text-[10px] text-purple-700 font-semibold">
-                                  표준명: {item.standard_name}
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 font-mono text-slate-700 text-[11px]">
-                              {item.specification || '-'}
-                            </td>
-                            <td className="py-2 px-3">
-                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 font-mono">
+                        .map((item, idx) => {
+                          const effectiveSpec = getEffectiveLearnedSpec(item);
+                          return (
+                            <tr
+                              key={item.id || idx}
+                              className={`cursor-pointer select-none border-b border-slate-200/80 min-h-[36px] transition-colors ${
+                                idx % 2 === 1 ? 'bg-slate-100/60 hover:bg-purple-50/80' : 'bg-white hover:bg-purple-50/80'
+                              }`}
+                            >
+                              <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-500 text-[14px]">
+                                {idx + 1}
+                              </td>
+                              <td className="py-1.5 px-4">
+                                <div className="font-bold text-slate-900 text-[14px]">{item.item_name}</div>
+                                {item.standard_name && item.standard_name !== item.item_name && (
+                                  <div className="text-[11.5px] text-purple-700 font-semibold leading-tight mt-0.5">
+                                    표준명: {item.standard_name}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-1.5 px-4 text-left font-mono font-normal text-slate-800 truncate text-[14px] tabular-nums">
+                                {effectiveSpec && effectiveSpec !== '-' ? (
+                                  <span className="font-mono font-normal text-slate-800" title={`부품 규격(Spec): ${effectiveSpec}`}>
+                                    {effectiveSpec}
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-slate-300 font-normal">-</span>
+                                )}
+                              </td>
+                              <td className="py-1.5 px-4 font-mono font-bold text-slate-700 truncate text-[13.5px] tabular-nums">
                                 {item.material || item.standard_material || 'SS400'}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3 text-right font-mono font-bold text-blue-700">
-                              ₩{Number(item.unit_price || 0).toLocaleString()}
-                            </td>
-                            <td className="py-2 px-3 text-center">
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                {item.approval_count || 1}회 승인
-                              </span>
-                            </td>
-                            <td className="py-2 px-3 text-center">
-                              <span className="text-[10px] text-slate-500 font-medium">
+                              </td>
+                              <td className="py-1.5 pl-4 pr-6 text-right font-mono font-bold text-blue-700 text-[15px] tabular-nums whitespace-nowrap leading-none">
+                                ₩{Number(item.unit_price || 0).toLocaleString()}
+                              </td>
+                              <td className="py-1.5 px-3 text-center whitespace-nowrap">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[12.5px] font-bold border border-emerald-200 leading-none">
+                                  {item.approval_count || 1}회 승인
+                                </span>
+                              </td>
+                              <td className="py-1.5 px-3 text-center whitespace-nowrap text-[12.5px] text-slate-500 font-medium">
                                 {item.source === 'DRAWING_APPROVAL' ? '도면승인' : item.source === 'QUOTE_MANUAL' ? '수동견적' : item.source || '자가학습'}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3 text-slate-600 font-medium text-[11px]">
-                              {item.company_name || '-'}
-                            </td>
-                            <td className="py-2 px-3 text-center font-mono text-slate-400 text-[10px]">
-                              {item.last_used_at?.slice(0, 10) || item.created_at?.slice(0, 10) || '-'}
-                            </td>
-                            <td className="py-2 px-3 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handlePromoteToStandard(item)}
-                                className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded text-[11px] font-bold border border-purple-200 transition-colors cursor-pointer"
-                                title="이 실무 단가를 표준 부품 단가 대장에 등록합니다."
-                              >
-                                표준 등록
-                              </button>
-                            </td>
-                          </tr>
-                        ))
+                              </td>
+                              <td className="py-1.5 px-4 text-left whitespace-nowrap text-[13px] font-medium text-slate-700 truncate max-w-[130px]" title={item.company_name || '-'}>
+                                {item.company_name || '-'}
+                              </td>
+                              <td className="py-1.5 px-3 text-center font-mono text-slate-500 text-[12.5px] tabular-nums whitespace-nowrap">
+                                {item.last_used_at?.slice(0, 10) || item.created_at?.slice(0, 10) || '-'}
+                              </td>
+                              <td className="py-1.5 px-3 text-center whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handlePromoteToStandard(item)}
+                                  className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-[12px] font-bold border border-purple-200 shadow-2xs transition-colors cursor-pointer"
+                                  title="이 실무 단가를 표준 부품 단가 대장에 등록합니다."
+                                >
+                                  표준 등록
+                                </button>
+                              </td>
+                              <td className="p-0 pointer-events-none" />
+                            </tr>
+                          );
+                        })
                     )}
                   </tbody>
                 </table>
