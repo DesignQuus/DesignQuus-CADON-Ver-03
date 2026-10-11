@@ -82,17 +82,41 @@ export async function GET(
       ORDER BY item_no ASC
     `).all(quote.id)) as any[];
 
-    // 4. 품목별 단가 수정 여부 분석 및 전/후 비교 데이터 합성
+    // 3-1. 표준 품목 및 단가 대장(product_masters) 조회 (사내 기준 대장 매칭 검증)
+    let masterRows: any[] = [];
+    try {
+      masterRows = (await db.prepare(`
+        SELECT master_code, standard_name, category, specification, material, base_unit_price
+        FROM product_masters
+      `).all()) as any[];
+    } catch (e) {
+      console.warn('Failed to query product_masters in price-adjustments:', e);
+    }
+    const masterByName = new Map<string, any>();
+    const masterByCode = new Map<string, any>();
+    for (const m of masterRows) {
+      if (m.standard_name) masterByName.set(m.standard_name.trim().toLowerCase(), m);
+      if (m.master_code) masterByCode.set(m.master_code.trim().toLowerCase(), m);
+    }
+
+    // 4. 품목별 단가 출처 분석 및 사내 기준 대장 연동/수기 조정 데이터 합성
     const adjustments: any[] = [];
     let originalSubtotalSum = 0;
     let modifiedSubtotalSum = 0;
     let increasedCount = 0;
     let decreasedCount = 0;
+    let masterMatchCount = 0;
+    let manualCount = 0;
 
     for (const item of allItems) {
       const unitPrice = Number(item.unit_price) || 0;
       const qty = Number(item.quantity) || 1;
       const itemAmount = unitPrice * qty;
+
+      const nameKey = (item.item_name || '').trim().toLowerCase();
+      const codeKey = (item.master_code || '').trim().toLowerCase();
+      const matchedMaster = (codeKey ? masterByCode.get(codeKey) : null) || (nameKey ? masterByName.get(nameKey) : null);
+      const isMasterMatch = item.price_source === 'MASTER_MATCH' || item.price_source === 'PRICE_MASTER' || item.price_source === 'MASTER_STANDARD' || Boolean(matchedMaster);
 
       // 해당 품목 관련 단가 수정 로그 탐색
       const matchedLog = priceUpdateLogs.find((l: any) =>
@@ -111,21 +135,44 @@ export async function GET(
       }
 
       // 비고(remark) 또는 price_source 분석
-      const isManualSource = ['MANUAL_PRICE', 'MANUAL_INPUT', 'USER_OVERRIDE', 'PRICE_MASTER'].includes(item.price_source);
-      const hasPriceInRemark = item.remark && (item.remark.includes('단가') || item.remark.includes('수기') || item.remark.includes('수정') || item.remark.includes('마스터'));
+      const isManualSource = ['MANUAL_PRICE', 'MANUAL_INPUT', 'USER_OVERRIDE', 'MANUAL'].includes(item.price_source);
+      const hasPriceInRemark = item.remark && (item.remark.includes('단가') || item.remark.includes('수기') || item.remark.includes('수정'));
 
-      // 수정 판정 조건: 로그가 있거나, price_source가 수기이거나, 비고에 단가 수정 흔적이 있는 경우
-      const isModified = Boolean(matchedLog) || isManualSource || hasPriceInRemark || (unitPrice > 0 && item.price_source !== 'NOT_FOUND');
+      if (isMasterMatch) {
+        masterMatchCount++;
+        beforePrice = beforePrice || unitPrice;
+        const diffUnitPrice = unitPrice - beforePrice;
+        originalSubtotalSum += beforePrice * qty;
+        modifiedSubtotalSum += itemAmount;
 
-      if (isModified) {
-        // 기준 이전 가격 산정
+        adjustments.push({
+          id: item.id,
+          item_no: item.item_no,
+          item_name: item.item_name || '무제 부품',
+          master_code: matchedMaster?.master_code || item.master_code || item.drawing_no || '-',
+          specification: item.specification || matchedMaster?.specification || '-',
+          material: item.material || matchedMaster?.material || '-',
+          quantity: qty,
+          unit: item.unit || 'EA',
+          before_unit_price: beforePrice,
+          after_unit_price: unitPrice,
+          diff_unit_price: diffUnitPrice,
+          diff_rate: beforePrice > 0 ? Math.round((diffUnitPrice / beforePrice) * 1000) / 10 : 0,
+          total_diff_amount: diffUnitPrice * qty,
+          after_amount: itemAmount,
+          price_source: 'MASTER_MATCH',
+          price_source_label: '사내 기준단가 대장 연동',
+          remark: matchedMaster ? `원가 기준 관리 센터 표준 대장 [${matchedMaster.standard_name}] 연동` : (item.remark || '사내 기준단가 적용'),
+          modified_by: '표준 품목 및 단가 대장',
+          modified_at: item.created_at || quote.quote_date
+        });
+      } else if (Boolean(matchedLog) || isManualSource || hasPriceInRemark) {
+        manualCount++;
         if (!hasLogBeforePrice) {
-          // 비고에서 이전가 추출 시도
           const remarkMatch = (item.remark || '').match(/기존(?:가|단가)?\s*:\s*₩?([\d,]+)/);
           if (remarkMatch) {
             beforePrice = parseInt(remarkMatch[1].replace(/,/g, ''), 10) || 0;
           } else {
-            // 기준 산출가가 없으면 단가의 85%~90% 수준 또는 0으로 산정 (신규 품목인 경우 0)
             beforePrice = beforePrice || (unitPrice > 0 ? Math.round(unitPrice * 0.9) : 0);
           }
         }
@@ -156,10 +203,36 @@ export async function GET(
           total_diff_amount: totalDiffAmount,
           after_amount: itemAmount,
           price_source: item.price_source || 'MANUAL_PRICE',
-          price_source_label: item.price_source === 'PRICE_MASTER' ? '마스터 단가 매칭' : '담당자 수기 입력',
+          price_source_label: '담당자 수기 조정',
           remark: item.remark || (matchedLog ? '단가검토 워크스페이스 직접 수정' : '수기 견적가 책정'),
           modified_by: matchedLog?.user_name || item.updated_by || '견적 분석 담당자',
           modified_at: matchedLog?.created_at || item.updated_at || item.created_at || quote.quote_date
+        });
+      } else {
+        // AI 알고리즘 산출 품목
+        originalSubtotalSum += unitPrice * qty;
+        modifiedSubtotalSum += itemAmount;
+
+        adjustments.push({
+          id: item.id,
+          item_no: item.item_no,
+          item_name: item.item_name || '무제 부품',
+          master_code: item.master_code || item.drawing_no || '-',
+          specification: item.specification || '-',
+          material: item.material || '-',
+          quantity: qty,
+          unit: item.unit || 'EA',
+          before_unit_price: unitPrice,
+          after_unit_price: unitPrice,
+          diff_unit_price: 0,
+          diff_rate: 0,
+          total_diff_amount: 0,
+          after_amount: itemAmount,
+          price_source: item.price_source || 'ESTIMATED',
+          price_source_label: 'AI 알고리즘 산출',
+          remark: item.remark || 'BOM 및 가공 공정 알고리즘 자동 산출',
+          modified_by: 'CADON AI',
+          modified_at: item.created_at || quote.quote_date
         });
       }
     }
@@ -180,7 +253,8 @@ export async function GET(
       },
       summary: {
         total_items_count: allItems.length,
-        modified_count: adjustments.length,
+        master_match_count: masterMatchCount,
+        modified_count: manualCount,
         original_subtotal: originalSubtotalSum,
         modified_subtotal: modifiedSubtotalSum,
         net_diff_amount: modifiedSubtotalSum - originalSubtotalSum,

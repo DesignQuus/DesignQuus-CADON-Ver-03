@@ -43,7 +43,12 @@ export async function GET(req: NextRequest) {
         qc.case_name,
         COALESCE(NULLIF(c.company_name, ''), NULLIF(qc_c.company_name, ''), '고객사 미지정') as company_name,
         (SELECT COUNT(*) FROM quote_items qi WHERE qi.quote_id = q.id) as item_count,
-        (SELECT COUNT(*) FROM quote_items qi WHERE qi.quote_id = q.id AND (qi.price_source IN ('MANUAL_PRICE', 'MANUAL_INPUT', 'USER_OVERRIDE', 'PRICE_MASTER', 'MANUAL_REVIEW') OR qi.unit_price > 0)) as modified_count
+        (SELECT COUNT(*) FROM quote_items qi WHERE qi.quote_id = q.id 
+         AND (qi.price_source IN ('MASTER_MATCH', 'PRICE_MASTER', 'MASTER_STANDARD')
+              OR EXISTS (SELECT 1 FROM product_masters pm WHERE pm.standard_name = qi.item_name OR (pm.master_code IS NOT NULL AND pm.master_code = qi.master_code)))) as master_match_count,
+        (SELECT COUNT(*) FROM quote_items qi WHERE qi.quote_id = q.id 
+         AND qi.price_source IN ('MANUAL', 'MANUAL_PRICE', 'MANUAL_INPUT', 'USER_OVERRIDE')
+         AND NOT EXISTS (SELECT 1 FROM product_masters pm WHERE pm.standard_name = qi.item_name OR (pm.master_code IS NOT NULL AND pm.master_code = qi.master_code))) as modified_count
       FROM quotes q
       LEFT JOIN quotation_cases qc ON qc.id = q.quotation_case_id
       LEFT JOIN companies c ON (c.id = q.company_id AND c.id != 'comp_unassigned')

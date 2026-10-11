@@ -2605,7 +2605,7 @@ export default function MasterDataManagerPage() {
               <div className="flex items-center space-x-2 shrink-0">
                 <button
                   type="button"
-                  onClick={fetchLearnedItems}
+                  onClick={() => fetchLearnedItems()}
                   disabled={loadingLearned}
                   className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold border border-white/20 transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
                   title="최신 자가학습 데이터 새로고침"

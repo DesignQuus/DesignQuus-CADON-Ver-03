@@ -31,7 +31,8 @@ import {
   Layers,
   Sparkles,
   Sliders,
-  RotateCcw
+  RotateCcw,
+  ShieldCheck
 } from 'lucide-react';
 import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import PriceAdjustmentModal from '@/components/quotes/PriceAdjustmentModal';
@@ -55,6 +56,7 @@ interface QuoteItem {
   company_name: string;
   author_name: string;
   item_count: number;
+  master_match_count?: number;
   modified_count?: number;
 }
 
@@ -736,10 +738,10 @@ export default function QuotesListPage() {
                   {/* 11번째 고스트 스페이서 컬럼: 대화면 잉여 여백을 흡수하여 각 열의 독립적인 폭 보존 */}
                   <col className="w-auto" />
                 </colgroup>
-                <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
-                  <tr className="text-slate-600 font-bold">
+                <thead className="sticky top-0 z-10 bg-slate-100/70 border-b border-slate-200 select-none shadow-2xs">
+                  <tr className="text-slate-700 font-extrabold text-[14px]">
                     <th
-                      className="py-2.5 px-3 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      className="py-2 px-3 text-center relative group/th select-none border-b border-slate-200"
                       title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
                       onDoubleClick={() => handleAutoFitColWidth('no')}
                     >
@@ -751,7 +753,7 @@ export default function QuotesListPage() {
                     </th>
 
                     <th
-                      className="py-2.5 px-4 relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      className="py-2 px-4 text-left relative group/th select-none border-b border-slate-200"
                       title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
                       onDoubleClick={() => handleAutoFitColWidth('quoteNo')}
                     >
@@ -763,7 +765,7 @@ export default function QuotesListPage() {
                     </th>
 
                     <th
-                      className="py-2.5 px-4 relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      className="py-2 px-4 text-left relative group/th select-none border-b border-slate-200"
                       title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
                       onDoubleClick={() => handleAutoFitColWidth('company')}
                     >
@@ -775,7 +777,7 @@ export default function QuotesListPage() {
                     </th>
 
                     <th
-                      className="py-2.5 px-4 relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      className="py-2 px-4 text-left relative group/th select-none border-b border-slate-200"
                       title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
                       onDoubleClick={() => handleAutoFitColWidth('caseName')}
                     >
@@ -787,7 +789,7 @@ export default function QuotesListPage() {
                     </th>
 
                     <th
-                      className="py-2.5 px-4 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      className="py-2 px-4 text-center relative group/th select-none border-b border-slate-200"
                       title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
                       onDoubleClick={() => handleAutoFitColWidth('itemCount')}
                     >
@@ -799,7 +801,7 @@ export default function QuotesListPage() {
                     </th>
 
                     <th
-                      className="py-2.5 pl-4 pr-6 text-right relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      className="py-2 pl-4 pr-6 text-right relative group/th select-none border-b border-slate-200"
                       title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
                       onDoubleClick={() => handleAutoFitColWidth('subtotal')}
                     >
@@ -811,7 +813,7 @@ export default function QuotesListPage() {
                     </th>
 
                     <th
-                      className="py-2.5 pl-4 pr-6 text-right relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      className="py-2 pl-4 pr-6 text-right relative group/th select-none border-b border-slate-200"
                       title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
                       onDoubleClick={() => handleAutoFitColWidth('tax')}
                     >
@@ -823,7 +825,7 @@ export default function QuotesListPage() {
                     </th>
 
                     <th
-                      className="py-2.5 pl-4 pr-6 text-right font-extrabold text-slate-900 relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      className="py-2 pl-4 pr-6 text-right font-extrabold text-blue-700 relative group/th select-none border-b border-slate-200"
                       title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
                       onDoubleClick={() => handleAutoFitColWidth('totalAmount')}
                     >
@@ -835,7 +837,7 @@ export default function QuotesListPage() {
                     </th>
 
                     <th
-                      className="py-2.5 px-4 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      className="py-2 px-4 text-center relative group/th select-none border-b border-slate-200"
                       title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
                       onDoubleClick={() => handleAutoFitColWidth('status')}
                     >
@@ -847,7 +849,7 @@ export default function QuotesListPage() {
                     </th>
 
                     <th
-                      className="py-2.5 px-4 text-center relative group/th select-none bg-slate-50 border-b border-slate-200"
+                      className="py-2 px-4 text-center relative group/th select-none border-b border-slate-200"
                       title="더블클릭: 자동 맞춤(Auto-fit) / 드래그: 열 너비 조절"
                       onDoubleClick={() => handleAutoFitColWidth('actions')}
                     >
@@ -859,10 +861,10 @@ export default function QuotesListPage() {
                     </th>
 
                     {/* 11번째 고스트 스페이서 헤더 (우측 남는 잉여 폭 흡수) */}
-                    <th className="p-0 bg-slate-50 border-b border-slate-200 pointer-events-none" />
+                    <th className="p-0 bg-slate-100 border-b border-slate-200 pointer-events-none" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                <tbody className="divide-y divide-slate-200/80 font-sans">
                   {paginatedGroupedQuotes.map((group, idx) => {
                     const q = group.latestQuote;
                     const isExpanded = expandedCaseKeys.has(group.key);
@@ -872,31 +874,39 @@ export default function QuotesListPage() {
                     return (
                       <React.Fragment key={group.key}>
                         {/* 1. 최신 유효 견적 대표 행 */}
-                        <tr className={`transition-colors hover:bg-blue-50/40 ${isExpanded ? 'bg-blue-50/20' : ''}`}>
+                        <tr
+                          className={`cursor-pointer select-none border-b border-slate-200/80 min-h-[36px] transition-colors ${
+                            isExpanded
+                              ? 'bg-blue-50/60 hover:bg-blue-50/90'
+                              : idx % 2 === 1
+                              ? 'bg-slate-100/60 hover:bg-blue-50/80'
+                              : 'bg-white hover:bg-blue-50/80'
+                          }`}
+                        >
                           {/* 0. Row Number (No.) */}
-                          <td className="py-3.5 px-3 text-center whitespace-nowrap">
-                            <span className="font-mono text-slate-400 text-xs font-bold">
+                          <td className="py-2 px-2 text-center whitespace-nowrap">
+                            <span className="font-mono text-slate-500 text-[14px] font-bold">
                               {String(globalIdx).padStart(2, '0')}
                             </span>
                           </td>
 
                           {/* Quote No & Version */}
-                          <td className="py-3.5 px-4 font-mono">
+                          <td className="py-2 px-4 font-mono">
                             <div className="flex items-center space-x-2">
                               <Link
                                 href={`/cases/${q.quotation_case_id}`}
-                                className="font-bold text-blue-700 hover:underline flex items-center gap-1 group/link"
+                                className="font-bold text-blue-700 hover:underline flex items-center gap-1 group/link text-[14px]"
                                 title="견적의뢰 상세 및 도면 분석 화면으로 이동"
                               >
                                 <span>{q.quote_no}</span>
-                                <ArrowUpRight className="w-3 h-3 opacity-0 group-hover/link:opacity-100 transition-opacity" />
+                                <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover/link:opacity-100 transition-opacity" />
                               </Link>
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
+                              <span className="px-1.5 py-0.5 rounded text-[11px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
                                 최신 v{q.quote_version}
                               </span>
                             </div>
 
-                            <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+                            <div className="text-[12px] text-slate-500 font-mono mt-0.5 tabular-nums">
                               발행일: {q.quote_date || (q.created_at ? q.created_at.slice(0, 10) : '-')}
                             </div>
 
@@ -905,7 +915,7 @@ export default function QuotesListPage() {
                               <button
                                 type="button"
                                 onClick={() => toggleExpand(group.key)}
-                                className="mt-1.5 inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 transition-colors cursor-pointer"
+                                className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 transition-colors cursor-pointer"
                                 title={isExpanded ? '이전 이력 접기' : '이전 수정 이력 펼치기'}
                               >
                                 {isExpanded ? (
@@ -924,38 +934,52 @@ export default function QuotesListPage() {
                           </td>
 
                           {/* Company */}
-                          <td className="py-3.5 px-4">
-                            <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                              <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span>{q.company_name}</span>
+                          <td className="py-2 px-4 font-bold text-slate-900 text-[14px]">
+                            <div className="flex items-center gap-1.5">
+                              <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                              <span className="truncate max-w-[170px]" title={q.company_name}>{q.company_name}</span>
                             </div>
                           </td>
 
                           {/* Case Name with SmartTruncateTooltip */}
-                          <td className="py-3.5 px-4">
+                          <td className="py-2 px-4">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {(q.case_name?.includes('즉시 견적') || q.case_name?.includes('즉시견적')) && (
-                                <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs" title="AI 즉시 견적으로 산출된 건입니다.">
-                                  <Zap className="w-2.5 h-2.5 text-amber-500" />
+                                <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs" title="AI 즉시 견적으로 산출된 건입니다.">
+                                  <Zap className="w-3 h-3 text-amber-500" />
                                   <span>AI 즉시 견적</span>
                                 </span>
                               )}
                               <SmartTruncateTooltip
                                 text={q.case_name}
-                                className="font-semibold text-slate-800 text-xs"
-                                maxWidthClass="max-w-[320px] 2xl:max-w-[480px]"
+                                className="font-bold text-slate-900 text-[14px]"
+                                maxWidthClass="max-w-[280px] 2xl:max-w-[420px]"
                               />
                             </div>
-                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">{q.case_no}</div>
+                            <div className="text-[11.5px] text-slate-400 font-mono mt-0.5">{q.case_no}</div>
                           </td>
 
-                          {/* Item Count & Modified Price Badge */}
-                          <td className="py-3.5 px-4 text-center">
+                          {/* Item Count & Standard Master Match / Modified Price Badge */}
+                          <td className="py-2 px-4 text-center">
                             <div className="flex flex-col items-center gap-1">
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-300/80 font-bold text-[12px] shadow-2xs">
                                 <span className="font-mono font-black text-slate-900 text-[13.5px] tabular-nums">{Number(q.item_count || 0)}</span>
                                 <span className="text-[11px] text-slate-600 font-bold">개 품목</span>
                               </span>
+                              {Number(q.master_match_count || 0) > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedAdjustmentQuote(q);
+                                  }}
+                                  className="px-2 py-0.5 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-[10.5px] inline-flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                                  title="원가 기준 관리 센터 표준 품목 및 단가 대장과 일치하여 자동 적용된 품목 내역 보기"
+                                >
+                                  <ShieldCheck className="w-3 h-3 text-blue-600" />
+                                  <span>사내 기준 {q.master_match_count}건</span>
+                                </button>
+                              )}
                               {Number(q.modified_count || 0) > 0 && (
                                 <button
                                   type="button"
@@ -964,7 +988,7 @@ export default function QuotesListPage() {
                                     setSelectedAdjustmentQuote(q);
                                   }}
                                   className="px-2 py-0.5 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-[10.5px] inline-flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
-                                  title="견적 분석 담당자가 수기로 수정한 단가 품목 일람표 보기"
+                                  title="견적 분석 담당자가 수기로 조정한 단가 품목 일람표 보기"
                                 >
                                   <Sparkles className="w-3 h-3 text-amber-600" />
                                   <span>단가수정 {q.modified_count}건</span>
@@ -973,35 +997,35 @@ export default function QuotesListPage() {
                             </div>
                           </td>
 
-                          {/* Subtotal */}
-                          <td className="py-3.5 pl-4 pr-6 text-right font-mono text-slate-600">
+                          {/* Subtotal (공급가액) */}
+                          <td className="py-2 pl-4 pr-6 text-right font-mono font-bold text-slate-900 text-[15px] tabular-nums whitespace-nowrap">
                             ₩{Number(q.subtotal || 0).toLocaleString()}
                           </td>
 
-                          {/* Tax */}
-                          <td className="py-3.5 pl-4 pr-6 text-right font-mono text-slate-400 text-[11px]">
+                          {/* Tax (부가세) */}
+                          <td className="py-2 pl-4 pr-6 text-right font-mono font-normal text-slate-600 text-[14px] tabular-nums whitespace-nowrap">
                             ₩{Number(q.tax_amount || 0).toLocaleString()}
                           </td>
 
-                          {/* Total Amount */}
-                          <td className="py-3.5 pl-4 pr-6 text-right font-mono font-black text-sm text-blue-700">
+                          {/* Total Amount (최종 견적 총액) */}
+                          <td className="py-2 pl-4 pr-6 text-right font-mono font-bold text-blue-700 text-[15px] tabular-nums whitespace-nowrap leading-none">
                             ₩{Number(q.total_amount || 0).toLocaleString()}
                           </td>
 
                           {/* Status */}
-                          <td className="py-3.5 px-4 text-center">
+                          <td className="py-2 px-4 text-center">
                             {q.status === 'ISSUED' && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs">
                                 공식발행
                               </span>
                             )}
                             {q.status === 'APPROVED' && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs">
                                 승인완료
                               </span>
                             )}
                             {q.status === 'DRAFT' && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs">
                                 {Number(q.total_amount || 0) > 0 ? '초안 (단가산출)' : '초안 (검토대기)'}
                               </span>
                             )}
@@ -1139,12 +1163,26 @@ export default function QuotesListPage() {
                               </td>
 
                               {/* Item Count & Modified Price Badge */}
-                              <td className="py-2.5 px-4 text-center">
+                              <td className="py-2 px-4 text-center">
                                 <div className="flex flex-col items-center gap-0.5">
                                   <span className="inline-flex items-center gap-1 text-slate-700 font-semibold text-[11.5px]">
                                     <span className="font-mono font-bold text-slate-900 tabular-nums">{Number(hq.item_count || 0)}</span>
                                     <span className="text-slate-500 font-medium">개 품목</span>
                                   </span>
+                                  {Number(hq.master_match_count || 0) > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedAdjustmentQuote(hq);
+                                      }}
+                                      className="px-1.5 py-0.2 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-semibold text-[9.5px] inline-flex items-center gap-0.5 transition-all cursor-pointer hover:scale-105 active:scale-95"
+                                      title="과거 버전의 표준 대장 일치 품목 내역 보기"
+                                    >
+                                      <ShieldCheck className="w-2.5 h-2.5 text-blue-600" />
+                                      <span>사내 기준 {hq.master_match_count}건</span>
+                                    </button>
+                                  )}
                                   {Number(hq.modified_count || 0) > 0 && (
                                     <button
                                       type="button"
@@ -1163,17 +1201,17 @@ export default function QuotesListPage() {
                               </td>
 
                               {/* Subtotal */}
-                              <td className="py-2.5 pl-4 pr-6 text-right font-mono text-slate-500">
+                              <td className="py-2 pl-4 pr-6 text-right font-mono font-bold text-slate-800 text-[14px] tabular-nums whitespace-nowrap">
                                 ₩{Number(hq.subtotal || 0).toLocaleString()}
                               </td>
 
                               {/* Tax */}
-                              <td className="py-2.5 pl-4 pr-6 text-right font-mono text-slate-400 text-[11px]">
+                              <td className="py-2 pl-4 pr-6 text-right font-mono font-normal text-slate-600 text-[13px] tabular-nums whitespace-nowrap">
                                 ₩{Number(hq.tax_amount || 0).toLocaleString()}
                               </td>
 
                               {/* Total Amount */}
-                              <td className="py-2.5 pl-4 pr-6 text-right font-mono font-bold text-slate-600">
+                              <td className="py-2 pl-4 pr-6 text-right font-mono font-bold text-slate-700 text-[14px] tabular-nums whitespace-nowrap leading-none">
                                 ₩{Number(hq.total_amount || 0).toLocaleString()}
                               </td>
 
