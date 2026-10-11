@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
 import { resolveStoragePath, getStorageSubdir } from '@/lib/storage';
+import { invalidateCasesCache } from '../route';
 import fs from 'fs';
 import path from 'path';
 
@@ -166,6 +167,8 @@ export async function POST(req: NextRequest) {
         successCount++;
       }
     }
+
+    invalidateCasesCache();
 
     return NextResponse.json({
       success: true,

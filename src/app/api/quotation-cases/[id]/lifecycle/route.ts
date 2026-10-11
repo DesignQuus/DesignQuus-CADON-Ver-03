@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
 import { resolveStoragePath, getStorageSubdir } from '@/lib/storage';
+import { invalidateCasesCache } from '../route';
 import fs from 'fs';
 import path from 'path';
 
@@ -47,6 +48,7 @@ export async function PATCH(
         details: `견적건 보관함 이동 [사유: ${archiveReason}]`
       });
 
+      invalidateCasesCache();
       return NextResponse.json({ success: true, message: '보관함으로 이동되었습니다.' });
     }
 
@@ -66,6 +68,7 @@ export async function PATCH(
         details: '견적건 휴지통으로 이동'
       });
 
+      invalidateCasesCache();
       return NextResponse.json({ success: true, message: '휴지통으로 이동되었습니다.' });
     }
 
@@ -92,6 +95,7 @@ export async function PATCH(
         details: '견적건 작업 활성 상태로 복원'
       });
 
+      invalidateCasesCache();
       return NextResponse.json({ success: true, message: '견적건이 복원되었습니다.' });
     }
 
@@ -167,6 +171,7 @@ export async function PATCH(
         details: `견적건 완전 영구 삭제: [] `
       });
 
+      invalidateCasesCache();
       return NextResponse.json({ success: true, message: '영구 삭제되었습니다.' });
     }
 

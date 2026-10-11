@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
+import { invalidateCasesCache } from '@/app/api/quotation-cases/route';
 
 export async function DELETE(
   req: NextRequest,
@@ -49,6 +50,9 @@ export async function DELETE(
 
     // 2. 견적서(quotes) 본 레코드 삭제
     await db.prepare('DELETE FROM quotes WHERE id = ?').run(id);
+
+    // 2-1. 상단 견적건 테이블의 quote_total_amount 실시간 갱신을 위한 캐시 무효화
+    invalidateCasesCache();
 
     // 3. 감사 로그 기록 (비차단)
     try {

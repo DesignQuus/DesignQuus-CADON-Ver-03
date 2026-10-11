@@ -48,6 +48,7 @@ import SmartTruncateTooltip from '@/components/common/SmartTruncateTooltip';
 import CustomerSelectCombobox, { CustomerSelectionValue, AUTO_DETECT_CUSTOMER } from '@/components/common/CustomerSelectCombobox';
 import { getClientCache, setClientCache, isCacheFresh } from '@/lib/cacheStore';
 import { QuoteDeleteConfirmModal, QuoteDeleteToast, SKIP_CONFIRM_KEY } from '@/components/common/QuoteDeleteConfirmModal';
+import { CaseActionConfirmModal, CaseActionType, SKIP_CASE_TRASH_CONFIRM_KEY } from '@/components/common/CaseActionConfirmModal';
 import AIInstantQuoteModal from '@/components/common/AIInstantQuoteModal';
 
 interface UserProfile {
@@ -142,6 +143,21 @@ export default function HomePage() {
     quoteNo: ''
   });
   const [isDeletingQuote, setIsDeletingQuote] = useState(false);
+
+  // 견적의뢰 건 삭제/휴지통 모달 상태
+  const [deleteCaseModal, setDeleteCaseModal] = useState<{
+    isOpen: boolean;
+    caseId: string;
+    caseNo: string;
+    actionType: CaseActionType;
+  }>({
+    isOpen: false,
+    caseId: '',
+    caseNo: '',
+    actionType: 'TRASH'
+  });
+  const [isDeletingCase, setIsDeletingCase] = useState(false);
+
   const [deleteToast, setDeleteToast] = useState<{ text: string; showRestoreConfirm?: boolean; isError?: boolean } | null>(null);
 
   useEffect(() => {
@@ -410,8 +426,8 @@ export default function HomePage() {
         body: JSON.stringify({ action: 'RESTORE' })
       });
       if (res.ok) {
-        setCases((prev) =>
-          prev.map((c) =>
+        setCases((prev) => {
+          const next = prev.map((c) =>
             c.id === caseId
               ? {
                   ...c,
@@ -424,8 +440,17 @@ export default function HomePage() {
                   status: c.status === 'ARCHIVED' || c.status === 'DELETED' ? 'ANALYZED' : c.status
                 }
               : c
-          )
-        );
+          );
+          setClientCache('cases', { cases: next });
+          try {
+            localStorage.setItem('cadon_cached_cases', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        setDeleteToast({
+          text: `견적의뢰 [${caseName || '해당 건'}]이(가) 활성 상태로 복원되었습니다.`,
+          isError: false
+        });
       } else {
         const data = await res.json();
         alert(data.error || '복구에 실패했습니다.');
@@ -436,20 +461,47 @@ export default function HomePage() {
     }
   };
 
-  const handleDeleteCase = async (e: React.MouseEvent, caseId: string, caseNo: string) => {
-    e.stopPropagation();
-    if (!confirm(`[${caseNo || '해당 의뢰건'}] 견적의뢰 건을 휴지통으로 이동하시겠습니까?\n(삭제 후 30일간 휴지통에 보관되며 복구할 수 있습니다.)`)) {
-      return;
-    }
+  const executeDeleteCase = async (caseId: string, caseNo: string, actionType: CaseActionType, wasSkipped: boolean = false) => {
+    setIsDeletingCase(true);
     try {
       const res = await apiFetch(`/api/quotation-cases/${caseId}/lifecycle`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'TRASH' })
+        body: JSON.stringify({ action: actionType })
       });
-      if (res.ok) {
-        setCases((prev) =>
-          prev.map((c) =>
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error || `${actionType === 'PERMANENT_DELETE' ? '영구 삭제' : '휴지통 이동'} 처리에 실패했습니다.`);
+      }
+
+      if (actionType === 'PERMANENT_DELETE') {
+        // 완전 영구 삭제: 목록에서 영구 제거
+        setCases((prev) => {
+          const next = prev.filter((c) => c.id !== caseId);
+          setClientCache('cases', { cases: next });
+          try {
+            localStorage.setItem('cadon_cached_cases', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        // 하단 견적서 목록에서도 해당 건의 견적서 즉시 동기화 제거
+        setQuotes((prev) => {
+          const next = prev.filter((q) => q.quotation_case_id !== caseId);
+          setClientCache('quotes', { quotes: next });
+          try {
+            localStorage.setItem('cadon_cached_quotes', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        setDeleteToast({
+          text: `견적의뢰 [${caseNo || '해당 건'}]이(가) 완전히 영구 삭제되었습니다.`,
+          isError: false
+        });
+      } else {
+        // 휴지통 이동 (30일 보관)
+        setCases((prev) => {
+          const next = prev.map((c) =>
             c.id === caseId
               ? {
                   ...c,
@@ -460,16 +512,57 @@ export default function HomePage() {
                   status: 'DELETED'
                 }
               : c
-          )
-        );
-      } else {
-        const data = await res.json();
-        alert(data.error || '휴지통 이동에 실패했습니다.');
+          );
+          setClientCache('cases', { cases: next });
+          try {
+            localStorage.setItem('cadon_cached_cases', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        setDeleteToast({
+          text: `견적의뢰 [${caseNo || '해당 건'}]이(가) ${wasSkipped ? '확인 없이 즉시 ' : ''}휴지통으로 이동되었습니다. (30일 보관)`,
+          isError: false
+        });
       }
+
+      setDeleteCaseModal({ isOpen: false, caseId: '', caseNo: '', actionType: 'TRASH' });
     } catch (err: any) {
-      console.error('Failed to trash case:', err);
-      alert('휴지통 이동 중 오류가 발생했습니다.');
+      console.error('Failed to trash/delete case:', err);
+      setDeleteToast({
+        text: err.message || '삭제 처리 중 오류가 발생했습니다.',
+        isError: true
+      });
+    } finally {
+      setIsDeletingCase(false);
     }
+  };
+
+  const handleDeleteCaseClick = (e: React.MouseEvent, caseId: string, caseNo: string) => {
+    e.stopPropagation();
+    let skipConfirm = false;
+    try {
+      skipConfirm = localStorage.getItem(SKIP_CASE_TRASH_CONFIRM_KEY) === 'true';
+    } catch {}
+
+    if (skipConfirm) {
+      executeDeleteCase(caseId, caseNo, 'TRASH', true);
+    } else {
+      setDeleteCaseModal({
+        isOpen: true,
+        caseId,
+        caseNo,
+        actionType: 'TRASH'
+      });
+    }
+  };
+
+  const handleConfirmCaseModal = async (skipNextTime: boolean, selectedAction: CaseActionType = 'TRASH') => {
+    if (selectedAction === 'TRASH' && skipNextTime) {
+      try {
+        localStorage.setItem(SKIP_CASE_TRASH_CONFIRM_KEY, 'true');
+      } catch {}
+    }
+    await executeDeleteCase(deleteCaseModal.caseId, deleteCaseModal.caseNo, selectedAction, skipNextTime);
   };
 
   const loadDashboardData = useCallback(async () => {
@@ -949,8 +1042,29 @@ export default function HomePage() {
       setQuotes((prev) => {
         const next = prev.filter((q) => q.id !== quoteId);
         setClientCache('quotes', { quotes: next });
+        try {
+          localStorage.setItem('cadon_cached_quotes', JSON.stringify(next));
+        } catch {}
         return next;
       });
+
+      // 연관 견적의뢰 건의 최신 견적금액 즉시 재계산 및 캐시 동기화
+      setCases((prev) => {
+        const next = prev.map((c) => {
+          const caseQuotes = quotes.filter((q) => q.id !== quoteId && q.quotation_case_id === c.id);
+          const latestAmount = caseQuotes.length > 0 ? caseQuotes[0].total_amount : null;
+          return {
+            ...c,
+            quote_total_amount: latestAmount
+          };
+        });
+        setClientCache('cases', { cases: next });
+        try {
+          localStorage.setItem('cadon_cached_cases', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
       setDeleteQuoteModal({ isOpen: false, quoteId: '', quoteNo: '' });
 
       // 방법 A: 삭제 완료 토스트 표시 (확인 없이 삭제된 경우 [확인창 다시 켜기] 복원 버튼 노출)
@@ -1942,9 +2056,9 @@ export default function HomePage() {
                             <span className="text-[11px] text-slate-400 font-medium">보관 상태</span>
                             <button
                               type="button"
-                              onClick={(e) => handleDeleteCase(e, c.id, c.case_no)}
+                              onClick={(e) => handleDeleteCaseClick(e, c.id, c.case_no)}
                               className="h-[26px] w-[26px] inline-flex items-center justify-center bg-[#E9E9E9] hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-300 hover:border-rose-300 rounded-full transition-all shadow-2xs cursor-pointer"
-                              title="휴지통(삭제보관함)으로 이동"
+                              title="견적의뢰 건 삭제 / 휴지통 이동"
                             >
                               <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                             </button>
@@ -1971,9 +2085,9 @@ export default function HomePage() {
                             )}
                             <button
                               type="button"
-                              onClick={(e) => handleDeleteCase(e, c.id, c.case_no)}
+                              onClick={(e) => handleDeleteCaseClick(e, c.id, c.case_no)}
                               className="h-[26px] w-[26px] inline-flex items-center justify-center bg-[#E9E9E9] hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-300 hover:border-rose-300 rounded-full transition-all shadow-2xs cursor-pointer"
-                              title="휴지통(삭제보관함)으로 이동"
+                              title="견적의뢰 건 삭제 / 휴지통 이동"
                             >
                               <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                             </button>
@@ -2699,6 +2813,18 @@ export default function HomePage() {
         onClose={() => setDeleteQuoteModal({ isOpen: false, quoteId: '', quoteNo: '' })}
         onConfirm={handleConfirmModalDelete}
         isDeleting={isDeletingQuote}
+      />
+
+      {/* ⚠️ 견적의뢰 건 삭제 / 휴지통 이동 모달 (즉시 영구 삭제 옵션 지원) */}
+      <CaseActionConfirmModal
+        isOpen={deleteCaseModal.isOpen}
+        actionType={deleteCaseModal.actionType}
+        itemCount={1}
+        caseTitle={deleteCaseModal.caseNo}
+        onClose={() => setDeleteCaseModal({ isOpen: false, caseId: '', caseNo: '', actionType: 'TRASH' })}
+        onConfirm={handleConfirmCaseModal}
+        isLoading={isDeletingCase}
+        allowToggleMode={true}
       />
 
       {/* 💡 방법 A: 삭제 완료 토스트 & [확인창 다시 켜기] 복원 버튼 */}

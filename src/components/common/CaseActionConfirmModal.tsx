@@ -13,12 +13,13 @@ interface CaseActionConfirmModalProps {
   itemCount: number;
   caseTitle?: string;
   onClose: () => void;
-  onConfirm: (skipNextTime: boolean) => Promise<void> | void;
+  onConfirm: (skipNextTime: boolean, selectedAction?: CaseActionType) => Promise<void> | void;
   isLoading?: boolean;
+  allowToggleMode?: boolean;
 }
 
 /**
- * 견적의뢰 대장 전용 화면 정중앙 확인 모달
+ * 견적의뢰 대장 및 메인 대시보드 공용 확인 모달
  */
 export function CaseActionConfirmModal({
   isOpen,
@@ -28,19 +29,22 @@ export function CaseActionConfirmModal({
   onClose,
   onConfirm,
   isLoading = false,
+  allowToggleMode = false,
 }: CaseActionConfirmModalProps) {
+  const [currentAction, setCurrentAction] = useState<CaseActionType>(actionType);
   const [skipNextTime, setSkipNextTime] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setSkipNextTime(false);
+      setCurrentAction(actionType);
     }
-  }, [isOpen]);
+  }, [isOpen, actionType]);
 
   if (!isOpen) return null;
 
-  const isPermanent = actionType === 'PERMANENT_DELETE';
-  const isTrash = actionType === 'TRASH';
+  const isPermanent = currentAction === 'PERMANENT_DELETE';
+  const isTrash = currentAction === 'TRASH';
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-2xs z-[120] flex items-center justify-center p-4 animate-in fade-in duration-150">
@@ -111,6 +115,36 @@ export function CaseActionConfirmModal({
           </div>
         </div>
 
+        {/* allowToggleMode 시 휴지통 이동 vs 영구 삭제 선택 세그먼트 탭 */}
+        {allowToggleMode && (
+          <div className="mt-4 flex bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => setCurrentAction('TRASH')}
+              className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                currentAction === 'TRASH'
+                  ? 'bg-white text-amber-700 shadow-xs border border-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Trash2 className="w-3.5 h-3.5 text-amber-600" />
+              <span>휴지통 이동 (30일 보관)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentAction('PERMANENT_DELETE')}
+              className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                currentAction === 'PERMANENT_DELETE'
+                  ? 'bg-white text-rose-600 shadow-xs border border-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+              <span>즉시 완전 영구 삭제</span>
+            </button>
+          </div>
+        )}
+
         {/* 휴지통 이동 시에만 '다음부터는 확인 없이 이동' 체크박스 노출 (영구 삭제는 안전을 위해 항상 확인) */}
         {isTrash && (
           <div className="mt-4 pt-3 border-t border-slate-100">
@@ -143,7 +177,7 @@ export function CaseActionConfirmModal({
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(skipNextTime)}
+            onClick={() => onConfirm(skipNextTime, currentAction)}
             disabled={isLoading}
             className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition shadow-xs disabled:opacity-50 cursor-pointer flex items-center space-x-1.5 ${
               isPermanent
