@@ -722,9 +722,9 @@ export default function CaseWorkbenchPage({ params }: { params: Promise<{ id: st
         setLoading(true);
       }
       
-      // [성능 가드] 4초 프론트엔드 통신 타임아웃 설정 (무한 스피너 원천 방지)
+      // [성능 가드] 15초 프론트엔드 통신 타임아웃 설정 (콜드 스타트 및 대용량 CAD 도면 대응)
       const controller = new AbortController();
-      const timeoutTimer = setTimeout(() => controller.abort(), 4000);
+      const timeoutTimer = setTimeout(() => controller.abort(), 15000);
 
       const res = await apiFetch(`/api/quotation-cases/${id}`, {
         signal: controller.signal
