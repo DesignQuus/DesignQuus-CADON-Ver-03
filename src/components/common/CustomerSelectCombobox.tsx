@@ -195,7 +195,7 @@ export default function CustomerSelectCombobox({
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className={`w-full pl-9 pr-28 py-2.5 rounded-lg border text-xs font-semibold transition-all focus:outline-none ${
+          className={`w-full pl-10 pr-32 py-3 rounded-xl border text-[16px] font-semibold transition-all focus:outline-none ${
             isCurrentAuto
               ? 'border-indigo-400 bg-indigo-50/30 text-indigo-950 focus:ring-2 focus:ring-indigo-500/20'
               : value.isNew
@@ -205,10 +205,10 @@ export default function CustomerSelectCombobox({
         />
 
         {/* 우측 뱃지 및 액션 버튼들 */}
-        <div className="absolute right-2 flex items-center space-x-1.5">
+        <div className="absolute right-3 flex items-center space-x-1.5">
           {value.companyName && !isOpen && (
             <span
-              className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold shrink-0 flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-lg text-[13px] font-bold shrink-0 flex items-center gap-1.5 ${
                 isCurrentAuto
                   ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
                   : value.isNew
@@ -218,17 +218,17 @@ export default function CustomerSelectCombobox({
             >
               {isCurrentAuto ? (
                 <>
-                  <Zap className="w-3 h-3 text-indigo-600" />
+                  <Zap className="w-3.5 h-3.5 text-indigo-600" />
                   <span>AI 자동 감지</span>
                 </>
               ) : value.isNew ? (
                 <>
-                  <Sparkles className="w-3 h-3 text-blue-600" />
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                   <span>신규 등록</span>
                 </>
               ) : (
                 <>
-                  <Building2 className="w-3 h-3 text-slate-500" />
+                  <Building2 className="w-3.5 h-3.5 text-slate-500" />
                   <span>기존 고객사</span>
                 </>
               )}
@@ -275,16 +275,16 @@ export default function CustomerSelectCombobox({
       </div>
 
       {/* 상태 안내 문구 */}
-      <div className="flex items-center justify-between text-[11px] mt-1 px-1 text-slate-500">
+      <div className="flex items-center justify-between text-[14px] mt-1.5 px-1 text-slate-500">
         <div>
           {isCurrentAuto ? (
-            <span className="text-indigo-600 font-medium flex items-center gap-1">
-              <Zap className="w-3 h-3 text-indigo-600 inline" />
+            <span className="text-indigo-600 font-medium flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-indigo-600 inline" />
               CAD 도면 분석 시 표제란(Title Block)을 판독하여 발주 고객사가 자동 바인딩됩니다.
             </span>
           ) : value.isNew ? (
-            <span className="text-blue-600 font-medium flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-blue-600 inline" />
+            <span className="text-blue-600 font-medium flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-blue-600 inline" />
               <strong>{value.companyName}</strong> 고객사는 사내 고객사 대장에 자동 등록됩니다.
             </span>
           ) : value.companyName ? (
@@ -297,7 +297,7 @@ export default function CustomerSelectCombobox({
             </span>
           )}
         </div>
-        <span className="text-[10px] text-slate-400 shrink-0">초성 검색 지원</span>
+        <span className="text-[12px] text-slate-400 shrink-0">초성 검색 지원</span>
       </div>
 
       {/* 드롭다운 목록 (플로팅) */}

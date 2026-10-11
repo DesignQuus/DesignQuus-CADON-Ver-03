@@ -269,6 +269,9 @@ export default function HomePage() {
     setSelectedFile(null);
     setSubmitError(null);
     setIsSampleMode(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     setIsUploadModalOpen(true);
   };
 
@@ -2425,21 +2428,21 @@ export default function HomePage() {
       {/* 신규 도면 견적 등록 모달 */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
             {/* Modal Header */}
-            <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400">
-                  {isSampleMode ? <Sparkles className="w-5 h-5 text-amber-400" /> : <UploadCloud className="w-5 h-5" />}
+            <div className="px-7 py-5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-11 h-11 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0">
+                  {isSampleMode ? <Sparkles className="w-6 h-6 text-amber-400" /> : <UploadCloud className="w-6 h-6" />}
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
+                  <h3 className="text-[19px] font-extrabold tracking-tight text-white flex items-center gap-2">
                     <span>{isSampleMode ? '표준 판금 샘플 견적 체험' : '신규 도면 견적 등록'}</span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isSampleMode ? 'bg-amber-500/30 text-amber-300' : 'bg-blue-500/30 text-blue-300'}`}>
+                    <span className={`text-[12px] font-bold px-2 py-0.5 rounded ${isSampleMode ? 'bg-amber-500/30 text-amber-300' : 'bg-blue-500/30 text-blue-300'}`}>
                       {isSampleMode ? 'SAMPLE' : 'FAST'}
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-300 mt-0.5">
+                  <p className="text-[15px] sm:text-[16px] text-slate-300 mt-1 leading-normal">
                     {isSampleMode
                       ? 'CAD 도면이 없어도 표준 판금 샘플 프로젝트로 AI 견적 워크플로우를 즉시 체험합니다.'
                       : selectedFile
@@ -2451,7 +2454,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => !isSubmitting && setIsUploadModalOpen(false)}
-                className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
+                className="w-9 h-9 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2459,8 +2462,8 @@ export default function HomePage() {
 
             {/* Sample Mode Friendly Callout */}
             {isSampleMode && (
-              <div className="bg-amber-50/90 border-b border-amber-200 px-6 py-3 text-xs text-amber-900 flex items-center gap-2.5">
-                <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+              <div className="bg-amber-50/90 border-b border-amber-200 px-7 py-3.5 text-[15px] text-amber-900 flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-amber-600 shrink-0" />
                 <span className="leading-relaxed">
                   <strong>[체험 모드 안내]</strong> 별도 도면 파일 없이도 생성 즉시 <strong>AI 가상 BOM 전개, 가공 공정 단가 매칭, 공식 견적서 발행</strong>까지의 전체 과정을 안전하게 테스트해보실 수 있습니다.
                 </span>
@@ -2468,77 +2471,61 @@ export default function HomePage() {
             )}
 
             {/* Modal Body */}
-            <form onSubmit={handleCreateCase} className="p-6 space-y-4 overflow-y-auto">
+            <form onSubmit={handleCreateCase} className="p-7 space-y-5 overflow-y-auto">
               {submitError && (
-                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[16px] font-semibold flex items-center gap-2.5">
+                  <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
                   <span>{submitError}</span>
                 </div>
               )}
 
               {/* 1. 최우선 메인: CAD 도면 파일 업로드 (드래그 앤 드롭 영역) */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                    <FileCode2 className="w-4 h-4 text-blue-600" />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[16px] font-extrabold text-slate-800 flex items-center gap-2">
+                    <FileCode2 className="w-5 h-5 text-blue-600" />
                     <span>CAD 도면 파일 첨부</span>
                     <span className="text-rose-500">*</span>
                   </label>
                   {selectedFile && (
-                    <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" />
+                    <span className="text-[15px] font-bold text-emerald-600 flex items-center gap-1.5">
+                      <Check className="w-4 h-4" />
                       <span>도면 파일 첨부 완료</span>
                     </span>
                   )}
                 </div>
 
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDragging(true);
-                  }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDragging(false);
-                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                      handleFileChange(e.dataTransfer.files[0]);
+                {/* Hidden File Input with native label association */}
+                <input
+                  id="main-cad-file-upload"
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".dwg,.dxf,.zip,.DWG,.DXF,.ZIP"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleFileChange(file);
                     }
+                    e.target.value = '';
                   }}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
-                    isDragging
-                      ? 'border-blue-500 bg-blue-50/70 scale-[1.01]'
-                      : selectedFile
-                      ? 'border-emerald-500 bg-emerald-50/30'
-                      : 'border-blue-300 hover:border-blue-500 bg-blue-50/10 hover:bg-blue-50/30 shadow-xs'
-                  }`}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".dwg,.dxf,.zip"
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleFileChange(e.target.files[0]);
-                      }
-                    }}
-                  />
-                  {selectedFile ? (
-                    <div className="bg-white p-3.5 rounded-xl border border-emerald-300 shadow-2xs">
+                />
+
+                {selectedFile ? (
+                  <div className="border-2 border-emerald-500 bg-emerald-50/30 rounded-2xl p-6 text-center transition-all">
+                    <div className="bg-white p-4 rounded-xl border border-emerald-300 shadow-2xs">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3 min-w-0">
-                          <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
-                            <FileCode2 className="w-6 h-6 text-emerald-600" />
+                        <div className="flex items-center space-x-3.5 min-w-0">
+                          <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                            <FileCode2 className="w-7 h-7 text-emerald-600" />
                           </div>
                           <div className="text-left min-w-0">
-                            <p className="text-xs font-bold text-slate-800 truncate">{selectedFile.name}</p>
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-slate-500">
+                            <p className="text-[16px] font-bold text-slate-900 truncate">{selectedFile.name}</p>
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1 text-[15px] text-slate-600">
                               <span>{(selectedFile.size / 1024 / 1024).toFixed(2)} MB • CAD 원본 도면</span>
                               <span className="text-slate-300 hidden sm:inline">|</span>
-                              <span className="inline-flex items-center gap-1 font-semibold text-indigo-600">
-                                <Sparkles className="w-3 h-3 text-indigo-500 shrink-0" />
+                              <span className="inline-flex items-center gap-1.5 font-semibold text-indigo-600">
+                                <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
                                 <span>표제란 AI 자동 판독 준비</span>
                               </span>
                             </div>
@@ -2550,59 +2537,94 @@ export default function HomePage() {
                             e.stopPropagation();
                             setSelectedFile(null);
                             setNewCaseName('');
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = '';
+                            }
                           }}
-                          className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                          className="text-slate-400 hover:text-rose-500 p-2 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
                           title="다른 파일로 변경"
                         >
-                          <X className="w-4 h-4" />
+                          <X className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
-                  ) : (
-                    <div className="py-2">
-                      <div className="w-12 h-12 rounded-2xl bg-blue-100/70 text-blue-600 flex items-center justify-center mx-auto mb-3">
-                        <UploadCloud className="w-7 h-7" />
+                  </div>
+                ) : (
+                  <label
+                    htmlFor="main-cad-file-upload"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(true);
+                    }}
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(false);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(false);
+                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        handleFileChange(e.dataTransfer.files[0]);
+                      }
+                    }}
+                    className={`block border-2 border-dashed rounded-2xl p-7 text-center cursor-pointer transition-all ${
+                      isDragging
+                        ? 'border-blue-500 bg-blue-50/70 scale-[1.01]'
+                        : 'border-blue-300 hover:border-blue-500 bg-blue-50/10 hover:bg-blue-50/30 shadow-xs'
+                    }`}
+                  >
+                    <div className="py-3">
+                      <div className="w-14 h-14 rounded-2xl bg-blue-100/70 text-blue-600 flex items-center justify-center mx-auto mb-3.5">
+                        <UploadCloud className="w-8 h-8" />
                       </div>
-                      <p className="text-sm font-extrabold text-slate-800">
+                      <p className="text-[17px] font-extrabold text-slate-900">
                         DWG / DXF 도면 파일을 끌어다 놓으세요
                       </p>
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-[15px] sm:text-[16px] text-slate-600 mt-1">
                         클릭하여 파일 선택 (최대 200MB)
                       </p>
-                      <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-700">
-                        <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      <div className="mt-3.5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-[14px] sm:text-[15px] font-bold text-blue-700">
+                        <Sparkles className="w-4 h-4 text-blue-600" />
                         <span>도면 표제란(Title Block) 기반 100% 자동 채번</span>
                       </div>
                     </div>
-                  )}
-                </div>
+                  </label>
+                )}
               </div>
 
               {/* 2. 스마트 사전 채번 정보 (선택적 확인/수정 영역) */}
-              <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
-                <div className="text-[11px] font-bold text-slate-500 flex items-center justify-between">
-                  <span>자동 채번 사전 확인 (필요 시 수정 가능)</span>
-                  <span className="text-[10px] text-slate-400">비워두면 도면 분석 후 자동 반영됩니다</span>
+              <div className="p-5 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[16px] font-extrabold text-slate-800">자동 채번 사전 확인 (필요 시 수정 가능)</span>
+                  <span className="text-[14px] text-slate-500">비워두면 도면 분석 후 자동 반영됩니다</span>
                 </div>
 
                 {/* 견적의뢰 건명 */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    견적의뢰 건명 <span className="text-slate-400 font-normal">(도면 파일명 기반 자동 채번)</span>
+                  <label className="block text-[16px] font-bold text-slate-800 mb-1.5">
+                    견적의뢰 건명 <span className="text-slate-500 text-[14px] font-normal">(도면 파일명 기반 자동 채번)</span>
                   </label>
                   <input
                     type="text"
                     value={newCaseName}
                     onChange={(e) => setNewCaseName(e.target.value)}
                     placeholder="도면 첨부 시 파일명으로 자동 입력됩니다"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 bg-white"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 text-[16px] font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 bg-white"
                   />
                 </div>
 
                 {/* 발주 고객사 (의뢰처) */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    발주 고객사 (의뢰처) <span className="text-slate-400 font-normal">(도면 표제란 자동 판독 권장)</span>
+                  <label className="block text-[16px] font-bold text-slate-800 mb-1.5">
+                    발주 고객사 (의뢰처) <span className="text-slate-500 text-[14px] font-normal">(도면 표제란 자동 판독 권장)</span>
                   </label>
                   <CustomerSelectCombobox
                     companies={customerCompanies}
@@ -2619,19 +2641,19 @@ export default function HomePage() {
               </div>
 
               {/* Modal Footer Buttons */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => setIsUploadModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                  className="px-6 py-3 rounded-xl border border-slate-300 text-[16px] font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting || (!selectedFile && !isSampleMode)}
-                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  className={`inline-flex items-center gap-2.5 px-7 py-3 rounded-xl text-white text-[16px] font-extrabold shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                     selectedFile
                       ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30 ring-2 ring-blue-500/20'
                       : isSampleMode
@@ -2641,12 +2663,12 @@ export default function HomePage() {
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-5 h-5 animate-spin" />
                       <span>{submittingStep || '도면 등록 및 분석 파이프라인 가동 중...'}</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-4 h-4" />
+                      <Sparkles className="w-5 h-5" />
                       <span>⚡ 도면 등록 및 AI 분석 시작 (0.5초 즉시 전환)</span>
                     </>
                   )}

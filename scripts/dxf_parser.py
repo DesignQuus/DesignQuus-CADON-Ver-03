@@ -137,11 +137,10 @@ def parse_dxf_file(dxf_path: str, text_and_frames_only: bool = False) -> dict:
         for e in msp:
             t = e.dxftype()
             counts[t] = counts.get(t, 0) + 1
+            if text_and_frames_only and t not in ('LWPOLYLINE', 'POLYLINE', 'TEXT', 'MTEXT', 'INSERT', 'ATTRIB', 'ATTDEF', 'LINE'):
+                continue
             bbox = get_bounding_box(e)
             update_bounds(bbox)
-
-            if text_and_frames_only and t not in ('LWPOLYLINE', 'POLYLINE', 'TEXT', 'MTEXT', 'INSERT', 'ATTRIB', 'ATTDEF'):
-                continue
             
             raw_text = getattr(e.dxf, 'text', None)
             if raw_text is None and t == 'MTEXT':
@@ -386,6 +385,10 @@ def parse_dxf_file(dxf_path: str, text_and_frames_only: bool = False) -> dict:
             candidate_meta = []
 
             for b in msp_boxes:
+                bw = b[2] - b[0]
+                bh = b[3] - b[1]
+                if bw < 50 and bh < 50:
+                    continue
                 cx, cy = (b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0
                 if _excluded(cx, cy) or _contains_sheet(b):
                     continue
