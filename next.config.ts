@@ -1,15 +1,5 @@
 import type { NextConfig } from "next";
 
-// 🧹 기동 시 이전 세션의 백그라운드 유령(좀비) Node 프로세스 자동 감지 및 정리 (1회 실행)
-if (!(global as any).__CADON_CLEANED_ZOMBIES__) {
-  (global as any).__CADON_CLEANED_ZOMBIES__ = true;
-  try {
-    const { cleanupZombies } = require('./scripts/cleanup-zombies.js');
-    cleanupZombies({ preserveActivePort: process.env.PORT || '4003' });
-  } catch (e) {
-    // 무시
-  }
-}
 
 console.log('🔍 DEBUG next.config: EGDESK_BASE_PATH env var =', process.env.EGDESK_BASE_PATH);
 

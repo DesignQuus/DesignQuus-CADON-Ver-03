@@ -51,7 +51,7 @@ function cleanupZombies(options = {}) {
     const memMb = Math.round((proc.WorkingSetSize || 0) / (1024 * 1024));
 
     // 현재 활성 포트가 지정된 경우, 해당 포트의 정식 활성 서버는 보호
-    if (preserveActivePort && cmd.includes(`-p ${preserveActivePort} -p ${preserveActivePort}`)) {
+    if (preserveActivePort && (cmd.includes(`-p ${preserveActivePort}`) || cmd.includes(`:${preserveActivePort}`))) {
       console.log(`  ℹ️ [유지] 현재 활성 서버 (PID: ${pid}, Port: ${preserveActivePort}, RAM: ${memMb}MB)`);
       continue;
     }

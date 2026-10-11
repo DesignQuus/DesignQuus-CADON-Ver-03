@@ -338,6 +338,7 @@ export async function callEgdeskHttp(
       method,
       headers: buildServerEgdeskHeaders(),
       body: method === 'POST' ? JSON.stringify(options.body || {}) : undefined,
+      signal: AbortSignal.timeout(12000),
     });
   } else {
     response = await apiFetch('/__egdesk_http_proxy', {
@@ -377,7 +378,8 @@ export async function callUserDataTool(
     response = await fetch(`${apiUrl}/user-data/tools/call`, {
       method: 'POST',
       headers: buildServerEgdeskHeaders(),
-      body
+      body,
+      signal: AbortSignal.timeout(12000),
     });
   } else {
     // Browser: use proxy for CORS and tunnel base path (proxy.ts injects routing headers)

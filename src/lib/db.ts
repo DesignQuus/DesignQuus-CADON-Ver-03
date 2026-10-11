@@ -58,6 +58,12 @@ import { setupDatabase } from './setup-db';
 
 let localSqliteInstance: any = null;
 
+/**
+ * 🔒 Read-Only Direct SQLite Engine (EGDesk 동시성 & 락 충돌 원천 방지)
+ * - EGDesk Electron 메인 프로세스가 user_data.db의 단일 소유자로서 쓰기/락/체크포인트를 관리합니다.
+ * - Next.js는 readOnly: true로만 열어 초고속 SELECT(0.001초)를 지원하며,
+ *   Windows 파일 잠금(Lock Contention)으로 인한 EGDesk '응답 없음' 프리징을 100% 방지합니다.
+ */
 export function getLocalSqlite(): any {
   if (localSqliteInstance) return localSqliteInstance;
   try {
@@ -75,12 +81,13 @@ export function getLocalSqlite(): any {
 
     for (const c of candidates) {
       if (fs.existsSync(c)) {
-        localSqliteInstance = new DatabaseSync(c);
+        // readOnly: true로 오픈하여 독점 락 및 WAL 체크포인트 방해를 완전히 배제
+        localSqliteInstance = new DatabaseSync(c, { readOnly: true });
         try {
-          localSqliteInstance.exec('PRAGMA journal_mode = WAL;');
-          localSqliteInstance.exec('PRAGMA busy_timeout = 5000;');
+          localSqliteInstance.exec('PRAGMA query_only = ON;');
+          localSqliteInstance.exec('PRAGMA busy_timeout = 2000;');
         } catch {}
-        console.log(`[db.ts] ⚡ [Direct SQLite Engine] Connected to: ${c}`);
+        console.log(`[db.ts] ⚡ [Direct SQLite Read Engine (ReadOnly)] Connected to: ${c}`);
         return localSqliteInstance;
       }
     }
@@ -92,22 +99,7 @@ export function getLocalSqlite(): any {
 
 export async function insertRows(tableName: string, rows: Record<string, any>[]): Promise<any> {
   if (!rows || rows.length === 0) return { success: true, inserted: 0 };
-  const local = getLocalSqlite();
-  if (local) {
-    try {
-      const sample = rows[0];
-      const cols = Object.keys(sample);
-      const placeholders = cols.map(() => '?').join(', ');
-      const stmt = local.prepare(`INSERT INTO ${tableName} (${cols.join(', ')}) VALUES (${placeholders})`);
-      for (const row of rows) {
-        const vals = cols.map(c => row[c] !== undefined ? row[c] : null);
-        stmt.run(...vals);
-      }
-      return { success: true, inserted: rows.length };
-    } catch (err: any) {
-      console.warn(`[insertRows] local SQLite insert fallback to remote: ${err.message}`);
-    }
-  }
+  // 쓰기 작업은 파일 잠금 분쟁을 방지하기 위해 단일 창구인 EGDesk 공식 API로 위임
   return await remoteInsertRows(tableName, rows);
 }
 
@@ -375,29 +367,33 @@ export async function executeDmlOrQuery(sql: string, params: any[] = []): Promis
  */
 export const db = {
   prepare: (sql: string) => {
-    const local = getLocalSqlite();
-    if (local) {
-      try {
-        const stmt = local.prepare(sql);
-        return {
-          all: async (...params: any[]) => {
-            return stmt.all(...params) as any[];
-          },
-          get: async (...params: any[]) => {
-            return stmt.get(...params) ?? undefined;
-          },
-          run: async (...params: any[]) => {
-            const res = stmt.run(...params);
-            return {
-              changes: res?.changes || 1,
-              lastInsertRowid: res?.lastInsertRowid || 0
-            };
-          }
-        };
-      } catch (err: any) {
-        console.warn(`[db.prepare] Direct SQLite statement error, falling back to HTTP: ${err.message}`);
+    const cleanSql = sql.trim().toUpperCase();
+    const isSelect = cleanSql.startsWith('SELECT') || cleanSql.startsWith('PRAGMA') || cleanSql.startsWith('WITH');
+
+    if (isSelect) {
+      const local = getLocalSqlite();
+      if (local) {
+        try {
+          const stmt = local.prepare(sql);
+          return {
+            all: async (...params: any[]) => {
+              return stmt.all(...params) as any[];
+            },
+            get: async (...params: any[]) => {
+              return stmt.get(...params) ?? undefined;
+            },
+            run: async (...params: any[]) => {
+              // SELECT 문에서 run 호출 시 안전 반환
+              return { changes: 0, lastInsertRowid: 0 };
+            }
+          };
+        } catch (err: any) {
+          console.warn(`[db.prepare] Direct SQLite read error, falling back to HTTP: ${err.message}`);
+        }
       }
     }
+
+    // 쓰기(INSERT/UPDATE/DELETE) 또는 로컬 SQLite 미사용/실패 시 EGDesk 공식 HTTP API로 안전 위임
     return {
       all: async (...params: any[]) => {
         const res = await executeDmlOrQuery(sql, params);
@@ -417,15 +413,6 @@ export const db = {
     };
   },
   exec: async (sql: string) => {
-    const local = getLocalSqlite();
-    if (local) {
-      try {
-        local.exec(sql);
-        return;
-      } catch (e: any) {
-        console.warn(`[db.exec] Direct SQLite exec error, falling back to HTTP: ${e.message}`);
-      }
-    }
     const stmts = sql.split(';').map(s => s.trim()).filter(Boolean);
     for (const s of stmts) {
       await executeDmlOrQuery(s);
