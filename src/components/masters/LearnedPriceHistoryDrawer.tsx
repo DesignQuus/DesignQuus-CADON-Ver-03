@@ -502,7 +502,7 @@ export default function LearnedPriceHistoryDrawer({
                   ) : (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>새 차수로 저장</span>
+                      <span>단가 수정 저장</span>
                     </>
                   )}
                 </button>
