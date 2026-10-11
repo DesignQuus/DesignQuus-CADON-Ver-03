@@ -1979,7 +1979,7 @@ export default function MasterDataManagerPage() {
                             </div>
                           </td>
 
-                          <td className="py-1.5 px-4 text-left font-mono font-bold text-slate-800 truncate text-[14px] tabular-nums">
+                          <td className="py-1.5 px-4 text-left font-mono font-normal text-slate-800 truncate text-[14px] tabular-nums">
                             {(() => {
                               const rawSpec = it.specification;
                               const effectiveSpec = !isNoiseSpec(rawSpec)
@@ -1994,7 +1994,7 @@ export default function MasterDataManagerPage() {
 
                               if (effectiveSpec && effectiveSpec !== '-') {
                                 return (
-                                  <span className="font-mono font-bold text-slate-800" title={`부품 규격(Spec): ${effectiveSpec}`}>
+                                  <span className="font-mono font-normal text-slate-800" title={`부품 규격(Spec): ${effectiveSpec}`}>
                                     {effectiveSpec}
                                   </span>
                                 );
