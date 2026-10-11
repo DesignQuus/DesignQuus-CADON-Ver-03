@@ -306,13 +306,17 @@ export default function MasterDataManagerPage() {
   const [loadingLearned, setLoadingLearned] = useState<boolean>(false);
   const [learnedSearchQuery, setLearnedSearchQuery] = useState<string>('');
 
-  const fetchLearnedItems = async () => {
-    setLoadingLearned(true);
+  const fetchLearnedItems = async (isSilent = false) => {
+    if (!isSilent && learnedItems.length === 0) {
+      setLoadingLearned(true);
+    }
     try {
       const res = await apiFetch('/api/manual-prices?mode=ALL_LEARNED');
-      const data = await res.json();
-      if (res.ok && data.list) {
-        setLearnedItems(data.list);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.list)) {
+          setLearnedItems(data.list);
+        }
       }
     } catch (err) {
       console.warn('자가학습 풀 로딩 오류:', err);
@@ -330,13 +334,15 @@ export default function MasterDataManagerPage() {
 
   // 💡 자가학습 품목의 실제 유효 규격 산출 (노이즈 '1 / 1' 필터링 및 표준 마스터 품목 규격 실시간 연동)
   const getEffectiveLearnedSpec = useCallback((item: any) => {
+    if (!item) return '-';
+
     // 1. 표준 품목 및 단가 대장(items)에서 매칭되는 품목의 실제 규격 우선 탐색
     const nameToMatch = (item.standard_name || item.item_name || '').trim().toLowerCase();
-    if (nameToMatch && items.length > 0) {
+    if (nameToMatch && items && items.length > 0) {
       const matchedMaster = items.find((m) => {
         const mName = (m.standard_name || '').trim().toLowerCase();
         const mCode = (m.master_code || '').trim().toLowerCase();
-        return (mName && mName === nameToMatch) || (mCode && nameToMatch.includes(mCode));
+        return (mName && mName === nameToMatch) || (mCode && mCode.length > 2 && nameToMatch.includes(mCode));
       });
 
       if (matchedMaster) {
@@ -1586,7 +1592,7 @@ export default function MasterDataManagerPage() {
           <button
             onClick={() => {
               setActiveTab('learned');
-              fetchLearnedItems();
+              fetchLearnedItems(learnedItems.length > 0);
             }}
             className={`px-3.5 py-1.5 rounded-md text-[13px] font-extrabold transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'learned' ? 'bg-white text-purple-700 shadow-xs ring-1 ring-purple-300' : 'text-slate-600 hover:text-slate-900'
@@ -2621,7 +2627,7 @@ export default function MasterDataManagerPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200/80 font-sans">
-                    {loadingLearned ? (
+                    {loadingLearned && learnedItems.length === 0 ? (
                       <tr>
                         <td colSpan={11} className="py-12 text-center text-slate-400">
                           <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-purple-600" />
