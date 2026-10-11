@@ -1,13 +1,13 @@
 /**
  * EGDesk User Data Configuration
- * Generated at: 2026-10-05T10:49:10.433Z
+ * Generated at: 2026-10-11T04:03:35.011Z
  *
  * This file contains type-safe definitions for your EGDesk tables.
  */
 
 export const EGDESK_CONFIG = {
   apiUrl: 'http://localhost:8080',
-  tunnelUrl: 'https://tunneling-service.onrender.com/t/lee-mac-pc',
+  tunnelUrl: 'http://localhost:8080',
   apiKey: '48632c34-0fd1-4b53-b448-b8162e19b925',
 } as const;
 

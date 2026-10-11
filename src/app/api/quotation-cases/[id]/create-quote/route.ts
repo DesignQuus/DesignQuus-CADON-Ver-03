@@ -74,7 +74,8 @@ export async function POST(
     const dateStr = now.toISOString().slice(0, 10);
     const quoteCountRow = (await db.prepare('SELECT COUNT(*) as cnt FROM quotes WHERE quotation_case_id = ?').get(id)) as any;
     const quoteVersion = (quoteCountRow?.cnt || 0) + 1;
-    const quoteNo = `Q-${qc.case_no.replace('QT-', '')}-V${quoteVersion}`;
+    const seqStr = String(quoteVersion).padStart(2, '0');
+    const quoteNo = `${qc.case_no}-Q${seqStr}`;
     const quoteId = `quote_${Date.now()}`;
 
     // 💎 Roll-up / Aggregation: 동일 도번 또는 동일 품명+재질 기준 수량 합산 및 조립도 자동 제외

@@ -2295,27 +2295,26 @@ export default function CasesPage() {
                           <td className="py-3 pl-3.5 pr-5 min-w-[260px]">
                             {(() => {
                               const isInstantQuote = !!(c.case_name?.includes('즉시 견적') || c.case_name?.includes('즉시견적') || c.notes?.includes('즉시 견적'));
-                              const isDxf = c.primary_file_name?.toLowerCase().endsWith('.dxf') || c.case_name?.toLowerCase().includes('.dxf');
-                              const isDwg = !isDxf && (c.primary_file_name?.toLowerCase().endsWith('.dwg') || c.case_name?.toLowerCase().includes('.dwg') || isInstantQuote || true);
+                              const pName = (c.primary_file_name || '').toLowerCase();
+                              const cName = (c.case_name || '').toLowerCase();
+                              const isDxf = (pName.endsWith('.dxf') && !pName.includes('.dwg')) || (cName.endsWith('.dxf') && !cName.includes('.dwg')) || cName.includes('테스트 dxf');
 
-                              const displayName = (() => {
-                                if (c.primary_file_name) {
-                                  return c.files_count && c.files_count > 1 ? `${c.primary_file_name} 외 ${c.files_count - 1}건` : c.primary_file_name;
-                                }
-                                if (c.case_name) {
-                                  const matched = c.case_name.match(/^\[(.*?)\]/);
-                                  if (matched && matched[1]) {
-                                    const base = matched[1].trim();
-                                    return (base.endsWith('.dwg') || base.endsWith('.dxf')) ? base : `${base}.dwg`;
-                                  }
-                                  return c.case_name;
-                                }
-                                return '-';
-                              })();
+                              const hasExplicitName = Boolean(c.case_name && !c.case_name.match(/^[0-9a-fA-F_-]+\.(dwg|dxf)$/i));
+                              const displayName = hasExplicitName ? c.case_name : (c.primary_file_name || '-');
+                              
+                              const rawFile = c.primary_file_name || '';
+                              const cleanBaseName = rawFile.replace(/\.[^/.]+$/, '').trim();
+                              const isFileNameAlreadyInTitle = Boolean(
+                                cleanBaseName && (
+                                  displayName.includes(cleanBaseName) ||
+                                  cleanBaseName.includes(displayName.replace(/^\[|\]$/g, '').trim())
+                                )
+                              );
+                              const subFileName = (!isFileNameAlreadyInTitle && rawFile && rawFile !== displayName) ? rawFile : null;
 
                               return (
                                 <div className="flex items-center justify-between gap-2 min-w-0">
-                                  <div className="min-w-0 flex items-center gap-1.5 max-w-[260px] xl:max-w-[310px]">
+                                  <div className="min-w-0 flex items-center gap-1.5 max-w-[340px] xl:max-w-[440px]">
                                     {/* ⚡ AI 즉시 견적 식별 뱃지 (#E9E9E9 소프트 쿨 그레이 룩) */}
                                     {isInstantQuote && (
                                       <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs" title="AI 즉시 견적으로 자동 산출된 프로젝트입니다.">
@@ -2335,12 +2334,22 @@ export default function CasesPage() {
                                       </span>
                                     )}
 
-                                    {/* 파일명 말줄임 (뱃지 유무에 맞춰 우측 정렬 끝선 일치) */}
+                                    {/* 도면명 메인 표시 및 스마트 툴팁 */}
                                     <SmartTruncateTooltip
                                       text={displayName}
                                       className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-[13.5px]"
-                                      maxWidthClass={isInstantQuote ? "max-w-[130px] xl:max-w-[175px]" : "max-w-[210px] xl:max-w-[260px]"}
+                                      maxWidthClass={isInstantQuote ? "max-w-[180px] xl:max-w-[240px]" : "max-w-[240px] xl:max-w-[320px]"}
+                                      showCopy={true}
                                     />
+
+                                    {subFileName && (
+                                      <span
+                                        className="text-[11px] font-mono text-slate-400 group-hover:text-slate-500 truncate max-w-[120px] xl:max-w-[160px] shrink-0"
+                                        title={`첨부 파일명: ${subFileName}`}
+                                      >
+                                        ({subFileName})
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="shrink-0 flex items-center gap-1.5 ml-auto">
                                 {selectedTab === 'TRASHED' ? (

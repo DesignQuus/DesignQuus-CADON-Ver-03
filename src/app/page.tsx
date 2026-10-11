@@ -1145,7 +1145,7 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              <div className="space-y-1 text-xs">
+              <div className="space-y-1.5 text-xs">
                 {/* Step 1: 도면 접수 & CAD 파싱 */}
                 <button
                   type="button"
@@ -1159,14 +1159,14 @@ export default function HomePage() {
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-blue-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">1</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5.5 h-5.5 rounded-md bg-blue-600 text-white text-[11px] font-black flex items-center justify-center shrink-0">1</span>
                     <div>
-                      <div className="font-extrabold text-slate-900">도면 접수 & CAD 파싱</div>
-                      <div className="text-[10px] text-slate-400">DWG 업로드·WebGL 60FPS 파싱</div>
+                      <div className="text-[13px] font-extrabold text-slate-900">도면 접수 & CAD 파싱</div>
+                      <div className="text-[11px] text-slate-500 font-medium">DWG 업로드·WebGL 60FPS 파싱</div>
                     </div>
                   </div>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['1'] > 0 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                  <span className={`text-[12px] font-extrabold px-2.5 py-0.5 rounded-full ${pipelineCounts['1'] > 0 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
                     {pipelineCounts['1']}건
                   </span>
                 </button>
@@ -1184,14 +1184,14 @@ export default function HomePage() {
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">2</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5.5 h-5.5 rounded-md bg-indigo-600 text-white text-[11px] font-black flex items-center justify-center shrink-0">2</span>
                     <div>
-                      <div className="font-extrabold text-slate-900">멀티레벨 BOM 자동 전개</div>
-                      <div className="text-[10px] text-slate-400">도곽·표제란·계층구조 판독</div>
+                      <div className="text-[13px] font-extrabold text-slate-900">멀티레벨 BOM 자동 전개</div>
+                      <div className="text-[11px] text-slate-500 font-medium">도곽·표제란·계층구조 판독</div>
                     </div>
                   </div>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['2'] > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                  <span className={`text-[12px] font-extrabold px-2.5 py-0.5 rounded-full ${pipelineCounts['2'] > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
                     {pipelineCounts['2']}건
                   </span>
                 </button>
@@ -1209,14 +1209,14 @@ export default function HomePage() {
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-amber-500 text-slate-900 text-[10px] font-black flex items-center justify-center shrink-0">3</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5.5 h-5.5 rounded-md bg-amber-500 text-slate-900 text-[11px] font-black flex items-center justify-center shrink-0">3</span>
                     <div>
-                      <div className="font-extrabold text-slate-900">단가 마스터 매칭 & 원가 산출</div>
-                      <div className="text-[10px] text-slate-400">단가 검토·공정 임가공 산출</div>
+                      <div className="text-[13px] font-extrabold text-slate-900">단가 마스터 매칭 & 원가 산출</div>
+                      <div className="text-[11px] text-slate-500 font-medium">단가 검토·공정 임가공 산출</div>
                     </div>
                   </div>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['3'] > 0 ? 'bg-amber-500 text-slate-900' : 'bg-slate-100 text-slate-400'}`}>
+                  <span className={`text-[12px] font-extrabold px-2.5 py-0.5 rounded-full ${pipelineCounts['3'] > 0 ? 'bg-amber-500 text-slate-900' : 'bg-slate-100 text-slate-500'}`}>
                     {pipelineCounts['3']}건
                   </span>
                 </button>
@@ -1234,14 +1234,14 @@ export default function HomePage() {
                       : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">4</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5.5 h-5.5 rounded-md bg-emerald-600 text-white text-[11px] font-black flex items-center justify-center shrink-0">4</span>
                     <div>
-                      <div className="font-extrabold text-slate-900">공식 견적서 발행 & 승인</div>
-                      <div className="text-[10px] text-slate-400">전자결재 승인·엑셀 배포 완료</div>
+                      <div className="text-[13px] font-extrabold text-slate-900">공식 견적서 발행 & 승인</div>
+                      <div className="text-[11px] text-slate-500 font-medium">전자결재 승인·엑셀 배포 완료</div>
                     </div>
                   </div>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${pipelineCounts['4'] > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                  <span className={`text-[12px] font-extrabold px-2.5 py-0.5 rounded-full ${pipelineCounts['4'] > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
                     {pipelineCounts['4']}건
                   </span>
                 </button>
@@ -1273,15 +1273,15 @@ export default function HomePage() {
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-slate-500">총 견적 산출액</span>
                     <span className="text-[10px] font-bold text-emerald-600">
-                      공식 {quotes.filter((q) => ['APPROVED', 'ISSUED'].includes(q.status) && Number(q.total_amount || 0) > 0).length}건 발행
+                      견적 {quotes.filter((q) => Number(q.total_amount || 0) > 0).length}건 산출완료
                     </span>
                   </div>
                   <div className="text-lg font-black text-slate-900 font-mono mt-0.5">
                     ₩{stats.totalQuoteAmount.toLocaleString()}
                   </div>
                   <div className="text-[9.5px] text-slate-400 mt-1 flex items-center justify-between border-t border-slate-200/60 pt-1">
-                    <span>초안(단가 미확정): <strong className="text-amber-600 font-bold">{quotes.filter((q) => q.status === 'DRAFT' || Number(q.total_amount || 0) === 0).length}건</strong></span>
-                    <span>승인확정: <strong className="text-emerald-700 font-mono">₩{stats.approvedQuoteAmount.toLocaleString()}</strong></span>
+                    <span>단가 검토 대기: <strong className="text-amber-600 font-bold">{quotes.filter((q) => Number(q.total_amount || 0) === 0).length}건</strong></span>
+                    <span>승인 확정: <strong className="text-emerald-700 font-mono">{quotes.filter((q) => ['APPROVED', 'ISSUED'].includes(q.status)).length}건</strong></span>
                   </div>
                 </div>
               </div>
@@ -1329,8 +1329,8 @@ export default function HomePage() {
               <ClipboardList className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-extrabold text-slate-900 tracking-tight">도면 분석 & 견적 진행 현황</h2>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-[17px] font-black text-slate-900 tracking-tight">도면 분석 & 견적 진행 현황</h2>
                 {caseFilter === 'MY' ? (
                   <button
                     type="button"
@@ -1338,7 +1338,7 @@ export default function HomePage() {
                       setCaseFilter('ALL');
                       setCasePage(1);
                     }}
-                    className="h-[26px] px-2.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-800 bg-[#E9E9E9] hover:bg-[#DCDCDC] border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                    className="h-[28px] px-3 rounded-full inline-flex items-center gap-1.5 text-[12px] font-extrabold text-slate-800 bg-[#E9E9E9] hover:bg-[#DCDCDC] border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                     title="클릭하여 전사 총괄 관제로 전환"
                   >
                     <User className="w-3.5 h-3.5 text-blue-600" />
@@ -1351,7 +1351,7 @@ export default function HomePage() {
                       setCaseFilter('MY');
                       setCasePage(1);
                     }}
-                    className="h-[26px] px-2.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-800 bg-[#E9E9E9] hover:bg-[#DCDCDC] border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                    className="h-[28px] px-3 rounded-full inline-flex items-center gap-1.5 text-[12px] font-extrabold text-slate-800 bg-[#E9E9E9] hover:bg-[#DCDCDC] border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                     title="클릭하여 내 담당 관제로 전환"
                   >
                     <Building2 className="w-3.5 h-3.5 text-indigo-600" />
@@ -1359,8 +1359,8 @@ export default function HomePage() {
                   </button>
                 )}
                 {pipelineFilter !== 'ALL' && (
-                  <span className="h-[26px] px-2.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-800 bg-[#E9E9E9] border border-slate-300 shadow-2xs animate-in fade-in">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                  <span className="h-[28px] px-3 rounded-full inline-flex items-center gap-1.5 text-[12px] font-extrabold text-slate-800 bg-[#E9E9E9] border border-slate-300 shadow-2xs animate-in fade-in">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
                     <span>
                       {pipelineFilter === '1' && '1단계: 도면 접수 & CAD 파싱'}
                       {pipelineFilter === '2' && '2단계: 멀티레벨 BOM 자동 전개'}
@@ -1374,7 +1374,7 @@ export default function HomePage() {
                         setPipelineFilter('ALL');
                         setCasePage(1);
                       }}
-                      className="ml-1 text-slate-500 hover:text-slate-900 bg-white/80 hover:bg-white px-1.5 py-0.2 rounded border border-slate-300 text-[10px] font-black cursor-pointer transition-colors"
+                      className="ml-1 text-slate-500 hover:text-slate-900 bg-white/80 hover:bg-white px-1.5 py-0.2 rounded border border-slate-300 text-[11px] font-black cursor-pointer transition-colors"
                       title="전체 단계 보기로 초기화"
                     >
                       × 해제
@@ -1382,7 +1382,7 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-[13px] text-slate-600 mt-1">
                 {pipelineFilter !== 'ALL'
                   ? '선택하신 파이프라인 단계에 머물러 있는 도면 분석 건만 집중 모니터링 중입니다.'
                   : caseFilter === 'MY'
@@ -1539,17 +1539,17 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="overflow-x-auto overflow-y-visible pb-4">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-100">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-100/90 text-slate-700 border-b border-slate-200">
                 <tr>
-                  <th className="py-3 px-4 font-bold text-center w-16 text-slate-500">No.</th>
-                  <th className="py-3 px-4 font-bold">의뢰번호 / 명칭</th>
-                  <th className="py-3 px-4 font-bold">고객사</th>
-                  <th className="py-3 px-4 font-bold">견적 담당자</th>
-                  <th className="py-3 px-4 font-bold">도면 구조 / BOM (다품일도)</th>
-                  <th className="py-3 px-4 font-bold text-right">견적금액</th>
-                  <th className="py-3 px-4 font-bold text-center">진행 / 보관 상태</th>
-                  <th className="py-3 px-4 font-bold text-center">관리</th>
+                  <th className="py-3.5 px-4 font-extrabold text-center w-16 text-slate-600 text-xs">No.</th>
+                  <th className="py-3.5 px-4 font-extrabold text-[13px]">의뢰번호 / 명칭</th>
+                  <th className="py-3.5 px-4 font-extrabold text-[13px]">고객사</th>
+                  <th className="py-3.5 px-4 font-extrabold text-[13px]">견적 담당자</th>
+                  <th className="py-3.5 px-4 font-extrabold text-[13px]">도면 구조 / BOM (다품일도)</th>
+                  <th className="py-3.5 px-4 font-extrabold text-right text-[13px]">견적금액</th>
+                  <th className="py-3.5 px-4 font-extrabold text-center text-[13px]">진행 / 보관 상태</th>
+                  <th className="py-3.5 px-4 font-extrabold text-center text-[13px]">관리</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1575,78 +1575,111 @@ export default function HomePage() {
                       }`}
                     >
                       {/* 0. No. 순번 */}
-                      <td className="py-2.5 px-4 text-center font-mono font-bold text-xs text-slate-400 group-hover:text-blue-600 transition-colors w-16 whitespace-nowrap">
+                      <td className="py-3 px-4 text-center font-mono font-extrabold text-[13px] text-slate-400 group-hover:text-blue-600 transition-colors w-16 whitespace-nowrap">
                         {String(globalIdx).padStart(2, '0')}
                       </td>
-                      {/* 1. 의뢰번호 / 명칭 (1행 가로 통합 + SmartTruncateTooltip) */}
-                      <td className="py-2.5 px-4">
-                        <div className="flex items-center gap-2 min-w-0 whitespace-nowrap">
-                          <span className="font-mono text-xs text-slate-500 group-hover:text-blue-700 font-bold shrink-0 transition-colors">
-                            {c.case_no}
-                          </span>
-                          <span className="text-slate-300 shrink-0 font-light">|</span>
-                          <div className="flex items-center gap-1.5 min-w-0 max-w-[280px] xl:max-w-[360px]">
-                            {/* ⚡ AI 즉시 견적 식별 뱃지 (#E9E9E9 소프트 쿨 그레이 룩) */}
+                      {/* 1. 의뢰번호 / 명칭 (2줄 스택 구조: 1행 의뢰번호&뱃지, 2행 도면명(케이스명) 우선 표시 + 파일명 보조) */}
+                      <td className="py-3 px-4 min-w-[280px]">
+                        <div className="flex flex-col gap-1 min-w-0">
+                          {/* 1행: 의뢰번호 + 배지 그룹 */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-[13px] text-blue-700 font-extrabold shrink-0 group-hover:underline">
+                              {c.case_no}
+                            </span>
+
+                            {/* ⚡ AI 즉시 견적 식별 뱃지 */}
                             {(c.case_name?.includes('즉시 견적') || c.case_name?.includes('즉시견적') || (c as any).notes?.includes('즉시 견적')) && (
-                              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs" title="AI 즉시 견적으로 산출된 프로젝트입니다.">
-                                <Zap className="w-2.5 h-2.5 text-amber-500" />
+                              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs" title="AI 즉시 견적으로 산출된 프로젝트입니다.">
+                                <Zap className="w-3 h-3 text-amber-500" />
                                 <span>AI 즉시 견적</span>
                               </span>
                             )}
 
-                            {(c.primary_file_name?.toLowerCase().endsWith('.dwg') || c.case_name?.toLowerCase().includes('.dwg') || (!c.primary_file_name?.toLowerCase().endsWith('.dxf') && !c.case_name?.toLowerCase().includes('.dxf'))) ? (
-                              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
-                                DWG
-                              </span>
-                            ) : (
-                              <span className="shrink-0 px-1 py-0.2 rounded text-[9.5px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-300 shadow-2xs">
-                                DXF
+                            {/* 도면 확장자 뱃지 (DWG 우선 및 순수 DXF 분리) */}
+                            {(() => {
+                              const pName = (c.primary_file_name || '').toLowerCase();
+                              const cName = (c.case_name || '').toLowerCase();
+                              // 순수 DXF 파일인 경우에만 DXF로 판정 (DWG 변환본 .dwg.dxf나 원본 DWG는 DWG로 우선 표기)
+                              const isDxf = (pName.endsWith('.dxf') && !pName.includes('.dwg')) || (cName.endsWith('.dxf') && !cName.includes('.dwg')) || cName.includes('테스트 dxf');
+                              return isDxf ? (
+                                <span className="shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-300 shadow-2xs">
+                                  DXF
+                                </span>
+                              ) : (
+                                <span className="shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs">
+                                  DWG
+                                </span>
+                              );
+                            })()}
+
+                            {/* 다중 도면 첨부 표시 */}
+                            {c.files_count && c.files_count > 1 && (
+                              <span className="shrink-0 px-2 py-0.5 rounded text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                외 {c.files_count - 1}건
                               </span>
                             )}
+                          </div>
 
-                            <SmartTruncateTooltip
-                              text={(() => {
-                                if (c.primary_file_name) {
-                                  return c.files_count && c.files_count > 1 ? `${c.primary_file_name} 외 ${c.files_count - 1}건` : c.primary_file_name;
-                                }
-                                if (c.case_name) {
-                                  const matched = c.case_name.match(/^\[(.*?)\]/);
-                                  if (matched && matched[1]) {
-                                    const base = matched[1].trim();
-                                    return (base.endsWith('.dwg') || base.endsWith('.dxf')) ? base : `${base}.dwg`;
-                                  }
-                                  return c.case_name;
-                                }
-                                return '도면 견적의뢰';
-                              })()}
-                              className={`font-bold text-xs ${
-                                isDeleted ? 'text-slate-500 line-through' : 'text-slate-800 group-hover:text-blue-700'
-                              }`}
-                              maxWidthClass={(c.case_name?.includes('즉시 견적') || c.case_name?.includes('즉시견적') || (c as any).notes?.includes('즉시 견적')) ? "max-w-[130px] xl:max-w-[180px]" : "max-w-[200px] xl:max-w-[280px]"}
-                              showCopy={true}
-                            />
+                          {/* 2행: 실제 도면/프로젝트명(케이스명) 메인 표시 + 원본 파일명 보조 (중복 방지) */}
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {(() => {
+                              const hasExplicitName = Boolean(c.case_name && !c.case_name.match(/^[0-9a-fA-F_-]+\.(dwg|dxf)$/i));
+                              const mainTitle = hasExplicitName ? c.case_name : (c.primary_file_name || '도면 견적의뢰');
+                              
+                              // 케이스명에 이미 파일명의 핵심 문자열이 포함되어 있으면 중복 파일명 표기 생략
+                              const rawFile = c.primary_file_name || '';
+                              const cleanBaseName = rawFile.replace(/\.[^/.]+$/, '').trim();
+                              const isFileNameAlreadyInTitle = Boolean(
+                                cleanBaseName && (
+                                  mainTitle.includes(cleanBaseName) ||
+                                  cleanBaseName.includes(mainTitle.replace(/^\[|\]$/g, '').trim())
+                                )
+                              );
+                              const subFileName = (!isFileNameAlreadyInTitle && rawFile && rawFile !== mainTitle) ? rawFile : null;
+
+                              return (
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <SmartTruncateTooltip
+                                    text={mainTitle}
+                                    className={`font-extrabold text-[14.5px] ${
+                                      isDeleted ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-blue-700'
+                                    }`}
+                                    maxWidthClass="max-w-[280px] lg:max-w-[380px] xl:max-w-[480px]"
+                                    showCopy={true}
+                                  />
+                                  {subFileName && (
+                                    <span
+                                      className="text-[12px] font-mono text-slate-400 group-hover:text-slate-500 truncate max-w-[150px] xl:max-w-[220px] shrink-0"
+                                      title={`첨부 파일명: ${subFileName}`}
+                                    >
+                                      ({subFileName})
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       </td>
 
                       {/* 2. 고객사 */}
-                      <td className="py-2.5 px-3.5 text-slate-700 font-medium whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-slate-800 font-semibold text-[13.5px] whitespace-nowrap">
                         {companyDisplay}
                       </td>
 
                       {/* 3. 견적 담당자 */}
-                      <td className="py-2.5 px-3.5 whitespace-nowrap">
+                      <td className="py-3 px-3.5 whitespace-nowrap">
                         {isOwner ? (
-                          <span className="inline-flex items-center gap-1.5 font-semibold text-slate-900 text-xs">
-                            <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 flex items-center justify-center text-[10px] font-bold shrink-0">
+                          <span className="inline-flex items-center gap-1.5 font-bold text-slate-900 text-[13px]">
+                            <span className="w-5.5 h-5.5 rounded-full bg-slate-200 text-slate-800 flex items-center justify-center text-[10.5px] font-extrabold shrink-0">
                               {user?.name ? user.name.slice(0, 1) : (c.created_by_name ? c.created_by_name.slice(0, 1) : '나')}
                             </span>
                             <span>{c.created_by_name || user?.name || '담당자'}</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 text-slate-700 text-xs">
-                            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-medium shrink-0">
-                              {c.created_by_name ? c.created_by_name.slice(0, 1) : <User className="w-3 h-3 text-slate-400" />}
+                          <span className="inline-flex items-center gap-1.5 text-slate-700 text-[13px] font-medium">
+                            <span className="w-5.5 h-5.5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10.5px] font-medium shrink-0">
+                              {c.created_by_name ? c.created_by_name.slice(0, 1) : <User className="w-3.5 h-3.5 text-slate-400" />}
                             </span>
                             <span>{c.created_by_name || '담당자'}</span>
                           </span>
@@ -1654,17 +1687,17 @@ export default function HomePage() {
                       </td>
 
                       {/* 4. 도면 구조 / BOM (다품일도 1행 통합) */}
-                      <td className="py-2.5 px-4 whitespace-nowrap">
+                      <td className="py-3 px-4 whitespace-nowrap">
                         {c.drawings_count > 1 ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.2 rounded font-bold text-[10px] bg-slate-100 text-slate-700 border border-slate-300 shrink-0">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded font-bold text-[11px] bg-slate-100 text-slate-700 border border-slate-300 shrink-0">
                               다품일도
                             </span>
-                            <span className="font-bold text-slate-800 font-mono text-xs">
+                            <span className="font-extrabold text-slate-900 font-mono text-[13px]">
                               {c.drawings_count}시트
                             </span>
                             <span className="text-slate-300 text-xs font-light">·</span>
-                            <span className="text-xs text-slate-600 font-medium">
+                            <span className="text-[13px] text-slate-700 font-medium">
                               {c.bom_items_count > 0 ? (
                                 <span>{c.bom_items_count}품목 전개</span>
                               ) : (
@@ -1673,58 +1706,58 @@ export default function HomePage() {
                             </span>
                           </div>
                         ) : c.drawings_count === 1 ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.2 rounded font-medium text-[10px] bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded font-medium text-[11px] bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
                               단품일도
                             </span>
-                            <span className="font-bold text-slate-800 font-mono text-xs">
+                            <span className="font-extrabold text-slate-900 font-mono text-[13px]">
                               1시트
                             </span>
                             <span className="text-slate-300 text-xs font-light">·</span>
-                            <span className="text-xs text-slate-500 font-medium">
+                            <span className="text-[13px] text-slate-600 font-medium">
                               {c.bom_items_count}품목 전개
                             </span>
                           </div>
                         ) : c.primary_file_name || (c.files_count && c.files_count > 0) ? (
-                          <div className="flex items-center gap-1.5 text-amber-700 font-bold text-xs" title="도면 파일은 접수되었으나 아직 CAD 시트 분할 및 BOM 파싱이 진행되지 않았습니다.">
-                            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          <div className="flex items-center gap-1.5 text-amber-700 font-bold text-[12.5px]" title="도면 파일은 접수되었으나 아직 CAD 시트 분할 및 BOM 파싱이 진행되지 않았습니다.">
+                            <Clock className="w-4 h-4 text-amber-500 shrink-0" />
                             <span>도면 분석 대기 (CAD 파싱 필요)</span>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 text-slate-400 font-medium text-xs">
-                            <AlertCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <div className="flex items-center gap-1.5 text-slate-400 font-medium text-[12.5px]">
+                            <AlertCircle className="w-4 h-4 text-slate-400 shrink-0" />
                             <span>도면 미첨부 (0매)</span>
                           </div>
                         )}
                       </td>
 
                       {/* 5. 견적금액 */}
-                      <td className="py-2.5 px-3.5 text-right font-extrabold text-slate-900 font-mono whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-right font-black text-slate-900 font-mono text-[15px] whitespace-nowrap">
                         {c.quote_total_amount
                           ? `₩${Number(c.quote_total_amount).toLocaleString()}`
                           : '-'}
                       </td>
 
                       {/* 6. 파이프라인 진행 상태 (1행 가로 뱃지형) */}
-                      <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-center whitespace-nowrap">
                         {isDeleted ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className="inline-block px-2.5 py-0.5 rounded text-[12px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
                               삭제보관
                             </span>
-                            <span className="text-[10px] text-rose-500 font-medium">
+                            <span className="text-[11px] text-rose-500 font-bold">
                               {typeof c.remaining_days === 'number'
                                 ? `(D-${c.remaining_days})`
                                 : '(만료 임박)'}
                             </span>
                           </div>
                         ) : isArchived ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className="inline-flex items-center gap-1.5 h-[28px] px-3 rounded-full text-[12px] font-extrabold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs">
+                              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
                               <span>보관완료</span>
                             </span>
-                            <span className="text-[10px] text-slate-500 font-medium">
+                            <span className="text-[11px] text-slate-500 font-bold">
                               (격리)
                             </span>
                           </div>
@@ -1732,24 +1765,24 @@ export default function HomePage() {
                           <div className="relative group/status flex items-center justify-center">
                             <Link
                               href="/quotes"
-                              className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 h-[28px] px-3 rounded-full text-[12px] font-extrabold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                             >
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                               <span>4/4 견적발행 완료</span>
-                              <ChevronRight className="w-3 h-3 text-slate-500" />
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
                             </Link>
 
                             {/* 💡 호버 안내 카드 */}
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
                               <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
-                                <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                <span className="text-[12px] font-black text-slate-900 flex items-center gap-1.5">
                                   <span>📌</span> 파이프라인 단계 안내
                                 </span>
-                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300">
+                                <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300">
                                   4단계 : 발행완료
                                 </span>
                               </div>
-                              <div className="space-y-1 text-[11px] text-slate-600">
+                              <div className="space-y-1 text-[11.5px] text-slate-600">
                                 <div>• 공식 견적서 채번 및 단가 확정 완료</div>
                                 <div className="text-slate-800 font-bold">👉 클릭 시 [견적서 관리 대장]으로 이동하여 공식 엑셀 다운로드 및 [변경비교]를 진행합니다.</div>
                               </div>
@@ -1760,25 +1793,25 @@ export default function HomePage() {
                           <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/quotes/${c.id}/review`}
-                              className="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 h-[28px] px-3 rounded-full text-[12px] font-extrabold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                             >
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                               <span>3/4 단가검토</span>
-                              <span className="text-[10.5px] font-semibold text-slate-600">({c.bom_items_count}건 대기)</span>
-                              <ChevronRight className="w-3 h-3 text-slate-500" />
+                              <span className="text-[11.5px] font-bold text-slate-600">({c.bom_items_count}건 대기)</span>
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
                             </Link>
 
                             {/* 💡 마우스 호버 시 다음 단계 안내 카드 */}
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-72 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
                               <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
-                                <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                <span className="text-[12px] font-black text-slate-900 flex items-center gap-1.5">
                                   <span>📌</span> 다음 진행 단계 가이드
                                 </span>
-                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800">
+                                <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800">
                                   3단계 : 단가검토
                                 </span>
                               </div>
-                              <div className="space-y-1.5 text-[11px] text-slate-600">
+                              <div className="space-y-1.5 text-[11.5px] text-slate-600">
                                 <div className="flex items-start gap-1.5">
                                   <span className="text-emerald-600 font-bold">✔</span>
                                   <span>도면 분석 완료: <strong>BOM {c.bom_items_count}개 품목</strong> 추출됨</span>
@@ -1787,14 +1820,14 @@ export default function HomePage() {
                                   <span className="text-blue-600 font-bold">👉</span>
                                   <span className="text-slate-800 font-bold">클릭 시 [단가 검토 화면]으로 이동</span>
                                 </div>
-                                <div className="pl-3.5 text-[10px] text-slate-500 space-y-0.5 border-l-2 border-indigo-200 my-1">
+                                <div className="pl-3.5 text-[11px] text-slate-500 space-y-0.5 border-l-2 border-indigo-200 my-1">
                                   <div>• <strong>[⚡ AI 공학원가 산출]</strong> 버튼으로 단가 자동 계산</div>
                                   <div>• 사내 마스터 단가 대조 및 비도면 부대비용 추가</div>
                                   <div>• <strong>[견적 확정]</strong> 시 4단계 최종 견적서 즉시 발행</div>
                                 </div>
                               </div>
                               <div className="mt-2 pt-1.5 border-t border-slate-100 text-center">
-                                <span className="text-[10.5px] font-extrabold text-indigo-600">
+                                <span className="text-[11px] font-extrabold text-indigo-600">
                                   클릭하여 단가 검토 및 산출 시작하기 →
                                 </span>
                               </div>
@@ -1805,24 +1838,24 @@ export default function HomePage() {
                           <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/cases/${c.id}`}
-                              className="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 h-[28px] px-3 rounded-full text-[12px] font-extrabold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                             >
-                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
                               <span>2/4 AI BOM 분석</span>
-                              <span className="text-[10px] text-slate-600 font-medium">({c.drawings_count}매)</span>
-                              <ChevronRight className="w-3 h-3 text-slate-500" />
+                              <span className="text-[11px] text-slate-600 font-bold">({c.drawings_count}매)</span>
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
                             </Link>
 
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
                               <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
-                                <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                <span className="text-[12px] font-black text-slate-900 flex items-center gap-1.5">
                                   <span>📌</span> 파이프라인 단계 안내
                                 </span>
-                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-indigo-100 text-indigo-800">
+                                <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-indigo-100 text-indigo-800">
                                   2단계 : BOM 분석중
                                 </span>
                               </div>
-                              <div className="space-y-1 text-[11px] text-slate-600">
+                              <div className="space-y-1 text-[11.5px] text-slate-600">
                                 <div>• 도면 {c.drawings_count}매 외곽선 및 도곽 감지 완료</div>
                                 <div className="text-slate-800 font-bold">👉 클릭 시 3단계 [단가 검토 및 산출] 화면으로 이동합니다.</div>
                               </div>
@@ -1833,23 +1866,23 @@ export default function HomePage() {
                           <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/cases/${c.id}`}
-                              className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 h-[28px] px-3 rounded-full text-[12px] font-extrabold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                             >
-                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                               <span>1/4 도면접수 완료</span>
-                              <ChevronRight className="w-3 h-3 text-slate-500" />
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
                             </Link>
 
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
                               <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
-                                <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                <span className="text-[12px] font-black text-slate-900 flex items-center gap-1.5">
                                   <span>📌</span> 파이프라인 단계 안내
                                 </span>
-                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300">
+                                <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300">
                                   1단계 : 접수완료
                                 </span>
                               </div>
-                              <div className="space-y-1 text-[11px] text-slate-600">
+                              <div className="space-y-1 text-[11.5px] text-slate-600">
                                 <div>• 도면 파일 업로드 완료</div>
                                 <div className="text-slate-800 font-bold">👉 클릭 시 2단계 [AI 도면 분석 및 파싱]을 즉시 시작합니다.</div>
                               </div>
@@ -1860,23 +1893,23 @@ export default function HomePage() {
                           <div className="relative group/status flex items-center justify-center">
                             <Link
                               href={`/cases/${c.id}?step=1`}
-                              className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-full text-[11px] font-bold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 h-[28px] px-3 rounded-full text-[12px] font-extrabold bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
                             >
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                               <span>1/4 도면접수 대기</span>
-                              <ChevronRight className="w-3 h-3 text-slate-500" />
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
                             </Link>
 
                             <div className="hidden group-hover/status:flex flex-col absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-300 p-3 text-left pointer-events-none transition-all duration-150 animate-in fade-in zoom-in-95">
                               <div className="flex items-center justify-between border-b border-slate-100 pb-1.5 mb-2">
-                                <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5">
+                                <span className="text-[12px] font-black text-slate-900 flex items-center gap-1.5">
                                   <span>📌</span> 다음 기능 안내
                                 </span>
-                                <span className="text-[9.5px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800">
+                                <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800">
                                   도면 등록 필요
                                 </span>
                               </div>
-                              <div className="space-y-1 text-[11px] text-slate-600">
+                              <div className="space-y-1 text-[11.5px] text-slate-600">
                                 <div>• 견적의뢰 기본 정보 등록 완료</div>
                                 <div className="text-slate-800 font-bold">👉 클릭 시 [DWG / DXF 도면 파일 업로드] 화면으로 이동합니다.</div>
                               </div>
@@ -1966,16 +1999,16 @@ export default function HomePage() {
               <FileSpreadsheet className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+              <h2 className="text-[17px] font-black text-slate-900 tracking-tight flex items-center gap-2.5">
                 <span>발행 견적서 및 엑셀 다운로드</span>
-                <span className="h-[26px] px-2.5 rounded-full inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs">
+                <span className="h-[28px] px-3 rounded-full inline-flex items-center gap-1.5 text-[12px] font-extrabold bg-[#E9E9E9] text-slate-800 border border-slate-300 shadow-2xs">
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
                   <span>
                     총 {quotes.length}건 (발행완료 {quotes.filter((q) => Number(q.total_amount || 0) > 0).length}건{quotes.filter((q) => Number(q.total_amount || 0) === 0).length > 0 ? ` / 단가대기 ${quotes.filter((q) => Number(q.total_amount || 0) === 0).length}건` : ''})
                   </span>
                 </span>
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-[13px] text-slate-600 mt-1">
                 원가 산출이 완료된 견적서 목록입니다. 웹뷰어 열람 및 고객 제출용 엑셀(.xlsx) 즉시 다운로드가 가능합니다.
               </p>
             </div>
@@ -2132,50 +2165,50 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="overflow-x-auto overflow-y-auto max-h-[500px] 2xl:max-h-[620px] scrollbar-thin">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
-                <tr className="text-slate-600 font-bold">
-                  <th className="py-2.5 px-4 font-bold text-center w-16 bg-slate-50">No.</th>
+            <table className="w-full text-left text-sm border-collapse">
+              <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 shadow-2xs">
+                <tr className="text-slate-700 font-extrabold text-[13px]">
+                  <th className="py-3.5 px-4 font-extrabold text-center w-16 bg-slate-100 text-xs text-slate-600">No.</th>
                   <th
                     onClick={() => handleToggleQuoteSort('quote_no')}
-                    className="py-2.5 px-4 font-bold bg-slate-50 cursor-pointer select-none hover:bg-slate-100 transition-colors group"
+                    className="py-3.5 px-4 font-extrabold bg-slate-100 cursor-pointer select-none hover:bg-slate-200/70 transition-colors group"
                     title="견적번호 기준 정렬 (클릭)"
                   >
                     <div className="flex items-center space-x-1">
                       <span>견적번호 / 버전</span>
-                      <span className={`text-[10px] ${quoteSortField === 'quote_no' ? 'text-emerald-700 font-black' : 'text-slate-300 group-hover:text-slate-500'}`}>
+                      <span className={`text-[11px] ${quoteSortField === 'quote_no' ? 'text-emerald-700 font-black' : 'text-slate-400 group-hover:text-slate-600'}`}>
                         {quoteSortField === 'quote_no' ? (quoteSortOrder === 'asc' ? '▲' : '▼') : '↕'}
                       </span>
                     </div>
                   </th>
-                  <th className="py-2.5 px-4 font-bold bg-slate-50">연동 케이스명</th>
+                  <th className="py-3.5 px-4 font-extrabold bg-slate-100">연동 케이스명</th>
                   <th
                     onClick={() => handleToggleQuoteSort('company')}
-                    className="py-2.5 px-4 font-bold bg-slate-50 cursor-pointer select-none hover:bg-slate-100 transition-colors group"
+                    className="py-3.5 px-4 font-extrabold bg-slate-100 cursor-pointer select-none hover:bg-slate-200/70 transition-colors group"
                     title="고객사 이름순 정렬 (클릭)"
                   >
                     <div className="flex items-center space-x-1">
                       <span>고객사</span>
-                      <span className={`text-[10px] ${quoteSortField === 'company' ? 'text-emerald-700 font-black' : 'text-slate-300 group-hover:text-slate-500'}`}>
+                      <span className={`text-[11px] ${quoteSortField === 'company' ? 'text-emerald-700 font-black' : 'text-slate-400 group-hover:text-slate-600'}`}>
                         {quoteSortField === 'company' ? (quoteSortOrder === 'asc' ? '▲' : '▼') : '↕'}
                       </span>
                     </div>
                   </th>
-                  <th className="py-2.5 px-4 font-bold text-center bg-slate-50">품목 수</th>
+                  <th className="py-3.5 px-4 font-extrabold text-center bg-slate-100">품목 수</th>
                   <th
                     onClick={() => handleToggleQuoteSort('amount')}
-                    className="py-2.5 px-4 font-bold text-right bg-slate-50 cursor-pointer select-none hover:bg-slate-100 transition-colors group"
+                    className="py-3.5 px-4 font-extrabold text-right bg-slate-100 cursor-pointer select-none hover:bg-slate-200/70 transition-colors group"
                     title="견적 금액순 정렬 (클릭)"
                   >
                     <div className="flex items-center justify-end space-x-1">
                       <span>견적 총액 (VAT포함)</span>
-                      <span className={`text-[10px] ${quoteSortField === 'amount' ? 'text-emerald-700 font-black' : 'text-slate-300 group-hover:text-slate-500'}`}>
+                      <span className={`text-[11px] ${quoteSortField === 'amount' ? 'text-emerald-700 font-black' : 'text-slate-400 group-hover:text-slate-600'}`}>
                         {quoteSortField === 'amount' ? (quoteSortOrder === 'asc' ? '▲' : '▼') : '↕'}
                       </span>
                     </div>
                   </th>
-                  <th className="py-2.5 px-4 font-bold text-center bg-slate-50">상태</th>
-                  <th className="py-2.5 px-4 font-bold text-center bg-slate-50">원클릭 엑셀</th>
+                  <th className="py-3.5 px-4 font-extrabold text-center bg-slate-100">상태</th>
+                  <th className="py-3.5 px-4 font-extrabold text-center bg-slate-100">원클릭 엑셀</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -2203,67 +2236,77 @@ export default function HomePage() {
                       key={q.id}
                       className="relative transition-all duration-150 group border-l-4 border-l-transparent hover:border-l-emerald-600 hover:bg-emerald-50/30"
                     >
-                      <td className="py-3 px-4 text-center font-mono font-bold text-xs text-slate-400 group-hover:text-emerald-700 transition-colors w-16">
+                      <td className="py-3.5 px-4 text-center font-mono font-extrabold text-[13px] text-slate-400 group-hover:text-emerald-700 transition-colors w-16">
                         {String(globalIdx).padStart(2, '0')}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         <div className="flex items-center space-x-1.5">
                           <Link
                             href={`/cases/${q.quotation_case_id}`}
-                            className="font-mono text-xs font-black text-blue-600 hover:text-blue-800 hover:underline"
+                            className="font-mono text-[13.5px] font-black text-blue-600 hover:text-blue-800 hover:underline"
                             title="해당 도면 견적 워크벤치로 이동"
                           >
-                            {q.quote_no}
+                            {q.quote_no?.replace(new RegExp(`-V0*${q.quote_version}$`, 'i'), '') || q.quote_no}
                           </Link>
-                          <span className="px-1.5 py-0.2 rounded font-mono text-[10px] font-bold bg-slate-100 text-slate-700">
+                          <span className="px-1.5 py-0.5 rounded font-mono text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                             V{q.quote_version}
                           </span>
                         </div>
-                        <span className="text-[11px] text-slate-400 block mt-0.5">
+                        <span className="text-[12px] text-slate-400 block mt-0.5 font-medium">
                           {q.quote_date || (q.created_at ? new Date(q.created_at).toLocaleDateString('ko-KR') : '-')}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-semibold text-slate-800 max-w-[200px] truncate">
-                        {q.case_name || '-'}
+                      <td className="py-3.5 px-4 min-w-[260px]">
+                        <SmartTruncateTooltip
+                          text={q.case_name || '-'}
+                          className="font-bold text-slate-900 text-[14px]"
+                          maxWidthClass="max-w-[260px] lg:max-w-[360px] xl:max-w-[480px] 2xl:max-w-[600px]"
+                          showCopy={true}
+                        />
                       </td>
-                      <td className="py-3 px-4 text-slate-600 font-medium">
+                      <td className="py-3.5 px-4 text-slate-800 font-semibold text-[13.5px]">
                         {q.company_name || '고객사 미지정'}
                       </td>
-                      <td className="py-3 px-4 text-center font-semibold text-slate-700 font-mono" title="가공 견적 산출 대상 품목 수">
-                        {q.item_count || 0}개 품목
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap" title="가공 견적 산출 대상 품목 수">
+                        <span className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-md bg-slate-100 text-slate-800 border border-slate-300/90 shadow-2xs">
+                          <span className="font-mono font-black text-slate-900 text-[15px] tabular-nums tracking-tight">
+                            {q.item_count || 0}
+                          </span>
+                          <span className="text-[12.5px] text-slate-600 font-extrabold">개 품목</span>
+                        </span>
                       </td>
-                      <td className="py-3 px-4 text-right font-black text-slate-900 font-mono text-sm">
+                      <td className="py-3.5 px-4 text-right font-black text-slate-900 font-mono text-[15.5px]">
                         ₩{Number(q.total_amount || 0).toLocaleString()}
                       </td>
-                      <td className="py-3 px-4 text-center">
-                        <span className={`inline-flex items-center gap-1.5 h-[26px] px-2.5 text-[10.5px] font-bold border ${statusBadge}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></span>
+                      <td className="py-3.5 px-4 text-center">
+                        <span className={`inline-flex items-center gap-1.5 h-[28px] px-3 text-[12px] font-extrabold border ${statusBadge}`}>
+                          <span className={`w-2 h-2 rounded-full ${dotColor}`}></span>
                           <span>{statusLabel}</span>
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center space-x-1.5">
                           {Number(q.total_amount || 0) > 0 ? (
-                            <div className="flex items-center space-x-1">
+                            <div className="flex items-center space-x-1.5">
                               <Link
                                 href={`/quotes/${q.quotation_case_id}/publish`}
-                                className="inline-flex items-center space-x-1 h-[26px] px-2.5 bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 rounded-full text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
+                                className="inline-flex items-center space-x-1 h-[28px] px-3 bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 rounded-full text-[12px] font-extrabold transition-all shadow-2xs cursor-pointer"
                                 title="견적서 세부 및 공식 웹뷰어 확인"
                               >
-                                <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
+                                <FileSpreadsheet className="w-4 h-4 text-blue-600" />
                                 <span>견적서 보기</span>
                               </Link>
                               <button
                                 type="button"
                                 onClick={() => handleDownloadExcel(q.id, q.quote_no)}
                                 disabled={downloadingQuoteId === q.id}
-                                className="inline-flex items-center space-x-1 h-[26px] px-2.5 bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 rounded-full text-[11px] font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                                className="inline-flex items-center space-x-1 h-[28px] px-3 bg-[#E9E9E9] hover:bg-[#DCDCDC] text-slate-800 border border-slate-300 rounded-full text-[12px] font-extrabold transition-all shadow-2xs cursor-pointer disabled:opacity-50"
                                 title="한국 표준 견적서 양식 Excel (.xlsx) 즉시 다운로드"
                               >
                                 {downloadingQuoteId === q.id ? (
-                                  <Clock className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                                  <Clock className="w-4 h-4 animate-spin text-emerald-600" />
                                 ) : (
-                                  <Download className="w-3.5 h-3.5 text-emerald-600" />
+                                  <Download className="w-4 h-4 text-emerald-600" />
                                 )}
                                 <span>엑셀</span>
                               </button>

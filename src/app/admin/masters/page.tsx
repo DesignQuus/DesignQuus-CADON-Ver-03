@@ -9,7 +9,7 @@ import {
   RefreshCw, FileSpreadsheet, ArrowLeft, Sliders, DollarSign,
   AlertCircle, Layers, X, Scissors, Flame, Sparkles, Wrench, Percent, Factory, ShieldCheck,
   Target, Calculator, TrendingUp, ArrowRight, CheckSquare, Square, Save, ChevronDown, Tag,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check, RotateCcw
 } from 'lucide-react';
 
 import {
@@ -51,6 +51,51 @@ const CATEGORY_STAT_KEYS: Record<string, 'machining' | 'sheetMetal' | 'casting' 
   IMPORTED: 'imported',
   SUPPLIED: 'supplied',
   ASSEMBLY: 'assembly'
+};
+
+// 엑셀 스타일 열 너비 조절 설정 (기본값 및 최소 한도)
+export type MasterColKey =
+  | 'checkbox'
+  | 'no'
+  | 'code'
+  | 'name'
+  | 'material'
+  | 'matCost'
+  | 'procCost'
+  | 'treatment'
+  | 'spec'
+  | 'category'
+  | 'price'
+  | 'action';
+
+const DEFAULT_MASTER_COL_WIDTHS: Record<MasterColKey, number> = {
+  checkbox: 44,
+  no: 52,
+  code: 145,
+  name: 240,
+  material: 110,
+  matCost: 175,
+  procCost: 195,
+  treatment: 155,
+  spec: 125,
+  category: 195,
+  price: 145,
+  action: 52,
+};
+
+const MIN_MASTER_COL_WIDTHS: Record<MasterColKey, number> = {
+  checkbox: 38,
+  no: 40,
+  code: 80,
+  name: 120,
+  material: 70,
+  matCost: 120,
+  procCost: 130,
+  treatment: 110,
+  spec: 80,
+  category: 120,
+  price: 90,
+  action: 42,
 };
 
 // 💡 3단계 담당자 눈높이: 실시간 단가 영향도 시뮬레이션용 대표 5대 부품
@@ -308,6 +353,95 @@ export default function MasterDataManagerPage() {
   // 페이지네이션 상태 (10, 20, 30, 40, 50개씩 보기)
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(20);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // 페이지 또는 페이지당 행수 변경 시 테이블 스크롤 최상단 복귀
+  useEffect(() => {
+    if (tableContainerRef.current) {
+      tableContainerRef.current.scrollTop = 0;
+    }
+  }, [currentPage, pageSize]);
+
+  // ⚡ 엑셀 스타일 열 너비 상태 및 실시간 드래그 리사이즈 핸들러
+  const [colWidths, setColWidths] = useState<Record<MasterColKey, number>>(DEFAULT_MASTER_COL_WIDTHS);
+  const resizingRef = useRef<{
+    colKey: MasterColKey;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  // 로컬 스토리지에서 사용자가 커스텀 설정한 열 폭 복원
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cadon_masters_col_widths');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setColWidths((prev) => ({ ...prev, ...parsed }));
+      }
+    } catch {}
+  }, []);
+
+  const handleColResizeStart = (e: React.MouseEvent, colKey: MasterColKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = {
+      colKey,
+      startX: e.clientX,
+      startWidth: colWidths[colKey] || DEFAULT_MASTER_COL_WIDTHS[colKey],
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { colKey: key, startX, startWidth } = resizingRef.current;
+      const delta = moveEvent.clientX - startX;
+      const minW = MIN_MASTER_COL_WIDTHS[key] || 40;
+      const newW = Math.max(minW, Math.round(startWidth + delta));
+      setColWidths((prev) => ({ ...prev, [key]: newW }));
+    };
+
+    const handleMouseUp = () => {
+      if (resizingRef.current) {
+        setColWidths((latest) => {
+          try {
+            localStorage.setItem('cadon_masters_col_widths', JSON.stringify(latest));
+          } catch {}
+          return latest;
+        });
+      }
+      resizingRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleResetSingleColWidth = (colKey: MasterColKey) => {
+    setColWidths((prev) => {
+      const next = { ...prev, [colKey]: DEFAULT_MASTER_COL_WIDTHS[colKey] };
+      try {
+        localStorage.setItem('cadon_masters_col_widths', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleResetAllColWidths = () => {
+    setColWidths(DEFAULT_MASTER_COL_WIDTHS);
+    try {
+      localStorage.removeItem('cadon_masters_col_widths');
+    } catch {}
+  };
+
+  const totalTableWidth = useMemo(() => {
+    return Object.values(colWidths).reduce((a, b) => a + b, 0);
+  }, [colWidths]);
 
   // New Item Modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -1199,11 +1333,11 @@ export default function MasterDataManagerPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
+    <div className="h-[calc(100vh-64px)] bg-slate-100 flex flex-col font-sans overflow-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 w-full px-2.5 sm:px-3 py-3.5 shadow-2xs flex items-center justify-between">
+      <header className="bg-white border-b border-slate-200 w-full px-3 sm:px-4 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center space-x-3">
-          <Link href="/cases" className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors">
+          <Link href="/cases" className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
@@ -1211,23 +1345,23 @@ export default function MasterDataManagerPage() {
               <span className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
                 <Database className="w-5 h-5" />
               </span>
-              <h1 className="text-lg font-bold text-slate-900">표준 단가·임률 관리 센터</h1>
+              <h1 className="text-xl font-black text-slate-900 leading-tight">표준 단가·임률 관리 센터</h1>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-[13px] text-slate-500 font-medium leading-tight">
               사내 공인 표준 부품, 단가표, 소재 시세 및 가공 임률을 등록하고 관리합니다.
             </p>
           </div>
         </div>
 
         {/* Tab Controls (3단 탭: 표준 품목 / 실무 자가학습 단가 풀 / 임률 설정) */}
-        <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-[4px] border border-slate-200">
+        <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200">
           <button
             onClick={() => setActiveTab('products')}
-            className={`px-3 py-1.5 rounded-[4px] text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-md text-[13px] font-extrabold transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'products' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Layers className="w-3.5 h-3.5" />
+            <Layers className="w-4 h-4" />
             <span>표준 품목 및 단가 대장</span>
           </button>
           <button
@@ -1235,210 +1369,328 @@ export default function MasterDataManagerPage() {
               setActiveTab('learned');
               fetchLearnedItems();
             }}
-            className={`px-3 py-1.5 rounded-[4px] text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-md text-[13px] font-extrabold transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'learned' ? 'bg-white text-purple-700 shadow-xs ring-1 ring-purple-300' : 'text-slate-600 hover:text-slate-900'
             }`}
             title="도면 검수 승인 및 견적 진행 과정에서 AI가 자동 학습하고 누적한 실무 단가 풀입니다."
           >
-            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+            <Sparkles className="w-4 h-4 text-purple-600" />
             <span>⚡ 실무 자가학습 단가 풀</span>
           </button>
           <button
             onClick={() => setActiveTab('settings')}
-            className={`px-3 py-1.5 rounded-[4px] text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-md text-[13px] font-extrabold transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'settings' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Sliders className="w-3.5 h-3.5" />
+            <Sliders className="w-4 h-4" />
             <span>소재 시세 & 가공 임률 설정</span>
           </button>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 w-full px-2.5 sm:px-3 pt-2 pb-4 space-y-2.5">
+      <main className="flex-1 w-full flex flex-col min-h-0 overflow-hidden">
         {activeTab === 'products' ? (
           <>
-            {/* Top Stat Cards: 10대 제조업 표준 분류 */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-1.5">
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-slate-500 block leading-tight">전체 표준 품목</span>
-                <span className="text-sm font-black text-slate-900 font-mono mt-0.5 block leading-tight">{stats.total.toLocaleString()}개</span>
-              </div>
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-blue-600 block leading-tight">기계 가공품</span>
-                <span className="text-sm font-black text-blue-700 font-mono mt-0.5 block leading-tight">{(stats.machining || 0).toLocaleString()}종</span>
-              </div>
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-cyan-600 block leading-tight">판금/제관품</span>
-                <span className="text-sm font-black text-cyan-700 font-mono mt-0.5 block leading-tight">{(stats.sheetMetal || 0).toLocaleString()}종</span>
-              </div>
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-pink-600 block leading-tight">사출/성형품</span>
-                <span className="text-sm font-black text-pink-700 font-mono mt-0.5 block leading-tight">{(stats.injection || 0).toLocaleString()}종</span>
-              </div>
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-teal-600 block leading-tight">기계요소</span>
-                <span className="text-sm font-black text-teal-700 font-mono mt-0.5 block leading-tight">{(stats.mechanical || 0).toLocaleString()}종</span>
-              </div>
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-emerald-600 block leading-tight">규격 철물</span>
-                <span className="text-sm font-black text-emerald-700 font-mono mt-0.5 block leading-tight">{(stats.commercial || 0).toLocaleString()}종</span>
-              </div>
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-amber-600 block leading-tight">전장/공압품</span>
-                <span className="text-sm font-black text-amber-700 font-mono mt-0.5 block leading-tight">{(stats.electrical || 0).toLocaleString()}종</span>
-              </div>
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-orange-600 block leading-tight">주조/단조품</span>
-                <span className="text-sm font-black text-orange-700 font-mono mt-0.5 block leading-tight">{(stats.casting || 0).toLocaleString()}종</span>
-              </div>
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-violet-600 block leading-tight">해외 수입품</span>
-                <span className="text-sm font-black text-violet-700 font-mono mt-0.5 block leading-tight">{(stats.imported || 0).toLocaleString()}종</span>
-              </div>
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-slate-600 block leading-tight">고객 사급품</span>
-                <span className="text-sm font-black text-slate-700 font-mono mt-0.5 block leading-tight">{(stats.supplied || 0).toLocaleString()}종</span>
-              </div>
-              <div className="bg-white py-1 px-2.5 rounded-[6px] border border-slate-200 shadow-2xs">
-                <span className="text-[10px] font-bold text-indigo-600 block leading-tight">조립품(모듈)</span>
-                <span className="text-sm font-black text-indigo-700 font-mono mt-0.5 block leading-tight">{(stats.assembly || 0).toLocaleString()}종</span>
-              </div>
-            </div>
-
-            {/* Toolbar: Search, Filters, Actions */}
-            <div className="bg-white py-2 px-3 rounded-[6px] border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
-              <form onSubmit={handleSearch} className="flex items-center space-x-2 flex-1 max-w-md">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="품목코드, 품명, 규격, 재질 검색..."
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-[6px] text-xs focus:outline-none focus:border-blue-500"
-                  />
+            {/* 💡 올인원 통합 마스터 콘솔 (통계 리본 + 툴바 + 테이블 100% 일체형 & 풀너비 엣지 투 엣지 & 뷰포트 고정) */}
+            <div className="bg-white flex flex-col flex-1 min-h-0 w-full overflow-hidden">
+              {/* 1. 상단 통계 리본 바: 1px 세선(divide-x divide-slate-200)으로 선명하게 구분 & 엣지 투 엣지 */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 divide-x divide-slate-200 bg-slate-50/60 shrink-0">
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-slate-500 block leading-tight">전체 표준 품목</span>
+                  <span className="text-[15px] font-black text-slate-900 font-mono mt-0.5 block leading-tight">{stats.total.toLocaleString()}개</span>
                 </div>
-                <button
-                  type="submit"
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-[6px] text-xs font-bold transition-colors cursor-pointer"
-                >
-                  검색
-                </button>
-              </form>
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-blue-600 block leading-tight">기계 가공품</span>
+                  <span className="text-[15px] font-black text-blue-700 font-mono mt-0.5 block leading-tight">{(stats.machining || 0).toLocaleString()}종</span>
+                </div>
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-cyan-600 block leading-tight">판금/제관품</span>
+                  <span className="text-[15px] font-black text-cyan-700 font-mono mt-0.5 block leading-tight">{(stats.sheetMetal || 0).toLocaleString()}종</span>
+                </div>
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-pink-600 block leading-tight">사출/성형품</span>
+                  <span className="text-[15px] font-black text-pink-700 font-mono mt-0.5 block leading-tight">{(stats.injection || 0).toLocaleString()}종</span>
+                </div>
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-teal-600 block leading-tight">기계요소</span>
+                  <span className="text-[15px] font-black text-teal-700 font-mono mt-0.5 block leading-tight">{(stats.mechanical || 0).toLocaleString()}종</span>
+                </div>
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-emerald-600 block leading-tight">규격 철물</span>
+                  <span className="text-[15px] font-black text-emerald-700 font-mono mt-0.5 block leading-tight">{(stats.commercial || 0).toLocaleString()}종</span>
+                </div>
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-amber-600 block leading-tight">전장/공압품</span>
+                  <span className="text-[15px] font-black text-amber-700 font-mono mt-0.5 block leading-tight">{(stats.electrical || 0).toLocaleString()}종</span>
+                </div>
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-orange-600 block leading-tight">주조/단조품</span>
+                  <span className="text-[15px] font-black text-orange-700 font-mono mt-0.5 block leading-tight">{(stats.casting || 0).toLocaleString()}종</span>
+                </div>
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-violet-600 block leading-tight">해외 수입품</span>
+                  <span className="text-[15px] font-black text-violet-700 font-mono mt-0.5 block leading-tight">{(stats.imported || 0).toLocaleString()}종</span>
+                </div>
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-slate-600 block leading-tight">고객 사급품</span>
+                  <span className="text-[15px] font-black text-slate-700 font-mono mt-0.5 block leading-tight">{(stats.supplied || 0).toLocaleString()}종</span>
+                </div>
+                <div className="py-1.5 px-2.5">
+                  <span className="text-[11px] font-extrabold text-indigo-600 block leading-tight">조립품(모듈)</span>
+                  <span className="text-[15px] font-black text-indigo-700 font-mono mt-0.5 block leading-tight">{(stats.assembly || 0).toLocaleString()}종</span>
+                </div>
+              </div>
 
-              {/* Category Filter Chips (10대 실무 분류) */}
-              <div className="flex items-center flex-wrap gap-1 text-xs">
-                {[
-                  { id: 'ALL', label: '전체' },
-                  ...PART_CATEGORIES.map(cat => ({ id: cat.id, label: cat.label }))
-                ].map(cat => (
+              {/* 2. 섹션 구분 1px 수평 라인 (통계-툴바 경계) */}
+              <div className="border-t border-slate-200 shrink-0" />
+
+              {/* 3. 하단 툴바: 검색, 필터, 액션 버튼 */}
+              <div className="py-1.5 px-3 sm:px-4 flex flex-wrap items-center justify-between gap-2.5 bg-white shrink-0">
+                <form onSubmit={handleSearch} className="flex items-center space-x-2 flex-1 max-w-md">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="품목코드, 품명, 규격, 재질 검색..."
+                      className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[13.5px] focus:outline-none focus:border-blue-500 font-medium placeholder:text-slate-400"
+                    />
+                  </div>
                   <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => {
-                      setCategoryFilter(cat.id);
-                      setCurrentPage(1);
-                    }}
-                    className={`px-2.5 py-1 rounded-[6px] font-bold transition-all cursor-pointer text-[11px] ${
-                      categoryFilter === cat.id
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                    }`}
+                    type="submit"
+                    className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-[13px] font-extrabold transition-colors cursor-pointer shadow-2xs"
                   >
-                    {cat.label}
+                    검색
                   </button>
-                ))}
+                </form>
+
+                {/* Category Filter Chips (10대 실무 분류) */}
+                <div className="flex items-center flex-wrap gap-1 text-xs">
+                  {[
+                    { id: 'ALL', label: '전체' },
+                    ...PART_CATEGORIES.map(cat => ({ id: cat.id, label: cat.label }))
+                  ].map(cat => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        setCategoryFilter(cat.id);
+                        setCurrentPage(1);
+                      }}
+                      className={`px-2.5 py-1 rounded-md font-extrabold transition-all cursor-pointer text-[12.5px] ${
+                        categoryFilter === cat.id
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center space-x-1.5">
+                  <button
+                    type="button"
+                    onClick={handleResetAllColWidths}
+                    className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-[13px] font-extrabold flex items-center space-x-1 shadow-2xs transition-colors cursor-pointer"
+                    title="사용자가 조절한 테이블 열 폭을 기본 규격으로 초기화합니다."
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                    <span>열 폭 초기화</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadExcelTemplate}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-[13px] font-extrabold flex items-center space-x-1.5 shadow-2xs transition-colors cursor-pointer"
+                    title="사내 단가 대량 등록용 표준 엑셀 템플릿 서식 다운로드 (.xlsx)"
+                  >
+                    <Download className="w-3.5 h-3.5 text-slate-500" />
+                    <span>엑셀 서식</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowImportModal(true)}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[13px] font-extrabold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>엑셀 업로드</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(true)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[13px] font-extrabold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>신규 품목 등록</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadExcelTemplate}
-                  className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-[6px] text-xs font-bold flex items-center space-x-1.5 shadow-2xs transition-colors cursor-pointer"
-                  title="사내 단가 대량 등록용 표준 엑셀 템플릿 서식 다운로드 (.xlsx)"
-                >
-                  <Download className="w-4 h-4 text-slate-500" />
-                  <span>엑셀 템플릿 다운로드</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowImportModal(true)}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[6px] text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
-                >
-                  <Upload className="w-4 h-4" />
-                  <span>엑셀 일괄 업로드</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(true)}
-                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-[6px] text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>신규 품목 등록</span>
-                </button>
-              </div>
-            </div>
+              {/* 4. 섹션 구분 1px 수평 라인 (툴바와 테이블 경계: 여백 제거 후 1px 라인 처리) */}
+              <div className="border-t border-slate-200 shrink-0" />
 
-            {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs table-fixed">
+              {/* 5. 데이터 테이블 (가로/세로 내부 스크롤 대응 & 엑셀 스타일 열 너비 실시간 조절) */}
+              <div ref={tableContainerRef} className="flex-1 min-h-0 overflow-auto w-full">
+                <table
+                  className="text-left border-collapse text-xs table-fixed min-w-full"
+                  style={{ width: `max(100%, ${totalTableWidth}px)` }}
+                >
                 <colgroup>
-                  <col style={{ width: '40px' }} />
-                  <col style={{ width: '44px' }} />
-                  <col style={{ width: '120px' }} />
-                  <col style={{ minWidth: '150px' }} />
-                  <col style={{ width: '150px' }} />
-                  <col style={{ width: '165px' }} />
-                  <col style={{ width: '135px' }} />
-                  <col style={{ width: '105px' }} />
-                  <col style={{ width: '85px' }} />
-                  <col style={{ width: '105px' }} />
-                  <col style={{ width: '135px' }} />
-                  <col style={{ width: '115px' }} />
-                  <col style={{ width: '44px' }} />
+                  <col style={{ width: `${colWidths.checkbox}px` }} />
+                  <col style={{ width: `${colWidths.no}px` }} />
+                  <col style={{ width: `${colWidths.code}px` }} />
+                  <col style={{ width: `${colWidths.name}px` }} />
+                  <col style={{ width: `${colWidths.material}px` }} />
+                  <col style={{ width: `${colWidths.matCost}px` }} />
+                  <col style={{ width: `${colWidths.procCost}px` }} />
+                  <col style={{ width: `${colWidths.treatment}px` }} />
+                  <col style={{ width: `${colWidths.spec}px` }} />
+                  <col style={{ width: `${colWidths.category}px` }} />
+                  <col style={{ width: `${colWidths.price}px` }} />
+                  <col style={{ width: `${colWidths.action}px` }} />
                 </colgroup>
-                <thead>
-                  <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 select-none h-8.5">
-                    <th className="py-1.5 px-2 text-center">
+                <thead className="sticky top-0 z-10 bg-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                  <tr className="bg-slate-100 text-slate-800 font-extrabold border-b border-slate-200 select-none h-9">
+                    <th className="py-2 px-2 text-center relative select-none">
                       <button
                         type="button"
                         onClick={handleToggleSelectAll}
                         className="text-slate-500 hover:text-blue-600 transition-colors cursor-pointer flex items-center justify-center mx-auto"
                         title={allPageSelected ? '현재 페이지 전체 선택 해제' : '현재 페이지 전체 선택'}
                       >
-                        {allPageSelected ? <CheckSquare className="w-3.5 h-3.5 text-blue-600" /> : <Square className="w-3.5 h-3.5" />}
+                        {allPageSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4 text-slate-400" />}
                       </button>
                     </th>
-                    <th className="py-1.5 px-2 text-center font-mono text-[11px]">No</th>
-                    <th className="py-1.5 px-3 text-[11px]">마스터 코드</th>
-                    <th className="py-1.5 px-3 text-[11px]">표준 품명</th>
-                    <th className="py-1.5 px-3 text-right text-[11px] whitespace-nowrap">소재 시세 · 재료비</th>
-                    <th className="py-1.5 px-3 text-right text-[11px] whitespace-nowrap">가공 임률 · 표준공수</th>
-                    <th className="py-1.5 px-3 text-center text-[11px] whitespace-nowrap">후처리 · 열처리</th>
-                    <th className="py-1.5 px-3 text-left text-[11px]">규격 (Spec)</th>
-                    <th className="py-1.5 px-3 text-left text-[11px]">재질</th>
-                    <th className="py-1.5 px-3 text-left text-[11px] whitespace-nowrap">
-                      <span className="inline-block relative left-[24px]">부품 분류</span>
+                    <th className="py-2 px-2 text-center font-mono text-[13px] font-extrabold relative select-none">
+                      <span>No</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'no')}
+                        onDoubleClick={() => handleResetSingleColWidth('no')}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 기본값 복원"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
                     </th>
-                    <th className="py-1.5 px-3 text-left text-[11px] whitespace-nowrap">실무 대표 품목</th>
-                    <th className="py-1.5 px-3 text-right text-[11px] whitespace-nowrap">공인 기준단가</th>
-                    <th className="py-1.5 px-2 text-center text-[11px]">관리</th>
+                    <th className="py-2 px-3 text-[14px] font-extrabold relative select-none">
+                      <span>마스터 코드</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'code')}
+                        onDoubleClick={() => handleResetSingleColWidth('code')}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 기본값 복원"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
+                    </th>
+                    <th className="py-2 px-3 text-[14px] font-extrabold relative select-none">
+                      <span>표준 품명</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'name')}
+                        onDoubleClick={() => handleResetSingleColWidth('name')}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 기본값 복원"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
+                    </th>
+                    <th className="py-2 px-3 text-left text-[14px] font-extrabold relative select-none">
+                      <span>재질</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'material')}
+                        onDoubleClick={() => handleResetSingleColWidth('material')}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 기본값 복원"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
+                    </th>
+                    <th className="py-2 px-3 text-right text-[14px] font-extrabold whitespace-nowrap relative select-none">
+                      <span>소재 시세 · 재료비</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'matCost')}
+                        onDoubleClick={() => handleResetSingleColWidth('matCost')}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 기본값 복원"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
+                    </th>
+                    <th className="py-2 px-3 text-right text-[14px] font-extrabold whitespace-nowrap relative select-none">
+                      <span>가공 임률 · 표준공수</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'procCost')}
+                        onDoubleClick={() => handleResetSingleColWidth('procCost')}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 기본값 복원"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
+                    </th>
+                    <th className="py-2 px-3 text-center text-[14px] font-extrabold whitespace-nowrap relative select-none">
+                      <span>후처리 · 열처리</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'treatment')}
+                        onDoubleClick={() => handleResetSingleColWidth('treatment')}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 기본값 복원"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
+                    </th>
+                    <th className="py-2 px-3 text-left text-[14px] font-extrabold relative select-none">
+                      <span>규격 (Spec)</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'spec')}
+                        onDoubleClick={() => handleResetSingleColWidth('spec')}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 기본값 복원"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
+                    </th>
+                    <th className="py-2 px-3 text-left text-[14px] font-extrabold whitespace-nowrap relative select-none">
+                      <span>부품 분류 · 대표 품목</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'category')}
+                        onDoubleClick={() => handleResetSingleColWidth('category')}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 기본값 복원"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
+                    </th>
+                    <th className="py-2 px-3 text-right text-[14px] font-extrabold whitespace-nowrap relative select-none">
+                      <span>공인 기준단가</span>
+                      <div
+                        onMouseDown={(e) => handleColResizeStart(e, 'price')}
+                        onDoubleClick={() => handleResetSingleColWidth('price')}
+                        className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize flex items-center justify-center z-20 group/resize hover:bg-blue-500/20"
+                        title="드래그: 열 너비 조절 | 더블클릭: 기본값 복원"
+                      >
+                        <div className="w-[1px] h-4 bg-slate-300 group-hover/resize:bg-blue-600 group-hover/resize:w-[2px] transition-all" />
+                      </div>
+                    </th>
+                    <th className="py-2 px-2 text-center text-[14px] font-extrabold relative select-none">
+                      <span>관리</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
                   {loading ? (
                     <tr>
-                      <td colSpan={13} className="py-8 text-center text-slate-400">
+                      <td colSpan={12} className="py-8 text-center text-slate-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-500" />
                         기준정보 데이터를 불러오는 중입니다...
                       </td>
                     </tr>
                   ) : filteredItems.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="py-8 text-center text-slate-400">
+                      <td colSpan={12} className="py-8 text-center text-slate-400">
                         {searchTerm.trim() ? (
                           <>검색어 &apos;{searchTerm}&apos;에 일치하는 품목이 없습니다.</>
                         ) : categoryFilter !== 'ALL' ? (
@@ -1458,48 +1710,53 @@ export default function MasterDataManagerPage() {
                         <tr
                           key={it.id || it.master_code || `master-item-${globalIdx}`}
                           onClick={() => handleToggleSelect(it.id)}
-                          className={`h-9 transition-colors cursor-pointer select-none ${
+                          className={`transition-colors cursor-pointer select-none border-b border-slate-100 min-h-[36px] ${
                             isSelected
                               ? 'bg-blue-50/80 hover:bg-blue-100/70'
                               : 'hover:bg-slate-50'
                           }`}
                           title="클릭하여 품목을 선택/해제합니다."
                         >
-                          <td className="py-1 px-2 text-center relative">
+                          <td className="py-1.5 px-2 text-center relative">
                             {isSelected && (
                               <span className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600" />
                             )}
                             <div className="flex items-center justify-center">
                               {isSelected ? (
-                                <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                                <CheckSquare className="w-4 h-4 text-blue-600" />
                               ) : (
-                                <Square className="w-3.5 h-3.5 text-slate-300 hover:text-slate-500" />
+                                <Square className="w-4 h-4 text-slate-300 hover:text-slate-500" />
                               )}
                             </div>
                           </td>
-                          <td className="py-1 px-2 text-center text-slate-400 font-mono text-[11px]">{globalIdx}</td>
-                          <td className="py-1 px-3 font-mono font-bold text-slate-900 truncate text-[11.5px]" title={it.master_code}>
+                          <td className="py-1.5 px-2 text-center text-slate-500 font-mono text-[14px] font-bold">{globalIdx}</td>
+                          <td className="py-1.5 px-3 font-mono font-bold text-blue-700 truncate text-[14.5px] tabular-nums" title={it.master_code}>
                             {it.master_code}
                           </td>
-                          <td className="py-1 px-3 font-medium text-slate-900 truncate text-[11.5px]" title={it.standard_name}>
+                          <td className="py-1.5 px-3 font-bold text-slate-900 truncate text-[15px]" title={it.standard_name}>
                             {it.standard_name}
                           </td>
 
+                          {/* 0. 재질 (소재 시세 · 재료비와 직결되도록 전진 배치) */}
+                          <td className="py-1.5 px-3 text-left font-mono font-bold text-slate-800 text-[14px] truncate" title={it.material || 'SS400'}>
+                            {it.material || 'SS400'}
+                          </td>
+
                           {/* 1. 소재 시세 · 재료비 (1행 처리) */}
-                          <td className="py-1 px-3 text-right whitespace-nowrap">
+                          <td className="py-1.5 px-3 text-right whitespace-nowrap">
                             {breakdown.materialCost > 0 ? (
                               <div className="flex items-center justify-end gap-1.5 leading-none">
-                                <span className="font-mono font-bold text-slate-900 text-[11.5px]">
+                                <span className="font-mono font-black text-slate-900 text-[15px] tabular-nums">
                                   ₩{breakdown.materialCost.toLocaleString()}
                                 </span>
-                                <span className="text-[10px] text-slate-400 font-mono" title={`소재 시세: ${breakdown.materialRatePerKg.toLocaleString()}원/kg`}>
+                                <span className="text-[12.5px] text-slate-500 font-semibold font-mono" title={`소재 시세: ${breakdown.materialRatePerKg.toLocaleString()}원/kg`}>
                                   ({breakdown.materialRatePerKg.toLocaleString()}원/kg)
                                 </span>
                               </div>
                             ) : (
                               <div className="flex items-center justify-end gap-1.5 leading-none">
-                                <span className="text-slate-300 font-mono text-[11px]">-</span>
-                                <span className="text-[10px] text-slate-400 font-mono">
+                                <span className="text-slate-300 font-mono text-[14px]">-</span>
+                                <span className="text-[12.5px] text-slate-500 font-semibold font-mono">
                                   ({breakdown.materialRatePerKg.toLocaleString()}원/kg)
                                 </span>
                               </div>
@@ -1507,20 +1764,20 @@ export default function MasterDataManagerPage() {
                           </td>
 
                           {/* 2. 가공 임률 · 표준공수 (1행 처리) */}
-                          <td className="py-1 px-3 text-right whitespace-nowrap">
+                          <td className="py-1.5 px-3 text-right whitespace-nowrap">
                             {breakdown.processCost > 0 ? (
                               <div className="flex items-center justify-end gap-1.5 leading-none">
-                                <span className="font-mono font-bold text-blue-700 text-[11.5px]">
+                                <span className="font-mono font-black text-blue-700 text-[15px] tabular-nums">
                                   ₩{breakdown.processCost.toLocaleString()}
                                 </span>
-                                <span className="text-[10px] text-blue-600/90 font-medium truncate max-w-[95px]" title={`가공비: ${breakdown.processName} (${breakdown.processRateStr})`}>
+                                <span className="text-[12.5px] text-blue-600 font-bold truncate max-w-[105px]" title={`가공비: ${breakdown.processName} (${breakdown.processRateStr})`}>
                                   ({breakdown.processName}{breakdown.cycleTimeHours > 0 ? ` ${breakdown.cycleTimeHours}h` : ''})
                                 </span>
                               </div>
                             ) : (
                               <div className="flex items-center justify-end gap-1.5 leading-none">
-                                <span className="text-slate-300 font-mono text-[11px]">-</span>
-                                <span className="text-[10px] text-slate-400 truncate max-w-[100px]" title={breakdown.processRateStr}>
+                                <span className="text-slate-300 font-mono text-[14px]">-</span>
+                                <span className="text-[12.5px] text-slate-400 font-medium truncate max-w-[105px]" title={breakdown.processRateStr}>
                                   ({breakdown.processName})
                                 </span>
                               </div>
@@ -1528,200 +1785,73 @@ export default function MasterDataManagerPage() {
                           </td>
 
                           {/* 3. 후처리 · 열처리 (1행 처리) */}
-                          <td className="py-1 px-3 text-center whitespace-nowrap">
+                          <td className="py-1.5 px-3 text-center whitespace-nowrap">
                             {breakdown.treatmentCost > 0 ? (
                               <div className="flex items-center justify-center gap-1.5 leading-none">
-                                <span className="font-mono font-semibold text-emerald-700 text-[11px]">
+                                <span className="font-mono font-extrabold text-emerald-800 text-[14.5px] tabular-nums">
                                   ₩{breakdown.treatmentCost.toLocaleString()}
                                 </span>
-                                <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9.5px] font-semibold border border-emerald-200/80 leading-none truncate max-w-[70px]" title={breakdown.treatmentName}>
+                                <span className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[12.5px] font-bold border border-emerald-200 leading-none truncate max-w-[80px]" title={breakdown.treatmentName}>
                                   {breakdown.treatmentName}
                                 </span>
                               </div>
                             ) : (
                               <div className="flex items-center justify-center gap-1.5 leading-none">
-                                <span className="text-slate-300 font-mono text-[11px]">-</span>
-                                <span className="text-[10px] text-slate-400 truncate max-w-[80px]" title={breakdown.treatmentName}>
+                                <span className="text-slate-300 font-mono text-[14px]">-</span>
+                                <span className="text-[12.5px] text-slate-400 font-medium truncate max-w-[90px]" title={breakdown.treatmentName}>
                                   ({breakdown.treatmentName})
                                 </span>
                               </div>
                             )}
                           </td>
 
-                          <td className="py-1 px-3 text-left font-mono text-slate-600 truncate text-[11px]" title={it.specification || '-'}>
+                          <td className="py-1.5 px-3 text-left font-mono font-bold text-slate-700 truncate text-[14px]" title={it.specification || '-'}>
                             {it.specification || '-'}
                           </td>
-                          <td className="py-1 px-3 text-left font-mono font-medium text-slate-700 text-[11px] truncate" title={it.material || 'SS400'}>
-                            {it.material || 'SS400'}
-                          </td>
-                          <td className="py-1 px-3 text-left" onClick={(e) => e.stopPropagation()}>
+                          {/* 🏷️ 부품 분류 · 실무 대표 품목 통합 열 (원클릭 스마트 피커 연동) */}
+                          <td className="py-1.5 px-3 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             {(() => {
                               const subItem = customSubItems[it.id] || detectPartSubItem(it.standard_name, it.category, it.master_code);
-                              const isOpen = activeCategoryDropdownId === it.id;
-                              const openUpward = idx > 9;
+                              const catLabel = getPartCategoryLabel(it.category);
+                              const hasDistinctSubItem = Boolean(subItem && subItem !== catLabel && subItem !== '가공품');
 
                               return (
-                                <div className="relative inline-block text-left" data-category-dropdown>
-                                  {/* 트리거 버튼 (행간 컴팩트화: h-[25px], py-0.5, gap-1.5, 좌측 완벽 정렬) */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setActiveCategoryDropdownId(isOpen ? null : it.id)}
-                                    className={`inline-flex items-center gap-1.5 py-0.5 pl-1.5 pr-2 rounded-md border transition-all cursor-pointer group text-left h-[25px] ${
-                                      isOpen
-                                        ? 'bg-blue-50/80 border-blue-400 ring-2 ring-blue-100 shadow-xs'
-                                        : 'border-transparent hover:border-slate-200 hover:bg-slate-100/80'
-                                    }`}
-                                    title={`클릭하여 부품 분류 변경 (현재: ${getPartCategoryLabel(it.category)})`}
-                                  >
-                                    <ChevronDown
-                                      className={`w-3 h-3 text-slate-400 group-hover:text-slate-600 transition-transform duration-150 shrink-0 ${
-                                        isOpen ? 'rotate-180 text-blue-600' : ''
-                                      }`}
-                                    />
-                                    <span className={`text-[11.5px] font-bold whitespace-nowrap leading-none ${getPartCategoryTextClass(it.category)}`}>
-                                      {getPartCategoryLabel(it.category)}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCategoryPickerState({
+                                      isOpen: true,
+                                      mode: 'inline',
+                                      targetId: it.id,
+                                      targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
+                                      currentCategory: it.category || 'MACHINING'
+                                    });
+                                  }}
+                                  className="inline-flex items-center gap-1.5 py-0.5 px-2.5 rounded-lg border border-slate-200/90 hover:border-blue-400 bg-white hover:bg-blue-50/80 text-left transition-all cursor-pointer shadow-2xs group active:scale-95 h-[28px]"
+                                  title={`클릭하여 부품 분류 & 대표 품목 스마트 피커 열기 (현재: ${catLabel}${hasDistinctSubItem ? ` > ${subItem}` : ''})`}
+                                >
+                                  {/* 대분류 뱃지 */}
+                                  <span className={`px-2 py-0.5 rounded-md font-black text-[13px] border ${getPartCategoryBadgeClass(it.category)} shadow-2xs leading-none`}>
+                                    {catLabel}
+                                  </span>
+
+                                  {/* 실무 대표 품목 (대분류와 상이한 경우에만 깔끔하게 태그 표시하여 중복 100% 제거) */}
+                                  {hasDistinctSubItem ? (
+                                    <span className="inline-flex items-center gap-1 font-bold text-[13px] text-blue-700 bg-blue-50/90 px-1.5 py-0.5 rounded border border-blue-200/90 leading-none">
+                                      <Tag className="w-3 h-3 text-blue-500 shrink-0" />
+                                      <span className="truncate max-w-[100px]">{subItem}</span>
                                     </span>
-                                  </button>
-
-                                  {/* 추천 1위: 모던 프리미엄 커스텀 드롭다운 팝오버 */}
-                                  {isOpen && (
-                                    <div
-                                      className={`absolute left-0 ${
-                                        openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                                      } z-[60] w-[280px] bg-white rounded-xl shadow-2xl border border-slate-200/90 p-2 space-y-2 animate-in fade-in zoom-in-95 duration-150`}
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      {/* 1. 스마트피커 열기 버튼 (프리미엄 커스텀 디자인: 검정 점선 제거, 부드러운 그라디언트 + 블루 섀도우) */}
-                                      <div className="relative group/picker">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setActiveCategoryDropdownId(null);
-                                            setCategoryPickerState({
-                                              isOpen: true,
-                                              mode: 'inline',
-                                              targetId: it.id,
-                                              targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
-                                              currentCategory: it.category || 'MACHINING'
-                                            });
-                                          }}
-                                          className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/30 transition-all flex items-center justify-center text-center cursor-pointer border border-blue-400/30 outline-none"
-                                        >
-                                          <span>세부 품목 검색·선택...</span>
-                                        </button>
-
-                                        {/* 호버 시 기능 설명 인라인 툴팁 (사용자 요청 1번 충족) */}
-                                        <div
-                                          className={`absolute left-1/2 -translate-x-1/2 ${
-                                            openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
-                                          } opacity-0 group-hover/picker:opacity-100 pointer-events-none transition-all duration-200 z-[80] w-[270px]`}
-                                        >
-                                          <div className="bg-slate-100/95 backdrop-blur-md text-[11px] rounded-lg p-2.5 shadow-xl border border-slate-300 text-center leading-snug">
-                                            <div className="font-bold text-blue-700 flex items-center justify-center gap-1 mb-1">
-                                              <span>💡 기능 설명</span>
-                                            </div>
-                                            <p className="text-slate-700 font-medium">
-                                              70여 종 실무 대표 품목(브라켓, 커버, 샤프트 등) 검색 및 원가 산출식 로직을 확인하고 변경합니다.
-                                            </p>
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      {/* 2. 구분 헤더: 좌우 라인 삭제, 완벽한 중앙 정렬, 폰트크기 30% 확대 (사용자 요청 2번 충족) */}
-                                      <div className="pt-1 border-t border-slate-100">
-                                        <div className="text-center font-bold text-[13px] text-slate-500 py-1 select-none">
-                                          10대 분류 및 실무 대표 품목
-                                        </div>
-                                      </div>
-
-                                      {/* 3. 10대 카테고리 목록 (호버 시 부드러운 하이라이트 + 체크 표시) */}
-                                      <div className="space-y-0.5 max-h-[250px] overflow-y-auto pr-0.5">
-                                        {PART_CATEGORIES.map((c) => {
-                                          const isCurrent = it.category === c.id;
-                                          return (
-                                            <button
-                                              key={c.id}
-                                              type="button"
-                                              onClick={() => {
-                                                handleInlineCategoryChange(it.id, c.id);
-                                                setActiveCategoryDropdownId(null);
-                                              }}
-                                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between group/item cursor-pointer ${
-                                                isCurrent
-                                                  ? 'bg-blue-50 text-blue-900 font-bold border border-blue-200'
-                                                  : 'hover:bg-slate-100 text-slate-700 font-medium'
-                                              }`}
-                                            >
-                                              <div className="flex items-center gap-1.5 truncate">
-                                                <span className={`text-xs font-bold ${c.textClass}`}>
-                                                  {c.label}
-                                                </span>
-                                                <span className="text-[11px] text-slate-400 font-normal truncate">
-                                                  ({c.subDetail})
-                                                </span>
-                                              </div>
-                                              {isCurrent && (
-                                                <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-1" />
-                                              )}
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
+                                  ) : (
+                                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0" />
                                   )}
-                                </div>
-                              );
-                            })()}
-                          </td>
-
-                          {/* 🏷️ 실무 대표 품목 (소분류 - 스마트 피커 연동 컬럼) */}
-                          <td className="py-1 px-3 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            {(() => {
-                              const subItem = customSubItems[it.id] || detectPartSubItem(it.standard_name, it.category, it.master_code);
-
-                              return subItem ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCategoryPickerState({
-                                      isOpen: true,
-                                      mode: 'inline',
-                                      targetId: it.id,
-                                      targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
-                                      currentCategory: it.category || 'MACHINING'
-                                    });
-                                  }}
-                                  className="inline-flex items-center gap-1.5 py-0.5 pl-1.5 pr-2 rounded-lg bg-blue-50/90 hover:bg-blue-100 text-blue-700 font-semibold text-[11px] border border-blue-200/90 hover:border-blue-300 transition-all shadow-2xs group cursor-pointer active:scale-95 leading-[18px]"
-                                  title="클릭하여 실무 대표 품목 및 산출식 스마트 피커 열기"
-                                >
-                                  <Tag className="w-3 h-3 text-blue-500 group-hover:scale-110 transition-transform shrink-0" />
-                                  <span className="truncate max-w-[125px] font-bold">{subItem}</span>
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCategoryPickerState({
-                                      isOpen: true,
-                                      mode: 'inline',
-                                      targetId: it.id,
-                                      targetInfo: { code: it.master_code, name: it.standard_name, spec: it.specification },
-                                      currentCategory: it.category || 'MACHINING'
-                                    });
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/80 text-slate-400 hover:text-blue-600 text-[10.5px] transition-all cursor-pointer font-medium leading-[18px]"
-                                  title="실무 대표 품목 선택"
-                                >
-                                  <Plus className="w-3 h-3 shrink-0" />
-                                  <span>대표품목 선택</span>
                                 </button>
                               );
                             })()}
                           </td>
                           {editingPriceId === it.id ? (
-                            <td className="py-0.5 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                            <td className="py-1 px-3 text-right" onClick={(e) => e.stopPropagation()}>
                               <div
-                                className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2 py-0.2 shadow-2xs ring-2 ring-blue-100 justify-end w-full max-w-[170px]"
+                                className="inline-flex items-center gap-1 bg-white border-2 border-blue-500 rounded-lg px-2.5 py-0.5 shadow-2xs ring-2 ring-blue-100 justify-end w-full max-w-[170px] h-[28px]"
                                 title={
                                   selectedIds.includes(it.id) && selectedIds.length > 1
                                     ? `Enter: 단일 저장 | Ctrl+Enter: 선택된 ${selectedIds.length}개 일괄 동시 적용`
@@ -1729,11 +1859,11 @@ export default function MasterDataManagerPage() {
                                 }
                               >
                                 {selectedIds.includes(it.id) && selectedIds.length > 1 && (
-                                  <span className="text-[9px] text-blue-600 bg-blue-50 px-1 py-0.2 rounded font-bold shrink-0 border border-blue-200">
+                                  <span className="text-[10px] text-blue-600 bg-blue-50 px-1 py-0.2 rounded font-bold shrink-0 border border-blue-200">
                                     Ctrl+↵
                                   </span>
                                 )}
-                                <span className="text-slate-400 font-mono text-[11px] shrink-0">₩</span>
+                                <span className="text-slate-400 font-mono text-[13px] shrink-0 font-bold">₩</span>
                                 <input
                                   type="text"
                                   autoFocus
@@ -1765,16 +1895,16 @@ export default function MasterDataManagerPage() {
                                     }
                                   }}
                                   onChange={(e) => handleInlinePriceChange(it.id, e.target.value)}
-                                  className="w-full text-right font-mono font-bold text-xs text-blue-700 outline-none bg-transparent"
+                                  className="w-full text-right font-mono font-black text-[15px] text-blue-700 outline-none bg-transparent"
                                 />
                                 {modifiedItems[it.id] !== undefined && (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="수정됨 (저장 대기)" />
+                                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" title="수정됨 (저장 대기)" />
                                 )}
                               </div>
                             </td>
                           ) : (
                             <td
-                              className="py-1 px-3 text-right font-mono font-bold text-blue-700 text-[11.5px] hover:bg-blue-100/60 cursor-pointer whitespace-nowrap leading-none"
+                              className="py-1.5 px-3 text-right font-mono font-black text-blue-700 text-[15.5px] tabular-nums hover:bg-blue-100/60 cursor-pointer whitespace-nowrap leading-none"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setEditingPriceId(it.id);
@@ -1783,22 +1913,22 @@ export default function MasterDataManagerPage() {
                             >
                               <div className="flex items-center justify-end gap-1.5">
                                 {modifiedItems[it.id] !== undefined && (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="수정됨 (저장 대기)" />
+                                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" title="수정됨 (저장 대기)" />
                                 )}
                                 <span>{it.unit_price > 0 ? `₩${it.unit_price.toLocaleString()}` : '-'}</span>
                               </div>
                             </td>
                           )}
-                          <td className="py-1 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                          <td className="py-1.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDeleteItem(it.id, it.master_code);
                               }}
-                              className="p-0.5 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded-md hover:bg-rose-50 transition-colors cursor-pointer"
                               title="삭제"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
                         </tr>
@@ -1807,18 +1937,36 @@ export default function MasterDataManagerPage() {
                   )}
                 </tbody>
               </table>
+              </div>
 
-              {/* Standard Pagination Navigation Bar (중앙 정렬 배치 & 프로젝트 표준 로직) */}
+              {/* Standard Pagination Navigation Bar (최적화 슬림 고정형 & 3구역 정렬) */}
               {filteredItems.length > 0 && (
-                <div className="py-2.5 px-5 border-t border-slate-200/90 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-6 text-xs text-slate-500 shrink-0">
-                  {/* 중앙 번호 네비게이션 버튼 그룹 (첫페이지, 이전, 번호, 다음, 끝페이지) */}
+                <div className="py-1 px-3 sm:px-4 border-t border-slate-200 bg-white/95 backdrop-blur-xs flex flex-col sm:flex-row items-center justify-between gap-2 text-[12.5px] text-slate-600 shrink-0 font-medium shadow-[0_-2px_6px_rgba(0,0,0,0.02)] h-11">
+                  {/* 좌측: 건수 정보 및 페이지 정보 */}
+                  <div className="flex items-center space-x-2 text-slate-600">
+                    <span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-0.5" />
+                    <span>
+                      총 <strong className="text-slate-900 font-black">{filteredItems.length.toLocaleString()}</strong>개 항목 중{' '}
+                      <span className="font-mono font-bold text-slate-800">
+                        {filteredItems.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} -{' '}
+                        {Math.min(filteredItems.length, currentPage * pageSize)}
+                      </span>
+                      개 표시
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <span className="text-slate-500 font-medium">
+                      전체 <strong className="text-slate-800 font-bold">{totalPages}</strong>페이지
+                    </span>
+                  </div>
+
+                  {/* 중앙: 페이지 번호 네비게이션 버튼 그룹 */}
                   <div className="flex items-center space-x-1">
                     {/* 첫 페이지 버튼 */}
                     <button
                       type="button"
                       onClick={() => setCurrentPage(1)}
                       disabled={currentPage <= 1}
-                      className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                      className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-bold transition-all cursor-pointer shadow-2xs h-7 w-7 flex items-center justify-center"
                       title="첫 페이지"
                     >
                       <ChevronsLeft className="w-3.5 h-3.5" />
@@ -1829,7 +1977,7 @@ export default function MasterDataManagerPage() {
                       type="button"
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                       disabled={currentPage <= 1}
-                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer flex items-center space-x-1 shadow-2xs"
+                      className="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 disabled:opacity-30 disabled:pointer-events-none text-[12px] font-bold transition-all cursor-pointer flex items-center space-x-1 shadow-2xs h-7"
                       title="이전 페이지"
                     >
                       <ChevronLeft className="w-3.5 h-3.5" />
@@ -1842,10 +1990,10 @@ export default function MasterDataManagerPage() {
                         key={`page-${pageNum}`}
                         type="button"
                         onClick={() => setCurrentPage(pageNum)}
-                        className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        className={`min-w-[28px] h-7 px-2 rounded text-[12.5px] font-black transition-all cursor-pointer ${
                           currentPage === pageNum
                             ? 'bg-blue-600 text-white shadow-2xs'
-                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                         }`}
                       >
                         {pageNum}
@@ -1857,7 +2005,7 @@ export default function MasterDataManagerPage() {
                       type="button"
                       onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                       disabled={currentPage >= totalPages}
-                      className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer flex items-center space-x-1 shadow-2xs"
+                      className="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 disabled:opacity-30 disabled:pointer-events-none text-[12px] font-bold transition-all cursor-pointer flex items-center space-x-1 shadow-2xs h-7"
                       title="다음 페이지"
                     >
                       <span>다음</span>
@@ -1869,43 +2017,31 @@ export default function MasterDataManagerPage() {
                       type="button"
                       onClick={() => setCurrentPage(totalPages)}
                       disabled={currentPage >= totalPages}
-                      className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                      className="p-1 rounded border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none text-xs font-bold transition-all cursor-pointer shadow-2xs h-7 w-7 flex items-center justify-center"
                       title="마지막 페이지"
                     >
                       <ChevronsRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
-                  <span className="hidden sm:inline text-slate-300">|</span>
-
-                  {/* 건수 정보 및 페이지당 표시 행수 선택기 */}
-                  <div className="flex items-center space-x-3 text-slate-600">
-                    <div>
-                      총 <strong className="text-slate-900 font-bold">{filteredItems.length}</strong>개 항목 중{' '}
-                      <span className="font-mono font-semibold text-slate-800">
-                        {filteredItems.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} -{' '}
-                        {Math.min(filteredItems.length, currentPage * pageSize)}
-                      </span>
-                      개 표시
-                    </div>
-                    <span className="text-slate-300">|</span>
-                    <div className="flex items-center space-x-1.5">
-                      <span className="text-slate-500 text-[11.5px]">페이지당 행 수:</span>
-                      <select
-                        value={pageSize}
-                        onChange={(e) => {
-                          setPageSize(Number(e.target.value));
-                          setCurrentPage(1);
-                        }}
-                        className="px-2 py-0.5 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-700 cursor-pointer shadow-2xs outline-none"
-                      >
-                        <option value={10}>10개씩 보기</option>
-                        <option value={20}>20개씩 보기</option>
-                        <option value={30}>30개씩 보기</option>
-                        <option value={40}>40개씩 보기</option>
-                        <option value={50}>50개씩 보기</option>
-                      </select>
-                    </div>
+                  {/* 우측: 페이지당 행 수 선택기 */}
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-slate-600 text-[12px] font-bold">페이지당 행 수:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="px-2 py-0 bg-white border border-slate-300 rounded text-[12.5px] font-bold text-slate-800 cursor-pointer shadow-2xs outline-none h-7 hover:border-slate-400 transition-colors"
+                    >
+                      <option value={10}>10개씩 보기</option>
+                      <option value={15}>15개씩 보기</option>
+                      <option value={20}>20개씩 보기</option>
+                      <option value={30}>30개씩 보기</option>
+                      <option value={40}>40개씩 보기</option>
+                      <option value={50}>50개씩 보기</option>
+                    </select>
                   </div>
                 </div>
               )}
@@ -1916,25 +2052,25 @@ export default function MasterDataManagerPage() {
               <>
                 {/* 플로팅 툴바 가림 방지 안전 여백 버퍼 (테이블 하단 행 및 페이지네이션 보호) */}
                 <div className="h-28 sm:h-32 shrink-0 pointer-events-none" aria-hidden="true" />
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl px-5 py-3 shadow-2xl border border-slate-700 flex flex-wrap items-center gap-3 z-50 animate-in slide-in-from-bottom-4 max-w-[95vw]">
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl px-5 py-3 shadow-2xl border border-slate-700 flex flex-wrap items-center gap-3 z-50 animate-in slide-in-from-bottom-4 max-w-[96vw]">
                 {/* 선택 카운터 뱃지 */}
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-[11px]">
+                  <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                     {selectedIds.length}
                   </span>
-                  <span className="font-semibold">개 품목 선택됨</span>
+                  <span className="font-bold text-[13px] text-slate-100">개 품목 선택됨</span>
                   {Object.keys(modifiedItems).length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/25 text-amber-300 border border-amber-500/50">
                       {Object.keys(modifiedItems).length}건 수정됨
                     </span>
                   )}
                 </div>
 
-                <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+                <div className="h-5 w-px bg-slate-700 hidden sm:block" />
 
                 {/* 단가 일괄 증감 컨트롤러 (원자재 시세 변동 반영) */}
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-[11px] text-slate-400 font-medium">일괄 증감:</span>
+                <div className="flex items-center gap-1.5 text-xs font-sans">
+                  <span className="text-xs text-slate-300 font-semibold">일괄 증감:</span>
                   {[
                     { label: '+5%', rate: 5 },
                     { label: '+10%', rate: 10 },
@@ -1945,15 +2081,16 @@ export default function MasterDataManagerPage() {
                       key={btn.label}
                       type="button"
                       onClick={() => handleBulkRateAdjust(btn.rate)}
-                      className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 font-mono text-[11px] font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-600 font-sans text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
                       title={`선택된 ${selectedIds.length}개 품목의 단가를 ${btn.label} 일괄 조정합니다.`}
                     >
                       {btn.label}
                     </button>
                   ))}
 
-                  {/* 직접 입력 일괄 변경 */}
-                  <div className="flex items-center gap-1 ml-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-0.5">
+                  {/* 직접 입력 일괄 변경 (오른쪽 버튼 폰트 기준 통일) */}
+                  <div className="flex items-center gap-1.5 ml-1 bg-slate-800 border border-slate-600 rounded-lg px-2.5 py-1">
+                    <span className="text-slate-400 font-sans text-xs font-bold">₩</span>
                     <input
                       type="text"
                       value={bulkCustomPriceInput ? Number(bulkCustomPriceInput.replace(/[^0-9]/g, '')).toLocaleString() : ''}
@@ -1962,25 +2099,25 @@ export default function MasterDataManagerPage() {
                         setBulkCustomPriceInput(cleaned);
                       }}
                       maxLength={15}
-                      placeholder="단가직접입력"
-                      className="w-24 text-[11px] font-mono font-bold text-white bg-transparent outline-none placeholder:text-slate-500 text-right"
+                      placeholder="단가 직접 입력"
+                      className="w-32 text-xs font-sans font-bold text-white bg-transparent outline-none placeholder:text-slate-400 text-right"
                     />
-                    <span className="text-[10px] text-slate-400">원</span>
+                    <span className="text-xs text-slate-300 font-semibold font-sans">원</span>
                     <button
                       type="button"
                       onClick={handleBulkApplyCustomPrice}
-                      className="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10.5px] font-bold transition-colors cursor-pointer"
+                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-xs font-bold font-sans transition-colors cursor-pointer shrink-0 shadow-xs"
                     >
                       적용
                     </button>
                   </div>
                 </div>
 
-                <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+                <div className="h-5 w-px bg-slate-700 hidden sm:block" />
 
-                {/* 부품 유형 일괄 변경 컨트롤러 (방안 B) */}
-                <div className="flex items-center gap-1.5 text-xs bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1">
-                  <span className="text-[11px] text-slate-300 font-medium flex items-center gap-1">
+                {/* 부품 유형 일괄 변경 컨트롤러 (방안 B - 오른쪽 폰트 기준 통일) */}
+                <div className="flex items-center gap-2 text-xs font-sans bg-slate-800 border border-slate-700 rounded-xl px-3 py-1">
+                  <span className="text-xs text-slate-200 font-semibold flex items-center gap-1">
                     <Tag className="w-3.5 h-3.5 text-blue-400" />
                     유형:
                   </span>
@@ -1998,7 +2135,7 @@ export default function MasterDataManagerPage() {
                       }
                       setBulkCategory(val);
                     }}
-                    className="bg-slate-900 border border-slate-600 rounded-lg px-2 py-0.5 text-xs text-white outline-none cursor-pointer font-medium"
+                    className="bg-slate-900 border border-slate-600 rounded-lg px-2.5 py-1 text-xs text-white outline-none cursor-pointer font-bold font-sans max-w-[190px] truncate"
                     title="선택된 품목들에 일괄 적용할 부품 유형 선택"
                   >
                     <option value="__OPEN_PICKER__" className="bg-blue-600 text-white font-bold py-1">
@@ -2024,17 +2161,17 @@ export default function MasterDataManagerPage() {
                       mode: 'bulk',
                       currentCategory: bulkCategory
                     })}
-                    className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-blue-300 rounded text-[10.5px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-blue-200 rounded-lg text-xs font-bold font-sans flex items-center gap-1 transition-colors cursor-pointer"
                     title="10대 부품 분류 & 실무 품목 스마트 피커 열기"
                   >
-                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                     <span>스마트 피커</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleBulkApplyCategory}
                     disabled={isApplyingCategory}
-                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10.5px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold font-sans transition-colors cursor-pointer disabled:opacity-50"
                     title={`선택된 ${selectedIds.length}개 품목의 부품 유형을 일괄 변경합니다.`}
                   >
                     {isApplyingCategory ? '적용 중...' : '유형 일괄 적용'}
@@ -2048,14 +2185,14 @@ export default function MasterDataManagerPage() {
                     setBulkModalTargetPrice(bulkCustomPriceInput || '');
                     setShowBulkCostModal(true);
                   }}
-                  className="px-2.5 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md active:scale-95 border border-blue-400/40"
+                  className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md active:scale-95 border border-blue-400/40"
                   title="선택된 품목들의 가공설비, 임률, 후처리, 단가를 한 번에 시뮬레이션하고 일괄 설정합니다."
                 >
                   <Calculator className="w-3.5 h-3.5 text-amber-300" />
                   <span>원가·임률 일괄 설정</span>
                 </button>
 
-                <div className="h-4 w-px bg-slate-700 hidden md:block" />
+                <div className="h-5 w-px bg-slate-700 hidden md:block" />
 
                 {/* 메인 저장 및 액션 버튼들 */}
                 <div className="flex items-center gap-2 text-xs">
@@ -2071,7 +2208,7 @@ export default function MasterDataManagerPage() {
                     ) : (
                       <Save className="w-3.5 h-3.5" />
                     )}
-                    <span>선택 저장 (Ctrl+S)</span>
+                    <span className="text-[13px]">선택 저장 (Ctrl+S)</span>
                   </button>
 
                   <button
@@ -2111,7 +2248,7 @@ export default function MasterDataManagerPage() {
           </>
         ) : activeTab === 'learned' ? (
           /* Tab: Learned (실무 자가학습 단가 풀 대장) */
-          <div className="space-y-3">
+          <div className="p-3 sm:p-4 space-y-3">
             {/* Header Banner */}
             <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="space-y-1">
@@ -2275,7 +2412,7 @@ export default function MasterDataManagerPage() {
           </div>
         ) : (
           /* Tab 2: Settings (소재 시세 & 임률 설정) */
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-6">
+          <div className="m-3 sm:m-4 bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-200 pb-4">
               <div>
                 <h2 className="text-base font-bold text-slate-900">공학 표준 원가 기초 파라미터 설정</h2>

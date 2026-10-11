@@ -5,6 +5,9 @@ import type { NextRequest } from 'next/server';
  * EGDesk Database Proxy Middleware
  *
  * Intercepts __user_data_proxy, __browser_recording_proxy, __business_identity_proxy, __company_research_proxy, __kakao_proxy, __drive_proxy, __sheets_proxy, __docs_proxy, __slides_proxy, __egdesk_http_proxy, __gmail_proxy, __apps_script_proxy, __visitor_auth_proxy, and __visitor_google_proxy requests
+ *
+ * POLICY (workspace-oauth-byo-multi-HANDOFF-README.md §6.9): Never codegen app/api/workspace-oauth/*
+ * or browser proxies to POST /workspace-oauth/tools/call — operator BYO config is not a visitor API.
  * and forwards them to the EGDesk MCP HTTP server.
  * This allows CORS-free database access in both local and tunneled environments.
  *
@@ -50,6 +53,20 @@ function resolveEgdeskMcpApiUrl(): string {
   const internal = process.env.EGDESK_MCP_INTERNAL_URL;
   if (internal && internal.trim()) return internal.replace(/\/$/, '');
   return (process.env.NEXT_PUBLIC_EGDESK_API_URL || 'http://localhost:8080').replace(/\/$/, '');
+}
+
+/**
+ * Hosted coding on the same PC: always use loopback MCP (operator BYO + local pending).
+ * Published-only deploys without EGDESK_MCP_INTERNAL_URL may use the tunnel gateway.
+ */
+function resolveVisitorAuthMcpApiUrl(): string {
+  const internal = process.env.EGDESK_MCP_INTERNAL_URL;
+  if (internal && internal.trim()) return internal.replace(/\/$/, '');
+  const tunnel = process.env.NEXT_PUBLIC_EGDESK_TUNNEL_URL;
+  if (tunnel && tunnel.trim()) return tunnel.replace(/\/$/, '');
+  const publicUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL;
+  if (publicUrl && publicUrl.trim()) return publicUrl.replace(/\/$/, '');
+  return 'http://localhost:8080';
 }
 
 export async function middleware(request: NextRequest) {
@@ -377,7 +394,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__visitor_auth_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = resolveEgdeskMcpApiUrl();
+      const apiUrl = resolveVisitorAuthMcpApiUrl();
 
       const response = await fetch(`${apiUrl}/visitor-auth/tools/call`, {
         method: 'POST',
@@ -397,7 +414,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__visitor_google_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = resolveEgdeskMcpApiUrl();
+      const apiUrl = resolveVisitorAuthMcpApiUrl();
       const headers = visitorUpstreamHeaders(request);
       const authorization = request.headers.get('authorization');
       if (authorization) headers['Authorization'] = authorization;

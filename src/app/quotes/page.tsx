@@ -621,8 +621,9 @@ export default function QuotesListPage() {
                           {/* Item Count & Modified Price Badge */}
                           <td className="py-3.5 px-4 text-center">
                             <div className="flex flex-col items-center gap-1">
-                              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono font-bold text-[11px]">
-                                {Number(q.item_count || 0)}개 품목
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-300/80 font-bold text-[12px] shadow-2xs">
+                                <span className="font-mono font-black text-slate-900 text-[13.5px] tabular-nums">{Number(q.item_count || 0)}</span>
+                                <span className="text-[11px] text-slate-600 font-bold">개 품목</span>
                               </span>
                               {Number(q.modified_count || 0) > 0 && (
                                 <button
@@ -806,8 +807,9 @@ export default function QuotesListPage() {
                               {/* Item Count & Modified Price Badge */}
                               <td className="py-2.5 px-4 text-center">
                                 <div className="flex flex-col items-center gap-0.5">
-                                  <span className="text-slate-500 font-mono text-[11px]">
-                                    {Number(hq.item_count || 0)}개 품목
+                                  <span className="inline-flex items-center gap-1 text-slate-700 font-semibold text-[11.5px]">
+                                    <span className="font-mono font-bold text-slate-900 tabular-nums">{Number(hq.item_count || 0)}</span>
+                                    <span className="text-slate-500 font-medium">개 품목</span>
                                   </span>
                                   {Number(hq.modified_count || 0) > 0 && (
                                     <button
