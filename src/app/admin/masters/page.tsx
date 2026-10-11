@@ -80,7 +80,7 @@ const DEFAULT_MASTER_COL_WIDTHS: Record<MasterColKey, number> = {
   treatment: 195, // 후처리 (우측 pr-6 패딩으로 다음 열과 40px 균일 간격)
   spec: 175, // 규격 (Ø30 × 45L, 1.2T 등 와이드 여백 활용 최적 표출)
   category: 215, // 부품 분류 및 대표 품목
-  price: 165, // 공인 기준단가 (우측 pr-6 패딩으로 관리 열과 40px 균일 간격)
+  price: 165, // 사내 기준단가 (우측 pr-6 패딩으로 관리 열과 40px 균일 간격)
   action: 60, // 관리 열
 };
 
@@ -902,7 +902,7 @@ export default function MasterDataManagerPage() {
         '규격(Spec)': it.specification || '-',
         '재질': it.material || 'SS400',
         '부품유형': getPartCategoryLabel(it.category),
-        '공인기준단가(원)': it.unit_price || 0,
+        '사내기준단가(원)': it.unit_price || 0,
         '단위': it.unit || 'EA'
       }));
 
@@ -1479,7 +1479,7 @@ export default function MasterDataManagerPage() {
               <h1 className="text-xl font-black text-slate-900 leading-tight">원가 기준 관리 센터</h1>
             </div>
             <p className="text-[13px] text-slate-500 font-medium leading-tight">
-              사내 공인 표준 부품, 단가표, 소재 시세 및 가공 원가 기준을 등록하고 관리합니다.
+              사내 표준 부품, 단가표, 소재 시세 및 가공 원가 기준을 등록하고 관리합니다.
             </p>
           </div>
         </div>
@@ -1832,7 +1832,7 @@ export default function MasterDataManagerPage() {
                       className="py-2 pl-4 pr-6 text-right text-[14px] font-extrabold whitespace-nowrap relative select-none"
                       style={{ width: `${colWidths.price}px`, minWidth: `${colWidths.price}px` }}
                     >
-                      <span>공인 기준단가</span>
+                      <span>사내 기준단가</span>
                       <div
                         onMouseDown={(e) => handleColResizeStart(e, 'price')}
                         onDoubleClick={() => handleAutoFitColWidth('price')}
@@ -2612,7 +2612,7 @@ export default function MasterDataManagerPage() {
               <div>
                 <h2 className="text-base font-bold text-slate-900">공학 표준 원가 기초 파라미터 설정</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  마스터에 없는 신규 부품 견적 시, 도면 치수와 결합되어 표준 원가를 자동 계산하는 사내 공인 기준표입니다.
+                  마스터에 없는 신규 부품 견적 시, 도면 치수와 결합되어 표준 원가를 자동 계산하는 사내 기준표입니다.
                 </p>
               </div>
               <button
@@ -2634,7 +2634,7 @@ export default function MasterDataManagerPage() {
                   <span className="px-1.5 py-0.5 bg-amber-200 text-amber-900 text-[10px] rounded font-mono font-medium">출발점 (Base Heuristic)</span>
                 </p>
                 <p className="text-amber-800 leading-relaxed text-[11px]">
-                  본 임률은 공인 절대값이 아닌 초기 계산을 위한 출발 기준선입니다. 
+                  본 임률은 절대값이 아닌 초기 계산을 위한 출발 기준선입니다. 
                   담당자가 견적 검토 화면에서 실제 거래 단가를 확정함에 따라, 시스템이 누적된 오차(Delta)와 도면 형상 피처를 분석하여 실제 공장 맞춤형 임률을 역산하고 자동 보정해 나갑니다.
                 </p>
               </div>
@@ -3277,7 +3277,7 @@ export default function MasterDataManagerPage() {
               </div>
 
               <div>
-                <label className="font-medium text-slate-700 block mb-1">공인 기준단가 (원 - 최대 백억 원대)</label>
+                <label className="font-medium text-slate-700 block mb-1">사내 기준단가 (원 - 최대 백억 원대)</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xs">₩</span>
                   <input
@@ -3518,9 +3518,9 @@ export default function MasterDataManagerPage() {
                 </select>
               </div>
 
-              {/* 3. 공인 기준단가 일괄 입력 */}
+              {/* 3. 사내 기준단가 일괄 입력 */}
               <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">3. 공인 기준단가 일괄 입력 (선택사항)</label>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">3. 사내 기준단가 일괄 입력 (선택사항)</label>
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono">₩</span>
