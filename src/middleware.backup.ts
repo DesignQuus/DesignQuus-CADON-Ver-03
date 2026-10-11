@@ -15,6 +15,17 @@ import type { NextRequest } from 'next/server';
  */
 
 /** Forward this site's origin so EGDesk can bind visitor sessions to this site only. */
+function resolveBrowserClientIpForMcp(request: NextRequest): string | undefined {
+  const xff = request.headers.get('x-forwarded-for');
+  if (xff) {
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp?.trim()) return realIp.trim();
+  return undefined;
+}
+
 function visitorUpstreamHeaders(request: NextRequest): Record<string, string> {
   const apiKey = process.env.NEXT_PUBLIC_EGDESK_API_KEY;
   const origin = request.headers.get('origin') || request.nextUrl.origin;
@@ -24,6 +35,8 @@ function visitorUpstreamHeaders(request: NextRequest): Record<string, string> {
     'X-Visitor-Origin': origin,
   };
   if (apiKey) headers['X-Api-Key'] = apiKey;
+  const clientIp = resolveBrowserClientIpForMcp(request);
+  if (clientIp) headers['X-EGDesk-Visitor-Client-Ip'] = clientIp;
   return headers;
 }
 
@@ -67,6 +80,27 @@ function resolveVisitorAuthMcpApiUrl(): string {
   const publicUrl = process.env.NEXT_PUBLIC_EGDESK_API_URL;
   if (publicUrl && publicUrl.trim()) return publicUrl.replace(/\/$/, '');
   return 'http://localhost:8080';
+}
+
+/** Phase 7b visitor BYO tools must hit desktop MCP (secrets), not the tunnel gateway. */
+const VISITOR_AUTH_DESKTOP_ONLY_TOOLS = new Set(['register_gcp', 'gcp_status', 'forget_gcp']);
+
+function resolveVisitorAuthMcpApiUrlForTool(tool: string): string {
+  if (VISITOR_AUTH_DESKTOP_ONLY_TOOLS.has(tool)) {
+    const internal = process.env.EGDESK_MCP_INTERNAL_URL;
+    if (internal && internal.trim()) return internal.replace(/\/$/, '');
+    return 'http://localhost:8080';
+  }
+  return resolveVisitorAuthMcpApiUrl();
+}
+
+function visitorAuthToolFromProxyBody(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { tool?: string; op?: string };
+    return String(parsed.tool || parsed.op || '').trim();
+  } catch {
+    return '';
+  }
 }
 
 export async function middleware(request: NextRequest) {
@@ -394,7 +428,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.includes('__visitor_auth_proxy')) {
     try {
       const body = await request.text();
-      const apiUrl = resolveVisitorAuthMcpApiUrl();
+      const apiUrl = resolveVisitorAuthMcpApiUrlForTool(visitorAuthToolFromProxyBody(body));
 
       const response = await fetch(`${apiUrl}/visitor-auth/tools/call`, {
         method: 'POST',
@@ -402,7 +436,10 @@ export async function middleware(request: NextRequest) {
         body,
       });
       const result = await response.json();
-      return NextResponse.json(result, { status: response.status });
+      const outHeaders: Record<string, string> = {};
+      const retryAfter = response.headers.get('retry-after');
+      if (retryAfter) outHeaders['Retry-After'] = retryAfter;
+      return NextResponse.json(result, { status: response.status, headers: outHeaders });
     } catch (error: any) {
       return NextResponse.json(
         { error: 'Proxy error', message: error.message },

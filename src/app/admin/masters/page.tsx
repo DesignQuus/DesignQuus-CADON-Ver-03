@@ -330,10 +330,55 @@ export default function MasterDataManagerPage() {
 
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [learnedFilterTab, setLearnedFilterTab] = useState<'ALL' | 'UNREGISTERED' | 'REGISTERED'>('ALL');
 
   // ⚡ SSR 하이드레이션 불일치 방지: 초기 상태는 서버/클라이언트 동일 기본값으로 유지하고, 마운트 직후(useEffect) 캐시를 즉각 복원
   const [items, setItems] = useState<MasterProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // 💡 사내 기준 등록 여부 판별 (items 대장과의 실시간 교차 검증 및 source 플래그 확인)
+  const isItemRegisteredInStandard = useCallback((item: any) => {
+    if (!item) return false;
+    if (item.source === 'MASTER_REGISTERED') return true;
+    const nameToMatch = (item.standard_name || item.item_name || '').trim().toLowerCase();
+    if (!nameToMatch || !items || items.length === 0) return false;
+    return items.some((m) => {
+      const mName = (m.standard_name || '').trim().toLowerCase();
+      const mCode = (m.master_code || '').trim().toLowerCase();
+      return (mName && mName === nameToMatch) || (mCode && mCode.length > 2 && nameToMatch.includes(mCode));
+    });
+  }, [items]);
+
+  const unregisteredCount = useMemo(() => {
+    return learnedItems.filter(item => !isItemRegisteredInStandard(item)).length;
+  }, [learnedItems, isItemRegisteredInStandard]);
+
+  const registeredCount = useMemo(() => {
+    return learnedItems.filter(item => isItemRegisteredInStandard(item)).length;
+  }, [learnedItems, isItemRegisteredInStandard]);
+
+  // 💡 인큐베이팅 필터 탭 & 검색어 기반 자가학습 단가 목록 필터링
+  const filteredLearnedItems = useMemo(() => {
+    return learnedItems.filter((item) => {
+      // 1. 사내 기준 등록 여부 인큐베이팅 필터
+      if (learnedFilterTab === 'UNREGISTERED') {
+        if (isItemRegisteredInStandard(item)) return false;
+      } else if (learnedFilterTab === 'REGISTERED') {
+        if (!isItemRegisteredInStandard(item)) return false;
+      }
+
+      // 2. 실시간 검색어 필터
+      if (!learnedSearchQuery.trim()) return true;
+      const q = learnedSearchQuery.toLowerCase().trim();
+      return (
+        (item.item_name || '').toLowerCase().includes(q) ||
+        (item.standard_name || '').toLowerCase().includes(q) ||
+        (item.specification || '').toLowerCase().includes(q) ||
+        (item.material || '').toLowerCase().includes(q) ||
+        (item.company_name || '').toLowerCase().includes(q)
+      );
+    });
+  }, [learnedItems, learnedFilterTab, isItemRegisteredInStandard, learnedSearchQuery]);
 
   // 💡 자가학습 품목의 실제 유효 규격 산출 (노이즈 '1 / 1' 필터링 및 표준 마스터 품목 규격 실시간 연동)
   const getEffectiveLearnedSpec = useCallback((item: any) => {
@@ -2572,8 +2617,68 @@ export default function MasterDataManagerPage() {
             </div>
 
             {/* Filter & Search Bar */}
-            <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-2.5">
-              <div className="flex items-center space-x-2 w-full sm:w-auto flex-1 max-w-md">
+            <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
+              {/* 3-State Incubator Subfilter Pills */}
+              <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-lg border border-slate-200 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setLearnedFilterTab('UNREGISTERED')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    learnedFilterTab === 'UNREGISTERED'
+                      ? 'bg-amber-500 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                  title="사내 기준단가 대장에 아직 정식 등록되지 않은 신규 가공/견적 학습 품목만 모아봅니다."
+                >
+                  <span className={`w-2 h-2 rounded-full ${unregisteredCount > 0 ? 'bg-amber-200 animate-pulse' : 'bg-slate-300'}`} />
+                  <span>사내 기준 미등록</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-bold ${
+                    learnedFilterTab === 'UNREGISTERED' ? 'bg-amber-600 text-amber-100' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {unregisteredCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLearnedFilterTab('REGISTERED')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    learnedFilterTab === 'REGISTERED'
+                      ? 'bg-slate-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                  title="사내 기준단가 대장에 이미 공식 등록되어 마스터로 관리 중인 품목을 모아봅니다."
+                >
+                  <Check className="w-3 h-3 text-emerald-400 stroke-[2.5]" />
+                  <span>등록 완료</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-bold ${
+                    learnedFilterTab === 'REGISTERED' ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {registeredCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLearnedFilterTab('ALL')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    learnedFilterTab === 'ALL'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                  title="등록 여부와 무관하게 전체 실무 자가학습 품목을 조회합니다."
+                >
+                  <span>전체</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono font-bold ${
+                    learnedFilterTab === 'ALL' ? 'bg-purple-700 text-purple-100' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {learnedItems.length}
+                  </span>
+                </button>
+              </div>
+
+              {/* Search Box */}
+              <div className="flex items-center space-x-2 w-full md:w-auto flex-1 max-w-sm">
                 <div className="relative w-full">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                   <input
@@ -2587,17 +2692,16 @@ export default function MasterDataManagerPage() {
                     <button
                       type="button"
                       onClick={() => setLearnedSearchQuery('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
                     >
                       ×
                     </button>
                   )}
                 </div>
               </div>
+
+              {/* Actions */}
               <div className="flex items-center space-x-3 shrink-0">
-                <div className="text-xs font-bold text-slate-600 flex items-center space-x-2">
-                  <span>총 학습 부품: <strong className="text-purple-700 font-mono text-[13px]">{learnedItems.length}</strong>건</span>
-                </div>
                 <button
                   type="button"
                   onClick={handleExportLearnedExcel}
@@ -2643,96 +2747,112 @@ export default function MasterDataManagerPage() {
                           <span>아직 자가학습된 단가 데이터가 없습니다. 도면 승인 및 견적 작성 시 자동 축적됩니다.</span>
                         </td>
                       </tr>
+                    ) : filteredLearnedItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={11} className="py-12 text-center text-slate-400">
+                          {learnedFilterTab === 'UNREGISTERED' ? (
+                            <div className="flex flex-col items-center justify-center space-y-1.5 py-4">
+                              <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-1" />
+                              <span className="font-bold text-slate-700 text-sm">현재 사내 기준 미등록 품목이 없습니다.</span>
+                              <span className="text-xs text-slate-400">자가학습된 모든 실무 단가가 사내 기준단가 대장과 연동되어 있습니다.</span>
+                            </div>
+                          ) : (
+                            <div className="py-4">
+                              <span>조건에 일치하는 품목이 없습니다.</span>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
                     ) : (
-                      learnedItems
-                        .filter((item) => {
-                          if (!learnedSearchQuery.trim()) return true;
-                          const q = learnedSearchQuery.toLowerCase().trim();
-                          return (
-                            (item.item_name || '').toLowerCase().includes(q) ||
-                            (item.standard_name || '').toLowerCase().includes(q) ||
-                            (item.specification || '').toLowerCase().includes(q) ||
-                            (item.material || '').toLowerCase().includes(q) ||
-                            (item.company_name || '').toLowerCase().includes(q)
-                          );
-                        })
-                        .map((item, idx) => {
-                          const effectiveSpec = getEffectiveLearnedSpec(item);
-                          return (
-                            <tr
-                              key={item.id || idx}
-                              onClick={() => setSelectedHistoryItem(item)}
-                              className={`cursor-pointer select-none border-b border-slate-200/80 min-h-[36px] transition-colors ${
-                                idx % 2 === 1 ? 'bg-slate-100/60 hover:bg-purple-50/80' : 'bg-white hover:bg-purple-50/80'
-                              }`}
-                              title="클릭하여 단가 수정/승인 이력 타임라인 보기"
-                            >
-                              <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-500 text-[14px]">
-                                {idx + 1}
-                              </td>
-                              <td className="py-1.5 px-4">
-                                <div className="font-bold text-slate-900 text-[14px]">{item.item_name}</div>
-                                {item.standard_name && item.standard_name !== item.item_name && (
-                                  <div className="text-[11.5px] text-purple-700 font-semibold leading-tight mt-0.5">
-                                    표준명: {item.standard_name}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-1.5 px-4 text-left font-mono font-normal text-slate-800 truncate text-[14px] tabular-nums">
-                                {effectiveSpec && effectiveSpec !== '-' ? (
-                                  <span className="font-mono font-normal text-slate-800" title={`부품 규격(Spec): ${effectiveSpec}`}>
-                                    {effectiveSpec}
-                                  </span>
-                                ) : (
-                                  <span className="font-mono text-slate-300 font-normal">-</span>
-                                )}
-                              </td>
-                              <td className="py-1.5 px-4 font-mono font-bold text-slate-700 truncate text-[13.5px] tabular-nums">
-                                {item.material || item.standard_material || 'SS400'}
-                              </td>
-                              <td className="py-1.5 pl-4 pr-6 text-right font-mono font-bold text-blue-700 text-[15px] tabular-nums whitespace-nowrap leading-none">
-                                ₩{Number(item.unit_price || 0).toLocaleString()}
-                              </td>
-                              <td className="py-1.5 px-3 text-center whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedHistoryItem(item);
-                                  }}
-                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 hover:text-purple-900 text-[12px] font-bold border border-purple-200 hover:border-purple-300 shadow-2xs transition-all cursor-pointer group"
-                                  title="클릭하여 단가 변천사 및 승인 이력 타임라인 보기"
+                      filteredLearnedItems.map((item, idx) => {
+                        const effectiveSpec = getEffectiveLearnedSpec(item);
+                        const isRegistered = isItemRegisteredInStandard(item);
+                        return (
+                          <tr
+                            key={item.id || idx}
+                            onClick={() => setSelectedHistoryItem(item)}
+                            className={`cursor-pointer select-none border-b border-slate-200/80 min-h-[36px] transition-colors ${
+                              idx % 2 === 1 ? 'bg-slate-100/60 hover:bg-purple-50/80' : 'bg-white hover:bg-purple-50/80'
+                            }`}
+                            title="클릭하여 단가 수정/승인 이력 타임라인 보기"
+                          >
+                            <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-500 text-[14px]">
+                              {idx + 1}
+                            </td>
+                            <td className="py-1.5 px-4">
+                              <div className="font-bold text-slate-900 text-[14px]">{item.item_name}</div>
+                              {item.standard_name && item.standard_name !== item.item_name && (
+                                <div className="text-[11.5px] text-purple-700 font-semibold leading-tight mt-0.5">
+                                  표준명: {item.standard_name}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-1.5 px-4 text-left font-mono font-normal text-slate-800 truncate text-[14px] tabular-nums">
+                              {effectiveSpec && effectiveSpec !== '-' ? (
+                                <span className="font-mono font-normal text-slate-800" title={`부품 규격(Spec): ${effectiveSpec}`}>
+                                  {effectiveSpec}
+                                </span>
+                              ) : (
+                                <span className="font-mono text-slate-300 font-normal">-</span>
+                              )}
+                            </td>
+                            <td className="py-1.5 px-4 font-mono font-bold text-slate-700 truncate text-[13.5px] tabular-nums">
+                              {item.material || item.standard_material || 'SS400'}
+                            </td>
+                            <td className="py-1.5 pl-4 pr-6 text-right font-mono font-bold text-blue-700 text-[15px] tabular-nums whitespace-nowrap leading-none">
+                              ₩{Number(item.unit_price || 0).toLocaleString()}
+                            </td>
+                            <td className="py-1.5 px-3 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedHistoryItem(item);
+                                }}
+                                className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 hover:text-purple-900 text-[12px] font-bold border border-purple-200 hover:border-purple-300 shadow-2xs transition-all cursor-pointer group"
+                                title="클릭하여 단가 변천사 및 승인 이력 타임라인 보기"
+                              >
+                                <Clock className="w-3 h-3 text-purple-500 group-hover:rotate-45 transition-transform" />
+                                <span>{item.approval_count || 1}회 승인</span>
+                              </button>
+                            </td>
+                            <td className="py-1.5 px-3 text-center whitespace-nowrap text-[12.5px] text-slate-500 font-medium">
+                              {item.source === 'DRAWING_APPROVAL' ? '도면승인' : item.source === 'QUOTE_MANUAL' ? '수동견적' : item.source === 'MASTER_REGISTERED' ? '마스터연동' : item.source || '자가학습'}
+                            </td>
+                            <td className="py-1.5 px-4 text-left whitespace-nowrap text-[13px] font-medium text-slate-700 truncate max-w-[130px]" title={item.company_name || '-'}>
+                              {item.company_name || '-'}
+                            </td>
+                            <td className="py-1.5 px-3 text-center font-mono text-slate-500 text-[12.5px] tabular-nums whitespace-nowrap">
+                              {item.last_used_at?.slice(0, 10) || item.created_at?.slice(0, 10) || '-'}
+                            </td>
+                            <td className="py-1.5 px-3 text-center whitespace-nowrap">
+                              {isRegistered ? (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[12px] font-bold border border-slate-200 select-none cursor-default"
+                                  title="사내 기준단가 대장에 이미 공식 등록되어 있는 품목입니다."
                                 >
-                                  <Clock className="w-3 h-3 text-purple-500 group-hover:rotate-45 transition-transform" />
-                                  <span>{item.approval_count || 1}회 승인</span>
-                                </button>
-                              </td>
-                              <td className="py-1.5 px-3 text-center whitespace-nowrap text-[12.5px] text-slate-500 font-medium">
-                                {item.source === 'DRAWING_APPROVAL' ? '도면승인' : item.source === 'QUOTE_MANUAL' ? '수동견적' : item.source || '자가학습'}
-                              </td>
-                              <td className="py-1.5 px-4 text-left whitespace-nowrap text-[13px] font-medium text-slate-700 truncate max-w-[130px]" title={item.company_name || '-'}>
-                                {item.company_name || '-'}
-                              </td>
-                              <td className="py-1.5 px-3 text-center font-mono text-slate-500 text-[12.5px] tabular-nums whitespace-nowrap">
-                                {item.last_used_at?.slice(0, 10) || item.created_at?.slice(0, 10) || '-'}
-                              </td>
-                              <td className="py-1.5 px-3 text-center whitespace-nowrap">
+                                  <Check className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
+                                  <span>등록 완료</span>
+                                </span>
+                              ) : (
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handlePromoteToStandard(item);
                                   }}
-                                  className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-[12px] font-bold border border-purple-200 shadow-2xs transition-colors cursor-pointer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[12px] font-bold shadow-2xs transition-colors cursor-pointer"
                                   title="이 실무 단가를 사내 기준단가 대장에 공식 등록합니다."
                                 >
-                                  기준 등록
+                                  <Sparkles className="w-3 h-3 text-purple-200" />
+                                  <span>기준 등록</span>
                                 </button>
-                              </td>
-                              <td className="p-0 pointer-events-none" />
-                            </tr>
-                          );
-                        })
+                              )}
+                            </td>
+                            <td className="p-0 pointer-events-none" />
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
