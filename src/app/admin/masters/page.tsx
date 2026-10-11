@@ -1947,7 +1947,7 @@ export default function MasterDataManagerPage() {
                                 ({breakdown.processName}{breakdown.cycleTimeHours > 0 ? ` ${breakdown.cycleTimeHours}h` : ''})
                               </span>
                               {breakdown.processCost > 0 ? (
-                                <span className="font-mono font-normal text-blue-700 text-[15px] tabular-nums min-w-[72px] text-right">
+                                <span className="font-mono font-bold text-blue-700 text-[15px] tabular-nums min-w-[72px] text-right">
                                   ₩{breakdown.processCost.toLocaleString()}
                                 </span>
                               ) : (
@@ -2025,7 +2025,7 @@ export default function MasterDataManagerPage() {
                                   title={`클릭하여 부품 분류 & 대표 품목 스마트 피커 열기 (현재: ${catLabel}${hasDistinctSubItem ? ` > ${subItem}` : ''})`}
                                 >
                                   {/* 대분류 (분류 고유 컬러 텍스트) */}
-                                  <span className={`font-normal text-[13px] ${getPartCategoryTextClass(it.category)} leading-none shrink-0`}>
+                                  <span className={`font-bold text-[13px] ${getPartCategoryTextClass(it.category)} leading-none shrink-0`}>
                                     {catLabel}
                                   </span>
 
