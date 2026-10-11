@@ -1398,48 +1398,48 @@ export default function MasterDataManagerPage() {
               {/* 1. 상단 통계 리본 바: 1px 세선(divide-x divide-slate-200)으로 선명하게 구분 & 엣지 투 엣지 */}
               <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 divide-x divide-slate-200 bg-slate-50/60 shrink-0">
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-slate-500 block leading-tight">전체 표준 품목</span>
-                  <span className="text-[15px] font-black text-slate-900 font-mono mt-0.5 block leading-tight">{stats.total.toLocaleString()}개</span>
+                  <span className="text-[13px] font-extrabold text-slate-600 block leading-tight truncate">전체 표준 품목</span>
+                  <span className="text-[15px] font-black text-slate-900 font-mono mt-0.5 block text-right leading-tight tabular-nums">{stats.total.toLocaleString()}개</span>
                 </div>
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-blue-600 block leading-tight">기계 가공품</span>
-                  <span className="text-[15px] font-black text-blue-700 font-mono mt-0.5 block leading-tight">{(stats.machining || 0).toLocaleString()}종</span>
+                  <span className="text-[13px] font-extrabold text-blue-600 block leading-tight truncate">기계 가공품</span>
+                  <span className="text-[15px] font-black text-blue-700 font-mono mt-0.5 block text-right leading-tight tabular-nums">{(stats.machining || 0).toLocaleString()}종</span>
                 </div>
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-cyan-600 block leading-tight">판금/제관품</span>
-                  <span className="text-[15px] font-black text-cyan-700 font-mono mt-0.5 block leading-tight">{(stats.sheetMetal || 0).toLocaleString()}종</span>
+                  <span className="text-[13px] font-extrabold text-cyan-600 block leading-tight truncate">판금/제관품</span>
+                  <span className="text-[15px] font-black text-cyan-700 font-mono mt-0.5 block text-right leading-tight tabular-nums">{(stats.sheetMetal || 0).toLocaleString()}종</span>
                 </div>
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-pink-600 block leading-tight">사출/성형품</span>
-                  <span className="text-[15px] font-black text-pink-700 font-mono mt-0.5 block leading-tight">{(stats.injection || 0).toLocaleString()}종</span>
+                  <span className="text-[13px] font-extrabold text-pink-600 block leading-tight truncate">사출/성형품</span>
+                  <span className="text-[15px] font-black text-pink-700 font-mono mt-0.5 block text-right leading-tight tabular-nums">{(stats.injection || 0).toLocaleString()}종</span>
                 </div>
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-teal-600 block leading-tight">기계요소</span>
-                  <span className="text-[15px] font-black text-teal-700 font-mono mt-0.5 block leading-tight">{(stats.mechanical || 0).toLocaleString()}종</span>
+                  <span className="text-[13px] font-extrabold text-teal-600 block leading-tight truncate">기계요소</span>
+                  <span className="text-[15px] font-black text-teal-700 font-mono mt-0.5 block text-right leading-tight tabular-nums">{(stats.mechanical || 0).toLocaleString()}종</span>
                 </div>
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-emerald-600 block leading-tight">규격 철물</span>
-                  <span className="text-[15px] font-black text-emerald-700 font-mono mt-0.5 block leading-tight">{(stats.commercial || 0).toLocaleString()}종</span>
+                  <span className="text-[13px] font-extrabold text-emerald-600 block leading-tight truncate">규격 철물</span>
+                  <span className="text-[15px] font-black text-emerald-700 font-mono mt-0.5 block text-right leading-tight tabular-nums">{(stats.commercial || 0).toLocaleString()}종</span>
                 </div>
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-amber-600 block leading-tight">전장/공압품</span>
-                  <span className="text-[15px] font-black text-amber-700 font-mono mt-0.5 block leading-tight">{(stats.electrical || 0).toLocaleString()}종</span>
+                  <span className="text-[13px] font-extrabold text-amber-600 block leading-tight truncate">전장/공압품</span>
+                  <span className="text-[15px] font-black text-amber-700 font-mono mt-0.5 block text-right leading-tight tabular-nums">{(stats.electrical || 0).toLocaleString()}종</span>
                 </div>
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-orange-600 block leading-tight">주조/단조품</span>
-                  <span className="text-[15px] font-black text-orange-700 font-mono mt-0.5 block leading-tight">{(stats.casting || 0).toLocaleString()}종</span>
+                  <span className="text-[13px] font-extrabold text-orange-600 block leading-tight truncate">주조/단조품</span>
+                  <span className="text-[15px] font-black text-orange-700 font-mono mt-0.5 block text-right leading-tight tabular-nums">{(stats.casting || 0).toLocaleString()}종</span>
                 </div>
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-violet-600 block leading-tight">해외 수입품</span>
-                  <span className="text-[15px] font-black text-violet-700 font-mono mt-0.5 block leading-tight">{(stats.imported || 0).toLocaleString()}종</span>
+                  <span className="text-[13px] font-extrabold text-violet-600 block leading-tight truncate">해외 수입품</span>
+                  <span className="text-[15px] font-black text-violet-700 font-mono mt-0.5 block text-right leading-tight tabular-nums">{(stats.imported || 0).toLocaleString()}종</span>
                 </div>
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-slate-600 block leading-tight">고객 사급품</span>
-                  <span className="text-[15px] font-black text-slate-700 font-mono mt-0.5 block leading-tight">{(stats.supplied || 0).toLocaleString()}종</span>
+                  <span className="text-[13px] font-extrabold text-slate-600 block leading-tight truncate">고객 사급품</span>
+                  <span className="text-[15px] font-black text-slate-700 font-mono mt-0.5 block text-right leading-tight tabular-nums">{(stats.supplied || 0).toLocaleString()}종</span>
                 </div>
                 <div className="py-1.5 px-2.5">
-                  <span className="text-[11px] font-extrabold text-indigo-600 block leading-tight">조립품(모듈)</span>
-                  <span className="text-[15px] font-black text-indigo-700 font-mono mt-0.5 block leading-tight">{(stats.assembly || 0).toLocaleString()}종</span>
+                  <span className="text-[13px] font-extrabold text-indigo-600 block leading-tight truncate">조립품(모듈)</span>
+                  <span className="text-[15px] font-black text-indigo-700 font-mono mt-0.5 block text-right leading-tight tabular-nums">{(stats.assembly || 0).toLocaleString()}종</span>
                 </div>
               </div>
 
@@ -1533,8 +1533,12 @@ export default function MasterDataManagerPage() {
               {/* 4. 섹션 구분 1px 수평 라인 (툴바와 테이블 경계: 여백 제거 후 1px 라인 처리) */}
               <div className="border-t border-slate-200 shrink-0" />
 
-              {/* 5. 데이터 테이블 (가로/세로 내부 스크롤 대응 & 엑셀 스타일 열 너비 실시간 조절) */}
-              <div ref={tableContainerRef} className="flex-1 min-h-0 overflow-auto w-full">
+              {/* 5. 데이터 테이블 (가로/세로 내부 스크롤 대응 & 엑셀 스타일 열 너비 실시간 조절 & 스크롤바 생성 시 텍스트 흔들림 방지 scrollbarGutter) */}
+              <div
+                ref={tableContainerRef}
+                className="flex-1 min-h-0 overflow-auto w-full"
+                style={{ scrollbarGutter: 'stable' }}
+              >
                 <table
                   className="text-left border-collapse text-xs table-fixed min-w-full"
                   style={{ width: `max(100%, ${totalTableWidth}px)` }}
@@ -1680,7 +1684,7 @@ export default function MasterDataManagerPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-sans">
+                <tbody className="divide-y divide-slate-200/80 font-sans">
                   {loading ? (
                     <tr>
                       <td colSpan={12} className="py-8 text-center text-slate-400">
@@ -1710,17 +1714,19 @@ export default function MasterDataManagerPage() {
                         <tr
                           key={it.id || it.master_code || `master-item-${globalIdx}`}
                           onClick={() => handleToggleSelect(it.id)}
-                          className={`transition-colors cursor-pointer select-none border-b border-slate-100 min-h-[36px] ${
+                          className={`cursor-pointer select-none border-b border-slate-200/80 min-h-[36px] ${
                             isSelected
-                              ? 'bg-blue-50/80 hover:bg-blue-100/70'
-                              : 'hover:bg-slate-50'
+                              ? 'bg-blue-100/80 hover:bg-blue-100'
+                              : idx % 2 === 1
+                                ? 'bg-slate-100/60 hover:bg-blue-50/80'
+                                : 'bg-white hover:bg-blue-50/80'
                           }`}
                           title="클릭하여 품목을 선택/해제합니다."
                         >
-                          <td className="py-1.5 px-2 text-center relative">
-                            {isSelected && (
-                              <span className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600" />
-                            )}
+                          <td
+                            className="py-1.5 px-2 text-center"
+                            style={{ boxShadow: isSelected ? 'inset 3px 0 0 #2563eb' : 'none' }}
+                          >
                             <div className="flex items-center justify-center">
                               {isSelected ? (
                                 <CheckSquare className="w-4 h-4 text-blue-600" />
@@ -1805,7 +1811,7 @@ export default function MasterDataManagerPage() {
                             )}
                           </td>
 
-                          <td className="py-1.5 px-3 text-left font-mono font-bold text-slate-700 truncate text-[14px]" title={it.specification || '-'}>
+                          <td className="py-1.5 px-3 text-left font-sans font-bold text-slate-700 truncate text-[14px] tabular-nums" title={it.specification || '-'}>
                             {it.specification || '-'}
                           </td>
                           {/* 🏷️ 부품 분류 · 실무 대표 품목 통합 열 (원클릭 스마트 피커 연동) */}
@@ -1827,23 +1833,26 @@ export default function MasterDataManagerPage() {
                                       currentCategory: it.category || 'MACHINING'
                                     });
                                   }}
-                                  className="inline-flex items-center gap-1.5 py-0.5 px-2.5 rounded-lg border border-slate-200/90 hover:border-blue-400 bg-white hover:bg-blue-50/80 text-left transition-all cursor-pointer shadow-2xs group active:scale-95 h-[28px]"
+                                  className="inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-lg border border-slate-200/90 hover:border-blue-400 bg-white hover:bg-blue-50/70 text-left transition-colors cursor-pointer shadow-2xs group max-w-[210px]"
                                   title={`클릭하여 부품 분류 & 대표 품목 스마트 피커 열기 (현재: ${catLabel}${hasDistinctSubItem ? ` > ${subItem}` : ''})`}
                                 >
-                                  {/* 대분류 뱃지 */}
-                                  <span className={`px-2 py-0.5 rounded-md font-black text-[13px] border ${getPartCategoryBadgeClass(it.category)} shadow-2xs leading-none`}>
+                                  {/* 대분류 (분류 고유 컬러 텍스트) */}
+                                  <span className={`font-bold text-[13px] ${getPartCategoryTextClass(it.category)} leading-none shrink-0`}>
                                     {catLabel}
                                   </span>
 
-                                  {/* 실무 대표 품목 (대분류와 상이한 경우에만 깔끔하게 태그 표시하여 중복 100% 제거) */}
-                                  {hasDistinctSubItem ? (
-                                    <span className="inline-flex items-center gap-1 font-bold text-[13px] text-blue-700 bg-blue-50/90 px-1.5 py-0.5 rounded border border-blue-200/90 leading-none">
-                                      <Tag className="w-3 h-3 text-blue-500 shrink-0" />
-                                      <span className="truncate max-w-[100px]">{subItem}</span>
-                                    </span>
-                                  ) : (
-                                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0" />
+                                  {/* 대표 품목이 있을 때 브레드크럼 구분자 및 대표 품목명 표출 */}
+                                  {hasDistinctSubItem && (
+                                    <>
+                                      <span className="text-slate-300 font-normal text-[12px] leading-none select-none shrink-0">›</span>
+                                      <span className="font-extrabold text-[13px] text-slate-800 group-hover:text-blue-700 leading-none truncate max-w-[110px]">
+                                        {subItem}
+                                      </span>
+                                    </>
                                   )}
+
+                                  {/* 드롭다운 화살표 */}
+                                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors shrink-0 ml-0.5" />
                                 </button>
                               );
                             })()}
@@ -2049,10 +2058,7 @@ export default function MasterDataManagerPage() {
 
             {/* 3. 플로팅 다중 선택 & 인라인 일괄 작업 툴바 */}
             {selectedIds.length > 0 && (
-              <>
-                {/* 플로팅 툴바 가림 방지 안전 여백 버퍼 (테이블 하단 행 및 페이지네이션 보호) */}
-                <div className="h-28 sm:h-32 shrink-0 pointer-events-none" aria-hidden="true" />
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl px-5 py-3 shadow-2xl border border-slate-700 flex flex-wrap items-center gap-3 z-50 animate-in slide-in-from-bottom-4 max-w-[96vw]">
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl px-5 py-3 shadow-2xl border border-slate-700 flex flex-wrap items-center gap-3 z-50 animate-in slide-in-from-bottom-4 max-w-[96vw]">
                 {/* 선택 카운터 뱃지 */}
                 <div className="flex items-center gap-2 text-xs">
                   <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xs shadow-xs">
@@ -2243,8 +2249,7 @@ export default function MasterDataManagerPage() {
                   </button>
                 </div>
               </div>
-            </>
-          )}
+            )}
           </>
         ) : activeTab === 'learned' ? (
           /* Tab: Learned (실무 자가학습 단가 풀 대장) */
