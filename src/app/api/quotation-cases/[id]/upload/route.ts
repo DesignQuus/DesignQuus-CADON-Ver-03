@@ -2,17 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { recordActivity } from '@/lib/audit';
 import { getStorageSubdir } from '@/lib/storage';
-import { queryTable, insertRows } from '../../../../../../egdesk-helpers';
+import { db, insertRows } from '@/lib/db';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-
-const getRows = (res: any): any[] => {
-  if (!res) return [];
-  if (Array.isArray(res)) return res;
-  if (Array.isArray(res.rows)) return res.rows;
-  return [];
-};
 
 export async function POST(
   req: NextRequest,
@@ -24,8 +17,7 @@ export async function POST(
   }
 
   const { id } = await params;
-  const cases = getRows(await queryTable('quotation_cases', { filters: { id }, limit: 1 }));
-  const qc = cases[0] || null;
+  const qc = (await db.prepare('SELECT id FROM quotation_cases WHERE id = ?').get(id)) as any;
   if (!qc) {
     return NextResponse.json({ error: '견적건을 찾을 수 없습니다.' }, { status: 404 });
   }
