@@ -1156,8 +1156,8 @@ export default function WebGlCadViewer({
 
     // ⚡ [Autodesk SVF2 Pattern] Check if a specific sheet chunk should be streamed (99% smaller)
     const curIdx = selectedDrawingIdxRef.current;
-    const targetSheetIdx = (curIdx !== undefined && curIdx >= 0 && drawingsRef.current[curIdx])
-      ? (drawingsRef.current[curIdx].drawing_index || (curIdx + 1))
+    const targetSheetIdx = (curIdx !== undefined && curIdx >= 0)
+      ? (drawingsRef.current[curIdx]?.drawing_index || (curIdx + 1))
       : null;
 
     const cacheKey = targetSheetIdx
@@ -1349,8 +1349,8 @@ export default function WebGlCadViewer({
     const fetchId = activeFileId;
 
     const curIdx = selectedDrawingIdxRef.current;
-    const targetSheetIdx = (curIdx !== undefined && curIdx >= 0 && drawingsRef.current[curIdx])
-      ? (drawingsRef.current[curIdx].drawing_index || (curIdx + 1))
+    const targetSheetIdx = (curIdx !== undefined && curIdx >= 0)
+      ? (drawingsRef.current[curIdx]?.drawing_index || (curIdx + 1))
       : null;
 
     const cacheKey = targetSheetIdx
