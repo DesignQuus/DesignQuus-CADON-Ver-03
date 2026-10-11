@@ -2262,7 +2262,7 @@ export default function QuoteReviewWorkspacePage({ params }: { params: Promise<{
             href="/admin/masters"
             target="_blank"
             className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs transition-colors shadow-2xs whitespace-nowrap shrink-0"
-            title="표준 품목, 기준단가 및 소재/가공 임률 설정 관리 (새 창)"
+            title="표준 품목, 사내 기준단가 및 소재 시세/가공 단가 설정 관리 (새 창)"
           >
             <ExternalLink className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>기준정보</span>

@@ -205,7 +205,7 @@ export default function MasterPriceReferenceDrawer({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                표준 부품, 소재 시세, 가공 임률 및 과거 수주 실적 실시간 참고
+                표준 부품, 소재 시세, 가공 단가 및 과거 수주 실적 실시간 참고
               </p>
             </div>
           </div>
