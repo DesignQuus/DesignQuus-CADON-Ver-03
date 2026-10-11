@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
       unitPrice: price,
       remark: remark || '관리자 수기 단가 조정',
       source: 'MANUAL',
-      userId: session.user?.id || 'usr_admin',
+      userId: session.userId || 'usr_admin',
       quotationCaseId: existing.quotation_case_id
     });
 

@@ -93,6 +93,7 @@ def build_multilevel_bom(raw_bom_data: dict, structure_data: dict, root_order_qt
             continue
             
         mult = drawing_multipliers.get(dno, root_order_qty)
+        dqty = float(d.get("quantity") or 1.0)
         key = dno
         
         node = {

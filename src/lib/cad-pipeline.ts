@@ -49,10 +49,15 @@ export function runPythonScript(scriptName: string, args: string[]): Promise<any
   });
 }
 
+export interface ProcessCadPipelineOptions {
+  quickEstimateMode?: boolean;
+}
+
 export async function processCadFilePipeline(
   quotationCaseId: string,
   sourceFileId: string,
-  userId: string
+  userId: string,
+  options?: ProcessCadPipelineOptions
 ): Promise<{ success: boolean; error?: string }> {
   const file = (await db.prepare('SELECT * FROM uploaded_files WHERE id = ?').get(sourceFileId)) as any;
   if (!file) {
@@ -71,7 +76,26 @@ export async function processCadFilePipeline(
 
     const convRunId = `conv_${Date.now()}`;
     const absoluteSourcePath = resolveStoragePath(file.storage_path);
-    const convResult = await runPythonScript('dwg_converter.py', [absoluteSourcePath, derivedDxfPath]);
+    
+    // Check if valid converted DXF already exists to skip slow LibreDWG conversion
+    let convResult: any = null;
+    const derivedExists = fs.existsSync(derivedDxfPath) && fs.statSync(derivedDxfPath).size > 1000;
+    if (derivedExists) {
+      console.log(`[cad-pipeline] Reusing existing converted DXF: ${derivedDxfPath}`);
+      convResult = {
+        provider: 'LIBREDWG_CACHED',
+        converter_version: '0.14',
+        source_dwg_signature: 'AC1015',
+        status: 'CONVERTED',
+        duration_ms: 10,
+        derived_dxf_size: fs.statSync(derivedDxfPath).size,
+        derived_dxf_sha256: 'cached_sha256',
+        warning_count: 0,
+        warnings: []
+      };
+    } else {
+      convResult = await runPythonScript('dwg_converter.py', [absoluteSourcePath, derivedDxfPath]);
+    }
 
     await db.prepare(`
       INSERT INTO dwg_conversion_runs (
@@ -118,114 +142,126 @@ export async function processCadFilePipeline(
   // 2. Parse DXF (PROMPT 04)
   const absoluteDxfPath = resolveStoragePath(effectiveDxfPath);
 
-  // 2-B. Start WebGL binary buffer & HD Vector SVG generation in parallel background (File-scoped isolation)
+  // 2-B. Start WebGL binary buffer & HD Vector SVG generation in background (File-scoped isolation)
   const derivedStorageDir = getStorageSubdir('derived');
   fs.mkdirSync(derivedStorageDir, { recursive: true });
 
   const webglBinName = `${quotationCaseId}_${sourceFileId}__cad_webgl.bin`;
   const legacyWebglBinName = `${quotationCaseId}__cad_webgl.bin`;
   const webglBinPath = path.join(derivedStorageDir, webglBinName);
-  const webglPromise = runPythonScript('cad_webgl_exporter.py', [absoluteDxfPath, webglBinPath])
-    .then(() => {
-      // Synchronize to workspace storage/derived as well & provide backward-compatible copy
-      const localDerived = path.join(process.cwd(), 'storage', 'derived');
-      fs.mkdirSync(localDerived, { recursive: true });
-
-      const txtName = webglBinName.replace('__cad_webgl.bin', '__cad_texts.json');
-      const rasterName = webglBinName.replace('__cad_webgl.bin', '__cad_rasters.json');
-      const legacyTxtName = legacyWebglBinName.replace('__cad_webgl.bin', '__cad_texts.json');
-      const legacyRasterName = legacyWebglBinName.replace('__cad_webgl.bin', '__cad_rasters.json');
-
-      try {
-        // Also provide case-level alias for single-file/backward compatibility
-        const legacyBinPath = path.join(derivedStorageDir, legacyWebglBinName);
-        fs.copyFileSync(webglBinPath, legacyBinPath);
-        if (localDerived !== derivedStorageDir) {
-          fs.copyFileSync(webglBinPath, path.join(localDerived, webglBinName));
-          fs.copyFileSync(webglBinPath, path.join(localDerived, legacyWebglBinName));
-        }
-
-        const srcTxt = path.join(derivedStorageDir, txtName);
-        if (fs.existsSync(srcTxt)) {
-          fs.copyFileSync(srcTxt, path.join(derivedStorageDir, legacyTxtName));
-          if (localDerived !== derivedStorageDir) {
-            fs.copyFileSync(srcTxt, path.join(localDerived, txtName));
-            fs.copyFileSync(srcTxt, path.join(localDerived, legacyTxtName));
-          }
-        }
-
-        const srcRaster = path.join(derivedStorageDir, rasterName);
-        if (fs.existsSync(srcRaster)) {
-          fs.copyFileSync(srcRaster, path.join(derivedStorageDir, legacyRasterName));
-          if (localDerived !== derivedStorageDir) {
-            fs.copyFileSync(srcRaster, path.join(localDerived, rasterName));
-            fs.copyFileSync(srcRaster, path.join(localDerived, legacyRasterName));
-          }
-        }
-      } catch (copyErr) {
-        console.warn('WebGL storage sync warning:', copyErr);
-      }
-    })
-    .catch((webglErr) => console.warn('WebGL binary export warning:', webglErr));
 
   const svgFileName = `${quotationCaseId}_${sourceFileId}__hd_vector.svg`;
   const legacySvgFileName = `${quotationCaseId}__hd_vector.svg`;
   const svgFilePath = path.join(derivedStorageDir, svgFileName);
 
-  const svgPromise = runPythonScript('vector_svg_renderer.py', [absoluteDxfPath, svgFilePath])
-    .then(async (svgResult) => {
-      if (svgResult && svgResult.status === 'SUCCESS') {
-        try {
-          fs.copyFileSync(svgFilePath, path.join(derivedStorageDir, legacySvgFileName));
-          const localDerived = path.join(process.cwd(), 'storage', 'derived');
-          if (fs.existsSync(localDerived) && localDerived !== derivedStorageDir) {
-            fs.copyFileSync(svgFilePath, path.join(localDerived, svgFileName));
-            fs.copyFileSync(svgFilePath, path.join(localDerived, legacySvgFileName));
-          }
-        } catch {}
-
-        await db.prepare(`
-          DELETE FROM uploaded_files
-          WHERE quotation_case_id = ? AND derived_from_file_id = ? AND file_role = 'VECTOR_SVG'
-        `).run(quotationCaseId, file.id);
-
-        const svgFileId = `file_svg_${Date.now()}`;
-        await db.prepare(`
-          INSERT INTO uploaded_files (
-            id, quotation_case_id, original_file_name, stored_file_name, storage_path,
-            file_type, file_role, derived_from_file_id, file_size, checksum,
-            upload_status, uploaded_by_user_id, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          svgFileId, quotationCaseId, `${file.original_file_name}.svg`, svgFileName,
-          svgFilePath, 'SVG', 'VECTOR_SVG', file.id, svgResult.svg_size_bytes || 1000,
-          'svg_checksum', 'CONVERTED', userId, now
-        );
-      }
-    })
-    .catch((svgErr) => console.warn('Vector SVG generation non-blocking warning:', svgErr));
-
-  // 2-C. Block & Smart Block Metadata Extraction (Non-blocking background pipeline)
   const blocksJsonName = `${quotationCaseId}_${sourceFileId}__cad_blocks.json`;
   const legacyBlocksJsonName = `${quotationCaseId}__cad_blocks.json`;
   const blocksJsonPath = path.join(derivedStorageDir, blocksJsonName);
-  const blocksPromise = runPythonScript('block_extractor.py', [absoluteDxfPath, blocksJsonPath])
-    .then(() => {
-      try {
-        const legacyBlocksPath = path.join(derivedStorageDir, legacyBlocksJsonName);
-        if (fs.existsSync(blocksJsonPath)) {
-          fs.copyFileSync(blocksJsonPath, legacyBlocksPath);
+
+  const startBackgroundRenders = () => {
+    if (!fs.existsSync(webglBinPath) || fs.statSync(webglBinPath).size === 0) {
+      runPythonScript('cad_webgl_exporter.py', [absoluteDxfPath, webglBinPath])
+        .then(() => {
           const localDerived = path.join(process.cwd(), 'storage', 'derived');
-          if (localDerived !== derivedStorageDir) {
-            fs.copyFileSync(blocksJsonPath, path.join(localDerived, blocksJsonName));
-            fs.copyFileSync(blocksJsonPath, path.join(localDerived, legacyBlocksJsonName));
+          fs.mkdirSync(localDerived, { recursive: true });
+
+          const txtName = webglBinName.replace('__cad_webgl.bin', '__cad_texts.json');
+          const rasterName = webglBinName.replace('__cad_webgl.bin', '__cad_rasters.json');
+          const legacyTxtName = legacyWebglBinName.replace('__cad_webgl.bin', '__cad_texts.json');
+          const legacyRasterName = legacyWebglBinName.replace('__cad_webgl.bin', '__cad_rasters.json');
+
+          try {
+            const legacyBinPath = path.join(derivedStorageDir, legacyWebglBinName);
+            fs.copyFileSync(webglBinPath, legacyBinPath);
+            if (localDerived !== derivedStorageDir) {
+              fs.copyFileSync(webglBinPath, path.join(localDerived, webglBinName));
+              fs.copyFileSync(webglBinPath, path.join(localDerived, legacyWebglBinName));
+            }
+
+            const srcTxt = path.join(derivedStorageDir, txtName);
+            if (fs.existsSync(srcTxt)) {
+              fs.copyFileSync(srcTxt, path.join(derivedStorageDir, legacyTxtName));
+              if (localDerived !== derivedStorageDir) {
+                fs.copyFileSync(srcTxt, path.join(localDerived, txtName));
+                fs.copyFileSync(srcTxt, path.join(localDerived, legacyTxtName));
+              }
+            }
+
+            const srcRaster = path.join(derivedStorageDir, rasterName);
+            if (fs.existsSync(srcRaster)) {
+              fs.copyFileSync(srcRaster, path.join(derivedStorageDir, legacyRasterName));
+              if (localDerived !== derivedStorageDir) {
+                fs.copyFileSync(srcRaster, path.join(localDerived, rasterName));
+                fs.copyFileSync(srcRaster, path.join(localDerived, legacyRasterName));
+              }
+            }
+          } catch (copyErr) {
+            console.warn('WebGL storage sync warning:', copyErr);
           }
-        }
-      } catch (bCopyErr) {
-        console.warn('CAD Blocks metadata sync warning:', bCopyErr);
-      }
-    })
-    .catch((bErr) => console.warn('Block extractor non-blocking warning:', bErr));
+        })
+        .catch((webglErr) => console.warn('WebGL binary export warning:', webglErr));
+    }
+
+    if (!fs.existsSync(svgFilePath) || fs.statSync(svgFilePath).size === 0) {
+      runPythonScript('vector_svg_renderer.py', [absoluteDxfPath, svgFilePath])
+        .then(async (svgResult) => {
+          if (svgResult && svgResult.status === 'SUCCESS') {
+            try {
+              fs.copyFileSync(svgFilePath, path.join(derivedStorageDir, legacySvgFileName));
+              const localDerived = path.join(process.cwd(), 'storage', 'derived');
+              if (fs.existsSync(localDerived) && localDerived !== derivedStorageDir) {
+                fs.copyFileSync(svgFilePath, path.join(localDerived, svgFileName));
+                fs.copyFileSync(svgFilePath, path.join(localDerived, legacySvgFileName));
+              }
+            } catch {}
+
+            await db.prepare(`
+              DELETE FROM uploaded_files
+              WHERE quotation_case_id = ? AND derived_from_file_id = ? AND file_role = 'VECTOR_SVG'
+            `).run(quotationCaseId, file.id);
+
+            const svgFileId = `file_svg_${Date.now()}`;
+            await db.prepare(`
+              INSERT INTO uploaded_files (
+                id, quotation_case_id, original_file_name, stored_file_name, storage_path,
+                file_type, file_role, derived_from_file_id, file_size, checksum,
+                upload_status, uploaded_by_user_id, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              svgFileId, quotationCaseId, `${file.original_file_name}.svg`, svgFileName,
+              svgFilePath, 'SVG', 'VECTOR_SVG', file.id, svgResult.svg_size_bytes || 1000,
+              'svg_checksum', 'CONVERTED', userId, now
+            );
+          }
+        })
+        .catch((svgErr) => console.warn('Vector SVG generation non-blocking warning:', svgErr));
+    }
+
+    if (!fs.existsSync(blocksJsonPath) || fs.statSync(blocksJsonPath).size === 0) {
+      runPythonScript('block_extractor.py', [absoluteDxfPath, blocksJsonPath])
+        .then(() => {
+          try {
+            const legacyBlocksPath = path.join(derivedStorageDir, legacyBlocksJsonName);
+            if (fs.existsSync(blocksJsonPath)) {
+              fs.copyFileSync(blocksJsonPath, legacyBlocksPath);
+              const localDerived = path.join(process.cwd(), 'storage', 'derived');
+              if (localDerived !== derivedStorageDir) {
+                fs.copyFileSync(blocksJsonPath, path.join(localDerived, blocksJsonName));
+                fs.copyFileSync(blocksJsonPath, path.join(localDerived, legacyBlocksJsonName));
+              }
+            }
+          } catch (bCopyErr) {
+            console.warn('CAD Blocks metadata sync warning:', bCopyErr);
+          }
+        })
+        .catch((bErr) => console.warn('Block extractor non-blocking warning:', bErr));
+    }
+  };
+
+  // If not in quickEstimateMode, start background renderers immediately
+  if (!options?.quickEstimateMode) {
+    startBackgroundRenders();
+  }
 
   // 2. High-Performance Unified In-Memory Pipeline (Single-Pass 8-in-1 Engine)
   const parseRunId = `parse_${Date.now()}`;
@@ -657,9 +693,12 @@ export async function processCadFilePipeline(
     WHERE id = ?
   `).run(now, quotationCaseId);
 
-  // Background Note: WebGL binary and HD Vector SVG continue running in parallel background
-  // and populate storage/derived without blocking the HTTP analysis response.
-  webglPromise.catch((err) => console.warn('Background WebGL export warning:', err));
+  // In quickEstimateMode, trigger background WebGL and SVG generation non-blockingly after analysis completes
+  if (options?.quickEstimateMode) {
+    setImmediate(() => {
+      startBackgroundRenders();
+    });
+  }
 
   // 🧠 [Option 2] AI 멀티모달(VLM) 기반 표제란·BOM 고정밀 자동 판독 및 메타데이터 보정 (Non-blocking)
   runAiVlmRefinement(quotationCaseId).catch((aiErr) => {

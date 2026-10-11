@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
     // 3. Run CAD AI Extraction Pipeline
     console.log(`[quick-estimate] Running CAD pipeline for ${caseId} (file: ${originalName})...`);
     try {
-      const pipelineRes = await processCadFilePipeline(caseId, fileId, session.userId);
+      const pipelineRes = await processCadFilePipeline(caseId, fileId, session.userId, { quickEstimateMode: true });
       console.log(`[quick-estimate] CAD pipeline result for ${caseId}:`, pipelineRes);
     } catch (pipelineErr: any) {
       console.warn(`[quick-estimate] Pipeline warning: ${pipelineErr.message}`);
@@ -108,13 +108,27 @@ export async function POST(req: NextRequest) {
       SELECT * FROM flattened_bom_items WHERE quotation_case_id = ?
     `).all(caseId)) as any[];
 
+    // Check if pipeline detected company (e.g. 엠브이텍)
+    const pipelineCaseRow = (await db.prepare('SELECT company_id FROM quotation_cases WHERE id = ?').get(caseId)) as any;
+    const effectiveCompId = (pipelineCaseRow?.company_id && pipelineCaseRow.company_id !== 'comp_unassigned')
+      ? pipelineCaseRow.company_id
+      : companyId;
+
     // 5. Intelligent Auto-Pricing via Self-Learning Pool & Standard Rates
-    const pricePool = await getLearnedPricePool(companyId);
-    const learnedMap = new Map<string, number>();
+    const pricePool = await getLearnedPricePool(effectiveCompId);
+    
+    // Clean key helper for robust matching
+    const cleanKey = (s: string) => (s || '').toUpperCase().replace(/[^A-Z0-9가-힣]/g, '');
+
+    const learnedMap = new Map<string, { price: number; spec: string }>();
     for (const p of pricePool) {
-      const key = (p.item_name || '').toUpperCase().replace(/\s+/g, '');
-      if (key && !learnedMap.has(key) && p.unit_price > 0) {
-        learnedMap.set(key, p.unit_price);
+      const k1 = cleanKey(p.item_name);
+      const k2 = cleanKey(p.standard_name || '');
+      if (k1 && !learnedMap.has(k1) && p.unit_price > 0) {
+        learnedMap.set(k1, { price: p.unit_price, spec: p.specification || '' });
+      }
+      if (k2 && !learnedMap.has(k2) && p.unit_price > 0) {
+        learnedMap.set(k2, { price: p.unit_price, spec: p.specification || '' });
       }
     }
 
@@ -148,16 +162,27 @@ export async function POST(req: NextRequest) {
       const mat = item.material || 'SS400';
       const qty = Number(item.quantity || item.total_quantity) || 1;
 
-      const normName = rawName.toUpperCase().replace(/\s+/g, '');
+      const normName = cleanKey(rawName);
       let unitPrice = 0;
       let isLearned = false;
 
       if (learnedMap.has(normName)) {
-        unitPrice = learnedMap.get(normName)!;
+        unitPrice = learnedMap.get(normName)!.price;
         isLearned = true;
         matchedCount++;
       } else {
-        unitPrice = getMaterialBasePrice(mat);
+        // Substring / fuzzy match against pool (e.g. UPPER_BLOCK, GUIDE PIN)
+        for (const [k, v] of learnedMap.entries()) {
+          if (k.length >= 4 && (normName.includes(k) || k.includes(normName))) {
+            unitPrice = v.price;
+            isLearned = true;
+            matchedCount++;
+            break;
+          }
+        }
+        if (!isLearned) {
+          unitPrice = getMaterialBasePrice(mat);
+        }
       }
 
       const lineTotal = unitPrice * qty;
