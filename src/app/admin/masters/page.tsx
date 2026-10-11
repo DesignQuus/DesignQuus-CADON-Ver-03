@@ -1572,7 +1572,7 @@ export default function MasterDataManagerPage() {
               </span>
               <h1 className="text-xl font-black text-slate-900 leading-tight">원가 기준 관리 센터</h1>
             </div>
-            <p className="text-[13px] text-slate-500 font-medium leading-tight">
+            <p className="text-[16px] text-slate-500 font-medium leading-tight mt-0.5">
               사내 표준 부품, 단가표, 소재 시세 및 가공 원가 기준을 등록하고 관리합니다.
             </p>
           </div>
@@ -2549,7 +2549,7 @@ export default function MasterDataManagerPage() {
                     <span>⚡ 실무 자가학습 단가 풀 (Manual Price Pool)</span>
                   </h2>
                 </div>
-                <p className="text-xs text-purple-200/90 leading-relaxed max-w-2xl">
+                <p className="text-[16px] text-purple-200/90 leading-relaxed max-w-4xl">
                   도면 검수 승인 및 견적 산출 과정에서 사용자가 입력한 단가와 품목 정보가 AI에 의해 자동으로 누적 학습된 실무 단가 저장소입니다. 
                   도면 파일이나 견적 건이 삭제되어도 이 학습 데이터베이스는 <strong className="text-amber-300 font-bold">영구 보존</strong>되며, 필요 시 원클릭으로 공식 표준 품목으로 승격할 수 있습니다.
                 </p>
