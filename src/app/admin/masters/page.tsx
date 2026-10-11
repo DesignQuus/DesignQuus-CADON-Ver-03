@@ -1737,68 +1737,68 @@ export default function MasterDataManagerPage() {
                             {it.standard_name}
                           </td>
 
-                          {/* 0. 재질 (소재 시세 · 재료비와 직결되도록 전진 배치) */}
-                          <td className="py-1.5 px-3 text-left font-mono font-bold text-slate-800 text-[14px] truncate" title={it.material || 'SS400'}>
+                          {/* 0. 재질 (소재 시세 · 재료비와 직결되도록 전진 배치 & 선명한 15px 굵은 폰트) */}
+                          <td className="py-1.5 px-3 text-left font-bold text-slate-900 text-[15px] truncate" title={it.material || 'SS400'}>
                             {it.material || 'SS400'}
                           </td>
 
-                          {/* 1. 소재 시세 · 재료비 (1행 처리) */}
+                          {/* 1. 소재 시세 · 재료비 (1행 처리 & 시세 폰트 13.5px 가독성 향상) */}
                           <td className="py-1.5 px-3 text-right whitespace-nowrap">
                             {breakdown.materialCost > 0 ? (
                               <div className="flex items-center justify-end gap-1.5 leading-none">
                                 <span className="font-mono font-black text-slate-900 text-[15px] tabular-nums">
                                   ₩{breakdown.materialCost.toLocaleString()}
                                 </span>
-                                <span className="text-[12.5px] text-slate-500 font-semibold font-mono" title={`소재 시세: ${breakdown.materialRatePerKg.toLocaleString()}원/kg`}>
+                                <span className="text-[13.5px] text-slate-600 font-bold font-mono" title={`소재 시세: ${breakdown.materialRatePerKg.toLocaleString()}원/kg`}>
                                   ({breakdown.materialRatePerKg.toLocaleString()}원/kg)
                                 </span>
                               </div>
                             ) : (
                               <div className="flex items-center justify-end gap-1.5 leading-none">
                                 <span className="text-slate-300 font-mono text-[14px]">-</span>
-                                <span className="text-[12.5px] text-slate-500 font-semibold font-mono">
+                                <span className="text-[13.5px] text-slate-500 font-bold font-mono">
                                   ({breakdown.materialRatePerKg.toLocaleString()}원/kg)
                                 </span>
                               </div>
                             )}
                           </td>
 
-                          {/* 2. 가공 임률 · 표준공수 (1행 처리) */}
+                          {/* 2. 가공 임률 · 표준공수 (1행 처리 & 13.5px 가독성 향상) */}
                           <td className="py-1.5 px-3 text-right whitespace-nowrap">
                             {breakdown.processCost > 0 ? (
                               <div className="flex items-center justify-end gap-1.5 leading-none">
                                 <span className="font-mono font-black text-blue-700 text-[15px] tabular-nums">
                                   ₩{breakdown.processCost.toLocaleString()}
                                 </span>
-                                <span className="text-[12.5px] text-blue-600 font-bold truncate max-w-[105px]" title={`가공비: ${breakdown.processName} (${breakdown.processRateStr})`}>
+                                <span className="text-[13.5px] text-blue-600 font-bold truncate max-w-[110px]" title={`가공비: ${breakdown.processName} (${breakdown.processRateStr})`}>
                                   ({breakdown.processName}{breakdown.cycleTimeHours > 0 ? ` ${breakdown.cycleTimeHours}h` : ''})
                                 </span>
                               </div>
                             ) : (
                               <div className="flex items-center justify-end gap-1.5 leading-none">
                                 <span className="text-slate-300 font-mono text-[14px]">-</span>
-                                <span className="text-[12.5px] text-slate-400 font-medium truncate max-w-[105px]" title={breakdown.processRateStr}>
+                                <span className="text-[13.5px] text-slate-400 font-medium truncate max-w-[110px]" title={breakdown.processRateStr}>
                                   ({breakdown.processName})
                                 </span>
                               </div>
                             )}
                           </td>
 
-                          {/* 3. 후처리 · 열처리 (1행 처리) */}
+                          {/* 3. 후처리 · 열처리 (1행 처리 & 13px 가독성 향상) */}
                           <td className="py-1.5 px-3 text-center whitespace-nowrap">
                             {breakdown.treatmentCost > 0 ? (
                               <div className="flex items-center justify-center gap-1.5 leading-none">
                                 <span className="font-mono font-extrabold text-emerald-800 text-[14.5px] tabular-nums">
                                   ₩{breakdown.treatmentCost.toLocaleString()}
                                 </span>
-                                <span className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[12.5px] font-bold border border-emerald-200 leading-none truncate max-w-[80px]" title={breakdown.treatmentName}>
+                                <span className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[13px] font-bold border border-emerald-200 leading-none truncate max-w-[85px]" title={breakdown.treatmentName}>
                                   {breakdown.treatmentName}
                                 </span>
                               </div>
                             ) : (
                               <div className="flex items-center justify-center gap-1.5 leading-none">
                                 <span className="text-slate-300 font-mono text-[14px]">-</span>
-                                <span className="text-[12.5px] text-slate-400 font-medium truncate max-w-[90px]" title={breakdown.treatmentName}>
+                                <span className="text-[13px] text-slate-400 font-medium truncate max-w-[95px]" title={breakdown.treatmentName}>
                                   ({breakdown.treatmentName})
                                 </span>
                               </div>
