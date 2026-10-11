@@ -2822,26 +2822,26 @@ export default function MasterDataManagerPage() {
                   const diffPct = basePrice > 0 ? Number(((diff / basePrice) * 100).toFixed(1)) : 0;
 
                   return (
-                    <div key={p.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+                    <div key={p.id} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-1.5 hover:border-blue-300 transition-colors">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
                           {p.categoryLabel}
                         </span>
-                        <span className="text-[10px] font-mono text-slate-400">{p.material}</span>
+                        <span className="text-[11px] font-mono text-slate-500 font-semibold">{p.material}</span>
                       </div>
-                      <div className="font-bold text-xs text-slate-800 truncate" title={p.name}>
+                      <div className="font-bold text-[13.5px] text-slate-900 truncate" title={p.name}>
                         {p.name}
                       </div>
-                      <div className="text-[10px] text-slate-400 truncate">{p.spec}</div>
-                      <div className="pt-1.5 border-t border-slate-100 flex items-baseline justify-between">
-                        <span className="text-[10px] text-slate-400">예상 견적</span>
-                        <span className="font-mono font-bold text-sm text-slate-900">
+                      <div className="font-mono text-[12.5px] text-slate-500 truncate tabular-nums">{p.spec}</div>
+                      <div className="pt-2 border-t border-slate-100 flex items-baseline justify-between">
+                        <span className="text-[11.5px] text-slate-500 font-medium">예상 견적</span>
+                        <span className="font-mono font-bold text-[15px] text-slate-900 tabular-nums">
                           ₩{currentPrice.toLocaleString()}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="text-slate-400">기준 대비</span>
-                        <span className={`font-mono font-bold ${
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 font-medium">기준 대비</span>
+                        <span className={`font-mono font-bold tabular-nums ${
                           diff > 0 ? 'text-rose-600' : diff < 0 ? 'text-blue-600' : 'text-slate-400'
                         }`}>
                           {diff > 0 ? `+${diff.toLocaleString()}` : diff < 0 ? diff.toLocaleString() : '0'} ({diffPct > 0 ? `+${diffPct}` : diffPct}%)
@@ -2874,7 +2874,7 @@ export default function MasterDataManagerPage() {
 
               <div className="bg-white p-3 rounded-xl border border-indigo-100 grid grid-cols-1 md:grid-cols-12 gap-3 items-center text-xs">
                 <div className="md:col-span-4 space-y-1">
-                  <label className="text-[11px] text-slate-500 font-medium block">대상 부품 선택</label>
+                  <label className="text-[11.5px] text-slate-600 font-bold block">대상 부품 선택</label>
                   <select
                     value={selectedEstimatorIndex}
                     onChange={(e) => setSelectedEstimatorIndex(Number(e.target.value))}
@@ -2889,15 +2889,15 @@ export default function MasterDataManagerPage() {
                 </div>
 
                 <div className="md:col-span-3 space-y-1">
-                  <label className="text-[11px] text-slate-500 font-medium block">목표 희망 단가 (원)</label>
-                  <div className="flex items-center space-x-1">
-                    <span className="text-slate-400 font-mono">₩</span>
+                  <label className="text-[11.5px] text-slate-600 font-bold block">목표 희망 단가 (원)</label>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-slate-400 font-mono font-bold">₩</span>
                     <input
                       type="number"
                       value={targetPriceInput}
                       onChange={(e) => setTargetPriceInput(Number(e.target.value))}
                       placeholder="30000"
-                      className="w-full text-right font-mono font-bold border border-slate-200 rounded-lg px-2 py-1.5 text-slate-900 bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500"
+                      className="w-full text-right font-mono text-[15px] font-bold border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-900 bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500 tabular-nums"
                     />
                   </div>
                 </div>
@@ -2955,38 +2955,64 @@ export default function MasterDataManagerPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* 좌측: 소재별 시세 (5 cols) */}
-              <div className="lg:col-span-5 space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between">
+              <div className="lg:col-span-5 space-y-3 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between pb-1 border-b border-slate-200">
                   <h3 className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
                     <DollarSign className="w-4 h-4 text-emerald-600" />
                     <span>소재별 kg당 기준 시세 (원/kg)</span>
                   </h3>
-                  <span className="text-[11px] text-slate-400 font-mono">총 {Object.keys(materialRates).length}개 강종</span>
+                  <span className="text-[11px] text-slate-500 font-mono font-medium">총 {Object.keys(materialRates).length}개 강종</span>
                 </div>
-                <div className="space-y-2 max-h-[640px] overflow-y-auto pr-1">
-                  {Object.entries(materialRates).map(([mat, rate]) => (
-                    <div key={mat} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200 text-xs hover:border-slate-300 transition-colors">
-                      <div className="flex flex-col">
-                        <span className="font-mono font-bold text-slate-800">{mat}</span>
-                        <span className="text-[10px] text-slate-400">{MATERIAL_NAMES[mat] || '일반 금속/수지재'}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <span className="text-slate-400 font-mono">₩</span>
-                        <input
-                          type="number"
-                          value={rate}
-                          onChange={(e) => setMaterialRates({ ...materialRates, [mat]: Number(e.target.value) })}
-                          className="w-24 text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-blue-500 bg-slate-50 focus:bg-white"
-                        />
-                        <span className="text-slate-500 text-[11px]">/kg</span>
-                      </div>
-                    </div>
-                  ))}
+                
+                {/* 표준 마스터 그리드 테이블 */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                  <div className="max-h-[640px] overflow-y-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-slate-50/90 sticky top-0 z-10 border-b border-slate-200 text-slate-600 text-[12px] font-bold">
+                        <tr>
+                          <th className="py-2.5 px-3 text-center w-12 font-mono text-slate-400">No.</th>
+                          <th className="py-2.5 px-3">강종 / 소재명</th>
+                          <th className="py-2.5 px-3 text-right">기준 시세 (원/kg)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {Object.entries(materialRates).map(([mat, rate], idx) => (
+                          <tr key={mat} className="hover:bg-blue-50/40 transition-colors group">
+                            <td className="py-2.5 px-3 text-center font-mono text-[13px] font-bold text-slate-400">
+                              {idx + 1}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="flex flex-col">
+                                <span className="font-mono text-[14px] font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
+                                  {mat}
+                                </span>
+                                <span className="text-[11.5px] text-slate-500 font-medium">
+                                  {MATERIAL_NAMES[mat] || '일반 금속/수지재'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center space-x-1.5 justify-end">
+                                <span className="text-slate-400 font-mono text-[13px] font-bold">₩</span>
+                                <input
+                                  type="number"
+                                  value={rate}
+                                  onChange={(e) => setMaterialRates({ ...materialRates, [mat]: Number(e.target.value) })}
+                                  className="w-28 text-right font-mono text-[15px] font-bold border border-slate-300 rounded-lg px-2.5 py-1 text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white tabular-nums transition-all"
+                                />
+                                <span className="text-slate-600 font-mono text-[12.5px] font-medium w-8 text-left">/kg</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
 
               {/* 우측: 공정별 가공 임률 및 표준 원가 파라미터 (7 cols) */}
-              <div className="lg:col-span-7 space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="lg:col-span-7 space-y-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200">
                 <h3 className="text-xs font-bold text-slate-800 flex items-center space-x-1.5 pb-1 border-b border-slate-200">
                   <Sliders className="w-4 h-4 text-blue-600" />
                   <span>제조업 공정별 표준 가공 임률 & 파라미터</span>
@@ -2994,290 +3020,296 @@ export default function MasterDataManagerPage() {
 
                 <div className="space-y-3.5 max-h-[640px] overflow-y-auto pr-1">
                   {/* 1. 기계 가공 (절삭) */}
-                  <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                    <div className="flex items-center justify-between pb-1 border-b border-blue-50">
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-blue-50">
                       <div className="flex items-center gap-1.5 text-xs font-bold text-blue-800">
-                        <Factory className="w-3.5 h-3.5 text-blue-600" />
-                        <span>1. 기계 가공 (절삭 / 선반 / 밀링)</span>
+                        <Factory className="w-4 h-4 text-blue-600" />
+                        <span className="text-[13px]">1. 기계 가공 (절삭 / 선반 / 밀링)</span>
                       </div>
-                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">기본 추정치</span>
+                      <span className="text-[10.5px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-bold">
+                        기본 추정치 (Base Heuristic)
+                      </span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                       <div>
-                        <span className="text-[11px] text-slate-500 block">CNC / 머시닝센터 시간당 임률</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-slate-700 block mb-1">CNC / 머시닝센터 시간당 임률</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['HOURLY_MACHINE_RATE'] || 45000}
                             onChange={(e) => setProcessRates({ ...processRates, 'HOURLY_MACHINE_RATE': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-blue-500"
+                            className="w-full text-right font-mono text-[15px] font-bold border border-slate-300 rounded-lg px-2.5 py-1.5 text-blue-700 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/h</span>
+                          <span className="text-blue-600 font-mono text-[12.5px] font-bold shrink-0">원/h</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block">범용 선반 / 밀링 시간당 임률</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-slate-700 block mb-1">범용 선반 / 밀링 시간당 임률</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['HOURLY_LATHE_RATE'] || 40000}
                             onChange={(e) => setProcessRates({ ...processRates, 'HOURLY_LATHE_RATE': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-blue-500"
+                            className="w-full text-right font-mono text-[15px] font-bold border border-slate-300 rounded-lg px-2.5 py-1.5 text-blue-700 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/h</span>
+                          <span className="text-blue-600 font-mono text-[12.5px] font-bold shrink-0">원/h</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block text-blue-700 font-medium">가공 준비 셋업 기본료 (소량보전)</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-blue-800 block mb-1">가공 준비 셋업 기본료 (소량보전)</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['SETUP_BASE_COST'] || 30000}
                             onChange={(e) => setProcessRates({ ...processRates, 'SETUP_BASE_COST': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-blue-200 rounded px-2 py-1 text-blue-900 bg-blue-50/30 focus:outline-none focus:border-blue-500"
+                            className="w-full text-right font-mono text-[15px] font-bold border border-blue-300 rounded-lg px-2.5 py-1.5 text-blue-900 bg-blue-50/40 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/건</span>
+                          <span className="text-blue-700 font-mono text-[12.5px] font-bold shrink-0">원/건</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* 2. 판금 / 제관 (Sheet Metal) */}
-                  <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                    <div className="flex items-center justify-between pb-1 border-b border-cyan-50">
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-cyan-50">
                       <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-800">
-                        <Scissors className="w-3.5 h-3.5 text-cyan-600" />
-                        <span>2. 판금 / 제관 (레이저 절단 / 피어싱 / 절곡 / 용접)</span>
+                        <Scissors className="w-4 h-4 text-cyan-600" />
+                        <span className="text-[13px]">2. 판금 / 제관 (레이저 절단 / 피어싱 / 절곡 / 용접)</span>
                       </div>
-                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">기본 추정치</span>
+                      <span className="text-[10.5px] bg-cyan-50 text-cyan-700 border border-cyan-200 px-2 py-0.5 rounded-md font-bold">
+                        기본 추정치 (Base Heuristic)
+                      </span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
                       <div>
-                        <span className="text-[11px] text-slate-500 block">레이저 외곽 절단 단가</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-slate-700 block mb-1">레이저 외곽 절단 단가</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['SHEET_LASER_PER_METER'] || 1800}
                             onChange={(e) => setProcessRates({ ...processRates, 'SHEET_LASER_PER_METER': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-cyan-500"
+                            className="w-full text-right font-mono text-[15px] font-bold border border-slate-300 rounded-lg px-2.5 py-1.5 text-cyan-800 focus:outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-500 bg-slate-50 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/m</span>
+                          <span className="text-cyan-700 font-mono text-[12.5px] font-bold shrink-0">원/m</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block text-cyan-700 font-medium">레이저 피어싱(홀당) 단가</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-cyan-800 block mb-1">레이저 피어싱(홀당) 단가</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['SHEET_PIERCING_RATE'] || 80}
                             onChange={(e) => setProcessRates({ ...processRates, 'SHEET_PIERCING_RATE': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-cyan-200 rounded px-2 py-1 text-cyan-900 bg-cyan-50/30 focus:outline-none focus:border-cyan-500"
+                            className="w-full text-right font-mono text-[15px] font-bold border border-cyan-300 rounded-lg px-2.5 py-1.5 text-cyan-900 bg-cyan-50/40 focus:outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-500 tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/홀</span>
+                          <span className="text-cyan-800 font-mono text-[12.5px] font-bold shrink-0">원/홀</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block">절곡(Bending) 1회 단가</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-slate-700 block mb-1">절곡(Bending) 1회 단가</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['SHEET_BEND_PER_STROKE'] || 800}
                             onChange={(e) => setProcessRates({ ...processRates, 'SHEET_BEND_PER_STROKE': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-cyan-500"
+                            className="w-full text-right font-mono text-[15px] font-bold border border-slate-300 rounded-lg px-2.5 py-1.5 text-cyan-800 focus:outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-500 bg-slate-50 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/회</span>
+                          <span className="text-cyan-700 font-mono text-[12.5px] font-bold shrink-0">원/회</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block">제관 용접 시간당 임률</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-slate-700 block mb-1">제관 용접 시간당 임률</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['HOURLY_WELDING_RATE'] || 38000}
                             onChange={(e) => setProcessRates({ ...processRates, 'HOURLY_WELDING_RATE': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-cyan-500"
+                            className="w-full text-right font-mono text-[15px] font-bold border border-slate-300 rounded-lg px-2.5 py-1.5 text-cyan-800 focus:outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-500 bg-slate-50 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/h</span>
+                          <span className="text-cyan-700 font-mono text-[12.5px] font-bold shrink-0">원/h</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* 3. 주조 / 주물 (Casting) */}
-                  <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                    <div className="flex items-center justify-between pb-1 border-b border-amber-50">
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-amber-50">
                       <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
-                        <Layers className="w-3.5 h-3.5 text-amber-600" />
-                        <span>3. 주조 / 주물 (형상 성형 및 주물 가공)</span>
+                        <Layers className="w-4 h-4 text-amber-600" />
+                        <span className="text-[13px]">3. 주조 / 주물 (형상 성형 및 주물 가공)</span>
                       </div>
-                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">기본 추정치</span>
+                      <span className="text-[10.5px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md font-bold">
+                        기본 추정치 (Base Heuristic)
+                      </span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
-                        <span className="text-[11px] text-slate-500 block">주조 형상 성형 kg당 공정비</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-slate-700 block mb-1">주조 형상 성형 kg당 공정비</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['CASTING_PER_KG_RATE'] || 2500}
                             onChange={(e) => setProcessRates({ ...processRates, 'CASTING_PER_KG_RATE': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-amber-500"
+                            className="w-full max-w-[240px] text-right font-mono text-[15px] font-bold border border-slate-300 rounded-lg px-2.5 py-1.5 text-amber-900 focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-500 bg-slate-50 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/kg</span>
+                          <span className="text-amber-800 font-mono text-[12.5px] font-bold shrink-0">원/kg</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* 4. 후처리 / 열처리 (외주 2차 공정 세창 직영 통제) */}
-                  <div className="bg-white p-3 rounded-lg border border-purple-200 space-y-2.5">
-                    <div className="flex items-center justify-between pb-1 border-b border-purple-100">
+                  <div className="bg-white p-3.5 rounded-xl border border-purple-200 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-purple-100">
                       <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900">
-                        <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                        <span>4. 외주 2차 가공 공정비 (세창 직영 통제)</span>
+                        <Sparkles className="w-4 h-4 text-purple-600" />
+                        <span className="text-[13px]">4. 외주 2차 가공 공정비 (세창 직영 통제)</span>
                       </div>
-                      <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold border border-purple-200">
+                      <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200">
                         세창 본사 협정 기준가 적용
                       </span>
                     </div>
 
-                    <div className="p-2 bg-purple-50/70 border border-purple-100 rounded-md text-[11px] text-purple-900 leading-relaxed">
+                    <div className="p-2.5 bg-purple-50/70 border border-purple-100 rounded-lg text-[11.5px] text-purple-900 leading-relaxed">
                       💡 <strong>외주 단가 통제:</strong> 열처리, 도금, 도장 등 2차 공정은 외주 공장에 단가 결정을 일임하지 않고, 세창인터내쇼날 본사에서 협약된 기준 단가표로 도면 분석 시 일괄 산출하여 원가 누수를 완벽히 방지합니다.
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 text-xs">
                       <div>
-                        <span className="text-[11px] text-slate-500 block">분체도장 ㎡당 단가</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-emerald-950 block mb-1">분체도장 ㎡당 단가</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['PAINTING_PER_SQM'] || 9000}
                             onChange={(e) => setProcessRates({ ...processRates, 'PAINTING_PER_SQM': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-purple-500"
+                            className="w-full text-right font-mono text-[14.5px] font-extrabold border border-emerald-300 rounded-lg px-2.5 py-1.5 text-emerald-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 bg-emerald-50/30 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/㎡</span>
+                          <span className="text-emerald-700 font-mono text-[12px] font-bold shrink-0">원/㎡</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block">아노다이징 개당 단가</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-emerald-950 block mb-1">아노다이징 개당 단가</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['ANODIZING_PER_UNIT'] || 1500}
                             onChange={(e) => setProcessRates({ ...processRates, 'ANODIZING_PER_UNIT': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-purple-500"
+                            className="w-full text-right font-mono text-[14.5px] font-extrabold border border-emerald-300 rounded-lg px-2.5 py-1.5 text-emerald-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 bg-emerald-50/30 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/개</span>
+                          <span className="text-emerald-700 font-mono text-[12px] font-bold shrink-0">원/개</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block">열처리(Q/T) kg당 단가</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-emerald-950 block mb-1">열처리(Q/T) kg당 단가</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['HEAT_TREATMENT_PER_KG'] || 1200}
                             onChange={(e) => setProcessRates({ ...processRates, 'HEAT_TREATMENT_PER_KG': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-purple-500"
+                            className="w-full text-right font-mono text-[14.5px] font-extrabold border border-emerald-300 rounded-lg px-2.5 py-1.5 text-emerald-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 bg-emerald-50/30 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/kg</span>
+                          <span className="text-emerald-700 font-mono text-[12px] font-bold shrink-0">원/kg</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block">도금/착색 개당 단가</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-emerald-950 block mb-1">도금/착색 개당 단가</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['PLATING_PER_UNIT'] || 1200}
                             onChange={(e) => setProcessRates({ ...processRates, 'PLATING_PER_UNIT': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-purple-500"
+                            className="w-full text-right font-mono text-[14.5px] font-extrabold border border-emerald-300 rounded-lg px-2.5 py-1.5 text-emerald-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 bg-emerald-50/30 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/개</span>
+                          <span className="text-emerald-700 font-mono text-[12px] font-bold shrink-0">원/개</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block text-purple-700 font-medium">외주 최소 로트 기본료</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-purple-900 block mb-1">외주 최소 로트 기본료</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['TREATMENT_MIN_LOT_COST'] || 30000}
                             onChange={(e) => setProcessRates({ ...processRates, 'TREATMENT_MIN_LOT_COST': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-purple-200 rounded px-2 py-1 text-purple-900 bg-purple-50/30 focus:outline-none focus:border-purple-500"
+                            className="w-full text-right font-mono text-[14.5px] font-extrabold border border-purple-300 rounded-lg px-2.5 py-1.5 text-purple-950 bg-purple-50/40 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-500 tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/건</span>
+                          <span className="text-purple-800 font-mono text-[12px] font-bold shrink-0">원/건</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* 5. 조달 관리 & 모듈 조립 & 물류 & 마진율 */}
-                  <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 pb-1 border-b border-slate-100">
-                      <Wrench className="w-3.5 h-3.5 text-slate-600" />
-                      <span>5. 조달 관리비율 & 조립 공수 & 물류 & 표준 마진</span>
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 pb-1.5 border-b border-slate-100">
+                      <Wrench className="w-4 h-4 text-slate-600" />
+                      <span className="text-[13px]">5. 조달 관리비율 & 조립 공수 & 물류 & 표준 마진</span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
                       <div>
-                        <span className="text-[11px] text-slate-500 block">전장/구매품 조달관리율 (%)</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
+                        <span className="text-[11.5px] font-bold text-slate-700 block mb-1">전장/구매품 조달관리율 (%)</span>
+                        <div className="flex items-center space-x-1.5">
                           <input
                             type="number"
                             step="1"
                             value={((processRates['ELECTRICAL_OVERHEAD_RATE'] ?? 0.08) * 100).toFixed(0)}
                             onChange={(e) => setProcessRates({ ...processRates, 'ELECTRICAL_OVERHEAD_RATE': Number(e.target.value) / 100 })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-slate-500"
+                            className="w-full text-right font-mono text-[15px] font-bold border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-slate-600 focus:ring-1 focus:ring-slate-500 bg-slate-50 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">%</span>
+                          <span className="text-slate-600 font-mono text-[12.5px] font-bold shrink-0">%</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block">유닛 조립/배선 시간당 임률</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
-                          <span className="text-slate-400 font-mono text-[11px]">₩</span>
+                        <span className="text-[11.5px] font-bold text-slate-700 block mb-1">유닛 조립/배선 시간당 임률</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-400 font-mono text-[12px] font-bold">₩</span>
                           <input
                             type="number"
                             value={processRates['HOURLY_ASSEMBLY_RATE'] || 35000}
                             onChange={(e) => setProcessRates({ ...processRates, 'HOURLY_ASSEMBLY_RATE': Number(e.target.value) })}
-                            className="w-full text-right font-mono font-bold border border-slate-200 rounded px-2 py-1 text-slate-900 focus:outline-none focus:border-slate-500"
+                            className="w-full text-right font-mono text-[15px] font-bold border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-slate-600 focus:ring-1 focus:ring-slate-500 bg-slate-50 focus:bg-white tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">원/h</span>
+                          <span className="text-slate-600 font-mono text-[12.5px] font-bold shrink-0">원/h</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block text-slate-700 font-medium">포장 및 출하 물류비율 (%)</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
+                        <span className="text-[11.5px] font-bold text-slate-700 block mb-1">포장 및 출하 물류비율 (%)</span>
+                        <div className="flex items-center space-x-1.5">
                           <input
                             type="number"
                             step="1"
                             value={((processRates['PACKAGING_SHIPPING_RATE'] ?? 0.03) * 100).toFixed(0)}
-                            onChange={(e) => setProcessRates({ ...processRates, 'PACKAGING_SHIPPING_RATE': Number(e.target.value) / 100 })}
-                            className="w-full text-right font-mono font-bold border border-slate-300 rounded px-2 py-1 text-slate-900 bg-slate-50 focus:outline-none focus:border-slate-500"
+                            onChange={(e) => setProcessRates({ ...processRates, 'PACKAGING_SHIPPING_RATE': Number(e.target.value) })}
+                            className="w-full text-right font-mono text-[15px] font-bold border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 bg-slate-50 focus:outline-none focus:border-slate-600 focus:ring-1 focus:ring-slate-500 tabular-nums transition-all"
                           />
-                          <span className="text-slate-500 text-[11px] shrink-0">% (3%)</span>
+                          <span className="text-slate-600 font-mono text-[12.5px] font-bold shrink-0">% (3%)</span>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[11px] text-slate-500 block">표준 목표 마진율 (%)</span>
-                        <div className="flex items-center space-x-1 mt-0.5">
+                        <span className="text-[11.5px] font-bold text-blue-900 block mb-1">표준 목표 마진율 (%)</span>
+                        <div className="flex items-center space-x-1.5">
                           <input
                             type="number"
                             step="1"
                             value={((processRates['DEFAULT_MARGIN_RATE'] ?? 0.18) * 100).toFixed(0)}
-                            onChange={(e) => setProcessRates({ ...processRates, 'DEFAULT_MARGIN_RATE': Number(e.target.value) / 100 })}
-                            className="w-full text-right font-mono font-bold border border-blue-200 rounded px-2 py-1 text-blue-900 bg-blue-50/50 focus:outline-none focus:border-blue-500"
+                            onChange={(e) => setProcessRates({ ...processRates, 'DEFAULT_MARGIN_RATE': Number(e.target.value) })}
+                            className="w-full text-right font-mono text-[15px] font-bold border border-blue-300 rounded-lg px-2.5 py-1.5 text-blue-900 bg-blue-50/50 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 tabular-nums transition-all"
                           />
-                          <span className="text-blue-600 font-bold text-[11px] shrink-0">% (기준 18%)</span>
+                          <span className="text-blue-700 font-mono text-[12.5px] font-bold shrink-0">% (기준 18%)</span>
                         </div>
                       </div>
                     </div>
