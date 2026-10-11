@@ -9,8 +9,10 @@ import {
   RefreshCw, FileSpreadsheet, ArrowLeft, Sliders, DollarSign,
   AlertCircle, Layers, X, Scissors, Flame, Sparkles, Wrench, Percent, Factory, ShieldCheck,
   Target, Calculator, TrendingUp, ArrowRight, CheckSquare, Square, Save, ChevronDown, Tag,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check, RotateCcw
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check, RotateCcw, Clock
 } from 'lucide-react';
+
+import LearnedPriceHistoryDrawer from '@/components/masters/LearnedPriceHistoryDrawer';
 
 import {
   PART_CATEGORIES,
@@ -305,6 +307,7 @@ export default function MasterDataManagerPage() {
   const [learnedItems, setLearnedItems] = useState<any[]>([]);
   const [loadingLearned, setLoadingLearned] = useState<boolean>(false);
   const [learnedSearchQuery, setLearnedSearchQuery] = useState<string>('');
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<any | null>(null);
 
   const fetchLearnedItems = async (isSilent = false) => {
     if (!isSilent && learnedItems.length === 0) {
@@ -2658,9 +2661,11 @@ export default function MasterDataManagerPage() {
                           return (
                             <tr
                               key={item.id || idx}
+                              onClick={() => setSelectedHistoryItem(item)}
                               className={`cursor-pointer select-none border-b border-slate-200/80 min-h-[36px] transition-colors ${
                                 idx % 2 === 1 ? 'bg-slate-100/60 hover:bg-purple-50/80' : 'bg-white hover:bg-purple-50/80'
                               }`}
+                              title="클릭하여 단가 수정/승인 이력 타임라인 보기"
                             >
                               <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-500 text-[14px]">
                                 {idx + 1}
@@ -2689,9 +2694,18 @@ export default function MasterDataManagerPage() {
                                 ₩{Number(item.unit_price || 0).toLocaleString()}
                               </td>
                               <td className="py-1.5 px-3 text-center whitespace-nowrap">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[12.5px] font-bold border border-emerald-200 leading-none">
-                                  {item.approval_count || 1}회 승인
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedHistoryItem(item);
+                                  }}
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 hover:text-purple-900 text-[12px] font-bold border border-purple-200 hover:border-purple-300 shadow-2xs transition-all cursor-pointer group"
+                                  title="클릭하여 단가 변천사 및 승인 이력 타임라인 보기"
+                                >
+                                  <Clock className="w-3 h-3 text-purple-500 group-hover:rotate-45 transition-transform" />
+                                  <span>{item.approval_count || 1}회 승인</span>
+                                </button>
                               </td>
                               <td className="py-1.5 px-3 text-center whitespace-nowrap text-[12.5px] text-slate-500 font-medium">
                                 {item.source === 'DRAWING_APPROVAL' ? '도면승인' : item.source === 'QUOTE_MANUAL' ? '수동견적' : item.source || '자가학습'}
@@ -2705,7 +2719,10 @@ export default function MasterDataManagerPage() {
                               <td className="py-1.5 px-3 text-center whitespace-nowrap">
                                 <button
                                   type="button"
-                                  onClick={() => handlePromoteToStandard(item)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePromoteToStandard(item);
+                                  }}
                                   className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-[12px] font-bold border border-purple-200 shadow-2xs transition-colors cursor-pointer"
                                   title="이 실무 단가를 표준 부품 단가 대장에 등록합니다."
                                 >
@@ -3703,6 +3720,14 @@ export default function MasterDataManagerPage() {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* ⚡ 실무 단가 수정 및 승인 이력 타임라인 서랍 (Slide-over Drawer) */}
+      <LearnedPriceHistoryDrawer
+        isOpen={!!selectedHistoryItem}
+        onClose={() => setSelectedHistoryItem(null)}
+        item={selectedHistoryItem}
+        onPriceUpdated={() => fetchLearnedItems(true)}
+      />
     </div>
   );
 }

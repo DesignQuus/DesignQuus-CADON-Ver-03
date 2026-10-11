@@ -556,6 +556,27 @@ export const CADON_TABLE_SPECS: TableSpec[] = [
     uniqueKeyColumns: ['id']
   },
   {
+    name: 'manual_price_history',
+    displayName: '실무 단가 수정 및 승인 이력',
+    description: '실무 단가 풀의 품목별 시계열 변천사 및 승인 이력 영구 보존 DB',
+    columns: [
+      { name: 'id', type: 'TEXT', notNull: true },
+      { name: 'pool_id', type: 'TEXT', notNull: true },
+      { name: 'revision_seq', type: 'INTEGER', notNull: true },
+      { name: 'unit_price', type: 'REAL', notNull: true },
+      { name: 'previous_price', type: 'REAL' },
+      { name: 'price_diff', type: 'REAL' },
+      { name: 'change_type', type: 'TEXT', notNull: true }, // 'INITIAL' | 'RE_APPROVAL' | 'MANUAL_EDIT'
+      { name: 'quotation_case_id', type: 'TEXT' },
+      { name: 'company_id', type: 'TEXT' },
+      { name: 'company_name', type: 'TEXT' },
+      { name: 'remark', type: 'TEXT' },
+      { name: 'created_by_user_id', type: 'TEXT' },
+      { name: 'created_at', type: 'TEXT', notNull: true }
+    ],
+    uniqueKeyColumns: ['id']
+  },
+  {
     name: 'excel_templates',
     displayName: '엑셀 템플릿 관리',
     description: '공식 견적서 엑셀 양식 관리',
